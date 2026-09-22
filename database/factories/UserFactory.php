@@ -2,7 +2,12 @@
 
 namespace Database\Factories;
 
+use App\Enums\AvatarKind;
+use App\Enums\Locale;
+use App\Enums\UserRole;
 use App\Models\User;
+use App\Settings\PlatformLimits;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
@@ -55,6 +60,195 @@ class UserFactory extends Factory
             'two_factor_secret' => encrypt('secret'),
             'two_factor_recovery_codes' => encrypt(json_encode(['recovery-code-1'])),
             'two_factor_confirmed_at' => now(),
+        ]);
+    }
+
+    /**
+     * Le rôle — colonne d'AUTORITÉ, hors `#[Fillable]` : une élévation de privilège par
+     * requête est précisément ce que la liste d'assignation en masse empêche. Le
+     * pipeline de `Factory` écrit sous `Model::unguarded()`, ce qui est le seul endroit
+     * où poser la colonne sans jamais l'exposer à un formulaire.
+     */
+    public function role(UserRole $role): static
+    {
+        return $this->state(['role' => $role]);
+    }
+
+    /**
+     * Le compte de démonstration `player` — celui qui ne peut ni curer ni administrer.
+     */
+    public function player(): static
+    {
+        return $this->role(UserRole::Player);
+    }
+
+    /**
+     * Le compte de démonstration `curator` : c'est lui qui porte
+     * `movie.content_verified_by_id` et `frame_review.reviewer_id` / `reviewer_name` /
+     * `reviewer_role` du catalogue de démonstration (§ 13.3, exigence 5).
+     */
+    public function curator(): static
+    {
+        return $this->role(UserRole::Curator);
+    }
+
+    /**
+     * Le compte de démonstration `admin` : c'est lui qui porte les lignes `admin_action`
+     * permanentes. Sans les trois rôles, la propriété ABSOLUE de `saved_config` face à
+     * un admin, l'exemption de purge des comptes privilégiés et la file « rôle
+     * privilégié sans 2FA » ne sont testables par aucun test.
+     */
+    public function admin(): static
+    {
+        return $this->role(UserRole::Admin);
+    }
+
+    /**
+     * La langue d'interface — NOT NULL avec défaut, jamais résolue à la lecture : les
+     * mails Fortify partent en file, donc `preferredLocale()` est lu hors de toute
+     * requête HTTP.
+     */
+    public function locale(Locale $locale): static
+    {
+        return $this->state(['locale' => $locale]);
+    }
+
+    /**
+     * Compte créé par OAuth : AUCUN mot de passe, e-mail vérifié par le fournisseur.
+     *
+     * `EloquentUserProvider` et `AbstractHasher` renvoient déjà `false` sur un haché
+     * nul : aucune faille n'est ouverte. La liaison automatique n'est permise que sur un
+     * e-mail vérifié — d'où `email_verified_at` posé ici, et jamais dans
+     * {@see self::withoutEmail()}.
+     */
+    public function oauthOnly(): static
+    {
+        return $this->state([
+            'password' => null,
+            'email_verified_at' => CarbonImmutable::now(),
+        ]);
+    }
+
+    /**
+     * Compte Discord sans adresse : `email` ET `password` nuls.
+     *
+     * C'est ce cas qui a rendu les deux colonnes nullables, et c'est lui que
+     * `User::hasVerifiedEmail()` doit rendre `true` — sinon toute route sous le
+     * middleware `verified` renvoie le compte en boucle sur `/email/verify`, qui lui
+     * propose d'envoyer un message à une adresse nulle.
+     */
+    public function withoutEmail(): static
+    {
+        return $this->state([
+            'email' => null,
+            'email_verified_at' => null,
+            'password' => null,
+        ]);
+    }
+
+    /**
+     * Avatar prédéfini explicitement choisi — une CLÉ stable, jamais un chemin de
+     * fichier : remplacer le pack doit être une migration de valeurs, pas une casse de
+     * données. Le nombre de clés disponibles est une limite de plate-forme, jamais un
+     * littéral.
+     */
+    public function withPresetAvatar(?string $preset = null): static
+    {
+        return $this->state([
+            'avatar_kind' => AvatarKind::Preset,
+            'avatar_preset' => $preset ?? sprintf(
+                'preset-%02d',
+                fake()->numberBetween(1, PlatformLimits::avatarPresets()),
+            ),
+        ]);
+    }
+
+    /**
+     * Copie LOCALE de la photo du fournisseur, sur le disque `avatars` : aucune URL
+     * distante n'est jamais servie au client.
+     */
+    public function withProviderAvatar(): static
+    {
+        return $this->state([
+            'avatar_kind' => AvatarKind::Provider,
+            'avatar_provider_path' => Str::ulid()->toBase32().'.webp',
+            'avatar_provider_hidden_at' => null,
+        ]);
+    }
+
+    /**
+     * Photo masquée après deux signalements distincts : le masquage SURVIT à la
+     * suppression du fichier, bloque le re-téléchargement et n'est levable que par un
+     * admin. Ce n'est pas un drapeau d'affichage, et l'accesseur doit redescendre sur
+     * les initiales.
+     */
+    public function providerAvatarHidden(): static
+    {
+        return $this->withProviderAvatar()->state([
+            'avatar_provider_hidden_at' => CarbonImmutable::now(),
+        ]);
+    }
+
+    /**
+     * Les trois PROJECTIONS de consentement, pour la garde d'affichage à la connexion.
+     *
+     * Elles ne remplacent jamais les lignes `user_consent`, qui portent l'historique et
+     * survivent à l'anonymisation : un seeder qui ne poserait que ces colonnes
+     * prouverait la mauvaise version dès le premier changement de CGU.
+     */
+    public function consented(string $termsVersion = '1.0'): static
+    {
+        $now = CarbonImmutable::now();
+
+        return $this->state([
+            'terms_accepted_at' => $now,
+            'terms_version' => $termsVersion,
+            'age_confirmed_at' => $now,
+        ]);
+    }
+
+    /**
+     * Compte dormant : la fenêtre est de 24 mois, VOLONTAIREMENT distincte des 12 mois
+     * d'historique — d'où une colonne `last_login_at` qui n'est pas `updated_at`.
+     */
+    public function dormant(int $monthsAgo = 25): static
+    {
+        return $this->state([
+            'last_login_at' => CarbonImmutable::now()->subMonths($monthsAgo),
+        ]);
+    }
+
+    /**
+     * Pierre tombale du § 5.5 : la LIGNE survit pour l'intégrité référentielle, et rien
+     * d'identifiant ne survit avec elle.
+     *
+     * Conserver l'`id` rend les clés d'auteur structurellement inorphelinables sans
+     * jamais dépendre d'un `nullOnDelete` ; `plan` et les consentements sont conservés ;
+     * `role` retombe à `player` et `locale` au repli d'instance.
+     *
+     * Cette fabrique ne pose que l'ÉTAT FINAL de `users` : la suppression en lignes
+     * (`linked_account`, `saved_config`, `data_export`, `passkeys`, `sessions`) et
+     * l'effacement des identifiants d'invité sur `player` / `game_player` appartiennent
+     * à l'action d'anonymisation, jamais à une fixture.
+     */
+    public function anonymized(): static
+    {
+        return $this->state([
+            'name' => 'deleted-user-'.Str::ulid()->toBase32(),
+            'email' => null,
+            'email_verified_at' => null,
+            'password' => null,
+            'two_factor_secret' => null,
+            'two_factor_recovery_codes' => null,
+            'two_factor_confirmed_at' => null,
+            'remember_token' => null,
+            'role' => UserRole::Player,
+            'locale' => Locale::English,
+            'avatar_kind' => null,
+            'avatar_preset' => null,
+            'avatar_provider_path' => null,
+            'avatar_provider_hidden_at' => null,
+            'anonymized_at' => CarbonImmutable::now(),
         ]);
     }
 }

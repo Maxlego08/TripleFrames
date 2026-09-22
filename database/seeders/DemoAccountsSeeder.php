@@ -1,0 +1,144 @@
+<?php
+
+namespace Database\Seeders;
+
+use App\Enums\ConsentKind;
+use App\Enums\Locale;
+use App\Enums\UserRole;
+use App\Models\User;
+use App\Models\UserConsent;
+use Carbon\CarbonImmutable;
+use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
+use RuntimeException;
+
+/**
+ * **Exigence 5 du § 13.3** — trois comptes de démonstration, un par rôle, créés
+ * AVANT le catalogue.
+ *
+ * L'ordre n'est pas cosmétique : le curateur porte `movie.content_verified_by_id`
+ * et les trois colonnes d'estampille de `frame_review` (`reviewer_id`,
+ * `reviewer_name`, `reviewer_role`), l'administrateur porte les lignes
+ * `admin_action` permanentes. Un catalogue seedé avant eux n'aurait aucune preuve
+ * nominative à citer, et la coche « contenu vérifié » qui rend un film publiable
+ * n'aurait pas d'auteur.
+ *
+ * Sans les trois rôles, trois propriétés du produit ne sont testables par aucun
+ * test : la propriété **absolue** d'une `saved_config` face à un administrateur,
+ * l'exemption de purge des comptes privilégiés, et la file de back-office « rôle
+ * privilégié sans 2FA ».
+ *
+ * **Jamais hors `local` et `testing`** : la garde est portée par
+ * {@see DatabaseSeeder} et redoublée ici par
+ * {@see DemoCatalogueSeeder::assertSeedableEnvironment()}, parce qu'un
+ * `db:seed --class=` contourne le point d'entrée. C'est une **liste blanche** :
+ * `APP_ENV` vaut `local` dans le `.env.example` que `composer setup` recopie, donc
+ * une garde adossée au seul nom `production` livrerait ces trois comptes, mot de
+ * passe connu compris, sur toute machine servie installée par ce chemin.
+ *
+ * Les trois comptes portent **les deux lignes `user_consent`** en plus des trois
+ * projections de `users` : les projections servent la garde d'affichage à la
+ * connexion, les lignes portent l'historique et survivent à l'anonymisation. Un
+ * compte qui ne porterait que les projections prouverait la mauvaise version dès
+ * le premier changement de CGU.
+ */
+class DemoAccountsSeeder extends Seeder
+{
+    public const string PLAYER_EMAIL = 'player@tripleframes.test';
+
+    public const string CURATOR_EMAIL = 'curator@tripleframes.test';
+
+    public const string ADMIN_EMAIL = 'admin@tripleframes.test';
+
+    /**
+     * Mot de passe commun aux trois comptes. C'est une fixture locale, jamais un
+     * secret : le seeder qui la pose ne tourne pas en production.
+     */
+    public const string PASSWORD = 'password';
+
+    /** Version des CGU acceptée par les trois comptes. */
+    public const string TERMS_VERSION = '1.0';
+
+    public function run(): void
+    {
+        DemoCatalogueSeeder::assertSeedableEnvironment();
+
+        DB::transaction(function (): void {
+            $this->account(self::PLAYER_EMAIL, 'Joueur Démo', UserRole::Player, Locale::French);
+            $this->account(self::CURATOR_EMAIL, 'Curateur Démo', UserRole::Curator, Locale::French);
+            $this->account(self::ADMIN_EMAIL, 'Admin Démo', UserRole::Admin, Locale::English);
+        });
+    }
+
+    /**
+     * Le compte demandé, réconcilié par son adresse.
+     *
+     * `role` est posé en **assignation directe** : la colonne est volontairement
+     * hors du `#[Fillable]` de {@see User}, une élévation de privilège par requête
+     * étant exactement ce que la liste d'assignation en masse empêche.
+     */
+    private function account(string $email, string $name, UserRole $role, Locale $locale): User
+    {
+        $now = CarbonImmutable::now();
+
+        $user = User::query()->where('email', $email)->first() ?? new User;
+
+        $user->name = $name;
+        $user->email = $email;
+        $user->email_verified_at = $now;
+        $user->password = Hash::make(self::PASSWORD);
+        $user->role = $role;
+        $user->locale = $locale;
+        $user->terms_accepted_at = $now;
+        $user->terms_version = self::TERMS_VERSION;
+        $user->age_confirmed_at = $now;
+        $user->last_login_at = $now;
+        $user->save();
+
+        foreach ([ConsentKind::Terms, ConsentKind::Age] as $kind) {
+            $exists = UserConsent::query()
+                ->where('user_id', $user->id)
+                ->where('kind', $kind)
+                ->exists();
+
+            if ($exists) {
+                continue;
+            }
+
+            UserConsent::factory()
+                ->for($user)
+                ->state(['kind' => $kind, 'version' => self::TERMS_VERSION, 'accepted_at' => $now])
+                ->create();
+        }
+
+        return $user;
+    }
+
+    /**
+     * Le compte du rôle demandé, ou une exception nommée.
+     *
+     * C'est le point d'entrée du catalogue de démonstration : il transforme
+     * « les seeders ont tourné dans le désordre » en un message qui dit quoi
+     * relancer, au lieu d'une violation de contrainte trois cents lignes plus loin.
+     */
+    public static function demoAccount(UserRole $role): User
+    {
+        $email = match ($role) {
+            UserRole::Player => self::PLAYER_EMAIL,
+            UserRole::Curator => self::CURATOR_EMAIL,
+            UserRole::Admin => self::ADMIN_EMAIL,
+        };
+
+        $user = User::query()->where('email', $email)->first();
+
+        if (! $user instanceof User) {
+            throw new RuntimeException(
+                "Le compte de démonstration [{$email}] n'existe pas : "
+                .self::class.' doit tourner AVANT le catalogue (§ 13.3, exigence 5).',
+            );
+        }
+
+        return $user;
+    }
+}

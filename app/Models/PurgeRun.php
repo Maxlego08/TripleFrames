@@ -42,11 +42,10 @@ use Illuminate\Database\Eloquent\Model;
  * `round_choice_set` → `round_tier` → `round_player` → `round` → `game_player`
  * → `game` → `player` → `room`.
  *
- * DIVERGENCE CONNUE, non arbitrée ici : `scope` est déclarée `string(20)` par la
- * migration, or deux cas de {@see PurgeScope} repris littéralement du tableau
- * du § 11.1 font 21 et 22 caractères. MySQL strict lèverait 1406 à l'insertion,
- * SQLite accepterait en silence. L'arbitrage appartient au porteur du projet et
- * est documenté sur l'enum, pas ici.
+ * `scope` est `string(32)` et non 20 : deux cas de {@see PurgeScope} repris du
+ * tableau du § 11.1 dépassent 20 caractères (`framework_failed_jobs`, 21 ;
+ * `framework_reset_tokens`, 22). MySQL strict aurait levé 1406 à l'insertion là
+ * où SQLite tronque en silence. Arbitré le 22/09, spec § 11.3.
  *
  * @property int $id
  * @property PurgeScope $scope

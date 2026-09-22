@@ -10,6 +10,7 @@
     "license": "MIT",
     "require": {
         "php": "^8.3",
+        "ext-imagick": "*",
         "inertiajs/inertia-laravel": "^3.0",
         "laravel/chisel": "^0.1.0",
         "laravel/fortify": "^1.37.2",
@@ -46,6 +47,7 @@
             "composer install",
             "@php -r \"file_exists('.env') || copy('.env.example', '.env');\"",
             "@php artisan key:generate",
+            "@php artisan tinker --execute=\"File::ensureDirectoryExists(config('filesystems.disks.frames.root')); if (! is_dir((string) config('filesystems.disks.frames.root')) || ! is_writable((string) config('filesystems.disks.frames.root'))) { throw new RuntimeException('FRAMES_DISK_ROOT introuvable ou non inscriptible : ['.config('filesystems.disks.frames.root').'].'); }\"",
             "@php artisan migrate --force",
             "npm install",
             "npm run build"

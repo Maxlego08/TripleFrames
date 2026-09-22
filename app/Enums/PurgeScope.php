@@ -33,13 +33,10 @@ enum PurgeScope: string
 
     case FrameworkSessions = 'framework_sessions';
 
-    // CONTRADICTION NON ARBITRÉE, à trancher par le porteur du projet avant la première
-    // exécution de purge : `purge_run.scope` est déclarée string(20) par la migration
-    // 2026_09_22_100037, or les deux valeurs ci-dessous font 21 et 22 caractères. MySQL strict
-    // lèverait 1406 à l'insertion, SQLite accepterait en silence. Les valeurs sont laissées
-    // telles que le tableau § 11.1 de la spec 10 les écrit ; les trois issues possibles sont
-    // de raccourcir ces deux cas, de porter la colonne à string(24) par migration additive,
-    // ou de journaliser ces périmètres sous un scope agrégé.
+    // Les deux valeurs ci-dessous font 21 et 22 caractères : c'est pour elles que
+    // `purge_run.scope` est `string(32)` et non 20 (arbitré le 22/09, spec § 11.3).
+    // MySQL strict aurait levé 1406 à l'insertion là où SQLite tronque en silence.
+    // Elles restent écrites telles que le tableau § 11.1 de la spec 10 les fixe.
     case FrameworkFailedJobs = 'framework_failed_jobs';
 
     case FrameworkResetTokens = 'framework_reset_tokens';
