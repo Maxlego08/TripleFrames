@@ -21,7 +21,7 @@ Le registre des locales est un **enum backed** `App\Enums\Locale`, pas un tablea
 
 **Ordre de repli d'affichage déclaré par l'instance** : `en`, puis `fr`. Cet ordre sert uniquement à choisir un titre quand celui de la locale du joueur manque ; il n'a aucun effet sur la négociation.
 
-**Locale d'interface ≠ locale de catalogue.** L'interface est livrée en `fr` et `en`. Le catalogue, lui, stocke des titres et des alias dans **toute** langue que TMDB fournit, `ja` compris. Un film japonais a un `title_original` japonais et, quand TMDB la fournit, une translittération latine stockée en alias. Ces lignes existent sans qu'il faille activer `ja` comme langue d'interface.
+**Locale d'interface ≠ locale de catalogue.** L'interface est livrée en `fr` et `en`. Le catalogue, lui, stocke des titres et des alias dans **toute** langue que TMDB fournit, `ja` compris. Un film japonais a un `title_original` japonais et, quand TMDB la fournit, une **translittération latine stockée sur `movie.title_original_latin`** — une colonne invariante, jamais une ligne d'`alias` (`10` § A4) : `alias` reste une table de validation pure, qui n'alimente aucun chemin de rendu. Ces lignes existent sans qu'il faille activer `ja` comme langue d'interface.
 
 ---
 
@@ -131,6 +131,7 @@ Trois familles de contenu sont traduites en données, pas en fichiers, parce qu'
 | Contenu | Exigence | Règle de publication |
 |---|---|---|
 | `title_original` | Invariant, jamais réécrit, jamais copié depuis une traduction. Dernier maillon de la chaîne de repli. | Obligatoire. |
+| `title_original_latin` | Colonne invariante de `movie`, **jamais un alias** (`10` § A4). Affichée **et** acceptée en réponse, inconditionnellement, sans filtre de locale activée. | Facultatif. |
 | `movie_title` par `locale` | Au plus un titre par couple (film, locale). Une locale de catalogue quelconque est admise, pas seulement les locales activées. | **Facultatif** : un film se publie sans couverture complète, le repli le rend jouable. Le back-office affiche la couverture par langue et une file « titres manquants ». |
 | `alias` par `locale` | Plusieurs alias par couple (film, locale). Sert **uniquement** à la validation, jamais à l'affichage. | Facultatif. Un alias FR n'est jamais proposé comme titre EN à la révélation, même s'il reste accepté en réponse. |
 | Libellé de `theme` par `locale` | Un libellé par couple (thème, locale), éditable en back-office. | **Obligatoire dans chaque locale activée pour publier un thème.** Un thème sans libellé afficherait son identifiant technique au joueur ; et les thèmes se comptent en dizaines, quand les films se comptent en centaines — l'exigence est tenable là où elle ne l'est pas pour un titre. |
@@ -147,7 +148,7 @@ Trois familles de contenu sont traduites en données, pas en fichiers, parce qu'
 2. `movie_title` d'une autre locale activée, dans l'**ordre de repli déclaré par l'instance** (`en`, puis `fr`).
 3. `title_original`.
 
-Quand le titre retenu est en écriture non latine, l'affichage utilise la **translittération latine** si TMDB l'a fournie et qu'elle est stockée ; sinon le titre tel quel. La **révélation affiche toujours le titre retenu et `title_original` s'il diffère**, plus l'année — qui est aussi le discriminant des homonymes et des remakes.
+Quand le titre retenu est en écriture non latine, l'affichage utilise la **translittération latine de `movie.title_original_latin`** si TMDB l'a fournie ; sinon le titre tel quel. **Jamais un alias** : un alias n'est jamais affiché, sans exception (`10` § A4). La **révélation affiche toujours le titre retenu et `title_original` s'il diffère**, plus l'année — qui est aussi le discriminant des homonymes et des remakes.
 
 Le **rang atteint** dans cette chaîne est une donnée de premier plan : c'est lui qui rend le QCM dangereux.
 

@@ -106,7 +106,7 @@ Traitée en section dédiée ci-dessous.
 
 ### 7. D'où viennent les images de jeu ? — **b, TMDB + captures personnelles, source tracée image par image**
 
-**Conséquence assumée.** « Source tracée » veut dire des **colonnes** sur `frame`, pas un champ libre : nature de la source (`tmdb` ou capture), référence (chemin de fichier TMDB d'origine, ou support, édition et timecode pour une capture), empreinte du fichier d'origine et du fichier publié. C'est ce qui permet de répondre **en minutes** à une mise en demeure — « combien de vos images viennent de captures, sur quels films » — et c'est la première pièce du dossier de conformité rendu nécessaire par les décisions 1 et 2. La source est déclarée **au moment de la revue**, jamais après. Décision associée à écrire : **l'original non recadré n'est pas conservé**, seul son hachage l'est ; le garder augmenterait l'exposition et le volume de sauvegarde pour un bénéfice de re-curation, tandis qu'une **source de re-cadrage** normalisée (WebP 1920 px, privée, jamais servie à un joueur) rend un re-recadrage gratuit.
+**Conséquence assumée.** « Source tracée » veut dire des **colonnes** sur `frame`, pas un champ libre : nature de la source (`tmdb` ou capture), référence (chemin de fichier TMDB d'origine, ou **timecode seul** pour une capture — voir `10` § A7, qui restreint la trace à ce qui identifie l'**œuvre** et exclut nommément support, édition, appareil et logiciel, sur le risque « licéité de l'acte de capture »), empreinte du fichier d'origine et du fichier publié. C'est ce qui permet de répondre **en minutes** à une mise en demeure — « combien de vos images viennent de captures, sur quels films » — et c'est la première pièce du dossier de conformité rendu nécessaire par les décisions 1 et 2. La source est déclarée **au moment de la revue**, jamais après. Décision associée à écrire : **l'original non recadré n'est pas conservé**, seul son hachage l'est ; le garder augmenterait l'exposition et le volume de sauvegarde pour un bénéfice de re-curation, tandis qu'une **source de re-cadrage** normalisée (WebP 1920 px, privée, jamais servie à un joueur) rend un re-recadrage gratuit.
 
 **Piège de périmètre à ne jamais confondre** : la décision 14 retire le téléversement d'**avatar** de la v1, pas celui d'**image de jeu**. Le curateur téléverse des captures **en v1**, et c'est sur le chemin critique. Le pipeline Imagick ainsi construit sera réutilisé tel quel par l'avatar en v1.1.
 
@@ -342,8 +342,8 @@ Le questionnaire étant clos, **plus aucune spec n'attend une décision du quest
 |---|---|---|---|
 | 1 | `00-overview.md` (mise à jour) | à reprendre | rien — y inscrire les 19 décisions, les jalons, la section conformité, et vider « Questions ouvertes » |
 | 2 | `05-i18n-et-langues.md` | **ÉCRITE** le 22/09 | — |
-| 3 | `10-catalogue-et-modele-de-donnees.md` | **prochaine à écrire** | rien |
-| 4 | `20-back-office-curation.md` | à écrire | rien |
+| 3 | `10-catalogue-et-modele-de-donnees.md` | **ÉCRITE** le 22/09 | — |
+| 4 | `20-back-office-curation.md` | **prochaine à écrire** | rien |
 | 5 | `30-themes-vivier-et-tirage-des-variantes.md` | à écrire | ta liste de sagas, si tu en as une |
 | 6 | `50-salon-reglages-presets-et-lobby.md` | à écrire | rien |
 | 7 | `60-moteur-de-partie-temps-reel-et-mode-solo.md` | à écrire | rien |

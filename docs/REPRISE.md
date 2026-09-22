@@ -1,20 +1,27 @@
 # Reprise — TripleFrames
 
-**Dernière session : 22/09/2026 — questionnaire clos.** Les 19 décisions sont prises. Une seule reste ouverte : le nom de domaine (décision 5). Ce fichier dit où on en est, ce qui est verrouillé, ce qui bloque, et par quoi commencer demain. À jour à chaque fin de session.
+**Dernière session : 22/09/2026 — `10-catalogue-et-modele-de-donnees.md` écrite et vérifiée.** Le schéma est arrêté : 35 tables de domaine plus `users` altérée. Les 19 décisions sont prises. Une seule reste ouverte : le nom de domaine (décision 5). Ce fichier dit où on en est, ce qui est verrouillé, ce qui bloque, et par quoi commencer demain. À jour à chaque fin de session.
 
 ---
 
 ## Où en est le projet
 
-**Phase : spécification.** Zéro ligne de code métier écrite. Le dépôt est le starter kit `laravel/react-starter-kit` intact.
+**Phase : implémentation du schéma.** Les specs `00`, `05` et `10` sont écrites ; **le schéma est en base et les modèles existent**. Le lot 0 (dette du starter) est purgé.
+
+**État de la suite, vérifié le 22/09 :** `composer test` vert — Pint passé, **PHPStan 0 erreur au niveau 7**, **Pest 212 tests / 1 151 assertions** (40 avant cette session). `migrate` et `migrate:rollback` passent 42/42.
 
 | Fichier | Rôle | État |
 |---|---|---|
-| `docs/specs/00-overview.md` | Vue d'ensemble : concept, boucle de jeu, réglages, vocabulaire, principes, exploitation, jalons, ouverture, carte des 12 specs, décisions du cadre | **v3, validée, à jour des 19 décisions** (462 lignes) |
+| `docs/specs/00-overview.md` | Vue d'ensemble : concept, boucle de jeu, réglages, vocabulaire, principes, exploitation, jalons, ouverture, carte des 12 specs, décisions du cadre | **v3, validée, à jour des 19 décisions** (473 lignes) |
 | `docs/specs/questions-ouvertes.md` | Journal de décisions : 19 décisions closes + arbitrages déjà tranchés + ordre d'écriture des specs + risques ouverts | **clos** (391 lignes) |
-| `docs/specs/05-i18n-et-langues.md` | Propriétaire unique de la règle de langue | **ÉCRITE le 22/09** (315 lignes) |
-| `CLAUDE.md` | Mémoire projet chargée à chaque session : règles de jeu, stack, commandes, conventions, pièges | **à jour** (144 lignes) |
-| `docs/specs/10` → `100` | Les 10 specs techniques restantes | **aucune écrite — `10` est la prochaine** |
+| `docs/specs/05-i18n-et-langues.md` | Propriétaire unique de la règle de langue | **ÉCRITE le 22/09** (316 lignes) |
+| `docs/specs/10-catalogue-et-modele-de-donnees.md` | **Propriétaire unique du schéma** : 35 tables de domaine + `users` altérée, conventions portables SQLite/MySQL, rétention et purge, arbitrages | **ÉCRITE le 22/09** (1 426 lignes) |
+| `CLAUDE.md` | Mémoire projet chargée à chaque session : règles de jeu, stack, commandes, conventions, pièges | **à jour** (148 lignes) |
+| `docs/specs/20` → `100` | Les 9 specs techniques restantes | **aucune écrite — `20` est la prochaine** |
+| `database/migrations/` | 37 migrations de domaine + les 5 du starter | **ÉCRITES et vertes le 22/09** (42 fichiers, 35 tables de domaine) |
+| `app/Models/` | 35 modèles de domaine + `User` amendé + un pivot typé | **ÉCRITS le 22/09** (37 fichiers) |
+| `app/Enums/`, `app/Settings/`, `app/Casts/`, `app/Support/` | 44 enums, `RoomSettings` + bornes + limites, le cast versionné, grille d'exclusion et préfixes de stockage | **ÉCRITS le 22/09** |
+| `tests/Feature/Schema/` | Balayages : familles d'horodatage, dérive PHPDoc ↔ colonnes, sérialisation et fuites, journaux en ajout seul, cast versionné | **ÉCRITS le 22/09** (172 tests) |
 
 ---
 
@@ -70,8 +77,8 @@ Points d'exécution secondaires, qui ne rouvrent aucune décision : personne de 
 
 ## Prochaine action, dans l'ordre
 
-1. **Écrire `10-catalogue-et-modele-de-donnees.md`** — seul propriétaire du schéma, dont dépendent les dix autres specs. **N'attend plus rien.**
-2. **Écrire `20-back-office-curation.md`** — débloque le démarrage de la curation, seul chantier humain de plusieurs semaines.
+1. **Écrire les factories et les seeders**, puis le test de bout en bout du `10` § 13.3 : « un salon créé sur le catalogue de démonstration peut lancer une partie de 10 manches ». C'est le seul test qui prouve que la chaîne des **sept faits indépendants** tient — dont deux portent sur des octets réels sur disque. Les cinq exigences du § 13.3 sont impératives, en particulier : `Frame::factory()->published()` doit **écrire un vrai fichier WebP** et calculer `published_hash` sur les octets écrits (deux hashs tirés indépendamment ⇒ aucun film publiable et un lobby à « 0 film » sur un catalogue complet), et les **trois comptes de démonstration** doivent précéder le catalogue. **Le lot 0 est entièrement appliqué** — code et documentaire. Ne pas le refaire.
+2. **Écrire `20-back-office-curation.md`** — débloque le démarrage de la curation, seul chantier humain de plusieurs semaines. Elle doit aussi **confirmer explicitement l'arbitrage A7** de `10` (aucune colonne de support ni d'édition sur une capture) et écrire le contenu item par item de la grille d'exclusion.
 3. Puis `30` → `50` → `60` → `70` → `80` → `40` → `90` → `100`, ordre détaillé en fin de `questions-ouvertes.md`.
 
 **Le chemin critique n'est pas le code, c'est la curation.** Plus tôt le back-office de curation existe, plus tôt le compteur démarre. Et le budget est commun : ~130 h sur le trimestre, dev **et** curation confondus.
@@ -80,19 +87,22 @@ Points d'exécution secondaires, qui ne rouvrent aucune décision : personne de 
 
 ## Dettes du starter à purger avant la première ligne de code métier
 
-- `tests/Pest.php` : `->use(RefreshDatabase::class)` est **commenté** → 31 tests en erreur « no such table: users ». Décommenter.
-- Larastan sature la mémoire : `phpstan analyse --memory-limit=1G`, sinon `composer test` et `ci:check` échouent toujours.
-- Pint échoue sur 12 fichiers de tests (newline finale). `composer lint` corrige.
+- ~~`tests/Pest.php` : `RefreshDatabase` commenté~~ — **fait le 22/09**, actif.
+- ~~Larastan sature la mémoire~~ — **fait**, `--memory-limit=1G` est dans `composer types:check`.
+- ~~Pint échoue sur 12 fichiers~~ — **fait**, 13 fichiers corrigés.
+- ~~PHPDoc `Carbon` de `User`~~ — **fait**, `CarbonImmutable` partout.
 - Aucun temps réel : `BROADCAST_CONNECTION=log`. Reverb, `laravel-echo` et `pusher-js` restent à installer.
 - Session + cache + queue tous sur le MySQL Homestead distant : c'est le goulet du cadencement. Redis est acté avant le moteur, et **`predis/predis` n'est pas encore requis en composer** (pas d'`ext-redis` sous Windows) — c'est `predis` qui doit être la ligne de base.
 - Socialite absent, aucune lib d'image installée (le pipeline vise **Imagick**, présent).
-- **`.env.example` à compléter** : Reverb, Redis, OAuth, TMDB, racine du disque `frames` (`FRAMES_DISK_ROOT`). `composer setup` le copie, donc toute variable manquante casse la CI.
+- **`.env.example` à compléter** : Reverb, Redis, OAuth, TMDB, racine du disque `frames` (`FRAMES_DISK_ROOT`). `composer setup` le copie, donc toute variable manquante casse la CI. Ajouter aussi une étape de création du répertoire dans `composer setup`, sinon le seeder d'images écrit dans un chemin inexistant (`10` § 13.3).
 - `APP_NAME=Laravel` → les titres React affichent « Laravel ». `database/database.sqlite` est un vestige.
 
 ---
 
 ## Pour relancer la session
 
-Dire à Claude : **« Lis `docs/REPRISE.md`, puis écris `docs/specs/10-catalogue-et-modele-de-donnees.md` »**
+Dire à Claude : **« Lis `docs/REPRISE.md`, puis écris les factories, les seeders et le test de bout en bout du `10` § 13.3 »**
+
+Ou, si tu préfères repasser au travail de spécification plutôt qu'au code : **« … puis écris `docs/specs/20-back-office-curation.md` »** — c'est elle qui débloque la curation, le seul chantier de plusieurs semaines.
 
 `CLAUDE.md` se charge tout seul et contient déjà les règles de jeu, la stack, les commandes et les pièges de l'environnement — inutile de les redonner.
