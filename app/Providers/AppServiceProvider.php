@@ -2,9 +2,16 @@
 
 namespace App\Providers;
 
+use App\Listeners\SyncCarbonLocale;
+use App\Support\I18n\LangVersion;
+use App\Support\I18n\NullPlayerTokenLocale;
+use App\Support\I18n\PlayerTokenLocale;
+use App\Support\I18n\TranslationDomains;
 use Carbon\CarbonImmutable;
+use Illuminate\Foundation\Events\LocaleUpdated;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
 use RuntimeException;
@@ -16,7 +23,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        $this->registerLocalization();
     }
 
     /**
@@ -26,6 +33,28 @@ class AppServiceProvider extends ServiceProvider
     {
         $this->configureDefaults();
         $this->assertFramesDiskRoot();
+
+        // `CarbonImmutable` est recâblé une seule fois, par un listener et non
+        // par le middleware de locale : la même bascule doit s'appliquer dans
+        // un job de mail en file, où aucun middleware HTTP ne tourne. Le dépôt
+        // n'a pas d'`EventServiceProvider`, l'enregistrement vit donc ici.
+        Event::listen(LocaleUpdated::class, SyncCarbonLocale::class);
+    }
+
+    /**
+     * Le registre des domaines de traduction est un singleton **de requête** :
+     * les middlewares de route le remplissent, la prop Inertia `translations`
+     * le lit au rendu.
+     *
+     * `PlayerTokenLocale` est le niveau 3 de la résolution de langue ; la
+     * forme du `player_token` appartenant aux specs 10 et 40, il est lié à une
+     * implémentation neutre tant que le jeton n'est pas frappé.
+     */
+    protected function registerLocalization(): void
+    {
+        $this->app->singleton(TranslationDomains::class);
+        $this->app->singleton(LangVersion::class);
+        $this->app->bind(PlayerTokenLocale::class, NullPlayerTokenLocale::class);
     }
 
     /**

@@ -101,7 +101,15 @@ return [
     |
     */
 
-    'middleware' => ['web'],
+    /*
+     * `translations:account` est ajouté ici et pas sur un groupe de routes :
+     * Fortify enregistre ses routes lui-même (connexion, inscription, mot de
+     * passe oublié, vérification d'adresse, 2FA), elles échapperaient à tout
+     * groupe déclaré dans `routes/`. Sans ce domaine, les écrans
+     * d'authentification recevraient `common` seul et afficheraient des clés
+     * brutes.
+     */
+    'middleware' => ['web', 'translations:account'],
 
     /*
     |--------------------------------------------------------------------------
