@@ -13,6 +13,15 @@ jobs:
   ci:
     runs-on: ubuntu-latest
 
+    # Une PR poussée trois fois ne consomme qu'une exécution ; `main` n'est
+    # jamais annulée, parce qu'elle alimente la construction des artefacts.
+    # Hors PR, chaque exécution a donc SON groupe (`run_id`) : GitHub ne garde
+    # qu'une exécution en attente par groupe et annule celle qui attendait
+    # quand une troisième arrive, même sans `cancel-in-progress`.
+    concurrency:
+      group: tests-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

@@ -1,0 +1,125 @@
+name: tests-mysql
+
+# Ce que la suite par défaut (SQLite) ne peut pas prouver : longueurs de
+# VARCHAR (1406), longueurs d'index (1071), ONLY_FULL_GROUP_BY, collation,
+# JSON natif, concurrence réelle de deux connexions et verrous Redis
+# (groupes `mysql` et `locks-timing`, contrat C18). Rejoue aussi chaque nuit
+# toute la suite par défaut sur MySQL. Un déploiement exige ce workflow vert,
+# comme `tests`, sur le commit source (spec 100 § 2.6).
+
+on:
+  push:
+    branches:
+      - main
+  schedule:
+    # Nocturne, en UTC, à une minute non ronde pour éviter les pics de
+    # l'ordonnanceur de la forge.
+    - cron: '23 3 * * *'
+  workflow_dispatch:
+  pull_request:
+    # Attrape avant la fusion les 1406 et 1071 nés des migrations et des
+    # modèles. Ne couvre ni les requêtes ni le cast : un ONLY_FULL_GROUP_BY
+    # né d'une requête est vu au `push: main` suivant, avant tout déploiement.
+    paths:
+      - 'database/**'
+      - 'app/Models/**'
+      - 'app/Enums/**'
+      - 'app/Settings/**'
+      - 'config/database.php'
+      - 'tests/Concurrency/**'
+      - 'tests/Feature/Schema/**'
+      - '.github/workflows/tests-mysql.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  mysql-redis:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    # Une PR poussée trois fois ne consomme qu'une exécution. Hors PR, chaque
+    # exécution a SON groupe (`run_id`) : GitHub ne garde qu'une exécution en
+    # attente par groupe et annule celle qui attendait quand une troisième
+    # arrive, même sans `cancel-in-progress`. Un groupe par `ref` priverait
+    # ainsi un commit de `main` du vert qu'exige son déploiement (§ 2.6).
+    concurrency:
+      group: tests-mysql-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
+          MYSQL_DATABASE: tripleframes_test
+        ports:
+          - 3306:3306
+        # Sonde en TCP : le serveur d'initialisation de l'image n'écoute pas le
+        # réseau, donc le conteneur n'est sain qu'une fois le vrai serveur prêt.
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 --silent"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=30
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=30
+
+    # Surcharge les valeurs non forcées de phpunit.xml. CACHE_STORE reste
+    # `array` : seuls les tests `locks-timing` choisissent Redis, et vident
+    # leurs bases de test (REDIS_DB, REDIS_CACHE_DB) avant chaque test.
+    env:
+      DB_CONNECTION: mysql
+      DB_HOST: 127.0.0.1
+      DB_DATABASE: tripleframes_test
+      DB_USERNAME: root
+      DB_PASSWORD: ''
+      REDIS_HOST: 127.0.0.1
+      REDIS_DB: 14
+      REDIS_CACHE_DB: 15
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
+        with:
+          php-version: '8.3'
+          # Miroir de `ext-imagick` dans composer.json (R-40, CLAUDE.md §8).
+          extensions: imagick
+          tools: composer:v2
+          coverage: none
+
+      - name: Setup Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22'
+
+      - name: Setup Application
+        run: composer setup
+
+      # La suite entière ET les deux groupes : aucune exclusion ici.
+      - name: Run Tests
+        run: php artisan test
+
+      # Non bloquant, nocturne seulement : les alertes restent lisibles dans le
+      # journal du job sans ouvrir un flux de PR de dépendances à relire.
+      - name: Audit Composer Dependencies
+        if: ${{ !cancelled() && github.event_name == 'schedule' }}
+        continue-on-error: true
+        run: composer audit
+
+      - name: Audit npm Dependencies
+        if: ${{ !cancelled() && github.event_name == 'schedule' }}
+        continue-on-error: true
+        run: npm audit --omit=dev

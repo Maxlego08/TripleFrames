@@ -75,7 +75,11 @@
             "@php artisan config:clear --ansi",
             "@lint:check",
             "@types:check",
-            "@php artisan test"
+            "@php artisan test --exclude-group=mysql --exclude-group=locks-timing"
+        ],
+        "test:mysql": [
+            "Composer\\Config::disableProcessTimeout",
+            "@php artisan test --group=mysql --group=locks-timing"
         ],
         "post-autoload-dump": [
             "Illuminate\\Foundation\\ComposerScripts::postAutoloadDump",
@@ -95,6 +99,10 @@
         "pre-package-uninstall": [
             "Illuminate\\Foundation\\ComposerScripts::prePackageUninstall"
         ]
+    },
+    "scripts-descriptions": {
+        "test": "Suite par défaut (SQLite) : Pint, PHPStan, puis Pest sans les groupes mysql et locks-timing.",
+        "test:mysql": "Groupes mysql et locks-timing contre une base MySQL de TEST : exporter DB_CONNECTION=mysql et DB_DATABASE=<base de test> (jamais la base de développement, que RefreshDatabase viderait)."
     },
     "extra": {
         "laravel": {

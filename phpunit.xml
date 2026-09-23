@@ -11,6 +11,11 @@
         <testsuite name="Feature">
             <directory>tests/Feature</directory>
         </testsuite>
+        <!-- Groupe `locks-timing` (contrat C18) : deux connexions MySQL réelles et
+             Redis. Exclue de `composer test`, jouée par le job CI `mysql-redis`. -->
+        <testsuite name="Concurrency">
+            <directory>tests/Concurrency</directory>
+        </testsuite>
     </testsuites>
     <source>
         <include>
@@ -41,8 +46,24 @@
              en appel réel et authentifié depuis le poste du développeur, et il
              passerait en local pour échouer en CI. La CI sans clé devient ici
              l'état par défaut partout. -->
-        <env name="TMDB_API_KEY" value=""/>
-        <env name="TMDB_API_READ_ACCESS_TOKEN" value=""/>
+        <!-- Chaque identifiant externe est vidé par une PAIRE de lignes (spec
+             100 § 2.3) : une variable exportée dans le shell du développeur
+             arrive à la fois dans l'environnement du processus et dans $_SERVER.
+             - `<env force="true">` écrase getenv() et $_ENV ; sans `force`,
+               PHPUnit laisse en place la valeur déjà exportée.
+             - `<server>` écrase $_SERVER, que phpdotenv — donc env() et toute la
+               configuration Laravel — lit EN PREMIER. Sans cette ligne, la vraie
+               clé du shell l'emporte malgré `force`.
+             Jamais sur DB_*, CACHE_STORE, QUEUE_CONNECTION ni REDIS_*, que le job
+             `mysql-redis` surcharge par son environnement. -->
+        <env name="TMDB_API_KEY" value="" force="true"/>
+        <server name="TMDB_API_KEY" value=""/>
+        <env name="TMDB_API_READ_ACCESS_TOKEN" value="" force="true"/>
+        <server name="TMDB_API_READ_ACCESS_TOKEN" value=""/>
+        <env name="MAIL_PASSWORD" value="" force="true"/>
+        <server name="MAIL_PASSWORD" value=""/>
+        <env name="AWS_SECRET_ACCESS_KEY" value="" force="true"/>
+        <server name="AWS_SECRET_ACCESS_KEY" value=""/>
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
         <env name="NIGHTWATCH_ENABLED" value="false"/>

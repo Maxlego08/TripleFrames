@@ -392,7 +392,7 @@ Ensuite, à chaque session : **« Implémente l'étape suivante de l'ordre des l
 
 **Phase A — socle et prérequis de la mise en service (IA ; 68,5 à 102 h)**
 
-6. L100-1 — groupes Pest, suites, job `mysql-redis` → —
+6. L100-1 — groupes Pest, suites, job `mysql-redis` → — — ✅ livrée le 24/09
 7. L100-2 — gardes du dépôt, licence, méta-vérification des tokens → 6
 8. L100-3 — Vitest, matrice des réglages, correctif `translateChoice` (I-10) → 6
 9. L50-1 — `config/game.php`, `PlatformLimits` (D22) → —
