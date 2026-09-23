@@ -24,7 +24,11 @@ export default function VerifyEmail({ status }: { status?: string }) {
                 {({ processing }) => (
                     <>
                         <Button disabled={processing} variant="secondary">
-                            {processing && <Spinner />}
+                            {processing && (
+                                <Spinner
+                                    aria-label={t('common.state.loading')}
+                                />
+                            )}
                             {t('account.verify_email.submit')}
                         </Button>
 

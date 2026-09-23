@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Enums\ImportRunKind;
 use App\Enums\ImportRunStatus;
+use App\Enums\Locale;
 use App\Models\ImportRun;
 use App\Models\User;
 use App\Support\Catalog\ImportDecision;
@@ -16,7 +17,10 @@ use App\Support\Tmdb\TmdbException;
 use App\ValueObjects\Catalog\ImportFilter;
 use Carbon\CarbonImmutable;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\App;
 use Symfony\Component\Console\Helper\ProgressBar;
+use Symfony\Component\Console\Input\InputInterface;
+use Symfony\Component\Console\Output\OutputInterface;
 
 /**
  * Ce que les deux voies d'import partagent : le refus poli quand aucune clé
@@ -27,10 +31,12 @@ use Symfony\Component\Console\Helper\ProgressBar;
  * déjà posé par `lang:hash` et `lang:types` dans ce dépôt. La règle 4 porte sur
  * les surfaces d'interface — écrans, erreurs de validation, e-mails, attributs
  * `alt` — ; une sortie de terminal n'en est pas une, et le domaine `admin` est
- * français par construction (décision 9). **Seuls les motifs de refus voyagent
- * en clés de traduction** : ils viennent du service d'import et du client TMDB,
- * ils seront rendus tels quels par l'écran de back-office, et les
- * pré-formatter ici les rendrait intraduisibles là-bas.
+ * français par construction (décision 9). **Tout ce que l'écran de back-office
+ * rendra à son tour voyage en clés de traduction** — motifs de refus, pannes
+ * TMDB, auteur inconnu : ils viennent du service d'import et du client TMDB, et
+ * les pré-formatter ici les rendrait intraduisibles là-bas. La locale de ces
+ * clés est posée explicitement ({@see self::initialize()}) : une console ne
+ * traverse aucun middleware, et la locale ambiante est `en`.
  */
 abstract class CatalogImportCommand extends Command
 {
@@ -56,6 +62,24 @@ abstract class CatalogImportCommand extends Command
         protected readonly TmdbQuotaLimiter $limiter,
     ) {
         parent::__construct();
+    }
+
+    /**
+     * Pendant de `ForceAdminLocale` pour la console.
+     *
+     * Le domaine `admin` est **français par construction** (décision 9) :
+     * `lang/en/admin.php` n'existe pas, et une commande tourne sous
+     * `APP_LOCALE=en` sans qu'aucun middleware HTTP ne passe. Sans ce geste,
+     * `__('admin.tmdb.error.server_error')` rendrait la **clé brute** au
+     * curateur, substitutions perdues. C'est le même geste que le middleware
+     * posé sur le groupe de routes d'administration, appliqué au seul endroit
+     * où ces clés sont consommées aujourd'hui.
+     */
+    protected function initialize(InputInterface $input, OutputInterface $output): void
+    {
+        parent::initialize($input, $output);
+
+        App::setLocale(Locale::French->value);
     }
 
     /**
@@ -113,6 +137,14 @@ abstract class CatalogImportCommand extends Command
     /**
      * Le balayage à reprendre, servi par l'index `(status)` — la raison d'être
      * de cet index (§ 9.1).
+     *
+     * **Elle estampille `started_at` lorsqu'il est nul**, et ce n'est pas un
+     * détail d'horodatage. Un balayage ouvert par le back-office est écrit
+     * `status = running` avec `started_at = null` : c'est exactement ce couple
+     * qui vaut « en file », c'est-à-dire ouvert mais qu'aucun worker n'a encore
+     * pris. Sans cette estampille, « en file » et « en cours » seraient
+     * indistinguables à l'écran, et le symptôme quotidien du développement —
+     * aucun worker ne tourne — n'aurait aucun signe visible.
      */
     protected function resumableRun(ImportRunKind $kind): ?ImportRun
     {
@@ -127,7 +159,14 @@ abstract class CatalogImportCommand extends Command
             $query->whereKey($runId);
         }
 
-        return $query->first();
+        $run = $query->first();
+
+        if ($run instanceof ImportRun && $run->started_at === null) {
+            $run->started_at = CarbonImmutable::now();
+            $run->save();
+        }
+
+        return $run;
     }
 
     /**
@@ -203,23 +242,24 @@ abstract class CatalogImportCommand extends Command
      */
     protected function reportTmdbFailure(TmdbException $exception): ImportRunStatus
     {
-        $message = __($exception->translationKey(), $exception->translationReplacements());
+        $message = $this->renderReason(
+            $exception->translationKey(),
+            $exception->translationReplacements(),
+        );
 
         $this->newLine();
 
-        if ($exception->kind === TmdbErrorKind::RateLimited) {
-            $this->components->warn('Quota TMDB atteint : '.(is_string($message) ? $message : $exception->translationKey()));
+        // La clé porte déjà sa qualification (« Quota TMDB atteint », « TMDB est
+        // en panne », « Appel TMDB interrompu ») : un préfixe littéral la
+        // dupliquerait mot pour mot. La distinction suspendu / échoué passe par
+        // le canal, pas par le texte.
+        if ($exception->kind === TmdbErrorKind::RateLimited || $exception->isTransient()) {
+            $this->components->warn($message);
 
             return ImportRunStatus::Running;
         }
 
-        if ($exception->isTransient()) {
-            $this->components->warn('Panne passagère de TMDB : '.(is_string($message) ? $message : $exception->translationKey()));
-
-            return ImportRunStatus::Running;
-        }
-
-        $this->components->error(is_string($message) ? $message : $exception->translationKey());
+        $this->components->error($message);
 
         return ImportRunStatus::Failed;
     }
@@ -276,7 +316,9 @@ abstract class CatalogImportCommand extends Command
             : User::query()->where('email', $actor)->first();
 
         if (! $user instanceof User) {
-            $this->components->warn('Auteur ['.$actor.'] inconnu : le balayage sera enregistré sans auteur.');
+            $this->components->warn(
+                $this->renderReason('admin.catalog.import.actor_unknown', ['actor' => $actor]),
+            );
 
             return null;
         }
@@ -288,16 +330,20 @@ abstract class CatalogImportCommand extends Command
      * Motif d'une décision d'import, rendu pour un humain.
      *
      * La clé et ses substitutions voyagent en DONNÉES jusqu'ici (règle 4) :
-     * c'est l'affichage, et lui seul, qui les résout. Une clé absente du
-     * dictionnaire est renvoyée telle quelle par le traducteur ; on retombe
-     * alors sur la clé suivie de ses substitutions, qui reste diagnosticable,
-     * plutôt que sur une phrase tronquée.
+     * c'est l'affichage, et lui seul, qui les résout. **La locale est passée
+     * explicitement** : le domaine `admin` n'existe qu'en français, et s'en
+     * remettre à la locale ambiante suffirait à faire rendre la clé brute dès
+     * qu'un appelant oublie de la poser. Une clé absente du dictionnaire est
+     * renvoyée telle quelle par le traducteur — c'est ce test, et non un
+     * `is_string()`, qui le détecte : on retombe alors sur la clé suivie de
+     * ses substitutions, qui reste diagnosticable, plutôt que sur une phrase
+     * tronquée passée pour un message.
      *
      * @param  array<string, string|int>  $replacements
      */
-    private function renderReason(string $key, array $replacements): string
+    protected function renderReason(string $key, array $replacements): string
     {
-        $message = __($key, $replacements);
+        $message = __($key, $replacements, Locale::French->value);
 
         if (is_string($message) && $message !== $key) {
             return $message;

@@ -96,5 +96,16 @@ class FortifyServiceProvider extends ServiceProvider
                 ($request->input('credential.id') ?: $request->session()->getId()).'|'.$request->ip(),
             );
         });
+
+        // Les trois écritures du back-office d'import. Le limiteur n'est pas là
+        // contre un attaquant — le groupe est déjà derrière `auth`, `verified`
+        // et `role:curator` — mais contre le double-clic et le rechargement
+        // nerveux : chaque envoi ouvre une ligne `import_run` et dispatche un
+        // job qui consomme un quota TMDB partagé. Par UTILISATEUR, et non par
+        // IP : deux curateurs derrière le même NAT associatif ne se bloquent
+        // jamais l'un l'autre.
+        RateLimiter::for('admin-import', function (Request $request) {
+            return Limit::perMinute(12)->by((string) $request->user()?->getAuthIdentifier());
+        });
     }
 }

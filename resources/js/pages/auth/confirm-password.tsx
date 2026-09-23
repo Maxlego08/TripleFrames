@@ -54,7 +54,11 @@ export default function ConfirmPassword() {
                                 disabled={processing}
                                 data-test="confirm-password-button"
                             >
-                                {processing && <Spinner />}
+                                {processing && (
+                                    <Spinner
+                                        aria-label={t('common.state.loading')}
+                                    />
+                                )}
                                 {t('account.confirm_password.submit')}
                             </Button>
                         </div>

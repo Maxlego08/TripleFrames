@@ -43,6 +43,7 @@ return [
         'register' => 'Register',
         'repository' => 'Repository',
         'settings' => 'Settings',
+        'toggle_sidebar' => 'Toggle sidebar',
     ],
 
     'language' => [

@@ -18,6 +18,12 @@
         </include>
     </source>
     <php>
+        <!-- Le poste de développement tourne à `memory_limit=128M` et les tests
+             d'architecture indexent tout `app/` : sans ce relèvement, la suite
+             tombe en épuisement mémoire au lieu d'échouer sur une assertion, et
+             le mode de défaillance devient illisible. Même geste que le
+             relèvement de mémoire déjà passé à PHPStan par `composer types:check`. -->
+        <ini name="memory_limit" value="512M"/>
         <env name="APP_ENV" value="testing"/>
         <env name="APP_MAINTENANCE_DRIVER" value="file"/>
         <env name="BCRYPT_ROUNDS" value="4"/>
@@ -29,6 +35,14 @@
         <env name="MAIL_MAILER" value="array"/>
         <env name="QUEUE_CONNECTION" value="sync"/>
         <env name="SESSION_DRIVER" value="array"/>
+        <!-- Le processus de test ne porte JAMAIS la clé TMDB. Une neutralisation
+             fichier par fichier serait une discipline, pas une propriété du
+             harnais : un test qui oublierait Http::preventStrayRequests() partirait
+             en appel réel et authentifié depuis le poste du développeur, et il
+             passerait en local pour échouer en CI. La CI sans clé devient ici
+             l'état par défaut partout. -->
+        <env name="TMDB_API_KEY" value=""/>
+        <env name="TMDB_API_READ_ACCESS_TOKEN" value=""/>
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
         <env name="NIGHTWATCH_ENABLED" value="false"/>

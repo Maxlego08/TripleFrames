@@ -71,11 +71,29 @@ return [
     | `deduplication_chunk` est la taille de lot du `SELECT id, availability
     | FROM movie WHERE tmdb_id IN (…)` servi par `movie_tmdb_uq` (§ 9.2).
     |
+    | Les quatre dernières valeurs bornent les DEUX formulaires du back-office,
+    | et elles vivent ici pour la même raison que le filtre de goût : un plafond
+    | écrit en littéral dans un FormRequest est un réglage de jeu codé en dur
+    | (règle 2). Elles bornent une requête WEB, pas la console — `composer dev`
+    | lance `queue:listen --timeout=900`, et un envoi dont le travail dépasse ce
+    | budget serait tué au milieu en laissant un balayage `running` sans cause
+    | visible. La console, elle, reste libre : `catalog:import-ids --file=` avale
+    | la liste d'amorçage de 200 identifiants d'un geste.
+    |
+    | `language_choices` est une liste de SUGGESTIONS d'interface, jamais une
+    | liste blanche : la validation accepte n'importe quel code de deux lettres,
+    | et c'est ce qui rend le balayage élargi possible — donc traçable par
+    | `import_run.is_widened`, et non interdit.
+    |
     */
 
     'import' => [
         'requests_per_second' => 35,
         'deduplication_chunk' => 200,
+        'paste_max_ids' => 50,
+        'pages_min' => 1,
+        'pages_max' => 5,
+        'language_choices' => ['fr', 'en', 'ja', 'ko', 'it', 'es', 'de', 'zh', 'ru', 'sv'],
     ],
 
 ];

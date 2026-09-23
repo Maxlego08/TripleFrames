@@ -90,7 +90,11 @@ export default function ResetPassword({ token, email, passwordRules }: Props) {
                             disabled={processing}
                             data-test="reset-password-button"
                         >
-                            {processing && <Spinner />}
+                            {processing && (
+                                <Spinner
+                                    aria-label={t('common.state.loading')}
+                                />
+                            )}
                             {t('account.reset_password.submit')}
                         </Button>
                     </div>

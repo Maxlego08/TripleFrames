@@ -40,6 +40,7 @@ return [
         'register' => 'Créer un compte',
         'repository' => 'Dépôt',
         'settings' => 'Réglages',
+        'toggle_sidebar' => 'Replier ou déplier la barre latérale',
     ],
 
     'language' => [

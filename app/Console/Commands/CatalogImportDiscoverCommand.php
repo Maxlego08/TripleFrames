@@ -139,18 +139,26 @@ class CatalogImportDiscoverCommand extends CatalogImportCommand
 
             $next = $cursor->next($page) ?? $cursor->nextLanguage(count($languages));
 
-            // Le curseur enregistré est TOUJOURS celui de la prochaine page à
-            // lire. Une page à demi consommée sera relue en entier : la
-            // déduplication par `movie_tmdb_uq` la rend inoffensive, alors
-            // qu'un curseur avancé trop tôt perdrait des films en silence.
-            $run->tmdb_page_cursor = ($next ?? $cursor)->toColumn();
-            $run->save();
-
+            // Une page à demi consommée est REJOUÉE EN ENTIER : `consume()` ne
+            // rend un statut que lorsqu'un appel de DÉTAIL a échoué, donc au
+            // milieu de la page courante. Avancer le curseur ici perdrait en
+            // silence tous les films restants de la page — jusqu'à dix-neuf par
+            // incident, sans aucune trace dans `import_run`, alors que la
+            // relecture est inoffensive : `movie_tmdb_uq` et
+            // `outcomeForExisting()` rendent `Duplicate` sans appel de détail.
             if ($status !== null) {
+                $run->tmdb_page_cursor = $cursor->toColumn();
+                $run->save();
+
                 $bar->finish();
 
                 return $status;
             }
+
+            // Page consommée jusqu'au bout : le curseur enregistré est celui de
+            // la prochaine page à lire.
+            $run->tmdb_page_cursor = ($next ?? $cursor)->toColumn();
+            $run->save();
 
             if ($next === null) {
                 $bar->finish();

@@ -365,11 +365,20 @@ final class MovieImporter
      * n'est jamais proposé au retrait pour sa langue, ses votes ou sa date.
      *
      * `content_flag` est le seul verdict que la relecture puisse changer, et
-     * **dans un seul sens** : une certification restrictive découverte après
-     * coup le bascule en `blocked` et **propose** une dépublication. Le lever
-     * est un geste de curateur — `content_verified_*` est dans la colonne
-     * « jamais touché », et un import qui le contredirait annulerait une
-     * vérification humaine signée et horodatée.
+     * seulement sur deux transitions, toutes deux dictées par la lecture :
+     *
+     *  - vers `blocked`, quand une certification restrictive apparaît après
+     *    coup — et cette bascule **propose** une dépublication ;
+     *  - de `unrated_pending` vers `clear`, quand le visa manquant au premier
+     *    import est désormais connu et non restrictif.
+     *
+     * `unrated_pending` n'est pas une vérification humaine, c'est le défaut de
+     * la colonne : l'y laisser garderait le film hors du vivier pour toujours
+     * et obligerait le curateur à poser `content_verified_*`, geste que le
+     * § 3.1 réserve à un film sans certification FR ni US connue — la coche
+     * deviendrait une signature fausse. **Un `blocked` n'est jamais levé** :
+     * `content_verified_*` est dans la colonne « jamais touché », et un import
+     * qui le contredirait annulerait une vérification humaine signée.
      */
     private function resynchronize(Movie $movie, TmdbMovie $tmdb): ImportOutcome
     {
@@ -389,6 +398,17 @@ final class MovieImporter
 
             if ($gate->isRefused()) {
                 $movie->content_flag = ContentFlag::Blocked;
+            } elseif (
+                $movie->content_flag === ContentFlag::UnratedPending
+                && $gate->flag === ContentFlag::Clear
+            ) {
+                // Sortie du défaut de la colonne, et de lui seul : un film importé
+                // avant que TMDB ne porte son visa restait hors du vivier à vie
+                // alors que sa classification est désormais connue et non
+                // restrictive — et le curateur devait cocher `content_verified_*`
+                // pour l'en sortir, c'est-à-dire signer une vérification qu'il
+                // n'a pas faite. Ce n'est PAS un lever de `blocked`.
+                $movie->content_flag = ContentFlag::Clear;
             }
 
             $movie->save();

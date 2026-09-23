@@ -171,6 +171,38 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Bornes croisees des reglages de salon
+    |--------------------------------------------------------------------------
+    |
+    | Emises par `App\Settings\RoomSettings`, qui valide les bornes CROISEES
+    | que douze regles champ par champ laisseraient passer (regle 2). Chaque
+    | ligne nomme le reglage fautif -- `:attribute` est resolu par le bloc
+    | `attributes` ci-dessous -- et ne porte que les substitutions que le code
+    | fournit reellement pour cette cle.
+    |
+    | Le TEXTE definitif de ces messages appartient a
+    | `50-salon-reglages-presets-et-lobby.md` ; seules les lignes que du code
+    | livre appelle deja sont ecrites ici.
+    |
+    */
+
+    'room_settings' => [
+        'between' => 'The :attribute setting must be between :min and :max.',
+        'boolean' => 'The :attribute setting must be on or off.',
+        'duration_mismatch' => 'The :attribute setting adds up to :sum seconds while the round lasts :duration.',
+        'enum' => 'The :attribute setting is not one of the allowed values.',
+        'integer' => 'The :attribute setting must be a whole number.',
+        'integer_list' => 'The :attribute setting must be a list of whole numbers.',
+        'list_size' => 'The :attribute setting must hold exactly :size values, one per frame.',
+        'round_duration' => 'The :attribute setting must be between :min and :max seconds for :frames frames per round.',
+        'sum_between' => 'The :attribute setting must add up to between :min and :max seconds.',
+        'theme_ids' => 'The :attribute setting must be a list of theme identifiers.',
+        'tier_duration' => 'Tier :tier of the :attribute setting must be between :min and :max seconds.',
+        'unknown_field' => 'The :attribute setting does not exist.',
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Custom Validation Language Lines
     |--------------------------------------------------------------------------
     |
@@ -198,19 +230,36 @@ return [
     */
 
     'attributes' => [
+        'advanced' => 'advanced tab',
+        'allowLateJoin' => 'late join',
+        'attemptsPerRound' => 'attempts per round',
+        'attemptsPerSecond' => 'attempts per second',
+        'capacity' => 'seats',
         'code' => 'authentication code',
         'current_password' => 'current password',
+        'disconnectGraceSeconds' => 'disconnection grace period',
         'email' => 'email address',
+        'framesPerRound' => 'frames per round',
         'frames_per_round' => 'frames per round',
+        'inputDifficulty' => 'input difficulty',
         'locale' => 'language',
+        'maxAnswerLength' => 'answer length',
         'name' => 'name',
         'nickname' => 'nickname',
+        'noRepeatMovies' => 'no repeated movies',
         'password' => 'password',
         'password_confirmation' => 'password confirmation',
         'recovery_code' => 'recovery code',
         'remember' => 'remember me',
+        'revealDuration' => 'reveal duration',
+        'roundDuration' => 'round duration',
+        'roundsCount' => 'rounds',
         'room_code' => 'room code',
         'rounds_count' => 'rounds',
+        'speedBonus' => 'speed bonus',
+        'themeIds' => 'themes',
+        'tierDurations' => 'tier durations',
+        'tierPoints' => 'tier points',
         'token' => 'token',
     ],
 

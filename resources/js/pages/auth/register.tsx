@@ -112,7 +112,11 @@ export default function Register({ passwordRules }: Props) {
                                 tabIndex={5}
                                 data-test="register-user-button"
                             >
-                                {processing && <Spinner />}
+                                {processing && (
+                                    <Spinner
+                                        aria-label={t('common.state.loading')}
+                                    />
+                                )}
                                 {t('account.register.submit')}
                             </Button>
                         </div>

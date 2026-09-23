@@ -51,7 +51,11 @@ export default function PasskeyVerify({
                     onClick={verify}
                     disabled={isLoading}
                 >
-                    {isLoading ? <Spinner /> : <KeyRound className="h-4 w-4" />}
+                    {isLoading ? (
+                        <Spinner aria-label={t('common.state.loading')} />
+                    ) : (
+                        <KeyRound className="h-4 w-4" />
+                    )}
                     {isLoading
                         ? (loadingLabel ?? t('account.passkeys.verify.loading'))
                         : (label ?? t('account.passkeys.verify.submit'))}

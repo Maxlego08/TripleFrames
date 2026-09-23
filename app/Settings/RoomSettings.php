@@ -1151,12 +1151,40 @@ final readonly class RoomSettings
     }
 
     /**
+     * Résout un message de borne croisée dans la langue de l'hôte.
+     *
+     * `:attribute` est résolu ici, et pas par le validateur : ces bornes ne
+     * passent par aucune règle Laravel, donc rien ne remplacerait le nom de
+     * champ brut par son libellé. Sans ce geste, un hôte francophone lirait
+     * « Le réglage tierDurations… » (spec 05 § Dictionnaires serveur). Un champ
+     * inconnu — le seul cas où la valeur vient de l'entrée — retombe sur son
+     * propre nom.
+     *
+     * Une clé absente du dictionnaire est renvoyée telle quelle par le
+     * traducteur : c'est la comparaison à la clé, et non un `is_string()`, qui
+     * le détecte.
+     *
      * @param  array<string, int|string>  $replace
      */
     private static function translate(string $key, array $replace): string
     {
+        if (array_key_exists('attribute', $replace)) {
+            $replace['attribute'] = self::attributeLabel((string) $replace['attribute']);
+        }
+
         $message = trans($key, $replace);
 
-        return is_string($message) ? $message : $key;
+        return is_string($message) && $message !== $key ? $message : $key;
+    }
+
+    /**
+     * Libellé lisible d'un réglage, pris dans le bloc `attributes` partagé avec
+     * tous les messages de validation du dépôt.
+     */
+    private static function attributeLabel(string $field): string
+    {
+        $label = trans('validation.attributes.'.$field);
+
+        return is_string($label) && $label !== 'validation.attributes.'.$field ? $label : $field;
     }
 }

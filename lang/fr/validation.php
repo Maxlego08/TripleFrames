@@ -172,6 +172,32 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Bornes croisées des réglages de salon
+    |--------------------------------------------------------------------------
+    |
+    | Miroir exact de `lang/en/validation.php` § `room_settings`. Émises par
+    | `App\Settings\RoomSettings` : l’hôte qui règle une manche de 10 s avec
+    | 5 images doit lire le minimum calculé, pas une clé brute.
+    |
+    */
+
+    'room_settings' => [
+        'between' => 'Le réglage :attribute doit être compris entre :min et :max.',
+        'boolean' => 'Le réglage :attribute doit être activé ou désactivé.',
+        'duration_mismatch' => 'Le réglage :attribute totalise :sum secondes alors que la manche en dure :duration.',
+        'enum' => 'Le réglage :attribute ne fait pas partie des valeurs autorisées.',
+        'integer' => 'Le réglage :attribute doit être un nombre entier.',
+        'integer_list' => 'Le réglage :attribute doit être une liste de nombres entiers.',
+        'list_size' => 'Le réglage :attribute doit compter exactement :size valeurs, une par image.',
+        'round_duration' => 'Le réglage :attribute doit être compris entre :min et :max secondes pour :frames images par manche.',
+        'sum_between' => 'Le réglage :attribute doit totaliser entre :min et :max secondes.',
+        'theme_ids' => 'Le réglage :attribute doit être une liste d’identifiants de thèmes.',
+        'tier_duration' => 'Le palier :tier du réglage :attribute doit être compris entre :min et :max secondes.',
+        'unknown_field' => 'Le réglage :attribute n’existe pas.',
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Messages de validation personnalisés
     |--------------------------------------------------------------------------
     */
@@ -195,19 +221,36 @@ return [
     */
 
     'attributes' => [
+        'advanced' => 'onglet avancé',
+        'allowLateJoin' => 'entrée en cours de partie',
+        'attemptsPerRound' => 'tentatives par manche',
+        'attemptsPerSecond' => 'tentatives par seconde',
+        'capacity' => 'nombre de sièges',
         'code' => 'code d’authentification',
         'current_password' => 'mot de passe actuel',
+        'disconnectGraceSeconds' => 'délai de grâce à la déconnexion',
         'email' => 'adresse e-mail',
+        'framesPerRound' => 'nombre d’images par manche',
         'frames_per_round' => 'nombre d’images par manche',
+        'inputDifficulty' => 'difficulté de saisie',
         'locale' => 'langue',
+        'maxAnswerLength' => 'longueur maximale d’une réponse',
         'name' => 'nom',
         'nickname' => 'pseudo',
+        'noRepeatMovies' => 'non-répétition des films',
         'password' => 'mot de passe',
         'password_confirmation' => 'confirmation du mot de passe',
         'recovery_code' => 'code de récupération',
         'remember' => 'se souvenir de moi',
+        'revealDuration' => 'durée de révélation',
+        'roundDuration' => 'durée d’une manche',
+        'roundsCount' => 'nombre de manches',
         'room_code' => 'code du salon',
         'rounds_count' => 'nombre de manches',
+        'speedBonus' => 'bonus de rapidité',
+        'themeIds' => 'thèmes',
+        'tierDurations' => 'durées des paliers',
+        'tierPoints' => 'valeurs des paliers',
         'token' => 'jeton',
     ],
 

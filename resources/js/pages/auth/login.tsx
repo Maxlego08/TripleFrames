@@ -99,7 +99,11 @@ export default function Login({ status, canResetPassword }: Props) {
                                 disabled={processing}
                                 data-test="login-button"
                             >
-                                {processing && <Spinner />}
+                                {processing && (
+                                    <Spinner
+                                        aria-label={t('common.state.loading')}
+                                    />
+                                )}
                                 {t('account.login.submit')}
                             </Button>
                         </div>

@@ -168,7 +168,7 @@ final class TmdbClient
         try {
             $response = $this->pendingRequest()->get($path, $query);
         } catch (ConnectionException $exception) {
-            throw TmdbException::transport($exception->getMessage(), $exception);
+            throw TmdbException::transport(self::transportReason($exception), $exception);
         } catch (RequestException $exception) {
             $response = $exception->response;
         }
@@ -224,7 +224,7 @@ final class TmdbClient
         throw match (true) {
             $status === 401, $status === 403 => TmdbException::unauthorized($status),
             $status === 404 => TmdbException::notFound($context),
-            $status === 429 => TmdbException::rateLimited(self::retryAfterSeconds($response)),
+            $status === 429 => TmdbException::rateLimited($this->cappedRetryAfterSeconds($response)),
             $status >= 500 => TmdbException::serverError($status),
             default => TmdbException::unexpectedStatus($status),
         };
@@ -248,6 +248,39 @@ final class TmdbClient
         $status = $exception->response->status();
 
         return $status === 429 || $status >= 500;
+    }
+
+    /**
+     * Raison d'une panne de transport, **assainie**.
+     *
+     * Le message d'une `ConnectionException` est construit par Guzzle et porte
+     * l'URL appelée, donc la clé v3 quand elle voyage en paramètre. Que la
+     * version installée efface ou non la chaîne de requête est un accident de
+     * résolution Composer, pas une propriété de ce code : on ne repropage
+     * jamais ce message. Le code cURL suffit au diagnostic, et l'original
+     * reste disponible en `$previous`.
+     */
+    private static function transportReason(ConnectionException $exception): string
+    {
+        return preg_match('/\bcURL error (\d+)/', $exception->getMessage(), $matches) === 1
+            ? 'cURL error '.$matches[1]
+            : $exception::class;
+    }
+
+    /**
+     * `Retry-After` **borné à la source**.
+     *
+     * La valeur voyage jusqu'à l'appelant par `TmdbException::$retryAfterSeconds`
+     * et invite au câblage d'une mise en sommeil : un `Retry-After: 86400`
+     * envoyé par TMDB ou par un intermédiaire mal configuré immobiliserait un
+     * worker 24 h, alors que tout le reste du client est soigneusement borné.
+     * Le plafond est celui du retrait exponentiel, et c'est le même.
+     */
+    private function cappedRetryAfterSeconds(Response $response): ?int
+    {
+        $seconds = self::retryAfterSeconds($response);
+
+        return $seconds === null ? null : min($seconds, $this->config->maxRetryAfterSeconds);
     }
 
     /**

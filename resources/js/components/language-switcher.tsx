@@ -79,7 +79,7 @@ export default function LanguageSwitcher({
                     })}
                 >
                     {pending ? (
-                        <Spinner />
+                        <Spinner aria-label={t('common.state.loading')} />
                     ) : (
                         <Languages aria-hidden="true" className="size-4" />
                     )}

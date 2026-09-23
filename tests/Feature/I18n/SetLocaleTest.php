@@ -142,3 +142,23 @@ it('preloads the dictionary of a target locale without switching the request', f
     expect($props['locale'])->toBe('en')
         ->and($props['translations']['common.action.save'])->toBe('Enregistrer');
 });
+
+/*
+|--------------------------------------------------------------------------
+| `Vary: Accept-Language`, sur l'accueil et nulle part ailleurs
+|--------------------------------------------------------------------------
+|
+| Le site est public et indexé : l'accueil est négocié depuis `Accept-Language`
+| et doit le DIRE aux caches. Les pages légales, mono-langue FR, doivent rester
+| cachables telles quelles — d'où les deux assertions, de sens opposé.
+|
+*/
+
+it('declares that the home page varies with the requested language', function () {
+    expect($this->get('/')->headers->get('Vary'))->toContain('Accept-Language');
+});
+
+it('never declares it on a page whose content does not vary with the language', function () {
+    expect($this->get(route('login'))->headers->get('Vary') ?? '')
+        ->not->toContain('Accept-Language');
+});

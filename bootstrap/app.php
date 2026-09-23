@@ -1,15 +1,19 @@
 <?php
 
+use App\Http\Middleware\EnsureUserHasRole;
+use App\Http\Middleware\ForceAdminAppearance;
 use App\Http\Middleware\ForceAdminLocale;
 use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\SelectTranslationDomains;
 use App\Http\Middleware\SetLocale;
+use App\Http\Middleware\VaryOnLanguage;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets;
 use Illuminate\Http\Request;
+use Illuminate\Routing\Middleware\SubstituteBindings;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -27,13 +31,32 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->encryptCookies(except: ['appearance', 'sidebar_state', 'locale']);
 
         $middleware->alias([
+            'admin.appearance' => ForceAdminAppearance::class,
             'admin.locale' => ForceAdminLocale::class,
+            'role' => EnsureUserHasRole::class,
             'translations' => SelectTranslationDomains::class,
         ]);
 
+        // `role:curator` garde la PORTE du back-office ; les `can:` posés route
+        // par route gardent la RESSOURCE. Ce rang n'est pas un raffinement :
+        // sans lui, `role` s'exécuterait APRÈS `SubstituteBindings`, et
+        // `/admin/catalog/{movie}` répondrait 404 à un joueur sur un
+        // identifiant inconnu contre 403 sur un identifiant réel. Le seuil de
+        // rôle doit tomber AVANT que la moindre ligne ne soit cherchée, sans
+        // quoi le simple couple de codes de statut énumère la table `movie`.
+        $middleware->prependToPriorityList(SubstituteBindings::class, EnsureUserHasRole::class);
+
         // `SetLocale` passe AVANT `HandleInertiaRequests` : les props partagées
         // doivent déjà connaître la locale quand elles sont construites.
-        $middleware->web(append: [
+        //
+        // `VaryOnLanguage` est en TÊTE du groupe, donc le DERNIER à toucher la
+        // réponse : `Inertia\Middleware` pose `Vary: X-Inertia` en écrasant
+        // l'en-tête, et un `Vary` posé plus bas dans l'oignon serait
+        // silencieusement effacé. Il n'agit que sur les routes qui le demandent
+        // par leur défaut `vary_language`.
+        $middleware->web(prepend: [
+            VaryOnLanguage::class,
+        ], append: [
             SetLocale::class,
             HandleAppearance::class,
             HandleInertiaRequests::class,

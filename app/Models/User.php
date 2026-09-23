@@ -84,6 +84,11 @@ use Laravel\Fortify\TwoFactorAuthenticatable;
     'password',
     'two_factor_secret',
     'two_factor_recovery_codes',
+    // Signal de sécurité d'un compte privilégié, qu'aucun écran ne lit :
+    // `resources/js/types/auth.ts` ne le déclare nulle part, et le jour où la
+    // 2FA devient obligatoire sur `curator` et `admin`, il dirait au client
+    // quels comptes ne l'ont pas encore activée.
+    'two_factor_confirmed_at',
     'remember_token',
     'plan',
     'avatar_provider_path',

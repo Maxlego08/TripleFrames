@@ -378,7 +378,10 @@ it('suspend et garde reprenable un balayage arrêté par le quota', function ():
     tmdbFake(['*themoviedb.org/3/movie/987654*' => tmdbJson('error-429', 429)]);
 
     $this->artisan('catalog:import-discover', ['--pages' => 1])
-        ->expectsOutputToContain('Quota TMDB atteint')
+        // La PHRASE, jamais un préfixe littéral : un préfixe codé en dur devant
+        // le message traduit certifierait une sortie cassée — il passerait au
+        // vert alors que le corps affiché serait la clé brute.
+        ->expectsOutputToContain('le balayage est suspendu et reprenable')
         ->assertSuccessful();
 
     /** @var ImportRun $run */
@@ -387,6 +390,37 @@ it('suspend et garde reprenable un balayage arrêté par le quota', function ():
     expect($run->status)->toBe(ImportRunStatus::Running)
         ->and($run->finished_at)->toBeNull()
         ->and($run->tmdb_page_cursor)->not->toBeNull();
+
+    // La panne est survenue sur un appel de DÉTAIL, donc AU MILIEU de la page :
+    // le curseur doit désigner encore cette page-là.
+    $cursor = DiscoverCursor::fromColumn($run->tmdb_page_cursor);
+
+    expect($cursor->languageIndex)->toBe(0)
+        ->and($cursor->page)->toBe(1);
+});
+
+it('ne perd aucun film quand la panne survient au milieu d’une page', function (): void {
+    // Page 1 sur 3 : sans garde, le curseur enregistré désignerait déjà la
+    // page 2 et --resume ne reverrait JAMAIS les films 2 à n de la page 1.
+    tmdbFake([
+        '*themoviedb.org/3/discover/movie*' => Http::sequence()
+            ->push(TmdbFixture::json('discover-page-1'), 200, ['Content-Type' => 'application/json'])
+            ->push(TmdbFixture::json('discover-page-2'), 200, ['Content-Type' => 'application/json']),
+        '*themoviedb.org/3/movie/987654*' => tmdbJson('error-429', 429),
+    ]);
+
+    $this->artisan('catalog:import-discover', ['--pages' => 2])->assertSuccessful();
+
+    /** @var ImportRun $run */
+    $run = ImportRun::query()->sole();
+
+    $cursor = DiscoverCursor::fromColumn($run->tmdb_page_cursor);
+
+    expect($run->status)->toBe(ImportRunStatus::Running)
+        ->and($cursor->languageIndex)->toBe(0)
+        ->and($cursor->page)->toBe(1)
+        // Rien n'est entré : le premier appel de détail de la page a échoué.
+        ->and(Movie::query()->count())->toBe(0);
 });
 
 it('suspend un balayage sur une panne de transport, sans exception nue', function (): void {
@@ -424,4 +458,46 @@ it('compte à part les refus du filtre de contenu, devant une mise en demeure', 
         ->and($run->total_skipped)->toBe(0)
         ->and($run->total_imported)->toBe(0)
         ->and(Movie::query()->count())->toBe(0);
+});
+
+/*
+|--------------------------------------------------------------------------
+| Le back-office est français par construction, la console comprise
+|--------------------------------------------------------------------------
+|
+| `APP_LOCALE=en`, `APP_FALLBACK_LOCALE=en`, et `lang/en/admin.php` n'existe
+| pas — volontairement (décision 9). Une commande ne traverse aucun
+| middleware : sans locale explicite, le curateur lit la CLÉ BRUTE, et la
+| substitution `:status` est perdue avec elle. Ces trois tests assertent la
+| PHRASE rendue ; un préfixe littéral ne les satisferait pas.
+|
+*/
+
+it('nomme la panne en français, substitutions comprises, sur une clé refusée', function (): void {
+    Http::fake(['*themoviedb.org/3/*' => tmdbJson('error-401', 401)]);
+
+    // Une seule attente par écriture : `PendingCommand` apparie chaque
+    // sous-chaîne à un appel d'écriture distinct. Celle-ci porte à la fois la
+    // phrase française et la substitution, qu'une clé brute perdrait.
+    $this->artisan('catalog:import-discover', ['--pages' => 1])
+        ->expectsOutputToContain('authentification (statut 401)')
+        ->assertFailed();
+});
+
+it('nomme le motif de refus de contenu en français, devant une mise en demeure', function (): void {
+    Http::fake(['*themoviedb.org/3/movie/987661*' => tmdbJson('movie-987661-fr-18')]);
+
+    $this->artisan('catalog:import-ids', ['ids' => ['987661'], '--verbose' => true])
+        ->expectsOutputToContain('classification')
+        ->assertSuccessful();
+});
+
+it('nomme un auteur inconnu par une clé, jamais par une chaîne en dur', function (): void {
+    tmdbFake();
+
+    $this->artisan('catalog:import-discover', ['--pages' => 1, '--actor' => 'inconnu@example.test'])
+        ->expectsOutputToContain('sera enregistré sans auteur')
+        ->assertSuccessful();
+
+    expect(ImportRun::query()->sole()->actor_id)->toBeNull();
 });

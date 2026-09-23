@@ -128,6 +128,42 @@ it('rejette par balayage le film que le filtre de notoriété écarte, et l’ac
         ->and($movie->exception_for_language)->toBeFalse();
 });
 
+it('écarte par balayage un film dont la langue originale est hors du filtre', function (): void {
+    // L'axe LANGUE du filtre de goût n'était prouvé dans aucun sens : aucune
+    // fixture ne portait d'`original_language` hors {fr, en, ja}, et le seul
+    // `exception_for_language` vrai du fichier était posé à la main. Une
+    // régression sur cet axe — comparaison de `zh-Hant` contre `zh`, condition
+    // inversée — laisserait la suite entièrement verte.
+    $outcome = importer()->import(
+        tmdbMovie('movie-987664-ko'),
+        importerRun(ImportRunKind::Discover),
+        ImportFilter::default(),
+    );
+
+    expect($outcome->decision)->toBe(ImportDecision::SkippedByFilter)
+        ->and(Movie::query()->where('tmdb_id', 987664)->exists())->toBeFalse();
+});
+
+it('fait entrer par exception un film dont SEULE la langue sort du filtre', function (): void {
+    // Le cas emblématique de la décision 11 : Parasite, Le Labyrinthe de Pan,
+    // La vita è bella. Notoriété et année satisfaites, langue non — donc un
+    // seul motif sur trois, et c'est l'asymétrie qu'il faut voir.
+    $outcome = importer()->import(
+        tmdbMovie('movie-987664-ko'),
+        importerRun(ImportRunKind::Paste),
+        ImportFilter::default(),
+    );
+
+    expect($outcome->decision)->toBe(ImportDecision::Imported);
+
+    $movie = Movie::query()->where('tmdb_id', 987664)->firstOrFail();
+
+    expect($movie->is_import_exception)->toBeTrue()
+        ->and($movie->exception_for_language)->toBeTrue()
+        ->and($movie->exception_for_vote_count)->toBeFalse()
+        ->and($movie->exception_for_release_year)->toBeFalse();
+});
+
 it('marque `is_import_exception` même quand le film collé satisfait tout le filtre', function (): void {
     // `is_import_exception` n'est JAMAIS dérivable des trois motifs : c'est la
     // VOIE qui est tracée, pas le verdict — d'où la quatrième colonne (§ 9.2).
@@ -609,6 +645,66 @@ it('bascule `content_flag` en `blocked` sans jamais dépublier ni détruire', fu
     expect($movie->content_flag)->toBe(ContentFlag::Blocked)
         ->and($movie->availability)->toBe(ContentAvailability::Published)
         ->and($movie->availability_reason)->toBeNull();
+});
+
+it('sort `unrated_pending` dès que la classification devient connue et non restrictive', function (): void {
+    // Un film importé avant que TMDB ne porte son visa entre en
+    // `unrated_pending`, sans aucune ligne `movie_certification`. Sans cette
+    // transition, il resterait hors du vivier à vie alors que sa classification
+    // est désormais connue — et le curateur devrait poser `content_verified_*`
+    // pour l'en sortir, c'est-à-dire signer une vérification qu'il n'a pas faite.
+    importer()->import(
+        tmdbMovie('movie-987655-minimal'),
+        importerRun(ImportRunKind::Paste),
+        ImportFilter::default(),
+    );
+
+    $movie = Movie::query()->where('tmdb_id', 987655)->firstOrFail();
+
+    expect($movie->content_flag)->toBe(ContentFlag::UnratedPending);
+
+    importer()->import(
+        tmdbMovie('movie-987655-rated'),
+        importerRun(ImportRunKind::Resync),
+        ImportFilter::default(),
+    );
+
+    $movie->refresh();
+
+    /** @var MovieCertification $france */
+    $france = MovieCertification::query()->where('movie_id', $movie->id)->firstOrFail();
+
+    expect($movie->content_flag)->toBe(ContentFlag::Clear)
+        ->and($france->certification)->toBe('-12')
+        ->and($france->is_restrictive)->toBeFalse()
+        // La coche du curateur reste vierge : ce n'est pas une vérification
+        // humaine, c'est la lecture qui a changé.
+        ->and($movie->content_verified_by_id)->toBeNull()
+        ->and($movie->content_verified_at)->toBeNull();
+});
+
+it('ne lève JAMAIS un `blocked` posé par une lecture précédente', function (): void {
+    importer()->import(tmdbMovie('movie-987654'), importerRun(ImportRunKind::Discover), ImportFilter::default());
+
+    $movie = Movie::query()->where('tmdb_id', 987654)->firstOrFail();
+
+    importer()->import(
+        tmdbMovie('movie-987654-resynced-blocked'),
+        importerRun(ImportRunKind::Resync),
+        ImportFilter::default(),
+    );
+
+    expect($movie->refresh()->content_flag)->toBe(ContentFlag::Blocked);
+
+    // Une lecture redevenue propre ne rouvre pas la porte : le lever reste un
+    // geste de curateur, signé et horodaté.
+    importer()->import(
+        tmdbMovie('movie-987654-resynced'),
+        importerRun(ImportRunKind::Resync),
+        ImportFilter::default(),
+    );
+
+    expect($movie->refresh()->content_flag)->toBe(ContentFlag::Blocked);
 });
 
 it('ne réapplique jamais le filtre d’import à une resynchronisation', function (): void {

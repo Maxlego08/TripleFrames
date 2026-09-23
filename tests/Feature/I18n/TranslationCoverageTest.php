@@ -1,6 +1,10 @@
 <?php
 
+use App\Enums\Locale;
+use App\Enums\SettingPresetKey;
 use App\Support\I18n\TranslationDomains;
+use App\Support\Tmdb\TmdbErrorKind;
+use Illuminate\Support\Facades\App;
 
 /**
  * Les trois vérifications de couverture que la spec 05 exige en CI, plus le
@@ -161,6 +165,112 @@ function i18nFrontCalls(): array
     return $calls;
 }
 
+/**
+ * Littéraux passés à `__()` / `trans()` dans `app/`, fichier par fichier.
+ *
+ * Symétrique de {@see i18nFrontCalls()}, et il manquait : c'est le SERVEUR qui
+ * produit les messages de validation, les e-mails et les motifs de refus,
+ * c'est-à-dire tout ce que la règle 4 nomme explicitement. Sans lui, une clé
+ * appelée par du code livré et absente de tout dictionnaire laisse la suite
+ * entièrement verte et s'affiche brute à l'utilisateur.
+ *
+ * Le filtre `domaine.chemin` écarte d'office les clés littérales de la famille
+ * Fortify (`__('Profile updated.')`), qui vivent dans `lang/*.json`. Le littéral
+ * doit **terminer** l'argument : `trans('validation.attributes.'.$field)` est
+ * un préfixe concaténé, pas une clé, et les constructeurs de clés de ce genre
+ * sont couverts un par un plus bas.
+ *
+ * @return array<string, list<string>>
+ */
+function i18nServerCalls(): array
+{
+    $calls = [];
+
+    $files = new RecursiveIteratorIterator(
+        new RecursiveDirectoryIterator(i18nBasePath('app'), FilesystemIterator::SKIP_DOTS),
+    );
+
+    foreach ($files as $file) {
+        if (! $file instanceof SplFileInfo || $file->getExtension() !== 'php') {
+            continue;
+        }
+
+        preg_match_all(
+            '/(?<![\w$>])(?:__|trans)\(\s*\'([a-z][a-z0-9_]*\.[^\']+)\'\s*[,)]/',
+            (string) file_get_contents($file->getPathname()),
+            $matches,
+        );
+
+        if ($matches[1] !== []) {
+            $calls[str_replace('\\', '/', $file->getPathname())] = array_values(array_unique($matches[1]));
+        }
+    }
+
+    return $calls;
+}
+
+/**
+ * La locale de référence d'un domaine : `en` partout, `fr` pour le back-office,
+ * français par construction (décision 9).
+ */
+function i18nReferenceLocale(string $domain): string
+{
+    return $domain === TranslationDomains::ADMIN ? 'fr' : 'en';
+}
+
+/**
+ * Vrai si la clé pointée existe dans le dictionnaire de référence de son
+ * domaine. Lit les **fichiers**, comme le reste de ce fichier : c'est le
+ * contenu versionné que la CI doit refuser, pas ce qu'un repli rattrape.
+ */
+function i18nKeyExists(string $key): bool
+{
+    [$domain, $path] = array_pad(explode('.', $key, 2), 2, '');
+
+    if ($path === '') {
+        return false;
+    }
+
+    return array_key_exists($path, i18nFile(i18nReferenceLocale($domain), $domain));
+}
+
+/**
+ * Les douze suffixes de bornes croisées émis par `App\Settings\RoomSettings`,
+ * dont le préfixe est concaténé et donc invisible au balayage.
+ *
+ * @return list<string>
+ */
+function i18nRoomSettingsKeys(): array
+{
+    return array_map(
+        static fn (string $suffix): string => 'validation.room_settings.'.$suffix,
+        [
+            'between', 'boolean', 'duration_mismatch', 'enum', 'integer',
+            'integer_list', 'list_size', 'round_duration', 'sum_between',
+            'theme_ids', 'tier_duration', 'unknown_field',
+        ],
+    );
+}
+
+/**
+ * Les six motifs portés par `ImportOutcome::$reasonKey`, construits par
+ * concaténation eux aussi.
+ *
+ * @return list<string>
+ */
+function i18nImportReasonKeys(): array
+{
+    return [
+        'admin.catalog.import.actor_unknown',
+        'admin.catalog.import.refused.adult',
+        'admin.catalog.import.refused.certification',
+        'admin.catalog.import.refused.withdrawn',
+        'admin.catalog.import.skipped.duplicate',
+        'admin.catalog.import.skipped.filter',
+        'admin.catalog.import.skipped.not_found',
+    ];
+}
+
 it('keeps the same keys in fr and en for every checked domain', function (string $domain) {
     $en = i18nFile('en', $domain);
     $fr = i18nFile('fr', $domain);
@@ -243,3 +353,68 @@ it('only calls translation keys that exist in a dictionary', function () {
 it('keeps the generated translation types in sync with the dictionaries', function () {
     $this->artisan('lang:types', ['--check' => true])->assertSuccessful();
 });
+
+it('only calls translation keys that exist in a dictionary, from the server too', function () {
+    $unknown = [];
+
+    foreach (i18nServerCalls() as $path => $keys) {
+        foreach ($keys as $key) {
+            if (! i18nKeyExists($key)) {
+                $unknown[] = $key.' ('.$path.')';
+            }
+        }
+    }
+
+    expect($unknown)->toBe([], 'Clé appelée par `app/` et absente de tout dictionnaire.');
+});
+
+it('carries every key built by an enumerable key constructor', function () {
+    // Ces quatre familles sont construites par concaténation : aucun balayage
+    // de littéraux ne les verra jamais, et ce sont elles qui manquaient.
+    $expected = [
+        ...array_map(
+            static fn (TmdbErrorKind $kind): string => $kind->translationKey(),
+            TmdbErrorKind::cases(),
+        ),
+        ...array_merge(...array_map(
+            static fn (SettingPresetKey $key): array => [$key->labelKey(), $key->descriptionKey()],
+            SettingPresetKey::cases(),
+        )),
+        ...i18nRoomSettingsKeys(),
+        ...i18nImportReasonKeys(),
+    ];
+
+    $missing = array_values(array_filter(
+        $expected,
+        static fn (string $key): bool => ! i18nKeyExists($key),
+    ));
+
+    expect($missing)->toBe([], 'Clé construite par du code livré et absente de son dictionnaire.');
+});
+
+it('renders the admin dictionary in french whatever the ambient locale', function (TmdbErrorKind $kind) {
+    // Le défaut d'instance est `en` et `lang/en/admin.php` n'existe pas : une
+    // console, un job ou un envoi hors requête qui s'en remettrait à la locale
+    // ambiante afficherait la CLÉ BRUTE, substitutions perdues. Le back-office
+    // résout donc toujours avec une locale explicite.
+    App::setLocale(Locale::English->value);
+
+    $rendered = __($kind->translationKey(), ['status' => 401], Locale::French->value);
+
+    expect($rendered)->toBeString()
+        ->and($rendered)->not->toBe($kind->translationKey())
+        ->and($rendered)->not->toContain(':status');
+})->with(TmdbErrorKind::cases());
+
+it('keeps every room preset nameable in both languages', function (SettingPresetKey $key) {
+    // `setting_preset` n'a AUCUNE colonne de libellé (spec 10 § 6.3) : laisser
+    // `room.php` vide reviendrait à dire que ces presets n'ont pas de nom, et
+    // le sélecteur afficherait `room.presets.classic.label` à l'hôte.
+    foreach ([Locale::English, Locale::French] as $locale) {
+        foreach ([$key->labelKey(), $key->descriptionKey()] as $translationKey) {
+            expect(__($translationKey, [], $locale->value))
+                ->toBeString()
+                ->not->toBe($translationKey);
+        }
+    }
+})->with(SettingPresetKey::cases());

@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 /*
@@ -17,6 +18,30 @@ use Tests\TestCase;
 pest()->extend(TestCase::class)
     ->use(RefreshDatabase::class)
     ->in('Feature');
+
+/*
+|--------------------------------------------------------------------------
+| Aucun test ne touche le réseau
+|--------------------------------------------------------------------------
+|
+| Garanti par construction, et non par relecture : un appel HTTP non simulé
+| lève au lieu de partir. Sans cette ligne, un futur test d'import qui
+| oublierait `Http::fake()` enverrait le jeton TMDB sur le réseau depuis le
+| poste du développeur — et passerait au vert en local pour échouer en CI,
+| où aucune clé n'est posée. Un test qui a besoin d'un appel simulé appelle
+| `Http::fake()` comme d'habitude ; `preventStrayRequests()` ne gêne que ce
+| qui n'est pas simulé.
+|
+| Portée limitée à `Feature` : seule cette suite est liée à `Tests\TestCase`,
+| donc à une application bootée. Un test de `Unit` tourne sur le `TestCase` nu
+| de PHPUnit, où la façade `Http` n'a aucune racine — et n'a, par construction,
+| aucun client HTTP à détourner.
+|
+*/
+
+pest()->beforeEach(function (): void {
+    Http::preventStrayRequests();
+})->in('Feature');
 
 /*
 |--------------------------------------------------------------------------

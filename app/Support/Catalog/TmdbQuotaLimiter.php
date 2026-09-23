@@ -72,11 +72,23 @@ final class TmdbQuotaLimiter
      */
     public function backOff(int $seconds): void
     {
+        $seconds = min($seconds, $this->maximumBackOffSeconds());
+
         if ($seconds > 0) {
             Sleep::sleep($seconds);
         }
 
         $this->lastRequestAt = CarbonImmutable::now();
+    }
+
+    /**
+     * Le même plafond que celui du retrait exponentiel du client. Une fenêtre
+     * annoncée par un tiers ne décide pas seule combien de temps un worker
+     * reste immobile : un `Retry-After: 86400` l'immobiliserait 24 h.
+     */
+    private function maximumBackOffSeconds(): int
+    {
+        return max(1, Config::integer('services.tmdb.max_retry_after_seconds', 60));
     }
 
     /**

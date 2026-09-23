@@ -91,7 +91,9 @@ function TwoFactorSetupStep({
                                         }}
                                     />
                                 ) : (
-                                    <Spinner />
+                                    <Spinner
+                                        aria-label={t('common.state.loading')}
+                                    />
                                 )}
                             </div>
                         </div>
@@ -114,7 +116,9 @@ function TwoFactorSetupStep({
                         <div className="flex w-full items-stretch overflow-hidden rounded-xl border border-border">
                             {!manualSetupKey ? (
                                 <div className="flex h-full w-full items-center justify-center bg-muted p-3">
-                                    <Spinner />
+                                    <Spinner
+                                        aria-label={t('common.state.loading')}
+                                    />
                                 </div>
                             ) : (
                                 <>
