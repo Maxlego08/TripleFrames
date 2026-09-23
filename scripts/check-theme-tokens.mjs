@@ -27,6 +27,23 @@
  * Le même script accueillera `resources/js/pages/game/**` quand l'écran de jeu
  * arrivera — c'est le forçage symétrique annoncé.
  *
+ * Méta-vérification, règle `[unclassified]` (spec 100 § 7.4, 90 § 9.3) :
+ * `WATCHED` est une liste blanche, donc un répertoire nouveau y échapperait
+ * par simple oubli de déclaration. Le script échoue aussi sur tout fichier
+ * `.ts` ou `.tsx` de `resources/js` qui n'est ni sous un chemin `WATCHED`, ni
+ * dans `EXEMPT`, ni sous une exemption permanente (fichiers générés). Et,
+ * règle `[stale-exempt]`, sur toute entrée d'`EXEMPT` périmée : fichier
+ * supprimé, ou déjà couvert par `WATCHED` ou une exemption permanente.
+ *
+ * Options :
+ *
+ *   --list-unclassified  imprime, un par ligne et triés, les fichiers `.ts` et
+ *                        `.tsx` de `resources/js` qu'aucun chemin `WATCHED` ni
+ *                        aucune exemption permanente ne couvre — c'est-à-dire
+ *                        le contenu qu'`EXEMPT` doit avoir —, sans rien
+ *                        vérifier. Sert à régénérer `EXEMPT` au commit de gel
+ *                        (L90-1), qui relit la liste avant de la coller.
+ *
  * Branché sur `npm run check` et `npm run check:fix`.
  */
 
@@ -57,6 +74,106 @@ const WATCHED = [
     'resources/js/hooks/use-forced-appearance.ts',
     'resources/js/types/admin.ts',
 ];
+
+/**
+ * Fichiers hérités, hors de `WATCHED` au commit de gel (spec 100 § 7.4, 90
+ * § 9.3) : ceux du starter, plus les trois fichiers du client d'i18n nés
+ * avant la méta-vérification (`language-switcher.tsx`, `use-translations.ts`,
+ * `lib/i18n.ts`). Ils ne sont pas balayés : la plupart seront réécrits, et
+ * les nettoyer en bloc serait du travail perdu.
+ *
+ * Cette liste NE FAIT QUE DÉCROÎTRE. Un fichier en sort — et entre dans
+ * `WATCHED` — dans le commit qui le réécrit ou le supprime ; aucun fichier n'y
+ * entre jamais. Un fichier nouveau se range sous un chemin `WATCHED`, jamais
+ * ici : sinon la méta-vérification ne garantirait plus rien.
+ *
+ * Contenu produit par `--list-unclassified` ; L90-1 le régénère de la même
+ * façon à son commit de gel, et le relit.
+ */
+const EXEMPT = [
+    'resources/js/app.tsx',
+    'resources/js/components/alert-error.tsx',
+    'resources/js/components/app-content.tsx',
+    'resources/js/components/app-header.tsx',
+    'resources/js/components/app-logo-icon.tsx',
+    'resources/js/components/app-logo.tsx',
+    'resources/js/components/app-shell.tsx',
+    'resources/js/components/app-sidebar-header.tsx',
+    'resources/js/components/app-sidebar.tsx',
+    'resources/js/components/appearance-tabs.tsx',
+    'resources/js/components/breadcrumbs.tsx',
+    'resources/js/components/delete-user.tsx',
+    'resources/js/components/heading.tsx',
+    'resources/js/components/input-error.tsx',
+    'resources/js/components/language-switcher.tsx',
+    'resources/js/components/manage-passkeys.tsx',
+    'resources/js/components/manage-two-factor.tsx',
+    'resources/js/components/nav-footer.tsx',
+    'resources/js/components/nav-main.tsx',
+    'resources/js/components/nav-user.tsx',
+    'resources/js/components/passkey-item.tsx',
+    'resources/js/components/passkey-register.tsx',
+    'resources/js/components/passkey-verify.tsx',
+    'resources/js/components/password-input.tsx',
+    'resources/js/components/text-link.tsx',
+    'resources/js/components/two-factor-recovery-codes.tsx',
+    'resources/js/components/two-factor-setup-modal.tsx',
+    'resources/js/components/user-info.tsx',
+    'resources/js/components/user-menu-content.tsx',
+    'resources/js/hooks/use-appearance.tsx',
+    'resources/js/hooks/use-clipboard.ts',
+    'resources/js/hooks/use-current-url.ts',
+    'resources/js/hooks/use-flash-toast.ts',
+    'resources/js/hooks/use-initials.tsx',
+    'resources/js/hooks/use-mobile-navigation.ts',
+    'resources/js/hooks/use-mobile.tsx',
+    'resources/js/hooks/use-translations.ts',
+    'resources/js/hooks/use-two-factor-auth.ts',
+    'resources/js/layouts/app-layout.tsx',
+    'resources/js/layouts/app/app-header-layout.tsx',
+    'resources/js/layouts/app/app-sidebar-layout.tsx',
+    'resources/js/layouts/auth-layout.tsx',
+    'resources/js/layouts/auth/auth-card-layout.tsx',
+    'resources/js/layouts/auth/auth-simple-layout.tsx',
+    'resources/js/layouts/auth/auth-split-layout.tsx',
+    'resources/js/layouts/settings/layout.tsx',
+    'resources/js/lib/i18n.ts',
+    'resources/js/lib/utils.ts',
+    'resources/js/pages/auth/confirm-password.tsx',
+    'resources/js/pages/auth/forgot-password.tsx',
+    'resources/js/pages/auth/login.tsx',
+    'resources/js/pages/auth/register.tsx',
+    'resources/js/pages/auth/reset-password.tsx',
+    'resources/js/pages/auth/two-factor-challenge.tsx',
+    'resources/js/pages/auth/verify-email.tsx',
+    'resources/js/pages/dashboard.tsx',
+    'resources/js/pages/settings/appearance.tsx',
+    'resources/js/pages/settings/profile.tsx',
+    'resources/js/pages/settings/security.tsx',
+    'resources/js/pages/welcome.tsx',
+    'resources/js/types/auth.ts',
+    'resources/js/types/global.d.ts',
+    'resources/js/types/index.ts',
+    'resources/js/types/navigation.ts',
+    'resources/js/types/ui.ts',
+    'resources/js/types/vite-env.d.ts',
+];
+
+/**
+ * Exemptions permanentes, hors de toute liste nominative : fichiers générés
+ * (shadcn, Wayfinder, `lang:types`), que le dépôt s'interdit d'éditer.
+ */
+const PERMANENTLY_EXEMPT = [
+    'resources/js/components/ui',
+    'resources/js/routes',
+    'resources/js/actions',
+    'resources/js/wayfinder',
+    'resources/js/types/translations.d.ts',
+];
+
+/** Racine et extensions soumises à la règle `[unclassified]`. */
+const CLASSIFIED_ROOT = 'resources/js';
+const CLASSIFIED_EXTENSIONS = ['.ts', '.tsx'];
 
 const EXTENSIONS = ['.ts', '.tsx', '.css'];
 
@@ -221,7 +338,7 @@ function blankComments(source) {
  */
 const IGNORE_MARKER = 'theme-tokens-ignore';
 
-async function collectFiles(target) {
+async function collectFiles(target, extensions = EXTENSIONS) {
     let entries;
 
     try {
@@ -234,7 +351,7 @@ async function collectFiles(target) {
         // Un fichier nommé directement dans `WATCHED` : `readdir` refuse, et
         // c'est le seul signal portable que la cible n'est pas un répertoire.
         if (error.code === 'ENOTDIR') {
-            return EXTENSIONS.some((extension) => target.endsWith(extension))
+            return extensions.some((extension) => target.endsWith(extension))
                 ? [target]
                 : [];
         }
@@ -250,16 +367,53 @@ async function collectFiles(target) {
         const path = join(directory, entry.name);
 
         if (entry.isDirectory()) {
-            files.push(...(await collectFiles(path)));
+            files.push(...(await collectFiles(path, extensions)));
             continue;
         }
 
-        if (EXTENSIONS.some((extension) => entry.name.endsWith(extension))) {
+        if (extensions.some((extension) => entry.name.endsWith(extension))) {
             files.push(path);
         }
     }
 
     return files;
+}
+
+/** Chemin relatif à la racine du dépôt, séparateur `/` sur tout système. */
+function toRelative(file) {
+    return relative(ROOT, file).split(sep).join('/');
+}
+
+/**
+ * Vrai si une entrée de la liste désigne ce fichier : le fichier lui-même, ou
+ * un répertoire qui le contient. Jamais un simple préfixe de nom :
+ * `pages/admin` ne couvre pas `pages/administration.tsx`.
+ */
+function covers(entries, path) {
+    return entries.some(
+        (entry) => path === entry || path.startsWith(`${entry}/`),
+    );
+}
+
+/**
+ * Fichiers `.ts` et `.tsx` de `resources/js` qu'aucun chemin `WATCHED` ni
+ * aucune exemption permanente ne couvre, triés : ce qu'`EXEMPT` doit contenir,
+ * et rien d'autre.
+ */
+async function outsideWatched() {
+    return (await classifiable()).filter(
+        (path) => !covers(WATCHED, path) && !covers(PERMANENTLY_EXEMPT, path),
+    );
+}
+
+/** Tous les fichiers `.ts` et `.tsx` de `resources/js`, relatifs et triés. */
+async function classifiable() {
+    const all = await collectFiles(
+        join(ROOT, CLASSIFIED_ROOT),
+        CLASSIFIED_EXTENSIONS,
+    );
+
+    return all.map(toRelative).sort();
 }
 
 function inspect(source, relativePath) {
@@ -300,6 +454,14 @@ function inspect(source, relativePath) {
     return findings;
 }
 
+if (process.argv.includes('--list-unclassified')) {
+    for (const path of await outsideWatched()) {
+        console.log(path);
+    }
+
+    process.exit(0);
+}
+
 const files = (
     await Promise.all(
         WATCHED.map((directory) => collectFiles(join(ROOT, directory))),
@@ -311,10 +473,22 @@ const findings = (
         files.map(async (file) => {
             const source = await readFile(file, 'utf8');
 
-            return inspect(source, relative(ROOT, file).split(sep).join('/'));
+            return inspect(source, toRelative(file));
         }),
     )
 ).flat();
+
+const outside = await outsideWatched();
+
+const unclassified = outside.filter((path) => !EXEMPT.includes(path));
+
+/**
+ * Entrées périmées d'`EXEMPT` : fichier supprimé, ou déjà couvert par
+ * `WATCHED` ou par une exemption permanente. Laissée en place, une telle
+ * entrée exempterait en silence un fichier recréé plus tard au même chemin :
+ * elle sort d'`EXEMPT` dans le commit qui réécrit ou supprime le fichier.
+ */
+const stale = EXEMPT.filter((path) => !outside.includes(path));
 
 if (findings.length > 0) {
     console.error(
@@ -330,10 +504,46 @@ if (findings.length > 0) {
     console.error(
         "\nLa v1 n'a pas de direction artistique, elle a une structure : un re-skin ne doit toucher que le thème.\n",
     );
+}
 
+if (unclassified.length > 0) {
+    console.error(
+        `\nTokens de thème : ${unclassified.length} fichier(s) non classé(s) sous ${CLASSIFIED_ROOT}\n`,
+    );
+
+    for (const path of unclassified) {
+        console.error(
+            `  ${path}  [unclassified]\n    ni sous un chemin WATCHED, ni dans EXEMPT — l'ajouter à WATCHED (son répertoire, s'il est nouveau) dans ce commit`,
+        );
+    }
+
+    console.error(
+        "\nEXEMPT ne fait que décroître : un fichier nouveau n'y entre jamais (spec 100 § 7.4, 90 § 9.3).\n",
+    );
+}
+
+if (stale.length > 0) {
+    console.error(
+        `\nTokens de thème : ${stale.length} entrée(s) périmée(s) dans EXEMPT\n`,
+    );
+
+    for (const path of stale) {
+        console.error(
+            `  ${path}  [stale-exempt]\n    fichier supprimé, ou déjà sous WATCHED ou une exemption permanente — le retirer d'EXEMPT dans ce commit`,
+        );
+    }
+
+    console.error(
+        '\nUne entrée périmée exempterait en silence un fichier recréé au même chemin (spec 100 § 7.4, 90 § 9.3).\n',
+    );
+}
+
+if (findings.length > 0 || unclassified.length > 0 || stale.length > 0) {
     process.exit(1);
 }
 
+const exempted = outside.filter((path) => EXEMPT.includes(path)).length;
+
 console.log(
-    `Tokens de thème : ${files.length} fichier(s) vérifié(s), aucune couleur ni taille en dur.`,
+    `Tokens de thème : ${files.length} fichier(s) vérifié(s), aucune couleur ni taille en dur ; ${exempted} fichier(s) hérité(s) exempté(s), aucun non classé.`,
 );

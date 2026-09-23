@@ -1,13 +1,9 @@
 {
     "$schema": "https://getcomposer.org/schema.json",
-    "name": "laravel/react-starter-kit",
+    "name": "tripleframes/tripleframes",
     "type": "project",
-    "description": "The skeleton application for the Laravel framework.",
-    "keywords": [
-        "laravel",
-        "framework"
-    ],
-    "license": "MIT",
+    "description": "TripleFrames : blindtest de films et de dessins animés en salons privés, quelques images de la plus cryptique à la plus évidente, un titre à trouver avant les autres.",
+    "license": "proprietary",
     "require": {
         "php": "^8.3",
         "ext-imagick": "*",

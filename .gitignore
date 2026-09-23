@@ -10,6 +10,7 @@
 /resources/js/actions
 /resources/js/routes
 /resources/js/wayfinder
+/tests/Load/.data
 /vendor
 .DS_Store
 .env
