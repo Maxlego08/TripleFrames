@@ -70,8 +70,9 @@ export default defineConfig({
             // rédigée, pas générée : oxfmt fusionne les listes ordonnées
             // qui suivent un paragraphe (l'ordre des migrations du § 12 de
             // `10-catalogue-et-modele-de-donnees.md` devient un pavé) et
-            // rembourre chaque cellule de tableau. `CLAUDE.md`, ignoré par
-            // `.gitignore`, échappe déjà au formateur pour la même raison.
+            // rembourre chaque cellule de tableau. `CLAUDE.md`, versionné
+            // depuis le 23/09 (D9), en est exclu pour la même raison.
+            'CLAUDE.md',
             'docs/**',
             'resources/js/components/ui/*',
             'resources/views/mail/*',

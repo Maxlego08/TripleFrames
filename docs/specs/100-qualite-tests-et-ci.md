@@ -1,0 +1,1044 @@
+# Qualité, tests et CI
+
+> **Spec partielle : section [J1] seule.** Conformément à D30 du 23/09, ce fichier contient la section **[J1] « socle de qualité et socle minimal de production »**, écrite en entier, puis une section **« Jalon 2 — à écrire »** qui liste, sans les rédiger, les sujets que la carte des specs (`00` § Carte des specs, ligne `100`) attribue à cette spec. Le titre du fichier est inchangé (S1 et D30 du 23/09).
+
+> **Hypothèse S2 — le VPS n'est pas relevé.** Tout ce qui s'exécute sur le VPS (§ 10, § 11, § 13, § 14, § 15, § 16) est écrit sous l'hypothèse d'un **accès SSH root obtenu une fois**, qui permet de poser une instance Redis dédiée, deux workers systemd et un service Reverb. Chaque élément qui dépend du relevé porte la marque **[à confirmer au relevé du VPS]**. Le relevé a lieu **avant tout déploiement**, jamais « avant l'écriture de `60` » (S2, A-36ter, A-55bis, A-81). Sans root, le repli reste celui de `questions-ouvertes.md` § Risques ouverts (second VPS minimal) : c'est une décision du porteur, hors de cette spec.
+
+Ce document est le **propriétaire de la qualité exécutable et du socle d'exploitation** de TripleFrames. Il décide : la définition de « terminé » sous sa forme vérifiable ; les groupes Pest, les suites, les scripts et les jobs CI, et le lieu où chaque test tourne (**contrat C18**, dont il est propriétaire) ; l'arborescence, le nommage et le placement des tests de toutes les specs ; le jeu de données de la matrice des réglages ; les gardes mécaniques du dépôt (zéro secret, aucun domaine littéral, aucune image réelle, licence) et le relevé des licences tierces ; la topologie du VPS mutualisé et ses garde-fous de cohabitation ; la chaîne de déploiement, le drapeau de drainage et le hook (**contrat C18-bis**, dont il est propriétaire) ; la variable d'indexation ; les sauvegardes et la restauration ; le moteur, l'ordonnancement et la surveillance de la purge de rétention ; les sondes ; le test de charge.
+
+Il ne possède **pas** : le schéma (`10`, seul propriétaire, y compris le tableau de conservation et le périmètre de chaque purge, 10 § 11) ; les valeurs de jeu et leurs bornes (`50`, contrat C0) ; le prédicat « partie en cours » et les constantes du moteur (`60`, contrats C7 et C17) ; le bandeau de maintenance, la page d'erreur, le tableau d'indexation route par route et le middleware d'en-têtes (`90`) ; le **contenu** des tests des autres specs (chacune écrit les siens ; `100` n'en fixe que la place et le groupe). Convention de renvoi, valable dans tout le document : « règle N » désigne `CLAUDE.md` §7 ; « principe N » désigne `00-overview.md` § Principes directeurs ; « décision N » désigne une des 19 décisions du 22/09 (`questions-ouvertes.md`) ; « DN du 23/09 » désigne une décision du 23/09, numérotée comme dans le relevé du 23/09 et à consigner dans `questions-ouvertes.md` (section « Décisions du 23/09/2026 — jalon 1 ») ; « contrat CN » désigne un contrat partagé du 23/09 ; « Sn » le cadre de la session du 23/09 (S1 périmètre, S2 VPS non relevé, S3 lots, S4 sagas) ; « n° N » une contradiction arbitrée le 23/09 (numérotation à partir de 0) ; « R-NN » un conflit entre contrats résolu le 23/09 ; « E10-NN » et « A-NN » les exigences à `10` et les amendements consolidés le 23/09.
+
+**Aucune valeur de jeu n'est une constante dans ce document** (règle 2). Les nombres qui y figurent sont de trois natures, toujours dites : une valeur de jeu citée **au réglage par défaut** avec sa source (`RoomSettingsBounds`, `SettingPresetCatalog`, `PlatformLimits`) ; une constante du moteur citée par son accesseur (`EngineConstants`, contrat C7) ; un **plafond d'exploitation** (mémoire d'une unité, délai d'un worker, seuil d'une sonde), qui n'est pas une règle de jeu, vit dans `config/ops.php`, `config/deploy.php`, `config/backup.php` ou dans un gabarit versionné sous `ops/`, et est marqué **valeur de départ** quand le test de charge (D33 du 23/09) doit la recalibrer.
+
+> **État réel du dépôt au moment d'écrire, vérifié au commit `d167a6a`.**
+> - **CI** : `.github/workflows/tests.yml` porte **un seul** job `ci` (push sur `main` et `pull_request`, PHP 8.3 avec `extensions: imagick`, Node 22, `composer setup` puis `composer ci:check`), actions épinglées par SHA, `permissions: contents: read`, `persist-credentials: false`, **aucune** référence `secrets.`. Aucun job MySQL, aucun job nocturne, aucun job d'artefacts. `dependabot.yml` ne suit que les GitHub Actions.
+> - **Composer** : `"name": "laravel/react-starter-kit"`, description du squelette, **`"license": "MIT"`** ; `ext-imagick` requis ; **ni `predis/predis` ni `laravel/reverb`** ; `test` = `config:clear` + `lint:check` + `types:check` + `artisan test` **sans exclusion de groupe** ; `ci:check` = `Composer\Config::disableProcessTimeout`, `npm run check`, `npm run types:check`, `@test` ; `dev` sans Reverb, `queue:listen --tries=1 --timeout=900` sans file nommée (le `--timeout=900` est la seule borne active de `RunCatalogImport`, dont le docblock le dit) ; `setup` crée la racine `frames`, migre, `npm install`, `npm run build`, et n'écrit aucun identifiant Reverb.
+> - **npm** : `package.json` n'a **ni script `test` ni champ `license`** ; `check` = `vp check && node scripts/check-theme-tokens.mjs`. `vite.config.ts` n'a **aucun bloc `test`** ; `tsconfig.json` n'inclut que `resources/js/**`.
+> - **Tests** : 33 fichiers `*Test.php` (32 sous `tests/Feature`, 1 sous `tests/Unit`), **aucun** `->group()`, **aucun** répertoire `tests/Concurrency` ni `tests/Frontend`. `tests/Pest.php` : `RefreshDatabase` **actif** sur `Feature`, `Http::preventStrayRequests()` avant chaque test `Feature`. `phpunit.xml` : suites `Unit` et `Feature`, SQLite `:memory:`, cache `array`, file `sync`, diffusion `null`, clés TMDB vides **sans `force="true"`**. Seul test d'architecture : `TmdbBoundaryTest`.
+> - **Gardes** : aucun test « zéro secret », « aucun domaine littéral » ni « aucune image réelle ». `scripts/check-theme-tokens.mjs` ne surveille que le back-office (`WATCHED` sans `EXEMPT` ni règle `[unclassified]`). Fichiers binaires suivis par git : `public/favicon.ico`, `public/favicon.svg`, `public/apple-touch-icon.png`, rien d'autre. **Aucun fichier `LICENSE`.** `.gitignore` exclut `/CLAUDE.md`, `/public/build` et les répertoires Wayfinder générés (`resources/js/{actions,routes,wayfinder}`). **Depuis le 23/09**, `/CLAUDE.md` n'y figure plus et `'CLAUDE.md'` est ajouté à `fmt.ignorePatterns` de `vite.config.ts`, les deux changements destinés au même commit (D9 du 23/09, A-78) : la part D9 de L100-2 est faite — amendé le 23/09.
+> - **Hôtes littéraux** : `config/` contient `api.themoviedb.org`, `image.tmdb.org`, `example.com`, `developer.mozilla.org`, `inertiajs.com`, `sqs.us-east-1.amazonaws.com` et `localhost`, et, dans `config/logging.php`, `'stream' => 'php://stderr'` et `'tls://'.env('PAPERTRAIL_URL')`, qui ne sont pas des hôtes (un flux PHP, une autorité bâtie par concaténation) ; `docs/specs/` ne contient que `tripleframes.test` (`00` § Stack, `questions-ouvertes.md` § Seule question encore ouverte et § Déjà tranché) ; `.env.example` contient `localhost` et `example.com`. `config/broadcasting.php`, que publiera le lot d'installation de 60 par `config:publish broadcasting` (L60-1 ; 60 interdit `install:broadcasting`), copie du fichier du framework (`vendor/laravel/framework/config/broadcasting.php`, vérifié), porte `docs.guzzlephp.org` en commentaire et, dans la connexion `pusher`, un hôte littéral de l'API Pusher bâti par concaténation autour de `env('PUSHER_APP_CLUSTER', 'mt1')` (non recopié ici : cette spec est elle-même balayée par § 7.2).
+> - **Environnement** : `.env.example` pose `REDIS_CLIENT=phpredis`, `BROADCAST_CONNECTION=log`, `QUEUE_CONNECTION=database`, `CACHE_STORE=database`, `FRAMES_DISK_ROOT=` et les deux clés TMDB vides ; **aucune** variable `REVERB_*`, `ACCOUNTS_*`, d'indexation, de drainage, de sauvegarde ni de sonde. `config/queue.php` › connexion `redis` : `retry_after` = `env('REDIS_QUEUE_RETRY_AFTER', 90)`, `block_for` nul. Ni `config/broadcasting.php`, ni `config/reverb.php`, ni `config/deploy.php`, ni `config/ops.php`, ni `config/backup.php`.
+> - **Indexation** : `public/robots.txt` vaut `User-agent: *` / `Disallow:` (tout est explorable, `/admin` compris) ; aucun `X-Robots-Tag`, aucune `Referrer-Policy`, aucune variable d'indexation. `bootstrap/app.php` déclare la route de santé `/up` et rien d'autre d'exploitation.
+> - **Exploitation** : `routes/console.php` ne contient que `inspire` (aucune planification) ; `app/Console/Commands/` compte six commandes (`catalog:import*`, `admin:first-admin`, `lang:hash`, `lang:types`) et **aucune** commande `deploy:*`, `backup:*`, `purge:*` ni `catalog:reproject`. L'enum `PurgeScope` (17 cas) et le modèle `PurgeRun` existent ; **aucun job de purge**. `AppServiceProvider` lève hors `local`/`testing` si `FRAMES_DISK_ROOT` est vide ou sous `base_path()`, et active `DB::prohibitDestructiveCommands()` en production.
+> - **Dettes du starter** : le lot 0 est purgé (`RefreshDatabase` actif, Pint vert, PHPStan à `--memory-limit=1G`, `CarbonImmutable` partout, `APP_NAME=TripleFrames`) ; `REPRISE.md` § Dettes du starter le décrit encore comme ouvert (n° 77, § 17) ; `CLAUDE.md` §8 et `00` § Stack sont alignés depuis le 23/09 — amendé le 23/09.
+> - **Catalogue en console** : `catalog:import-ids {--resync}` supprime puis réécrit les lignes `movie_title` et `alias` d'origine TMDB d'un film déjà en base (`MovieImporter`) ; le job `RunCatalogImport` du back-office appelle `catalog:import-ids` ou `catalog:import-discover` avec `--resume --run=<id>`, part sur la file `default` et déclare `$timeout = 900`.
+
+---
+
+## Section [J1] — socle de qualité et socle minimal de production
+
+### 1. Définition de « terminé », rendue exécutable
+
+La barre est celle de `questions-ouvertes.md` § Déjà tranché (« Terminé ») et de `00` § Jalons : **code + tests verts + CI verte + textes FR et EN complets + états chargement/erreur/déconnexion traités + parcours clavier vérifié**. Elle **ne se négocie pas et ne s'allège pas** sous contrainte de calendrier : on ne coupe **jamais** la barre (`CLAUDE.md` §1), et au J1 on ne coupe pas non plus le périmètre (D35 du 23/09 : J1 complet, aucune coupe). Le facteur 1,5 à 2 qu'elle coûte est **intégré** à chaque mesure de la section « Lots d'implémentation », de cette spec comme des autres ; ces heures sont des **mesures de taille**, jamais un calendrier ni un budget à tenir (D36 du 23/09) — amendé le 23/09.
+
+| Critère | Forme exécutable | Où il se vérifie | Nature |
+|---|---|---|---|
+| Tests verts | Les tests nommés par la spec du lot existent sous le nom exact et passent dans leur groupe (§ 2.1) | `composer ci:check` en local, qui joue aussi `npm run test` | automatique |
+| CI verte | Job `ci` vert sur la PR et sur `main` ; job `mysql-redis` vert sur `main` pour tout lot qui touche `database/**`, `app/Models/**`, `app/Enums/**`, `app/Settings/**`, `tests/Concurrency/**` ou `tests/Feature/Schema/**` | GitHub Actions (§ 2.5) | automatique |
+| FR et EN complets | Les trois vérifications de couverture et le contrôle de dérive de `05` § Couverture des clés passent | `TranslationCoverageTest`, groupe par défaut (§ 5) | automatique |
+| États chargement / erreur / déconnexion | Chaque écran du lot rend ses trois états avec les composants de `90` (contrat C16 : `EmptyState`, `ErrorState`, bandeau `common.connection.*`) ; pour un écran de jeu, la resynchronisation est prouvée par les tests de `60` | revue du lot, case cochée dans la PR | déclaré, vérifié à la main |
+| Parcours clavier vérifié | Tout élément interactif est atteignable et opérable au clavier ; règles de focus de C16 § 2.12 | revue du lot | déclaré, vérifié à la main |
+| Gardes du dépôt vertes | `npm run check` (tokens de thème, règle `[unclassified]`) et les tests `Architecture` (§ 7) | `composer ci:check` | automatique |
+| Lot d'exploitation | La procédure est **jouée sur la machine réelle** et son résultat consigné dans cette spec (§ 10.1, § 13.6, § 16.6) : une procédure écrite et jamais jouée n'est pas terminée, pour la même raison qu'« une sauvegarde non restaurée n'existe pas » (décision 18) | journal de ce document | déclaré, daté |
+
+Deux verrous d'outillage, sans outil nouveau (principe 11) :
+
+- **`.github/pull_request_template.md` [nouveau]** reprend ce tableau en cases à cocher, plus « `.env.example` à jour si une variable est née » (`CLAUDE.md` §8) et « `CLAUDE.md` relu » (D9 du 23/09). Le gabarit est un **rappel** : la seule autorité est la CI, et une case cochée ne remplace jamais un test.
+- **`main` est protégée** : fusion par PR seulement, check `ci` requis. Le travail courant vit sur la branche `develop`. Aucune poussée directe sur `main`, parce que le job `artifacts` (§ 2.5) transforme chaque commit de `main` en candidat au déploiement.
+
+### 2. Le pipeline : groupes Pest, suites, scripts et jobs CI (contrat C18)
+
+#### 2.1 Groupes Pest — liste close
+
+| Groupe | Contenu | Où il tourne |
+|---|---|---|
+| défaut (aucun groupe) | Tout test qui passe sur SQLite `:memory:`, cache `array`, file `sync`, diffusion `null` | partout : poste, job `ci`, job `mysql-redis` |
+| `mysql` | Longueurs de `VARCHAR` (erreur 1406), longueurs d'index (1071), `ONLY_FULL_GROUP_BY`, collation, comportements propres au JSON natif, comptes portables | job `mysql-redis` seulement |
+| `locks-timing` | `lockForUpdate`, allocation concurrente (`lock_rank`), verrous Redis, jobs de frontière, battement de cœur | job `mysql-redis` seulement |
+
+Pourquoi trois groupes et pas un : SQLite ne voit ni la troncature d'un `VARCHAR` (il l'accepte en silence, 10 § 1.4), ni `ONLY_FULL_GROUP_BY`, ni la concurrence réelle de deux connexions ; mais exiger MySQL et Redis de chaque PR rendrait la suite par défaut dépendante d'un service, ce que la CI à zéro secret et le poste Windows ne permettent pas. Les deux groupes nomment exactement ce que la suite par défaut ne peut pas prouver, et **rien d'autre**.
+
+Règles de déclaration, normatives :
+
+- Un test `mysql` se déclare **au niveau du fichier** par `pest()->group('mysql');` et appelle `beforeEach(fn () => requireMysql());`. Un fichier par défaut n'emploie **jamais** `->group('mysql')` sur un test isolé (R-03) : un groupe par test se perd à la première copie.
+- Un test `locks-timing` vit dans **`tests/Concurrency/<Domaine>/<Sujet>Test.php`**, où le groupe s'applique par répertoire.
+- **Tout test `mysql` ou `locks-timing` échoue hors de sa base, et ne se saute jamais.** Un test sauté en silence est la pire panne d'une suite : il est vert partout et ne prouve rien nulle part.
+- Les tests `locks-timing` ne dépendent jamais de l'horloge réelle : `Date::setTestNow()` ou `travelTo()`, `Sleep::fake()`, millisecondes entières (10 § 1.2). Ils utilisent `Queue::fake()` pour le coût constant L4 (n° 63). Ils choisissent explicitement leur store Redis et vident **leur** base Redis de test avant chaque test (bases `REDIS_DB` et `REDIS_CACHE_DB` du job, § 2.5).
+
+#### 2.2 `tests/Pest.php` [modifié]
+
+```php
+pest()->extend(TestCase::class)->use(RefreshDatabase::class)->in('Feature');                                 // [existant]
+pest()->extend(TestCase::class)->use(DatabaseTruncation::class)->group('locks-timing')->in('Concurrency');  // [nouveau]
+pest()->beforeEach(fn () => Http::preventStrayRequests())->in('Feature', 'Concurrency');                     // étendu
+pest()->beforeEach(fn () => requireMysql())->in('Concurrency');                                              // [nouveau]
+function requireMysql(): void { expect(DB::connection()->getDriverName())->toBe('mysql'); }                  // [nouveau]
+```
+
+`DatabaseTruncation` et non une transaction : deux connexions concurrentes doivent **voir** les écritures l'une de l'autre, ce qu'une transaction de test englobante interdit. Le squelette de commentaires du starter (`something()`, `toBeOne`) est retiré dans le même commit.
+
+#### 2.3 `phpunit.xml` [modifié]
+
+- Suite ajoutée : `<testsuite name="Concurrency"><directory>tests/Concurrency</directory></testsuite>`.
+- **`force="true"`** sur chaque identifiant externe, **valeur vide** : `TMDB_API_KEY`, `TMDB_API_READ_ACCESS_TOKEN` aujourd'hui, puis `MAIL_PASSWORD`, `AWS_SECRET_ACCESS_KEY`, `REVERB_APP_SECRET`, `OPS_PROBE_TOKEN` et toute clé OAuth, SMTP ou de sauvegarde ajoutée. Sans `force`, une variable exportée dans le shell du développeur l'emporte sur `phpunit.xml` et la suite part avec une vraie clé (`questions-ouvertes.md`, décision 6 et § Déjà tranché › CI).
+- **Jamais** `force` sur `DB_*`, `CACHE_STORE`, `QUEUE_CONNECTION` ni `REDIS_*` : le job `mysql-redis` doit pouvoir les surcharger par son environnement.
+
+#### 2.4 Scripts
+
+| Fichier | Script | Contenu | Motif |
+|---|---|---|---|
+| `composer.json` | `test` [modifié] | `@php artisan config:clear`, `@lint:check`, `@types:check`, `@php artisan test --exclude-group=mysql,locks-timing` | la suite par défaut n'exige ni MySQL ni Redis |
+| `composer.json` | `ci:check` [modifié] | `Composer\Config::disableProcessTimeout` [existant, conservé], `npm run check`, `npm run types:check`, `npm run test`, `@test` | un seul point d'entrée = la CI ; sans la levée du délai, Composer couperait le script à son délai par défaut de 300 s, dont la suite se rapproche avec la matrice (§ 4, environ 1 500 cas) |
+| `composer.json` | `test:mysql` [nouveau] | `Composer\Config::disableProcessTimeout`, `@php artisan test --group=mysql,locks-timing` | usage local contre une base MySQL de test (Homestead) |
+| `composer.json` | `dev` [modifié] | ajoute `php artisan reverb:start` (nom et couleur ajoutés à `concurrently`) et remplace le worker par `php artisan queue:listen --queue=game,default --tries=1 --sleep=1 --timeout=900` | exigence de 60 (contrat C7 § 5, 60 § 19.5) : le poste joue les deux files, sur Redis comme en production (§ 9 ; le driver `database` n'est jamais une file de moteur), et `--sleep=1` tient la borne `--sleep` ≤ 1 s de la file `game` ; le `--timeout=900` **existant est conservé** : sans `pcntl` sur le poste, c'est la seule borne de `RunCatalogImport` (`$timeout` = 900), que le défaut de `queue:listen` (60 s) tuerait en plein balayage |
+| `composer.json` | `setup` [modifié] | ajoute, après la copie de `.env.example`, une étape qui écrit `REVERB_APP_SECRET=` suivi de `bin2hex(random_bytes(16))` dans `.env` si la valeur y est vide | un poste neuf lance `reverb:start` avec une application complète (§ 10.10) ; le secret naît sur la machine, jamais dans le dépôt (§ 7.1) |
+| `package.json` | `test` [nouveau] | `vp test run` | Vitest fourni par Vite+, jamais un paquet ajouté à côté (principe 11) |
+
+**`predis/predis`** est requis, en dépendance de production, par le premier lot du moteur (L60-1, n° 46), jamais par un lot de cette spec : c'est le client de base sur le poste Windows (pas d'`ext-redis`), en CI et en production, pour que les trois se comportent pareil (`CLAUDE.md` §3).
+
+#### 2.5 Jobs CI
+
+**`.github/workflows/tests.yml`, job `ci` [existant]**
+- Déclenché sur `pull_request` et `push: main`. `setup-php` avec `extensions: imagick` **[existant]**, en miroir de `ext-imagick` au `composer.json` **[existant]** (R-40). `composer setup` puis `composer ci:check` : SQLite, sans les deux groupes, Vitest compris.
+- **[nouveau]** `concurrency: { group: tests-${{ github.ref }}, cancel-in-progress: ${{ github.event_name == 'pull_request' }} }` : une PR poussée trois fois ne consomme qu'une exécution ; `main` n'est jamais annulée, parce qu'elle alimente le job suivant.
+
+**Même fichier, job `artifacts` [nouveau, J1 par D1 du 23/09]**
+- `needs: ci`, avec `if: github.event_name == 'push' && github.ref == 'refs/heads/main'`.
+- `permissions: contents: write` **sur ce seul job**, jeton automatique seulement ; son `actions/checkout` est le seul du dépôt à garder `persist-credentials` (§ 7.1).
+- `concurrency: { group: deploy-artifacts, cancel-in-progress: false }` : deux constructions ne se croisent jamais sur la branche `deploy`.
+- Étapes : `setup-php` (même version, `extensions: imagick`) et `composer install --no-dev --prefer-dist --no-interaction` depuis `composer.lock`, **parce que la construction a besoin de PHP** — le greffon Wayfinder de Vite appelle `php artisan wayfinder:generate`, et `resources/js/{actions,routes,wayfinder}` ne sont pas suivis par git ; copie de `.env.example` et `key:generate` sur l'exécuteur ; `npm ci` (jamais `npm install` : un artefact se construit depuis le verrou) puis `npm run build`.
+- Publication : un commit sur la branche **`deploy`**, dont le parent est le commit `deploy` précédent (historique linéaire, **jamais** de `push --force` : Plesk Git doit pouvoir tirer en avance rapide). Son arbre = l'arbre du commit source de `main` **plus `public/build` ajouté de force** (il est ignoré par `.gitignore`), **sans `vendor`, sans `node_modules`, sans `.env`**. Message : `deploy: <sha source>`.
+- **Le build ne fige aucune valeur dépendant de l'hôte** : Echo se configure à l'exécution depuis la prop partagée `realtime` et `window.location` (contrat C7, n° 79, A-27). C'est ce qui rend l'artefact indépendant du domaine, promouvable d'un environnement à l'autre au J2, et constructible par une CI qui ignore `<DOMAINE>`.
+
+**`.github/workflows/tests-mysql.yml` [nouveau], job `mysql-redis`**
+- Déclencheurs : `push: main` ; `schedule` nocturne **`cron: '23 3 * * *'`** (UTC, minute non ronde pour éviter les pics de l'ordonnanceur de la forge) ; `workflow_dispatch` ; `pull_request` filtré par chemins : `database/**`, `app/Models/**`, `app/Enums/**`, `app/Settings/**`, `config/database.php`, `tests/Concurrency/**`, `tests/Feature/Schema/**` et le fichier du workflow lui-même (liste du contrat C18 § 2.5, reprise à la lettre). Le filtre attrape avant la fusion les 1406 et 1071 nés des migrations et des modèles, pour un coût marginal. Il ne couvre **ni** les requêtes (`app/Support/**`, `app/Actions/**`), **ni** le cast (`app/Casts/**`), **ni** les tests `mysql` rangés hors de `Schema` (`tests/Feature/Draw/PoolQueryMysqlTest.php`, `tests/Feature/Architecture/GameFrozenColumnsMysqlTest.php`) : un `ONLY_FULL_GROUP_BY` né d'une requête n'est vu qu'au `push: main` suivant, **avant tout déploiement** puisque le déploiement exige les deux workflows verts (§ 2.6).
+- Services : `mysql:8.0` avec `MYSQL_ALLOW_EMPTY_PASSWORD: yes` et une base `tripleframes_test` (sonde de santé du conteneur avant le premier test) ; `redis:7`.
+- `setup-php` avec **`extensions: imagick`** (R-40, `CLAUDE.md` §8 : un nouveau workflow reçoit la clé dans le commit qui le crée).
+- Variables de job : `DB_CONNECTION=mysql`, `DB_HOST=127.0.0.1`, `DB_DATABASE=tripleframes_test`, `DB_USERNAME=root`, `DB_PASSWORD=` ; `REDIS_HOST=127.0.0.1`, `REDIS_DB=14`, `REDIS_CACHE_DB=15`. `CACHE_STORE` reste `array` : seuls les tests `locks-timing` choisissent Redis.
+- Exécution : `composer setup`, puis `php artisan test` — **la suite entière et les deux groupes**. Tout test du groupe par défaut est donc aussi rejoué chaque nuit sur MySQL, ce qui couvre gratuitement les pièges non typologiques de 10 § 1.4.
+- Étape d'audit **non bloquante** (`continue-on-error: true`), nocturne seulement : `composer audit` et `npm audit --omit=dev`. L'enveloppe d'environ 10 h par semaine du porteur, qui couvre ses relectures et ses gestes humains et non plus le développement (D36 du 23/09), n'absorbe pas un flux de PR de dépendances à relire — amendé le 23/09 ; les alertes de sécurité restent visibles dans le journal du job. Dependabot reste limité aux GitHub Actions.
+
+Toutes les actions restent **épinglées par SHA** avec leur version en commentaire, comme dans le job existant.
+
+#### 2.6 Condition d'un déploiement
+
+Le porteur ne déclenche un déploiement (§ 11) que si **les deux workflows sont verts sur le commit source** du commit `deploy` visé (son message porte le SHA). Le job `mysql-redis` tournant sur `push: main`, la condition est connue quelques minutes après la fusion.
+
+### 3. Arborescence, nommage et placement des tests
+
+#### 3.1 Arborescence et nommage
+
+- `tests/Feature/<Domaine>/<Sujet>Test.php` : `<Sujet>` en PascalCase ; nom de test en **phrase française au présent, minuscule initiale, sans point final**, par `it()` ou `test()`, cité à l'identique par les specs (R-02 : `10` § 15 nomme ses tests en français et `10` prime). Les tests existants en anglais **ne sont pas renommés**.
+- `tests/Unit/<Domaine>/<Sujet>Test.php` : seulement pour le code pur, sans façade ni conteneur.
+- `tests/Concurrency/<Domaine>/<Sujet>Test.php` : groupe `locks-timing` (§ 2.1).
+- Jeux de données : `tests/Datasets/<Nom>.php` ; supports : `tests/Support/<Domaine>/<Classe>.php` (espace de noms `Tests\Support\…`) ; fixtures : `tests/Fixtures/<Source>/…`.
+- Front : `tests/Frontend/<domaine-kebab>/<sujet-kebab>.test.ts` (§ 6).
+- Test de charge : `tests/Load/` (§ 16), scripts k6 hors de toute suite, jamais joués en CI.
+- **Un test appartient à un seul domaine.** Un nouveau domaine s'ajoute au tableau ci-dessous avant son premier test.
+
+#### 3.2 Liste close des domaines de test
+
+| Domaine | Spec | Domaine | Spec |
+|---|---|---|---|
+| `Architecture` | 100 (tests d'architecture de toutes les specs) | `Identity` | 40 [J1] |
+| `Deploy` | 100 (déploiement **et exploitation** : drainage, hook, sauvegardes, sondes, indexation) | `Auth`, `Settings` | 40 (Fortify, existants) |
+| `Retention` | 10 et 100 | `Account` | 40 [J2] |
+| `Admin` | 20 | `Room` | 50 |
+| `Catalog` | 20 et 10 (et 70 pour `AnswerKeyProjectorTest`) | `Game` | 60 |
+| `Curation` | 20 | `Answer` | 70 (R-03 : jamais `Answers`) |
+| `Tmdb` | 20 | `Scoring` | 80 |
+| `Draw` | 30 | `Public` | 90 |
+| `I18n` | 05 | `Schema` | 10 |
+
+`tests/Feature/DashboardTest.php` et `tests/Feature/ExampleTest.php`, hérités du starter hors de tout domaine, restent tolérés tant que leur écran existe ; ils sont supprimés avec la page qu'ils testent (retrait du tableau de bord du starter : 40-J2, contrat C15 § 2.3).
+
+#### 3.3 Placement des tests nommés par `10` (E10-67)
+
+`10` § 15 confie à cette spec la **place** de ses tests nommés, pas leur règle : le contenu reste la propriété de la spec qui écrit le comportement. Rappel qui vaut pour toutes les lignes : le job `mysql-redis` rejoue la suite entière, donc tout test par défaut est aussi exécuté sur MySQL chaque nuit.
+
+| Tests nommés par `10` | Section de 10 | Fichier | Groupe | Écrit par | État au 23/09 |
+|---|---|---|---|---|---|
+| Balayage des horodatages des 36 modèles (le test existant en compte 36 ; `10` § 1.7 écrit 35, écart signalé) ; PHPDoc ↔ colonnes | § 1.7 | `tests/Feature/Schema/ModelTimestampsTest.php` | défaut | 10 | existe |
+| `player.last_seen_at` relu avec une partie milliseconde non nulle | § 1.2 | `tests/Feature/Game/PresenceTest.php` (« le battement écrit last_seen_at avec une partie milliseconde non nulle ») | défaut | 60 (L60-13), avec le battement qui l'écrit ; prouvé une seule fois (R-04) | à écrire |
+| `#[Hidden]` : `Player::first()->toArray()`, choix du QCM, colonnes de `round` et `round_tier` | § 7.1, § 7.8, § 15 | `tests/Feature/Schema/ModelSerializationTest.php` | défaut | 10 | existe, étendu par C5 |
+| Cast des réglages identique octet pour octet | § 6.1 | `tests/Feature/Schema/RoomSettingsCastTest.php` | défaut | 10 | existe (vrai sous SQLite seulement, contrat C6) |
+| Même garantie **par valeur** sous MySQL, où le JSON natif est relu normalisé : « relire settings_snapshot puis enregistrer game ne déclenche pas la garde des colonnes figées » | § 6.1, contrat C6 § 7 | `tests/Feature/Architecture/GameFrozenColumnsMysqlTest.php` | `mysql` | 50 (contrat C6 ; prouvé une seule fois, R-04) | à écrire |
+| Seize défauts, refus de `graceMs`/`tierGraceMs`/`preloadLeadMs`, partie porteuse des constantes | § 6.1 | `tests/Feature/Room/RoomSettingsContractTest.php`, `SettingsFreezeTest.php` | défaut | 50 (C0) | à écrire |
+| Projection égale au value object ; capacité et reprise de siège | § 6.2 | `tests/Feature/Room/RoomSettingsWriteTest.php`, `SeatTakingTest.php` | défaut | 50 | à écrire |
+| Presets livrés passés par `fromInput()` | § 6.3 | `tests/Feature/Room/PresetValidityTest.php` | défaut | 50, jeu `room_settings.presets` de 100 (R-04) | à écrire |
+| Deux lancements solo sous le même jeton → une ligne `player` | § 7.1 | `tests/Feature/Game/SoloTest.php` | défaut | 60 (C7) | à écrire |
+| Graine : deux tirages simultanés distincts, rejeu exact | § 7.2 | `tests/Feature/Draw/…` | défaut | 30 (C3) | à écrire |
+| Seuls écrivains de `serve_token`, `served_*`, `seen_frame` | § 7.4 | `tests/Feature/Architecture/TierServingWritersTest.php` | défaut | 60 (C8) | à écrire |
+| Sélection du palier à ± `tier_grace_ms` et rejeu | § 7.5 | `tests/Feature/Scoring/…` | défaut | 80 (C13) | à écrire |
+| `input_state` et `guess` ; `revealed`/`skipped` hors solo | § 7.6, A16 | `tests/Feature/Answer/…`, `tests/Feature/Game/SoloTest.php` | défaut | 70, 60 | à écrire |
+| Fin anticipée : participants déconnectés → clôture à `D`, pas avant ; joueur connecté sans ligne `round_player` qui ne bloque pas | § 7.7 | `tests/Feature/Game/EarlyEndTest.php` (noms de 10 § 7.7 conservés) | défaut | 60 (C7, L60-7) | à écrire |
+| Refus L4 à coût constant | § 1.8, § 7.9 | `tests/Feature/Answer/…` sous `Queue::fake()` (n° 63) | défaut | 70 (C10, C12) | à écrire |
+| Aucune autre action n'écrit l'acteur `system` | § 8.3 | `tests/Feature/Admin/…` | défaut | 20 (C14) | à écrire |
+| Préchargement : refus à `Tᵢ − lead − 1 ms`, service à `+ 1 ms`, relecture sur `game` ; resynchronisation à `t = 1 s` → une URL ; `serve_token` distinct par manche | § 10, § 15 | `tests/Feature/Game/FrameServeTest.php`, `ResyncPacketTest.php`, `ServeTokenMintTest.php` | défaut | 60 (C7, C8) | à écrire |
+| Frame `withdrawn` jamais retraitée | § 10 | `tests/Feature/Curation/…` | défaut | 20 (C9) | à écrire |
+| **Survie à la purge** : `saved_config` de 18 mois, `frame` de 13 mois | § 11.2 | `tests/Feature/Retention/PurgePerimeterTest.php` | défaut | **100** (L100-8) | à écrire |
+| Chaîne des sept faits du catalogue de démonstration | § 13.3 | `tests/Feature/Schema/DemoCatalogueChainTest.php` | défaut | 10 | existe (niveau données) |
+| **Bout en bout** : « un salon créé sur le catalogue de démonstration peut lancer une partie de 10 manches » | § 13.3 exigence 4 | même fichier, nouveau test | défaut | **100** (L100-14) | à écrire (n° 77) |
+| A3 : `blocked` et `unrated_pending` jamais tirés | § 14 A3 | `tests/Feature/Draw/…` | défaut | 30 | à écrire |
+| A13 : manche annulée exclue à la lecture (L1) | § 14 A13 | `tests/Feature/Scoring/…` | défaut | 80 | à écrire |
+| A16 : invariants sans contrainte de base | § 14 A16 | répartis : publication (20), `levels_mask` (30), capacité (50), `input_state` (70), longueur égale des trois `avatar_preset` (`ColumnLengthTest`, 100) | défaut et `mysql` | selon la ligne | à écrire |
+| Au moins un test de longueur de colonne **sur MySQL** | § 15 | `tests/Feature/Schema/ColumnLengthTest.php` | `mysql` | **100** (L100-1) | à écrire |
+
+#### 3.4 Inventaire des groupes hors défaut au J1
+
+- **`locks-timing`** (propriétaires entre parenthèses) : `tests/Concurrency/Room/LaunchConcurrencyTest.php` (50, C6), `tests/Concurrency/Room/LateJoinConcurrencyTest.php` (50, C6 ; écrit au J1 : les retardataires sont livrés au J1, D17 du 23/09 étant sans effet depuis D35 du 23/09 — amendé le 23/09), `tests/Concurrency/Game/EarlyEndHookTest.php` (60, C7), `tests/Concurrency/Game/SoloStartConcurrencyTest.php` (60, L60-15 ; ajout à l'inventaire de C18 § 2.1 par l'écart (q) de 60 § 22 bis : l'unicité d'un siège solo par jeton, exigence nouvelle E10-N3 de 60, non consolidée, ne se prouve qu'avec deux connexions MySQL), `tests/Concurrency/Answer/LockTransactionTest.php` (70, C10), `tests/Concurrency/Scoring/FinalizeGameConcurrencyTest.php` (80, C13).
+- **`mysql`** : `tests/Feature/Schema/ColumnLengthTest.php` (100), `tests/Feature/Draw/PoolQueryMysqlTest.php` (30, R-03), `tests/Feature/Architecture/GameFrozenColumnsMysqlTest.php` (50, C6).
+
+### 4. Matrice des réglages, bornes croisées et validité des presets
+
+`00` § Carte et `10` § 15 confient à `100` la matrice des combinaisons de réglages et ses seuils ; le contrat C18 § 2.7 en fige la forme. Son objet est la règle 2 : **les bornes croisées se valident côté serveur**, et un FormRequest champ par champ laisserait passer 10 s × 5 images. La matrice prouve, combinaison par combinaison, que `RoomSettings::validate()` refuse **exactement** ce qu'il doit refuser et que `warnings()` lève **exactement** ce qu'il doit lever.
+
+**Objet de cas** `tests/Support/Room/RoomSettingsCase.php` [nouveau], `final readonly` :
+
+```php
+public function __construct(
+    public string $label,          // stable, ex. "N3·D14·R5·points:default"
+    public array $input,           // charge postée : clés camelCase de RoomSettings::FIELDS + 'roundDuration'
+    public array $refusedFields,   // list<string> : clés du sac d'erreurs attendues, telles que validate() les indexe
+    public array $warnings,        // list<string> : codes RoomSettings::WARNING_* attendus si accepté
+) {}
+public function accepted(): bool;  // $refusedFields === []
+```
+
+**Générateur** `tests/Support/Room/RoomSettingsMatrix.php` [nouveau] : `cases(): iterable<string, array{RoomSettingsCase}>` et `accepted(): iterable<string, array{RoomSettings}>`. **Jeux nommés** dans `tests/Datasets/RoomSettingsMatrix.php` : `room_settings.matrix`, `room_settings.accepted` et `room_settings.presets` (`SettingPresetKey::cases()`).
+
+**Axes** — tous dérivés de `RoomSettingsBounds` ; les seuls littéraux sont les décalages ±1. Chaque valeur d'axe porte son verdict, **écrit à la main à partir des bornes nommées** : le générateur ne réimplémente jamais la validation, sans quoi il prouverait qu'une copie du code est égale au code.
+
+| Axe | Valeurs | Verdict porté par la valeur |
+|---|---|---|
+| `framesPerRound` (`n`) | de `MIN_FRAMES_PER_ROUND − 1` à `MAX_FRAMES_PER_ROUND + 1` | hors bornes → `framesPerRound`. Les bornes croisées s'évaluent contre `n̂ = clampFramesPerRound(n)`, règle du code actuel (`RoomSettings::validate()`), sous réserve de la règle d'interaction écrite par 50 |
+| `roundDuration` (`D`) | { `minRoundDuration(n̂) − 1`, `minRoundDuration(n̂)`, `DEFAULT_ROUND_DURATION`, `LONG_ROUND_WARNING_DURATION`, `LONG_ROUND_WARNING_DURATION + 1`, `MAX_ROUND_DURATION`, `MAX_ROUND_DURATION + 1` }, dédupliquées | hors `[minRoundDuration(n̂), MAX_ROUND_DURATION]` → `roundDuration` ; accepté et `> LONG_ROUND_WARNING_DURATION` → `long_round` |
+| `revealDuration` (`R`) | { `MIN − 1`, `MIN`, `RECOMMENDED_MIN_REVEAL_DURATION − 1`, `RECOMMENDED_MIN_REVEAL_DURATION`, `MAX`, `MAX + 1` } | hors bornes → `revealDuration` ; accepté et `< RECOMMENDED_MIN_REVEAL_DURATION` → `short_reveal` |
+| `tierPoints` (liste de taille `n̂`) | `defaultTierPoints(n̂)` ; son inverse ; tout `MIN_TIER_POINTS` ; tout `MAX_TIER_POINTS` ; le défaut avec le palier 1 à `MIN_TIER_POINTS − 1` ; le défaut avec le palier 1 à `MAX_TIER_POINTS + 1` | défaut → rien ; inverse et tout `MAX` → `non_decreasing_points` (l'égalité compte comme non décroissante) ; tout `MIN` → `non_decreasing_points` et `all_tiers_zero` ; palier 1 hors bornes → `tierPoints.0` |
+| famille `advanced` (liste `tierDurations` postée **sans** `roundDuration`, `n ∈ [MIN, MAX]`) | (α) `defaultTierDurations(n, DEFAULT_ROUND_DURATION)` avec le palier 1 à `MIN_TIER_DURATION − 1` ; (β) `defaultTierDurations(n, MAX_ROUND_DURATION)` avec le dernier palier `+ 1` ; (γ) palier 1 à `maxTierDuration(n) + 1`, les autres à `MIN_TIER_DURATION` ; (δ) `n + 1` entrées à `MIN_TIER_DURATION` | (α) → `tierDurations.0` ; (β) → `tierDurations` ; (γ) → `tierDurations.0` et `tierDurations` ; (δ) → `tierDurations` |
+
+**Composition** : `refusedFields` = union des verdicts des axes ; `warnings` = union des avertissements des axes **si et seulement si** `refusedFields` est vide, sinon liste vide. Cette règle d'interaction est encodée **une seule fois**, dans le générateur ; si `50` écrit une règle différente pour l'interaction de deux verdicts (N hors bornes combiné à une borne de D), c'est la sienne qui s'encode. Produit complet `N × D × R × barème` plus la famille `advanced` : environ 1 500 cas, **déterministes** (aucun Faker, aucun tirage), étiquettes stables.
+
+**Répartition de la famille `advanced` au J1** (contrat C18 § 8, libre pour 100) : elle exerce `RoomSettings::validate()` **directement**. Le value object ne change pas au J2 (`RoomSettings::VERSION` reste à 1) ; seul l'éditeur de l'onglet Simple refuse `advanced: true` et toute clé avancée au J1, ce que prouve `RoomSettingsEditorTest` de 50. La matrice n'a donc aucune raison d'attendre le J2.
+
+**Tests** — `tests/Feature/Room/RoomSettingsMatrixTest.php` (fichier du domaine de 50, écrit par 100 avec le jeu de données) :
+- « refuse exactement les champs déclarés pour chaque combinaison aux bornes » — `array_keys(RoomSettings::validate($case->input))` égal, à l'ordre près, à `$case->refusedFields` ;
+- « lève exactement les avertissements déclarés pour chaque combinaison acceptée » — `RoomSettings::fromInput($case->input)->warnings()` égal, à l'ordre près, à `$case->warnings`.
+
+**Consommateurs** du jeu `room_settings.accepted` (propriété de leur spec) : `tests/Feature/Game/RoundTierMaterializationTest.php` › « matérialise des décalages de palier entiers dont la somme vaut D pour chaque combinaison acceptée » (60) ; `tests/Feature/Scoring/SpeedBonusTest.php` › « garde B_max en pourcentage entier pour chaque N accepté » (80).
+
+**Validité des presets** : elle est prouvée **une seule fois**, par `tests/Feature/Room/PresetValidityTest.php` de 50 (R-04), sur le jeu `room_settings.presets` : « construit chaque preset livré par le chemin d'entrée de l'hôte sans erreur » et « garde chaque preset livré lançable sur le catalogue de démonstration ». La borne croisée 3 (vivier ≥ M) s'y évalue sur le catalogue de démonstration, seul catalogue disponible en CI.
+
+### 5. Couverture FR/EN et dérive des types
+
+Les trois vérifications de `05` § Couverture des clés (symétrie des clés, symétrie des paramètres, clés réellement appelées) et le contrôle de dérive de `translations.d.ts` **existent déjà** dans `tests/Feature/I18n/TranslationCoverageTest.php` : `keeps the same keys in fr and en for every checked domain`, `keeps the same placeholders in both translations of a key`, `keeps the literal dictionaries of fortify and the framework symmetrical`, `only calls translation keys that exist in a dictionary` (front et serveur), `carries every key built by an enumerable key constructor`, `keeps the generated translation types in sync with the dictionaries` (qui joue `lang:types --check`). Leurs noms anglais sont conservés (R-02).
+
+**Place dans le pipeline** : groupe **par défaut**, donc exécutées par `composer test`, par `composer ci:check` et par le job `ci` sur **chaque** PR. Une clé FR sans jumelle EN casse la PR qui l'introduit, jamais une livraison ultérieure. Elles portent sur le domaine joueur, `mail` compris ; seul `admin` en est exclu (français par construction, `05`). Les extensions exigées par le contrat C15 § 7 (clés de grille, avatars, erreurs HTTP, refus de salon, vivier) sont écrites par leurs propriétaires dans ce même fichier.
+
+**Au déploiement**, `lang:hash` écrit l'empreinte des dictionnaires (`bootstrap/cache/lang-version.php`) : c'est l'étape 8 du hook (§ 11.5). Sans elle, un déploiement qui ne change qu'une traduction laisse le dictionnaire client périmé (`05` § Invalidation).
+
+### 6. Tests front : Vitest
+
+Vitest est fourni par Vite+ et **configuré au J1** (A-30) :
+
+- `vite.config.ts` reçoit `test: { include: ['tests/Frontend/**/*.test.ts'], environment: 'node' }` ; `tsconfig.json` ajoute `tests/Frontend/**/*.ts` à `include`, sans quoi `tsc --noEmit` et le lint à types ignoreraient les tests.
+- Les tests importent leur API de **`vite-plus/test`**, jamais d'un paquet `vitest` installé à côté (principe 11).
+- **Aucun environnement DOM au J1** (contrat C18) : les tests portent sur des modules purs (`lib/`, parties pures des hooks). Tester un composant React exigerait un DOM simulé, dépendance sans besoin démontré au J1.
+- Premier test livré par cette spec, pour que `npm run test` ne tourne jamais à vide : `tests/Frontend/i18n/translate-choice.test.ts` sur `translateChoice()` de `resources/js/lib/i18n.ts` — « choisit la même forme plurielle que le sélecteur de Laravel pour 0, 1 et plusieurs » et « rend la clé telle quelle quand elle manque ». Parité justifiée par `05` : le serveur et le client doivent produire exactement la même phrase.
+- Les tests Vitest des autres specs (chronologie de manche, annonceur `aria-live` de C16 § 7, horloge de 60) vivent sous `tests/Frontend/game/` et relèvent de leurs propriétaires.
+
+### 7. Gardes mécaniques du dépôt
+
+Ces gardes transforment en **échec de CI** des interdictions qui n'étaient qu'une vigilance de relecture. Toutes sont des tests Pest du domaine `Architecture` (groupe par défaut), sauf la garde des tokens de thème, qui est un script branché sur `npm run check`.
+
+#### 7.1 CI à zéro secret — `tests/Feature/Architecture/ZeroSecretTest.php`
+
+**Pourquoi** : la forge est hors UE (décision 17) ; aucun secret de production, aucune clé TMDB, SMTP, OAuth ou de sauvegarde n'y passe, et le déploiement part du serveur qui **tire** avec une clé de lecture seule (`00` § Exploitation, décision 6). « La suite doit échouer si une clé externe est requise, jamais la réclamer » (`questions-ouvertes.md` § CI).
+
+| Test | Règle vérifiée |
+|---|---|
+| « ne référence aucun secret dans aucun workflow, hors jeton automatique » | aucune occurrence de `secrets.` dans `.github/workflows/*.yml`, hors `secrets.GITHUB_TOKEN` |
+| « ne persiste aucun identifiant hors du job artifacts » | toute étape `actions/checkout` porte `persist-credentials: false`, sauf dans le job `artifacts` |
+| « livre vide chaque clé sensible de .env.example » | toute clé de `.env.example` dont le nom se termine par `KEY`, `SECRET`, `TOKEN` ou `PASSWORD` vaut vide ou `null`, **sauf `REVERB_APP_KEY`**, identifiant public par conception (n° 79 : la clé d'application Reverb est servie à tout client dans la prop `realtime`), livré non vide pour que le temps réel du poste fonctionne (§ 10.10) ; `REVERB_APP_SECRET` reste vide et naît sur la machine (§ 2.4) |
+| « force à vide chaque identifiant externe dans phpunit.xml » | toute clé sensible de `.env.example` (même motif), hors la liste close `APP_KEY`, `DB_PASSWORD`, `REDIS_PASSWORD`, `REVERB_APP_KEY`, est déclarée dans `phpunit.xml` avec `value=""` **et** `force="true"` |
+
+`Http::preventStrayRequests()` (§ 2.2) reste la garde **d'exécution** : un appel réseau non simulé lève, sur le poste comme en CI.
+
+#### 7.2 Aucun domaine littéral — `tests/Feature/Architecture/NoLiteralDomainTest.php`
+
+**Pourquoi** : le domaine n'est pas choisi (décision 5) et se fige simultanément dans une dizaine d'endroits (`00` § Nom de domaine). Tant qu'il ne l'est pas, **et après** : la valeur ne vit que dans l'environnement (`.env` de production, réglages Plesk), jamais dans le dépôt, comme la variable d'indexation (§ 12). La garde est donc **permanente** et ne bascule pas le jour de l'achat.
+
+Test : « écrit <DOMAINE> au lieu de tout hôte littéral dans les specs, la configuration et .env.example ». Périmètre balayé : `docs/specs/**`, `config/**`, `.env.example` et les gabarits d'exploitation `ops/**` (§ 10, qui sont de la configuration). Un hôte est détecté sous trois formes :
+
+- l'**autorité d'une URL de schéma réseau** (`http`, `https`, `ws`, `wss`, `ftp`), c'est-à-dire ce qui suit `://` jusqu'au premier `/`, `:`, guillemet ou blanc, retenue **seulement si elle a la forme d'un nom DNS** (`étiquette(.étiquette)*`). Les flux PHP et de fichier (`php://stderr` de `config/logging.php`, `file://`), tout autre pseudo-schéma et une autorité bâtie par concaténation (`'tls://'.env('PAPERTRAIL_URL')`, dont l'autorité s'arrête au guillemet et reste vide) **ne sont pas des hôtes** : sans cette restriction, le test serait rouge dès sa livraison sur la configuration existante ;
+- le **domaine d'une adresse électronique**, retenu seulement s'il contient un point, ce qui exclut une référence `Classe@méthode` des specs (`ProbeController@show`) ;
+- un **nom nu** de la forme `étiquette(.étiquette)*.tld` dont le `tld` appartient à la liste close `com`, `net`, `org`, `fr`, `eu`, `io`, `co`, `me`, `info`, `dev`, `app`, `xyz`, `be`, `ch`, `de` (liste restreinte aux suffixes qui ne sont pas des extensions de fichier du dépôt). Est accepté : le symbole `<DOMAINE>` et tout nom qui se termine par `.<DOMAINE>` ; toute entrée de la **liste d'autorisation commentée** ci-dessous (n° 78). Tout autre hôte fait échouer le test.
+
+| Entrée autorisée | Motif |
+|---|---|
+| `localhost`, `*.localhost`, `*.test`, `*.example`, `*.invalid`, `example.com`, `example.net`, `example.org` et leurs sous-domaines | noms réservés (RFC 2606, RFC 6761) ; `tripleframes.test` des specs en relève |
+| `api.themoviedb.org`, `image.tmdb.org` | tiers nommé, flux sortant d'import seulement (`config/services.php`, règle 6) |
+| `inertiajs.com`, `developer.mozilla.org` | adresses de documentation dans les commentaires de configuration du framework |
+| `sqs.us-east-1.amazonaws.com` | valeur par défaut inerte de la connexion SQS du framework |
+| `docs.guzzlephp.org` | adresse de documentation dans les commentaires de `config/broadcasting.php`, publié par `config:publish broadcasting` (L60-1 ; 60 interdit `install:broadcasting`) ; entrée posée dès L100-2 pour que ce lot ne casse pas la garde |
+
+Les littéraux IP de bouclage (`127.0.0.1`, `::1`) ne sont pas des hôtes au sens de cette garde. **Toute nouvelle entrée** (hôte OAuth de Google ou Discord au J2, par exemple) s'ajoute dans le commit qui l'introduit, avec son motif en commentaire. `config/broadcasting.php` porte aussi, dans la connexion `pusher`, un nom nu du domaine de Pusher, que le détecteur retient : **exigence à 60**, son lot d'installation retire de ce fichier les connexions `pusher` et `ably`, inutilisées ; à défaut, le domaine de Pusher et ses sous-domaines entrent dans la liste d'autorisation avec leur motif, dans le même commit. Un second test, « reconnaît un hôte dans une URL, une adresse électronique et un nom nu, et ignore un flux php://stderr, une autorité construite par concaténation et une référence Classe@méthode », éprouve le détecteur sur des chaînes écrites dans le test lui-même, pour qu'un détecteur muet ne passe jamais pour une garde verte, ni un détecteur bavard pour une garde utile.
+
+#### 7.3 Aucune image réelle ni extrait de production — `tests/Feature/Architecture/NoRealFixtureTest.php`
+
+**Pourquoi** : « aucune image de jeu réelle n'entre dans le dépôt, jamais », ni aucun extrait de base de production (`00` § Dépôt et licence, 10 § 13.3, décision 6) ; la forge hors UE ne voit jamais une image curée ni une donnée personnelle.
+
+Test : « ne suit aucune image, aucun dump ni aucune archive hors de la liste d'autorisation ». Il lit `git ls-files` (échec, jamais saut, si git est absent) et refuse tout fichier d'extension image (`png`, `jpg`, `jpeg`, `webp`, `gif`, `avif`, `bmp`, `tif`, `tiff`, `heic`, `heif`, `svg`, `ico`) ou de vidage et d'archive (`sql`, `dump`, `gz`, `tgz`, `zip`, `7z`, `tar`, `bak`, `sqlite`, `sqlite3`, `db`) hors de :
+
+- `public/favicon.ico`, `public/favicon.svg`, `public/apple-touch-icon.png` (icônes du site) ;
+- `public/brand/*`, **à condition** que `public/brand/LICENSE.md` soit suivi (logo TMDB, contrat C16, n° 72) ;
+- `public/avatars/*.webp`, **à condition** que `public/avatars/LICENSE.md` soit suivi (pack d'avatars, contrat C5, D27 du 23/09).
+
+Les images du catalogue de démonstration sont **générées par Imagick au seeding** et ne sont jamais suivies ; les fixtures TMDB restent des JSON synthétiques. Les données du test de charge (liste des titres publiés, codes de salon, adresses des sites voisins, § 16) vivent dans `tests/Load/.data/`, **ignoré par git** [nouveau dans `.gitignore`]. Le `.gitignore` seul ne protège pas d'un ajout forcé, et le filtre par extension laisserait passer un `.json`, un `.csv` ou un `.txt` : c'est un extrait de production et une liste d'hôtes littéraux. Second test : « ne suit aucun fichier sous tests/Load/.data » (échec si `git ls-files tests/Load/.data` n'est pas vide).
+
+#### 7.4 Tokens de thème — branchement et méta-vérification
+
+La liste des interdits et le périmètre des composants appartiennent à `90` (contrat C16 § 2.11, principe 13) ; `100` possède le **branchement** et la **méta-vérification** (partage des sujets arrêté le 23/09). `scripts/check-theme-tokens.mjs` reste branché sur `npm run check`, donc sur `composer ci:check` et le job `ci`. Il reçoit, dans le lot L100-2 :
+
+- la constante **`EXEMPT`** : liste nominative des fichiers `.ts`/`.tsx` du starter non surveillés au commit de gel ; elle **ne fait que décroître** (un fichier en sort quand il est réécrit, aucun n'y entre) ;
+- l'exemption permanente de `components/ui/**`, `routes/**`, `actions/**`, `wayfinder/**` et `types/translations.d.ts` (fichiers générés, jamais édités) ;
+- la règle **`[unclassified]`** : tout fichier `.ts` ou `.tsx` sous `resources/js` est sous un chemin `WATCHED` ou dans `EXEMPT`, sinon le script échoue.
+
+**Pourquoi** : `WATCHED` est une liste blanche ; sans méta-vérification, un nouvel écran de jeu y échappe par défaut et le principe 13 cesse d'être outillé sans que la CI le signale (A-36 : « l'outillage couvre tout répertoire joueur créé avec méta-vérification » ; A-75 : périmètre `WATCHED` de la règle 5). Les ajouts à `WATCHED` suivent la création de chaque répertoire, par la spec qui le crée ; `ThemeTokensPerimeterTest` de 90 prouve la couverture des répertoires joueurs.
+
+**Partage appliqué par 90** (90 § 9.3, L90-1). Selon la carte des propriétés (« Script anti-couleur » : interdits et périmètre à 90, branchement et méta-vérification à 100), `EXEMPT`, la règle `[unclassified]` et l'option `--list-unclassified` sont écrits **une seule fois**, dans L100-2, livré avant L90-1, dont c'est la dépendance déclarée ; L90-1 garde `WATCHED`, l'option `--perimeter`, `ThemeTokensPerimeterTest`, et régénère `EXEMPT` par `--list-unclassified` à son commit de gel ; les heures ne sont comptées qu'une fois, dans L100-2.
+
+#### 7.5 Frontière TMDB
+
+`tests/Feature/Architecture/TmdbBoundaryTest.php` **[existant]** borne `TmdbClient` aux commandes et aux contrôleurs d'administration (règle 6). Il reste inchangé (contrat C9 § 6, non-amendement explicite).
+
+#### 7.6 Licence du dépôt — `tests/Feature/Architecture/LicenseTest.php`
+
+**Pourquoi** : le dépôt est privé, **tous droits réservés** (décision 6), et « l'absence de fichier laisse le statut ambigu » (`00` § Dépôt et licence) ; `composer.json` déclare aujourd'hui `MIT`, ce qui dit l'inverse (n° 75).
+
+- `LICENSE` [nouveau] : « Copyright (c) 2026 — [nom réel du porteur]. Tous droits réservés. », suivi de l'interdiction de reproduction, de distribution et d'usage sans autorisation écrite. Le nom est saisi par le porteur au commit.
+- `composer.json` : `"license": "proprietary"`, `"name": "tripleframes/tripleframes"`, description du projet (restes du starter retirés dans le même commit) ; `package.json` : `"license": "UNLICENSED"`.
+- Test : « déclare le dépôt tous droits réservés dans LICENSE, composer.json et package.json ».
+- Les actifs tiers tracent leur licence **à côté de leurs fichiers** (`public/avatars/LICENSE.md` par 40, `public/brand/LICENSE.md` par 90), ce que § 7.3 rend obligatoire.
+- **Relevé des licences tierces des actifs livrés au J1**, demandé à 100 par le contrat C5 § 6, par 40 (§ 5.7, § 9) et par 90 : `THIRD_PARTY_NOTICES.md` [nouveau], à la racine (hors du périmètre de § 7.2, parce qu'il cite les adresses des sources), une ligne par actif — chemin, auteur, licence, fichier ou en-tête qui la porte, et **texte d'attribution** quand la licence en exige un. Au J1 : pack d'avatars Kenney, CC0, `public/avatars/LICENSE.md` (40, D27 du 23/09) ; listes noires LDNOOBW, CC BY 4.0, en-têtes `# source:` / `# license:` de `resources/moderation/nicknames/{en,fr}.txt` (40), avec le texte d'attribution dû, que la page légale de 90 reprend à sa publication ; logo TMDB, `public/brand/LICENSE.md` (90, n° 72). Pourquoi au J1 : ces actifs sont livrés au J1, et une attribution CC BY due sans propriétaire n'est tenue par personne. Deuxième test de `LicenseTest` : « trace la licence de chaque actif tiers livré au J1, attribution comprise pour une source CC BY » (chaque chemin du relevé existe, son fichier ou son en-tête de licence existe, et une ligne CC BY porte un texte d'attribution non vide ; l'en-tête des listes noires lui-même est vérifié par 40). Le relevé des licences des **dépendances** composer et npm relève du J2 (section « Jalon 2 — à écrire »).
+
+### 8. Fixtures et catalogue de démonstration
+
+Le contrat de fixture de 10 § 13.3 est la seule façon de jouer une partie sans clé TMDB ni réseau. État au 23/09 : les exigences 1 (`Frame::factory()->published()` écrit un vrai WebP et hache ses octets), 2 (`Movie::factory()->playable()` recalcule la projection), 3 (`FRAMES_DISK_ROOT` dans `.env.example`, répertoire créé par `composer setup`) et 5 (trois comptes de démonstration, un par rôle, créés avant le catalogue ; un film d'exception) sont **tenues et prouvées** par `DemoCatalogueChainTest`. **L'exigence 4 est partielle** : le test de chaîne prouve les sept faits au niveau des données et, son en-tête le dit, « ne lance aucune partie » ; `REPRISE.md` § Prochaine action, point 1, le présente à tort comme fait (n° 77).
+
+Règles :
+
+1. **Le test de bout en bout** « un salon créé sur le catalogue de démonstration peut lancer une partie de 10 manches » s'ajoute à `DemoCatalogueChainTest.php` (lot L100-14) dès que l'action de lancement de 50 (`LaunchGame`, contrat C6) et la programmation de 60 existent : il seede, crée un salon au preset par défaut (au réglage par défaut : M = 10, N = 3), prend `RoomSettingsBounds::MIN_CONNECTED_PLAYERS_TO_LAUNCH` sièges connectés (contrat C6 § 5), lance, et vérifie que `min(M + marge, |vivier|)` manches sont matérialisées avec leurs paliers et le jeton du palier 1 de la manche 1. Il ne joue pas la partie : les jobs sont simulés (`Queue::fake()`). L'en-tête du fichier est corrigé dans le même commit.
+2. **Le catalogue de démonstration n'entre jamais en production** : `DatabaseSeeder` n'appelle les seeders de démonstration qu'en `local` et `testing` (liste blanche existante), et le hook de production n'appelle que `PlatformDataSeeder` (§ 11.5).
+3. **Fixtures d'avatars** : les tests génèrent leurs WebP de substitution par Imagick sur `Storage::fake()` ou lisent les clés en configuration ; le pack réel et ses tests (`AvatarPresetTest`) appartiennent à 40 [J1].
+4. **`database/database.sqlite`** n'est pas un vestige en CI : `composer setup` copie `.env.example` (`DB_CONNECTION=sqlite`) puis migre, ce qui crée et migre ce fichier ; c'est un **test de fumée des migrations sur SQLite fichier**, distinct du `:memory:` des tests (n° 81). Il reste ignoré par git.
+
+### 9. Environnements du J1
+
+| Environnement | Rôle au J1 | Base | Cache, file, diffusion | Particularités |
+|---|---|---|---|---|
+| **Poste** (Windows) | développement | MySQL Homestead distant | Redis via `predis` pour le cache et la file (Redis de la VM Homestead **[à vérifier sur la VM, point du poste et non du relevé du VPS]** ou Redis local, hôte dans le `.env` du poste), obligatoire dès L60-1 ; jamais le driver `database` pour une file de moteur (60 § 19.5) ; Reverb | `composer dev` sert `127.0.0.1:8000` avec Reverb et les deux files ; HTTP, sans OAuth ni passkeys |
+| **CI** | preuve | SQLite `:memory:` (job `ci`) ; MySQL 8 et Redis 7 en services (job `mysql-redis`) | `array`, `sync`, `null` | zéro secret (§ 7.1) |
+| **Production** (VPS Plesk) | curation dès le J1, **d'abord**, sur le socle minimal sans moteur, puis première vraie partie (D1 et D37 du 23/09 ; « Lots d'implémentation » — amendé le 23/09) | MySQL 8 **local** | Redis dédié, Reverb | `noindex` intégral (§ 12) ; aucun compte hors le premier admin, seul curateur (créé **après** l'achat du domaine, D4 du 23/09, A-67), les comptes de test jetables vivant sur les postes et en CI (40 § 8.1) ; inscription et **passkeys fermées** (décision 5, `ACCOUNTS_*` absentes, § 10.10) |
+
+- **Pas de préproduction au J1** : elle entre au J2 (`questions-ouvertes.md` § Environnements). Au J1, la production n'a pas d'utilisateur public ; le drainage (§ 11), exigé avant la première partie sur le VPS et non avant la curation (D37 du 23/09 — amendé le 23/09), protège les parties d'amis.
+- **Le développement local en HTTPS sur `dev.<DOMAINE>`** (DNS-01, RP ID `<DOMAINE>`) n'est exigé que par OAuth et les passkeys, qui sont au J2 : il est listé dans la section « Jalon 2 — à écrire » (partage des sujets arrêté le 23/09). Au J1, le poste reste sur `127.0.0.1` en HTTP.
+- **Parité du client Redis** : `predis` partout (§ 2.4) ; `.env.example` pose `redis` pour le cache et la file (60 § 19.5 ; `questions-ouvertes.md` § Déjà tranché › Redis : « dès le premier commit du moteur ») ; seule la CI garde `array` et `sync` par `phpunit.xml` (§ 2.3). **Pourquoi** : le driver `database` sonde et verrouille des lignes et ne tient pas une frontière de palier ; un poste qui jouerait la file `game` sur lui ne dirait rien du comportement de production. Un poste neuf a donc besoin d'un Redis joignable pour jouer une partie ; la suite par défaut, elle, n'en demande aucun.
+
+### 10. Topologie de production sur le VPS mutualisé (hypothèse root)
+
+La production est **un abonnement de plus sur le VPS Plesk existant**, machine déjà en production pour d'autres sites (décision 16). Chaque brique est un voisin de palier : « est-ce que ça tient ? » se double de « **est-ce que ça casse les autres ?** » (`00` § Exploitation). D'où trois familles de contraintes, toutes écrites ici comme des **règles** et non des recommandations (`questions-ouvertes.md` § Risques élevés) : **isolation**, **plafonnement**, **non-privilège**. Les gabarits de configuration sont **versionnés sous `ops/`** [nouveau] et recopiés à la main une fois par root : un réglage système qu'on ne peut pas relire dans le dépôt ne peut pas être revu. Les réglages saisis dans l'interface de Plesk, qui n'ont pas de fichier à recopier, sont consignés dans **`ops/plesk/settings.md`** [nouveau] : pool PHP-FPM (§ 10.6), tâches planifiées (§ 10.7, § 13.2), cache nginx désactivé (§ 10.8), rotation des journaux (§ 10.9), HSTS (§ 10.2). Ce relevé est mis à jour **dans le commit** qui change l'un d'eux ; il est sous `ops/`, donc balayé par § 7.2, et écrit `<DOMAINE>`.
+
+#### 10.1 Relevé préalable — avant tout déploiement
+
+| Point relevé | Commande ou lieu | Attendu | Conséquence si non |
+|---|---|---|---|
+| Accès SSH root | `ssh root@…` | oui, **une fois** | repli de `questions-ouvertes.md` (second VPS), décision du porteur |
+| RAM, vCPU, charge | `free -m`, `nproc`, `uptime` | ≥ 4 Go, ≥ 2 vCPU (seuil de `questions-ouvertes.md`) | plafonds du § 10 revus à la baisse avant D33 du 23/09 |
+| Ports en écoute | `ss -ltnp` | deux ports de bouclage libres (Redis dédié, Reverb) ; présence éventuelle d'un Redis voisin sur 6379 | choix des ports figé ici |
+| PHP de l'abonnement | `/opt/plesk/php/8.3/bin/php -m` | `imagick` (paquet `plesk-php83-imagick`), `pdo_mysql`, `mbstring`, `openssl`, `sodium` ; `pcntl` en CLI noté | sans `imagick` : pas de curation ; sans `pcntl` : `--timeout` des workers inopérant, `--max-time` reste la borne |
+| Plesk | version, mode de service (nginx seul vers PHP-FPM, sans proxy Apache), cache nginx de l'abonnement, Git (modes de déploiement), actions de déploiement additionnelles (répertoire courant, délai), tâches planifiées, shell SSH de l'utilisateur d'abonnement (non chrooté, `mysqldump` et composer accessibles) | tout disponible | procédure du § 11 adaptée |
+| Région du VPS | contrat de l'hébergeur | **UE** (décision 17) | la page de confidentialité serait fausse dès sa première ligne |
+| Heure | `timedatectl` ; `SELECT @@global.time_zone, @@session.time_zone, @@system_time_zone` ; `date.timezone` du PHP | tout en **UTC**, synchronisation NTP active | hypothèse de 10 § 1.2 et § 13.4 fausse : horodatages de partie décalés |
+| MySQL | version, `explicit_defaults_for_timestamp` | 8.0.x, `ON` | 10 § 1.2 |
+
+**Résultats du relevé** (à consigner ici, date comprise) : — *non relevé au 23/09*.
+
+#### 10.2 Abonnement et garde-fous de cohabitation
+
+- **Abonnement Plesk `<DOMAINE>`**, PHP 8.3 FPM servi **directement par nginx** **[à confirmer au relevé du VPS]**, racine du document `tripleframes/public`, certificat Let's Encrypt géré par Plesk, redirection HTTPS permanente, HSTS à durée courte sans `preload` au J1.
+- **Utilisateur système dédié** : l'utilisateur de l'abonnement, jamais partagé ; aucun processus du jeu ne tourne en root. **Base MySQL dédiée** et utilisateur MySQL dont les droits se limitent à cette base (création par Plesk).
+- **Secrets non partagés** entre abonnements : `APP_KEY`, mot de passe MySQL, mot de passe Redis, secret Reverb, jeton de sonde, clé d'envoi des sauvegardes sont propres à TripleFrames. Une intrusion chez un voisin ne doit pas ouvrir la base du jeu, sans quoi elle devient une violation de données personnelles de TripleFrames à notifier sous 72 h (`questions-ouvertes.md` § Risques élevés).
+- **Racines hors du chemin de déploiement**, sous le répertoire privé de l'abonnement, jamais sous `httpdocs` : `FRAMES_DISK_ROOT` (images curées) et `BACKUP_SNAPSHOT_DIR` (§ 13.1), en permissions `0700` à l'utilisateur d'abonnement. Un re-clonage Plesk ou une restauration d'abonnement ne peut pas les effacer (`CLAUDE.md` §8). Placées sous la racine de l'espace web, elles restent dans l'`open_basedir` que Plesk pose pour PHP-FPM.
+- **`storage/` ne contient rien d'irremplaçable au J1** (journaux, caches compilés) ; tout fichier irremplaçable vit hors du chemin de déploiement avec sa racine en variable d'environnement. Au J2, la copie locale des photos provider suit la même règle (section « Jalon 2 — à écrire »).
+- **Aucun processus Node en production** : pas de SSR (E10-13), les assets arrivent construits (§ 11.1).
+
+#### 10.3 Instance Redis dédiée
+
+**Pourquoi dédiée** : une base numérotée n'est pas une frontière de sécurité, et un `FLUSHALL` voisin effacerait les jobs de frontière et le drapeau de drainage en pleine partie (`questions-ouvertes.md` § Redis). **Redis n'est jamais source de vérité du temps** : `round.started_at` et `round_tier` le sont (10 § 13.4, contrat C7 § 4).
+
+Gabarit `ops/redis/tripleframes-redis.conf` [nouveau], unité `ops/systemd/tripleframes-redis.service` [nouveau] **[à confirmer au relevé du VPS : ports, chemins, utilisateur `tfredis`]** :
+
+```
+bind 127.0.0.1
+port <port de bouclage relevé, ≠ 6379>
+protected-mode yes
+requirepass <secret long, propre à l'abonnement>
+rename-command FLUSHALL ""
+rename-command FLUSHDB ""
+rename-command KEYS ""
+rename-command CONFIG ""
+rename-command DEBUG ""
+maxmemory 256mb                 # valeur de départ, recalibrée par D33 du 23/09
+maxmemory-policy noeviction     # une éviction de job différé fige une manche
+appendonly yes
+appendfsync everysec
+save ""
+dir /var/lib/tripleframes-redis
+supervised systemd
+```
+
+- Unité : `User=tfredis`, `Type=notify`, `Restart=always`, `MemoryMax=320M` (au-dessus de `maxmemory`, pour que le plafond de Redis déclenche avant le cgroup), `CPUWeight=80`.
+- **Conséquence voulue** : `FLUSHDB` étant désactivé, `php artisan cache:clear` **échoue** en production. C'est une protection : ce geste effacerait le drapeau de drainage, les battements de cœur, le signal de redémarrage des workers et l'état des limiteurs. Aucune procédure de cette spec ne vide le cache (§ 11.5, étape 2).
+- Variante plus forte, **non retenue par défaut** : un socket unix réservé à un groupe ne contenant que l'utilisateur d'abonnement et `tfredis`. Le port de bouclage avec mot de passe reste la base, parce qu'il garde une configuration identique au poste et à la CI (`REDIS_HOST`/`REDIS_PORT`) ; le socket s'ajoute si le relevé le rend simple.
+- Connexions Laravel : `default` (file) et `cache` (cache et verrous), préfixe de clés par défaut de l'application. `config/queue.php` › connexion `redis` : `block_for => null`, `retry_after => (int) env('REDIS_QUEUE_RETRY_AFTER', 960)` [modifié, aujourd'hui 90]. **Pourquoi 960** : supérieur à la plus longue durée d'exécution d'un job, `$timeout` propre au job compris — `RunCatalogImport::$timeout` = 900 s, sur la file `default`, l'emporte sur le `--timeout` du worker dès que `pcntl` est présent (§ 10.1). En deçà, le job réservé repasse dans la file pendant qu'il s'exécute encore et il est **délivré deux fois** : un balayage d'import rejouerait un curseur consommé. La valeur vaut pour les deux files, qui partagent la connexion : les jobs de `game` sont en `--tries=1`, idempotents et auto-périmants (§ 10.4), et un job de frontière perdu relève de `game:reschedule` (contrat C17), jamais d'une redélivrance.
+
+#### 10.4 Workers systemd
+
+Deux unités gabarit, **jamais Horizon** (`pcntl` et `posix` absents du poste, `CLAUDE.md` §8), chacune invoquant le PHP de l'abonnement **par chemin absolu** :
+
+```ini
+# ops/systemd/tripleframes-worker@.service   [à confirmer au relevé du VPS : utilisateur, groupe, chemins]
+[Unit]
+Description=TripleFrames - worker de la file %i
+After=network-online.target tripleframes-redis.service
+Wants=tripleframes-redis.service
+
+[Service]
+User=<utilisateur d'abonnement>
+WorkingDirectory=<chemin de déploiement>
+EnvironmentFile=/etc/tripleframes/worker-%i.env
+ExecStart=/opt/plesk/php/8.3/bin/php artisan queue:work redis --queue=%i $WORKER_ARGS
+Restart=always
+RestartSec=2
+Nice=5
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
+```
+
+| Instance | `WORKER_ARGS` | `MemoryMax` / `CPUWeight` (drop-in `tripleframes-worker@<i>.service.d/limits.conf`) | Motif |
+|---|---|---|---|
+| `game` | `--tries=1 --sleep=0.1 --timeout=30 --max-time=3600 --memory=128` | 192M / 80 | cadencement : un job de frontière est idempotent et auto-périmant, `--tries=1` le rend inoffensif en cas de rejeu, de doublon ou de `queue:restart` en vol (contrat C7 § 5 : `block_for` nul, `--sleep` ≤ 1 s) ; **`--sleep=0.1`** et non 1, voir ci-dessous |
+| `default` | `--tries=3 --backoff=10 --sleep=3 --timeout=120 --max-time=3600 --memory=384` | 512M / 20 | images Imagick, e-mails, import, purge ; un job qui déclare ses propres essais (traitement d'image, contrat C9) l'emporte sur `--tries` |
+
+- **Pourquoi `--sleep=0.1` sur `game`.** `availableAt()` tronque l'échéance d'un job différé à la seconde (60 § 4.2) : le job devient disponible à `S = floor(dueAt)` et, `block_for` étant nul, un worker à vide ne le relève qu'à son prochain sondage, `S + U` avec `U` uniforme sur l'intervalle de `--sleep`. Réveillé tôt, le job attend `dueAt` en processus ; réveillé tard, il part avec un retard `U − f`, où `f` est la partie fractionnaire de `dueAt`. À `--sleep=1`, `P(retard > 300 ms) = 0,7² / 2 ≈ 24,5 %` et le p95 du retard vaut environ 680 ms, au-dessus du seuil `PlatformLimits::tierGraceMs()` du critère 1 de D33 du 23/09 (§ 16.4) : le test échouerait sur l'intervalle de sondage, et aucune des réactions écrites d'avance (second processus, `EngineConstants`) n'agirait sur cette cause. `Worker::sleep()` accepte une durée inférieure à la seconde (`usleep`) ; 0,1 s respecte le « `--sleep` ≤ 1 s » du contrat C7 § 5, borne à 100 ms le retard dû au sondage à vide, et coûte quelques dizaines d'opérations Redis par seconde en boucle locale, négligeables. Le critère 1 mesure alors la tête de file (60 § 4.2) et non le sondage.
+- **Un seul processus `game`** au J1 (D1 et D30 du 23/09). Leur nombre est un paramètre de cette spec, fixé **après** D33 du 23/09 ; s'il dépasse un, le changement est **signalé au porteur**, parce qu'il modifie le socle de D1 du 23/09 (unités, mémoire sur un VPS partagé) (contrat C7 § 5).
+- `CPUWeight` des workers **inférieur** à celui des pools PHP-FPM (100 par défaut) : sous contention, les voisins et les requêtes de jeu passent avant Imagick. Toutes ces valeurs sont des **valeurs de départ**, recalibrées par D33 du 23/09 (§ 16).
+- `--max-time` redémarre proprement chaque worker toutes les heures (fuite mémoire bornée) ; `Restart=always` le relève.
+- **Aucun job de purge, d'image ni d'import n'emprunte la file `game`** (10 § 12, `CLAUDE.md` §8), et aucun job de jeu la file `default`.
+
+#### 10.5 Reverb en boucle locale, publié par nginx
+
+Unité `ops/systemd/tripleframes-reverb.service` [nouveau] : `ExecStart=/opt/plesk/php/8.3/bin/php artisan reverb:start`, host et port lus dans la configuration (`REVERB_SERVER_HOST=127.0.0.1`, `REVERB_SERVER_PORT` = port de bouclage relevé, vérifié libre par `ss -ltnp` avant d'être figé), `MemoryMax=256M`, `CPUWeight=80`, `LimitNOFILE=4096`, `Restart=always`. Pare-feu Plesk **fermé** sur ce port **[à confirmer au relevé du VPS]**. Sous un millier de connexions, la boucle `stream_select` suffit ; aucune extension d'événements n'est requise (à confirmer par D33 du 23/09).
+
+**Reverb n'est jamais exposé directement.** nginx publie le seul chemin WebSocket `/app/` par les **directives nginx additionnelles de l'abonnement**, jamais par l'édition d'un vhost que Plesk régénère (`00` § Exploitation). Gabarit `ops/nginx/additional-directives.conf` [nouveau] :
+
+```nginx
+location /app/ {
+    proxy_pass http://127.0.0.1:<REVERB_SERVER_PORT>;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "Upgrade";
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_read_timeout 3600s;
+    proxy_send_timeout 3600s;
+    proxy_buffering off;
+}
+```
+
+- **L'API HTTP de Reverb (`/apps/`) n'est pas publiée.** Le serveur publie ses événements en boucle locale en clair (`REVERB_HOST=127.0.0.1`, `REVERB_SCHEME=http`), jamais par un aller-retour TLS via nginx (`00` § Stack) : exposer `/apps/` n'offrirait qu'une surface d'attaque de plus. C'est un **amendement nouveau** de `00` § Stack, de `questions-ouvertes.md` § Déjà tranché et de `60` § 19.5 (première puce), qui exige encore cette publication : la contradiction entre les deux specs sœurs est signalée au porteur (N100-1).
+- **Préfixes réservés** : aucune route applicative ne commence par `/app/` ni `/apps/` (Reverb) ; sous `/ops/`, la seule route admise est `ops.probe` (§ 15), déclarée dans `routes/ops.php`. Test : `tests/Feature/Architecture/ReservedPathsTest.php` › « ne déclare aucune route sous /app/ ni /apps/, et aucune autre qu'ops.probe sous /ops/ ».
+- **Conséquences heureuses** (`00`) : Reverb ne manipule aucun certificat, le renouvellement Let's Encrypt ne le redémarre pas, un rechargement de nginx laisse vivre les WebSockets ouverts.
+- Origines autorisées : `REVERB_ALLOWED_ORIGINS=<DOMAINE>` en production ; **exigence à 60** (consolidée plus bas, « Exigences adressées aux specs sœurs ») : `config/reverb.php`, créé par son lot d'installation, lit cette variable (défaut `*` sur le poste).
+
+#### 10.6 PHP-FPM de l'abonnement
+
+Réglés dans Plesk, sans root **[à confirmer au relevé du VPS]** : `pm = ondemand`, `pm.max_children = 12` (valeur de départ, recalibrée par D33 du 23/09 : il borne la mémoire que le jeu peut prendre aux voisins, et c'est **lui** qui fait que la saturation dégrade le jeu plutôt que les autres sites), `pm.max_requests = 500`, `pm.process_idle_timeout = 10s`, page de statut du pool (`pm.status_path`), jamais publiée hors de la boucle locale, pour le relevé de `listen queue` au test de charge (§ 16.4) **[à confirmer au relevé du VPS]**. Valeurs consignées dans `ops/plesk/settings.md`. Limites d'envoi inchangées (`upload_max_filesize=2M`, `post_max_size=8M`) : l'application plafonne l'entrée à `PlatformLimits::frameUploadMaxKilobytes()`, bien en dessous, pour qu'un échec soit toujours une erreur traduite et jamais le 419 muet (`CLAUDE.md` §8). **`opcache.validate_timestamps` reste actif** : le déploiement est en place (D31 du 23/09) et l'utilisateur d'abonnement ne peut pas recharger FPM ; un OPcache figé servirait l'ancien code jusqu'au prochain redémarrage.
+
+#### 10.7 Planificateur
+
+**Tâche planifiée Plesk** de l'utilisateur d'abonnement, chaque minute **[à confirmer au relevé du VPS : tâches planifiées de l'abonnement à la minute]** : `/opt/plesk/php/8.3/bin/php <chemin de déploiement>/artisan schedule:run`, sortie non notifiée, consignée dans `ops/plesk/settings.md`. `routes/console.php` [modifié] déclare :
+
+| Tâche | Fréquence | File | § |
+|---|---|---|---|
+| `WorkerHeartbeat('game')` | toutes les 30 s | `game` | 15 |
+| `WorkerHeartbeat('default')` | chaque minute | `default` | 15 |
+| `room:archive-idle` (**50**, déclarée par son lot, listée ici pour que le tableau soit complet) | toutes les `RoomExpiry::SWEEP_EVERY_MINUTES` | `default` (job `App\Jobs\Room\ArchiveIdleRooms`) | 50 § 16.2 ; 14 |
+| `RunRetentionPurge` | quotidienne à `config('ops.purge.daily_at')`, défaut `02:10` UTC | `default` | 14 |
+| `backup:prune-snapshots` | quotidienne à `config('backup.prune_at')`, défaut `02:50` UTC | aucune (commande exécutée par le planificateur) | 13.1 |
+| `App\Jobs\Ops\ReportBruteForce` | hebdomadaire, le lundi à `config('ops.brute_force.report_at')`, défaut `04:10` UTC | `default` | 15 |
+
+La règle 8 (« pas de scheduler minute ») vise le **chrono de jeu** : aucun instant de partie n'est jamais décidé par le planificateur, qui ne porte que l'exploitation. Le planificateur est lui-même surveillé **indirectement** : s'il s'arrête, les battements vieillissent et la sonde alerte (§ 15). Heures en UTC, comme tout le serveur.
+
+#### 10.8 Aucun cache de page complète
+
+**Aucun cache HTTP de page complète devant l'application, Plesk compris** : une même URL sert deux langues (aucun préfixe de locale, `05`), donc un cache de page servirait la première langue rendue à tous (`CLAUDE.md` §3). Règles :
+
+- l'option de cache nginx de l'abonnement reste **désactivée** ; le service direct des fichiers statiques par nginx reste actif (assets immuables de `public/build`) ;
+- **vérification après toute modification des directives nginx additionnelles**, et chaque jour par la supervision (§ 15) : deux requêtes `GET /` avec `Accept-Language: fr` puis `en` rendent chacune le `<html lang>` attendu, et aucune ne porte `Age`, `X-Cache` ni `X-Proxy-Cache`. On mesure l'effet réel, pas la configuration.
+
+#### 10.9 Journaux
+
+- **Application** : canal `daily`, `LOG_DAILY_DAYS=14`. Un processeur `App\Support\Ops\RedactPersonalData` [nouveau], branché sur les canaux de l'application, retire du contexte toute clé de la liste close `ip`, `ip_address`, `nickname`, `email`, `player_token`, `answer`, `submitted`. **Pourquoi** : aucune IP en table de domaine, et l'IP ne vit qu'en journaux purgés tôt (principe 12) ; les journaux de l'application ne doivent pas devenir un second dépôt de pseudos. Test : `tests/Feature/Deploy/LogRedactionTest.php` › « retire du contexte de journal toute clé de la liste close des données personnelles ».
+- **Canal `game`** [nouveau] : lignes JSON, 14 jours, même processeur. `60` choisit les événements journalisés (ouverture et clôture de manche, substitutions, annulations, pauses, resynchronisations) ; **exigence à 60** (consolidée plus bas, « Exigences adressées aux specs sœurs ») : chaque diffusion de frontière journalise son **retard réel** en millisecondes (`serverNow` d'émission − instant théorique), mesure dont dépend le critère 1 de D33 du 23/09. Le fichier absent signalé par `FrameImageResponse` (contrats C8 et C9) part sur ce canal.
+- **nginx** : rotation de l'abonnement à **30 jours au plus** (seul lieu des IP, 10 § 11.1) **[à confirmer au relevé du VPS]**.
+- **Aucun suivi d'erreurs externe en v1** (défaut retenu le 23/09, `questions-ouvertes.md` § Confirmations attendues et décision 17) : journaux locaux et sondes suffisent, et un tiers de moins figure dans la page de confidentialité.
+
+#### 10.10 Variables d'environnement
+
+Toute variable née ici entre dans `.env.example` **dans le même commit** (`CLAUDE.md` §8 : `composer setup` le copie). La colonne « production » dit la valeur ou la règle ; **aucune valeur de production n'est écrite dans le dépôt**. Ce tableau est la **référence consolidée** des valeurs, mais il n'a qu'un écrivain par ligne : `CACHE_STORE`, `QUEUE_CONNECTION`, `REDIS_CLIENT`, `BROADCAST_CONNECTION` et les identifiants `REVERB_*` (hors `REVERB_ALLOWED_ORIGINS`) sont écrits par le premier lot du moteur (L60-1, n° 46, 60 § 19.5), avec les valeurs ci-dessous ; L100-4 écrit les variables propres à cette spec.
+
+| Variable | `.env.example` | Production | Source |
+|---|---|---|---|
+| `APP_ENV`, `APP_DEBUG` | `local`, `true` | `production`, `false` | — |
+| `APP_URL` | `http://localhost:8000` | `https://<DOMAINE>` | signature des URL temporaires |
+| `SESSION_DRIVER`, `SESSION_SECURE_COOKIE` | `database`, absent | `database`, `true` | `CLAUDE.md` §3 |
+| `CACHE_STORE`, `QUEUE_CONNECTION` | `redis`, `redis` (aujourd'hui `database`, `database`) | `redis`, `redis` | § 9 ; 60 § 19.5 (L60-1) |
+| `REDIS_CLIENT` | **`predis`** (aujourd'hui `phpredis`, n° 46) | `predis` | § 2.4 ; L60-1 |
+| `REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD` | `127.0.0.1`, `6379`, `null` | boucle locale, port relevé, secret | § 10.3 |
+| `REDIS_QUEUE_RETRY_AFTER` | `960` | `960` | § 10.3 |
+| `BROADCAST_CONNECTION` | `reverb` | `reverb` | contrat C7 |
+| `REVERB_APP_ID`, `REVERB_APP_KEY` | `tripleframes-local`, `tripleframes-local-key` (identifiants **publics** par conception, n° 79 : la clé est servie à tout client dans la prop `realtime`) | générés à la mise en service | contrat C7 ; § 7.1 |
+| `REVERB_APP_SECRET` | vide ; écrit dans `.env` par `composer setup` s'il y est vide (§ 2.4) | généré à la mise en service | contrat C7 ; sans les trois identifiants, `reverb:start` démarre une application sans clé et le temps réel du poste ne fonctionne pas |
+| `REVERB_HOST`, `REVERB_PORT`, `REVERB_SCHEME` | `127.0.0.1`, `8080`, `http` | boucle locale en clair | publication serveur |
+| `REVERB_SERVER_HOST`, `REVERB_SERVER_PORT` | `127.0.0.1`, `8080` | `127.0.0.1`, port relevé | écoute |
+| `REVERB_CLIENT_HOST`, `REVERB_CLIENT_PORT`, `REVERB_CLIENT_SCHEME` | vide, `8080` (égal au `REVERB_SERVER_PORT` du poste), vide | vides (`window.location` : nginx publie `/app/` sur le port 443, § 10.5) | noms **confirmés** ici (contrat C7 § 5) ; remplacent `VITE_REVERB_*` (A-27). Sur le poste, `composer dev` sert l'application sur le port 8000 et Reverb écoute sur `REVERB_SERVER_PORT` : un port client vide donnerait `port: null` dans la prop `realtime`, donc le port de `window.location` (60 § 10.5), et Echo tenterait le WebSocket sur le port d'`artisan serve`. Le `.env` de production est écrit à la main (§ 11.6, étape 2) et y laisse les trois vides |
+| `REVERB_ALLOWED_ORIGINS` | vide (`*`) | `<DOMAINE>` | § 10.5 |
+| `SITE_INDEXABLE` | `false` | `false` au J1 | § 12 |
+| `ACCOUNTS_REGISTRATION_OPEN`, `ACCOUNTS_PASSKEYS_ENABLED` | vides | **absentes ou `false` au J1** : inscription et passkeys fermées (décision 5, D1 du 23/09) par la liste blanche de `AccountSwitches` ; ouverture au J2 par l'environnement seul. Le serveur porte `APP_ENV=production`, vérifié à la mise en service (§ 11.6, étape 5) : un `APP_ENV=local` recopié par `composer setup` rouvrirait inscription et passkeys | 40 § 8.2, § 9 |
+| `DEPLOY_DRAIN_TIMEOUT_MINUTES`, `DEPLOY_WINDOW_MINUTES` | vide, `30` | idem | contrat C18-bis |
+| `BACKUP_SNAPSHOT_DIR` | vide (`storage/app/snapshots` en local) | chemin absolu hors déploiement | § 13.1 |
+| `BACKUP_SNAPSHOT_KEEP_DAYS` | `7` | `7` ; toute valeur supérieure est ramenée à 30 par `backup:prune-snapshots` (10 § 11.1) | § 13.1 |
+| `OPS_PROBE_TOKEN` | vide | secret long | § 15 |
+| `LOG_STACK`, `LOG_DAILY_DAYS` | `single`, `14` | `daily`, `14` | § 10.9 |
+| `FRAMES_DISK_ROOT` | vide [existant] | chemin absolu hors déploiement | 10 § 10 |
+
+### 11. Chaîne de déploiement (contrat C18-bis)
+
+**Cadre décidé** : Plesk Git en mode **manuel** ; c'est le porteur qui déclenche, après avoir obtenu une **fenêtre libre** par un drainage borné ; déploiement **non atomique assumé** (pas de répertoires `releases/` ni de lien `current`) ; le serveur **tire** toujours ; les assets sont **toujours construits en CI** (D31 et D32 du 23/09, n° 76, A-31, A-56). Motif du drainage : un `reverb:restart` déconnecte tous les joueurs, et `composer install`, les migrations, `optimize` et `queue:restart` cassent les requêtes et les jobs de toute partie en cours, solo compris (contrat C17 § 3).
+
+**Avant le moteur : hook sans drainage (D37 du 23/09) — amendé le 23/09.** Tant que le moteur de `60` n'est pas en production, aucune partie ne peut exister : la garde serait trivialement vraie et le drainage ne protégerait rien. Le hook (§ 11.5) est donc livré par L100-6 **sans ses étapes 3 (`deploy:guard`) et 12 (`deploy:release`)**, et la procédure du porteur (§ 11.4) sans ses étapes 3 et 4 ; les autres étapes du hook, instantané bloquant compris (règle 12), s'appliquent dès le premier déploiement par le hook, et la rotation d'`APP_KEY` (§ 11.7) se fait alors sans fenêtre de drainage. L100-5 livre le drapeau, les trois commandes et ces étapes **au plus tard dans le déploiement qui porte le moteur de `60` en production** — dès ce déploiement une partie peut exister et la garde cesse d'être triviale —, donc avant la première partie sur le VPS (D32 du 23/09). C'est ce qui permet au socle minimal de production, et avec lui à la curation, de précéder le moteur (« Lots d'implémentation », ordre « curation d'abord »).
+
+#### 11.1 Artefacts
+
+La branche **`deploy`** est écrite **par le seul job `artifacts`** (§ 2.5) : arbre source de `main` plus `public/build`, sans `vendor`. Un build sur le VPS volerait du CPU aux voisins (`00` § Exploitation).
+
+#### 11.2 Plesk Git en mode manuel
+
+Dépôt distant = la forge, **branche `deploy`**, clé de déploiement SSH générée par Plesk et enregistrée **en lecture seule** sur la forge ; chemin de déploiement `tripleframes/` de l'abonnement ; mode **manuel** ; actions de déploiement additionnelles = `bash ops/deploy/hook.sh` **[à confirmer au relevé du VPS : répertoire courant et délai des actions additionnelles]**. **Aucun webhook** n'est configuré au J1 : en mode manuel il ne sert à rien, et c'est un secret de moins.
+
+#### 11.3 Drapeau de drainage et commandes
+
+Noms exacts, repris du contrat C18-bis :
+
+- `App\Enums\DrainPhase: string` [nouveau] : `Draining = 'draining'`, `Window = 'window'`.
+- `App\ValueObjects\Deploy\DrainState` [nouveau], `final readonly` : `__construct(public DrainPhase $phase, public CarbonImmutable $startedAt, public CarbonImmutable $expiresAt)`, `toCache(): array{phase: string, startedAt: string, expiresAt: string}`, `static fromCache(mixed $raw): ?self`.
+- `App\Support\Deploy\DeployDrain` [nouveau] — **seul** drapeau de drainage du dépôt (R-08) : `start(int $timeoutMinutes): DrainState` (pose par `Cache::add`, lève `App\Support\Deploy\DrainAlreadyRunning` s'il existe), `openWindow(int $windowMinutes): DrainState`, `state(): ?DrainState`, `isDraining(): bool` (vrai **dans les deux phases**), `release(): void` (idempotent), `static defaultTimeoutMinutes(): int`.
+- Commandes [nouvelles] : `App\Console\Commands\DeployDrainCommand` — `deploy:drain {--timeout= : minutes} {--window= : minutes}` ; `DeployGuardCommand` — `deploy:guard` ; `DeployReleaseCommand` — `deploy:release`.
+- `config/deploy.php` [nouveau] : `drain_timeout_minutes` (`env('DEPLOY_DRAIN_TIMEOUT_MINUTES')`, `null` → `defaultTimeoutMinutes()`) ; `drain_margin_minutes` = 20 ; `window_minutes` (`env('DEPLOY_WINDOW_MINUTES', 30)`) ; `poll_seconds` = 15 ; `cache_key` = `'deploy:drain'`.
+- Prop partagée [nouvelle] `'maintenance' => fn (): bool => app(DeployDrain::class)->isDraining()`, typée dans `resources/js/types/global.d.ts`.
+- Sortie console en français, par **clés littérales** (pour que le balayage de clés serveur les voie), dans le domaine `admin` : `admin.console.deploy.{started, waiting (:count), window_open (:until), abandoned, already_running (:phase, :until), guard_ok, guard_games_in_progress (:count), guard_no_window, released, nothing_to_release}`. Les commandes forcent la locale `fr` comme `admin:first-admin` [existant] (`trans($key, $replace, Locale::French->value)`) : le back-office et sa console sont en français seulement (`05`). `:phase` n'injecte jamais la valeur brute de l'enum (`draining`, `window`) dans une phrase française : elle est rendue par `admin.console.deploy.phase.{draining, window}`.
+- **Même règle pour toutes les commandes de cette spec** (règle 4 : aucun texte en dur), en clés littérales et en locale `fr` forcée : `admin.console.backup.{snapshot_skipped, snapshot_written (:file), snapshot_failed, snapshot_unsafe_dir, pruned (:count), verify_ok (:count), verify_failed (:missing, :altered)}`, `admin.console.reproject.done (:movies)`, `admin.console.purge.{done (:scopes, :rows), suspended, resumed, already_suspended, not_suspended}`, `admin.console.loadtest.{deleted (:rooms), skipped_real_seat (:count), dry_run (:rooms)}`. Familles nouvelles au-delà de `admin.console.deploy.*` (contrat C15 § 2.4), **signalées à 05 et à 20**, propriétaires du domaine `admin`.
+
+**Forme du drapeau** : une entrée du cache par défaut (Redis `appendonly` en production), clé `config('deploy.cache_key')`, valeur `{phase, startedAt, expiresAt}` en ISO-8601 UTC, TTL = `expiresAt − now` en secondes entières, au moins 1. **Côté joueurs**, seulement `maintenance: boolean` dans les props Inertia : ni heure, ni phase, ni compte de parties, **aucune diffusion Reverb au J1** ; le bandeau (texte et rendu : 90) apparaît à la réponse Inertia suivante, et **le refus de lancement est la seule garantie**. **Journal** : nombres et instants seulement, jamais un pseudo ni un `room_code` ; **aucune ligne `admin_action`** (la liste fermée appartient à 10, et le drainage n'est pas un geste sur un sujet).
+
+**Borne** : `defaultTimeoutMinutes()` = `(int) ceil(GamesInProgress::maxNaturalDurationMs() / 60 000) + config('deploy.drain_margin_minutes')`, soit environ 78 + 20 = 98 minutes aux bornes actuelles (R-10 : dérivée du prédicat de 60, contrat C17 § 4.3, jamais d'un produit écrit à la main). **La marge couvre au moins une pause** : `drain_margin_minutes × 60 000 ≥ EngineConstants::pauseTimeoutMs() + EngineConstants::launchCountdownMs()`, testé — une pause ajoute l'attente **puis** le décompte de reprise, que `total_paused_ms` ne compte pas (60 § 17.3, écart (j) de 60 § 22 bis) ; aux valeurs par défaut des constantes (`pauseTimeoutMs` 900 000, `launchCountdownMs` 5 000, 60 § 19.1) et de `config/deploy.php` (`drain_margin_minutes` = 20), 1 200 000 ms ≥ 905 000 ms. Précision du propriétaire, § 11.8. **Fenêtre** : 30 minutes par défaut, le temps de cliquer « Déployer » et de laisser le hook finir avec une marge ; au-delà, le drapeau expire seul. **Relevé** : toutes les 15 secondes, un `COUNT` servi par l'index `game_ended_idx` [existant], charge négligeable.
+
+**Invariants de `deploy:drain`** :
+1. si un drapeau existe, sortie en code **2** sans rien modifier (`already_running`) ;
+2. sinon pose du drapeau en phase `draining`, `expiresAt = now + timeout` ;
+3. appel de **`game:reschedule`** (contrat C17) **avant** d'attendre, pour qu'aucune partie aux jobs perdus ne bloque le drainage jusqu'à l'échéance (R-10) ;
+4. relevé de `GamesInProgress::count()` toutes les `poll_seconds`, par `Sleep::for()` (simulable en test) ;
+5. **deux relevés nuls consécutifs** → phase `window`, `expiresAt = now + window`, annonce de la fenêtre, code **0** ;
+6. échéance atteinte avec au moins une partie en cours → `release()`, code **1** (abandon).
+
+**Mort de la commande** : le TTL fait expirer le drapeau à l'échéance, ce qui reproduit exactement la sémantique d'abandon, sans dépendre de `pcntl` ni d'un signal. Le porteur lance donc `deploy:drain` dans une session qui survit à une coupure SSH (`tmux`), ou accepte qu'une coupure vaille abandon à l'échéance.
+
+**`deploy:guard`** : code **0** si et seulement si `GamesInProgress::count()` vaut 0 **et** la phase est `window` ; code **1** si une partie est en cours ; code **2** hors fenêtre. **`deploy:release`** : retire le drapeau quelle que soit sa phase, toujours code **0**. **Seuls écrivains du drapeau** : `deploy:drain`, `deploy:release` et le hook qui les appelle ; aucun code applicatif ne le pose ni ne le lève (testé par 50, contrat C6).
+
+**Garde de lancement** (lue, jamais écrite, par les autres specs) : toute action qui crée une partie ou y ramène appelle `isDraining()` et refuse avec **`common.maintenance.launch_blocked`**, message unique résolu côté serveur (R-09) — lancement multijoueur (`room.launch`, `OpenGame`), « Rejouer » (`room.replay`, refusé pendant le drainage **quel que soit son effet**, D32 du 23/09), démarrage solo (`solo.store`, `OpenGame`). **Aucune partie en cours n'est jamais coupée ni retardée** ; le drainage ne bloque jamais une reprise après pause, une reconnexion, un retardataire admis ni une manche déjà programmée (contrat C17 § 4.4). **Course** : un lancement validé juste avant la pose est attendu par la règle des deux relevés ; le résidu est rattrapé par `deploy:guard` dans le hook.
+
+#### 11.4 Procédure du porteur
+
+1. Vérifier que les deux workflows sont verts sur le commit source (§ 2.6).
+2. Dans Plesk, tirer la branche `deploy` (mise à jour du dépôt local de Plesk, sans déployer).
+3. En SSH, utilisateur d'abonnement : `deploy:drain`, jusqu'à la fenêtre (code 0). Un code 1 (abandon) ou 2 (drainage déjà en cours) arrête la procédure.
+4. Vérifier `deploy:guard` à la main (code 0).
+5. Cliquer « Déployer » dans Plesk : les fichiers sont déposés, puis le hook s'exécute.
+6. Lire la sortie du hook ; en cas d'échec, suivre le remède du § 11.5.
+
+**Hors déploiement : geste de console sur le catalogue** (règle 12, contrat C18-bis § 2, second déclencheur de § 13.1). Avant toute commande ou tout script lancé à la main qui écrit dans `movie`, `frame`, `movie_title`, `alias` ou `frame_review` — resynchronisation TMDB en console (`catalog:import-ids --resync`, qui supprime et réécrit les titres et alias d'origine TMDB), import lancé en console, correction ponctuelle de données par `tinker` ou SQL —, le porteur joue `backup:snapshot` **sans option** et exige le code 0 avant de poursuivre. Une commande qui porte elle-même cette garde en tête (`catalog:themes` de 30 § 13.2 ; `catalog:import*` lancées à la main, exigence à 20, plus bas) dispense du geste manuel, jamais de l'instantané.
+
+#### 11.5 Hook — `ops/deploy/hook.sh` [nouveau]
+
+Script versionné, lancé par les actions additionnelles, `set -euo pipefail`, PHP invoqué par `/opt/plesk/php/8.3/bin/php`, composer par un chemin fixé dans `~/.config/tripleframes/hook.env` **[à confirmer au relevé du VPS]**, répertoire courant forcé sur la racine du déploiement. **Ordre normatif** :
+
+| # | Étape | Pourquoi |
+|---|---|---|
+| 1 | `composer install --no-dev --optimize-autoloader --no-interaction` | d'abord : une garde qui ne peut pas démarrer n'est pas une garde |
+| 2 | `artisan optimize:clear --except=cache` | vide les caches de démarrage ; **jamais le cache applicatif**, qui porte le drapeau de drainage que l'étape 3 lit (précision du propriétaire, § 11.8) |
+| 3 | `artisan deploy:guard` | code non nul → arrêt du hook avant toute migration |
+| 4 | `artisan backup:snapshot --if-pending` | règle 12, premier déclencheur : instantané bloquant dès que le migrateur signale une migration en attente, quelle que soit la table (§ 13.1) ; les gestes de console hors déploiement relèvent du second déclencheur (§ 11.4) |
+| 5 | `artisan migrate --force` | migrations additives, rejouables en avant (10 § 1.7) |
+| 6 | `artisan db:seed --class=PlatformDataSeeder --force` | ne **réconcilie** que `setting_preset` (seul écrivain, 10 § 6.3) ; thèmes, libellés et sagas S4 en insertion-si-absent, pour que les éditions du back-office survivent au déploiement (exigence à 30, contrat C18-bis § 6) |
+| 7 | `artisan catalog:reproject` | place décidée ici (contrat C12 § 6) : jouée **à chaque déploiement**, idempotente et par différence, elle garantit la reprojection après tout changement de `AnswerRules::VERSION` sans compter sur la mémoire du porteur, et avant le premier import de production (D1 du 23/09) |
+| 8 | `artisan optimize` | caches de configuration, routes, événements, vues |
+| 9 | `artisan lang:hash` | empreinte des dictionnaires (`05` § Invalidation) |
+| 10 | `artisan queue:restart` | les workers terminent leur job et redémarrent sur le nouveau code ; systemd les relève |
+| 11 | `artisan reverb:restart` | idem pour Reverb ; les salons au lobby se reconnectent et se resynchronisent (contrat C17 § 3) |
+| 12 | `artisan deploy:release` | lève le drapeau |
+
+**Jamais** `cache:clear`, `systemctl` ni un `php` du système dans le hook (non-privilège, `questions-ouvertes.md` § Hébergement). Test : `tests/Feature/Deploy/DeployHookTest.php` › « enchaîne les étapes du hook dans l'ordre du § 11.5, sous set -e » (l'ordre en douze étapes de ce tableau, et non les onze du contrat C18-bis § 6, § 11.8) et « n'appelle jamais cache:clear, systemctl ni un php du système ». Avant le moteur, le test vérifie le même ordre privé des étapes 3 et 12, que L100-5 ajoute au hook et au test (§ 11, D37 du 23/09 — amendé le 23/09).
+
+**Résidu assumé (D31 du 23/09, non atomique)** : Plesk Git dépose les fichiers **avant** les actions additionnelles. Un échec de garde n'arrête donc que les étapes suivantes (migrations, redémarrages), jamais la mise à jour des fichiers. **Remède écrit** : relancer `deploy:drain`, puis relancer les actions de déploiement Plesk. Si le hook échoue avant l'étape 12, le drapeau tient jusqu'au TTL de la fenêtre ; le porteur peut le lever par `deploy:release` une fois l'état réparé.
+
+#### 11.6 Mise en service initiale
+
+Le premier déploiement ne peut pas passer par le hook (ni `vendor`, ni `.env`, ni drapeau). Procédure unique, en SSH, utilisateur d'abonnement, après le relevé (§ 10.1) et l'achat du domaine (D1 du 23/09) :
+
+1. Plesk : abonnement, base, Git en mode manuel **sans** actions additionnelles ; premier « Déployer ».
+2. Écrire le `.env` de production (§ 10.10) hors dépôt, `0600` ; créer `FRAMES_DISK_ROOT` et `BACKUP_SNAPSHOT_DIR` sous le répertoire privé de l'abonnement, hors `httpdocs`, en `0700` à l'utilisateur d'abonnement (§ 10.2 : `composer setup`, qui crée la racine `frames` sur un poste, ne tourne pas en production, et `AppServiceProvider` vérifie la variable sans créer le répertoire) ; `key:generate`, puis **copie immédiate d'`APP_KEY` hors machine** avec la clé privée de sauvegarde (§ 13.4).
+3. `composer install --no-dev --optimize-autoloader`, puis `migrate --force` et `db:seed --class=PlatformDataSeeder --force`.
+4. Root : Redis, unités, directives nginx, pare-feu (§ 10.3 à § 10.5) ; tâche planifiée (§ 10.7) ; réglages Plesk consignés dans `ops/plesk/settings.md`.
+5. `optimize`, `lang:hash`, démarrage des unités ; vérification de `/up` et des sondes (§ 15) ; vérification que l'application tourne en `APP_ENV=production` (`artisan about --only=environment`), sans quoi la liste blanche de 40 § 8.2 rouvrirait inscription et passkeys.
+6. **Premier administrateur** : `admin:first-admin`, qui demande le nom réel (D12 du 23/09) — jamais avant l'achat du domaine, et **aucune passkey** au J1 (décision 5). À la première connexion, enrôlement du second facteur exigé par la garde `admin.2fa` (20 § 2.4) et rangement des codes de secours Fortify (§ 11.9).
+7. Renseigner ensuite les actions additionnelles (`bash ops/deploy/hook.sh`) : tout déploiement suivant suit § 11.4.
+
+**Ordre des prérequis du J1** : le tier chaud de sauvegarde (§ 13.2) est actif **avant la première image curée** en production ; la restauration chronométrée (§ 13.5, point 2), le drainage (§ 11.3, D32 du 23/09) et le test de charge complet (§ 16, D33 du 23/09) précèdent **la première vraie partie** ; aucun des trois n'est exigé avant la curation, qui commence dès le socle minimal sans moteur, seul le contrôle de lisibilité (§ 13.5, point 1) s'intercalant au lendemain de la première sauvegarde (D37 du 23/09 ; « Lots d'implémentation ») — amendé le 23/09.
+
+#### 11.7 Rotation d'`APP_KEY`
+
+Une rotation invalide tous les `player_token`, sessions, cookies chiffrés et URL signées, et change les clés de canal dérivées par HMAC de `APP_KEY` (contrats C4 I4.11 et C7). Elle n'est faite **que sur compromission soupçonnée**, jamais par calendrier, et **toujours dans une fenêtre de drainage** dès que le moteur est en production (avant lui, sans drainage : § 11, D37 du 23/09 — amendé le 23/09) : `deploy:drain` ; `APP_PREVIOUS_KEYS` = ancienne clé, `APP_KEY` = nouvelle ; `optimize`, `queue:restart`, `reverb:restart` ; `deploy:release`. L'ancienne clé reste dans `APP_PREVIOUS_KEYS` au moins la durée de vie du cookie `player_token` (contrat C4) puis est retirée. **Résidu nommé** : un salon au lobby pendant la rotation perd son flux jusqu'au rechargement de la page, qui rattrape l'état.
+
+#### 11.8 Précisions du propriétaire de C18-bis, signalées au porteur
+
+Cinq précisions, sans effet sur les noms figés, **signalées** et non corrigées en silence : (1) l'étape 2 du hook est `optimize:clear --except=cache` au lieu de `optimize:clear`, parce que `optimize:clear` appelle `cache:clear`, qui viderait le drapeau de drainage lu par l'étape 3 — et échouerait de toute façon, `FLUSHDB` étant désactivé (§ 10.3) ; (2) `catalog:reproject` est insérée en étape 7, place que le contrat délègue à `100` ; (3) le hook est un script versionné `ops/deploy/hook.sh`, et non une suite de commandes saisies dans Plesk, pour être relu et testé ; (4) le contrat C18-bis § 2 exige l'instantané « avant toute migration **ou commande** » touchant les cinq tables de la règle 12 : le hook ne couvre que les migrations (`--if-pending`), les commandes relèvent du second déclencheur de § 13.1 ; (5) la marge de drainage couvre `pauseTimeoutMs + launchCountdownMs`, et non le seul `pauseTimeoutMs` du contrat C18-bis (aligné sur C17 § 4.3, « chaque pause ajoute au plus `pauseTimeoutMs` »), pour suivre l'écart (j) de 60 § 22 bis (§ 11.3) : l'inégalité est plus forte, donc la valeur par défaut de `drain_margin_minutes` la tient toujours.
+
+#### 11.9 Perte du second facteur du seul administrateur (D4 du 23/09, exigence de 20)
+
+**Pourquoi** : au J1, le porteur est le seul administrateur et le seul curateur (D4 du 23/09), et la garde `admin.2fa` ferme `/admin` à tout rôle privilégié sans second facteur (20 § 2.4). Perdre le TOTP au-delà des codes de secours arrêterait toute la curation de production ; 20 renvoie ce cas à `100`, hors du chemin du curateur.
+
+1. **Prévention**, à la création du premier administrateur (§ 11.6, étape 6) : les codes de secours Fortify sont imprimés et rangés en deux exemplaires hors machine, avec la clé privée de sauvegarde et `APP_KEY` (§ 13.4).
+2. **Codes de secours** : la voie ordinaire de Fortify, sans geste d'exploitation.
+3. **Au-delà**, en SSH, utilisateur d'abonnement : `/opt/plesk/php/8.3/bin/php artisan tinker --execute="App\Models\User::where('email', '<adresse>')->firstOrFail()->forceFill(['two_factor_secret' => null, 'two_factor_recovery_codes' => null, 'two_factor_confirmed_at' => null])->save();"`. À la connexion suivante, la garde `admin.2fa` renvoie vers l'enrôlement ; le ré-enrôlement est **immédiat**, et de nouveaux codes de secours sont rangés comme au point 1.
+4. **Trace** : le geste est consigné, avec sa date et son motif, dans le journal d'exploitation de ce paragraphe — jamais dans `admin_action`, dont la liste fermée appartient à 10 (contrat C14) et ne porte pas ce cas. Aucun `backup:snapshot` n'est requis : `users` n'est pas une table de la règle 12.
+5. **Au J2**, le second administrateur nominatif (section « Jalon 2 — à écrire », point 6) évite qu'une seule perte ferme le back-office ; cette procédure reste le dernier recours.
+
+**Journal d'exploitation** (à inscrire ici : date, motif) : — *aucun geste au 23/09*.
+
+### 12. Indexation : `noindex` intégral par variable d'environnement
+
+**Cadre** : au J1, le site est **intégralement `noindex`** (`00` § Jalons, D30 du 23/09) ; au J2, le `noindex` est levé **sélectivement et manuellement** par une **variable d'environnement de production, jamais une valeur du dépôt**, pour qu'aucun déploiement ne puisse l'inverser ni le rétablir par accident (`CLAUDE.md` §1). Partage arrêté le 23/09 (carte des propriétés, « Indexation » ; annexe de la feuille de contrats) : **90** possède le tableau route par route, le drapeau de route indexable et le middleware d'en-têtes (`X-Robots-Tag`, `Referrer-Policy: strict-origin-when-cross-origin`), donc la preuve de leur comportement dans les deux états de la variable (`tests/Feature/Public/IndexingTest.php` ; R-04 : une seule preuve, dans le fichier du propriétaire du comportement) ; **100** possède la variable, sa configuration (`config/app.php` › `indexable`), sa ligne de `.env.example`, `robots.txt`, leur preuve et la procédure de levée (J2).
+
+**Partage appliqué par 90** (90 § 5.1, § 5.4, L90-2). Selon la carte des propriétés, `config/app.php` › `indexable`, la ligne `SITE_INDEXABLE` de `.env.example`, `public/robots.txt` et le test « livre un robots.txt qui n'interdit que /admin et /f/ » sont écrits **une seule fois, dans L100-4** ; tant que la clé manque, `config()` rend `null`, donc `noindex`, ce qui laisse L90-2 livrable sans dépendance ; `IndexingTest` de 90 garde le middleware, le tableau route par route et les en-têtes dans les deux états ; `SiteIndexingTest` ne répète **aucun** test d'en-tête (R-04). Le nom `SITE_INDEXABLE`, que 90 suppose, est confirmé ici.
+
+- **Variable `SITE_INDEXABLE`** [nouvelle], lue une seule fois par `config('app.indexable')` = `(bool) env('SITE_INDEXABLE', false)`. Absente ou fausse : **toute** réponse porte `X-Robots-Tag: noindex, nofollow`. Vraie : le middleware de 90 retire l'en-tête des seules routes marquées indexables. **Au J1, elle est fausse en production.**
+- **Restent `noindex` en permanence, quelle que soit la variable** : toute URL portant un `room_code`, les écrans de jeu, `/f/{serveToken}` (en-tête émis par la route elle-même, contrat C8, E10-59), le back-office, `/ops/`.
+- **`public/robots.txt` [modifié]**, statique (nginx le sert avant Laravel) et **identique dans les deux états** :
+
+  ```
+  User-agent: *
+  Disallow: /admin
+  Disallow: /f/
+  ```
+
+  **Jamais `Disallow: /`** : un robot qui ne peut pas lire une page ne lit pas son `noindex`, et une URL liée ailleurs peut alors être indexée sans contenu (n° 71). Le `noindex` passe par l'en-tête, le `Disallow` ne sert qu'à économiser l'exploration de ce qui n'a rien à indexer.
+- Tests : `tests/Feature/Deploy/SiteIndexingTest.php` — « lit SITE_INDEXABLE en booléen dans config('app.indexable'), faux quand la variable est absente » ; « livre un robots.txt qui n'interdit que /admin et /f/ ». Le `noindex` des sondes est prouvé par `ProbeEndpointTest` (§ 15), celui de `/f/` par 60 (contrat C8). Aucun de ces tests ne dépend du middleware de 90 : **aucun test rouge n'entre sur `main`**, dont le check `ci` est requis (§ 1). Le `noindex` intégral reste une condition du J1 : L100-9 (mise en service) ne démarre pas avant que `IndexingTest` de 90 (L90-2) soit vert.
+
+### 13. Sauvegardes et restauration
+
+**Cadre** : 24 h de perte maximum, stockage chez un **autre fournisseur** que le VPS, restauration testée (décision 18) ; deux tiers ; clé de la machine en écriture seule ; chiffrement côté client ; 30 jours ; purge rejouée après toute restauration (règle 12, 10 § 11.1). Au J1, la **curation naît en production, sous la vraie sauvegarde** (D1 du 23/09) : le tier chaud est actif avant la première image curée. Les résolutions de n° 80 s'appliquent : chiffrement **asymétrique**, clé limitée au dépôt d'objets, bucket versionné, archives complètes à 30 jours, tier froid adressé par empreinte, restauration sur **cible jetable**.
+
+#### 13.1 `backup:snapshot` — instantané bloquant avant migration ou geste de console sur le catalogue
+
+`App\Console\Commands\BackupSnapshotCommand` [nouveau], signature `backup:snapshot {--if-pending : ne rien faire sans migration en attente}` (contrat C18-bis, règle 12). **Pourquoi** : `movie`, `frame`, `movie_title`, `alias` et `frame_review` portent des centaines d'heures de curation irremplaçables ; le code se réécrit, elles non. La règle 12 et le contrat C18-bis § 2 exigent l'instantané avant toute **migration, commande ou script** qui touche ces cinq tables (n° 76 : « cinq tables partout »). **Deux déclencheurs** :
+
+1. **Dans le hook, avant toute migration en attente, quelle que soit la table** (§ 11.5, étape 4, `--if-pending`). C'est un **élargissement** des cinq tables, voulu : « migration en attente » est ce que rapporte le migrateur (`migrate:status --pending`), jamais une liste tenue à la main, et un tri par table serait une source d'oubli.
+2. **Hors du hook, avant toute commande ou tout script lancé à la main qui écrit dans l'une des cinq tables** (§ 11.4, geste de console) : `backup:snapshot` **sans option**, code 0 exigé avant de poursuivre. Une commande de console qui écrit ces tables porte cette garde **en tête** et s'arrête sans rien écrire sur un code non nul : `catalog:themes` (30 § 13.2) ; `catalog:import`, `catalog:import-discover` et `catalog:import-ids` (`--resync` compris, qui supprime et réécrit les lignes `movie_title` et `alias` d'origine TMDB) quand elles sont **lancées à la main** hors `local` et `testing` — exigence nouvelle adressée à 20, propriétaire de l'import (« Exigences adressées aux specs sœurs »). L'import lancé depuis le back-office par le job `RunCatalogImport` est le **chemin d'import ordinaire** (30 § 13.2), qui n'est pas une commande ni un script au sens de la règle 12 : un vidage complet par balayage placerait un geste d'exploitation sur le chemin du curateur (D10 du 23/09), et la curation, qu'il ne détruit pas, reste couverte par le tier chaud (§ 13.2). `catalog:reproject`, `purge:run` et `loadtest:forget` n'écrivent aucune des cinq tables et en sont dispensés (contrat C18-bis § 2 ; 10 § 11.2).
+
+- Contenu : `mysqldump --single-transaction --quick --no-tablespaces` (l'utilisateur MySQL de Plesk n'a pas le privilège `PROCESS`) **[à confirmer au relevé du VPS : `mysqldump` accessible dans le shell de l'utilisateur d'abonnement]** ; structure de toutes les tables, données de toutes **sauf** les sept tables exclues du tier chaud (`sessions`, `cache`, `cache_locks`, `jobs`, `job_batches`, `failed_jobs`, `password_reset_tokens`, § 13.2), pour la même raison de minimisation : elles portent des IP, des adresses et des charges sérialisées sans valeur pour un retour arrière de migration. Compressé, dans `config('backup.snapshot_dir')` (`BACKUP_SNAPSHOT_DIR`), fichier `0600` nommé par l'instant UTC.
+- **Vérification** avant de rendre la main : intégrité de la compression et présence de la ligne finale de fin de vidage. Codes de sortie : **0** (instantané écrit et vérifié, ou rien à faire sous `--if-pending`), **1** (échec d'écriture ou de vérification). Sous `set -e`, un code 1 arrête le hook avant la migration.
+- **Local et non chiffré, délibérément** : il sert à revenir en arrière après une migration ratée, pas à survivre à la perte de la machine (c'est le rôle du tier chaud) ; il est dans la même frontière de confiance que la base elle-même, que l'utilisateur d'abonnement lit déjà.
+- **Rétention, exécutée et non seulement déclarée** : `config('backup.snapshot_keep_days')` = `env('BACKUP_SNAPSHOT_KEEP_DAYS', 7)`, ramené à 30 au plus (10 § 11.1 : sauvegardes à 30 jours). Ces vidages portent des données personnelles ; pris seulement avant une migration ou un geste de console, ils s'accumuleraient sans borne sans un élagage **périodique**. Commande `App\Console\Commands\BackupPruneSnapshotsCommand` [nouvelle], `backup:prune-snapshots`, planifiée chaque jour (§ 10.7) : supprime de `config('backup.snapshot_dir')` les fichiers d'instantané plus vieux que la rétention, et eux seuls (motif de nom de § 13.1).
+- **Garde de chemin** : hors `local` et `testing`, la commande refuse (code 1) un répertoire vide ou situé sous `base_path()`, sur le modèle de `AppServiceProvider::assertFramesDiskRoot()`.
+- Tests : `tests/Feature/Deploy/BackupSnapshotCommandTest.php` — « ne fait rien et réussit sans migration en attente sous --if-pending » ; « sort en échec quand l'instantané ne peut être écrit ou vérifié » (processus simulé par `Process::fake()`) ; « refuse un répertoire d'instantanés situé sous le chemin de déploiement hors local et testing » ; « exclut du vidage les données des sept tables exclues du tier chaud ». `tests/Feature/Deploy/BackupPruneSnapshotsCommandTest.php` — « supprime les instantanés plus vieux que la rétention configurée, jamais au-delà de 30 jours » ; « ne touche aucun autre fichier du répertoire ».
+
+#### 13.2 Tier chaud, quotidien
+
+Script `ops/backup/backup-hot.sh` [nouveau], tâche planifiée Plesk de l'utilisateur d'abonnement à `03:10` UTC (après la purge du § 14, pour sauvegarder le moins de données personnelles possible), consignée dans `ops/plesk/settings.md`, secrets lus dans `~/.config/tripleframes/backup.env` (`0600`, hors dépôt) **[à confirmer au relevé du VPS : tâche planifiée de l'abonnement exécutant un script shell ; `~/.config/tripleframes/` accessible dans un shell d'abonnement non chrooté ; `mysqldump` disponible]** :
+
+1. **Vidage** : structure de toutes les tables ; données de toutes **sauf** `sessions`, `cache`, `cache_locks`, `jobs`, `job_batches`, `failed_jobs` et `password_reset_tokens` — minimisation : ces tables portent des IP, des adresses et des charges sérialisées sans valeur de restauration (10 § 11.1).
+2. **Manifeste** du disque `frames` : sortie de `php artisan backup:manifest` (chemin relatif, taille, SHA-256 de chaque fichier présent), preuve de ce qui existait.
+3. Compression, **chiffrement** pour la clé publique (§ 13.4), envoi sous `hot/<AAAA-MM-JJ>/`.
+4. En cas de succès **seulement**, requête sortante vers l'adresse de battement de la supervision (§ 15) : la sonde « sauvegarde de moins de 26 h » est un **interrupteur d'homme mort**, pas un sondage.
+
+Volume attendu : 50 à 200 Mo par jour (décision 18).
+
+#### 13.3 Tier froid : ce qui n'est pas retéléchargeable
+
+Périmètre = **une requête, pas une colonne** (10 § 10) : les `game_path` des frames `published`, plus, au J2, les deux fichiers des frames `source_kind = 'capture'` (voie capture désactivée au J1). Un master d'origine TMDB se reconstruit depuis `tmdb_file_path` et les paramètres de recadrage. **Les dérivés publiés sont sauvegardés en octets** parce que la revue immuable porte sur **leur** condensat : un dérivé régénéré par un Imagick d'une autre version aurait un autre condensat et exigerait une nouvelle revue de chaque image.
+
+- `php artisan backup:manifest --cold` liste ce périmètre (`<condensat> <chemin relatif>`) ; `ops/backup/backup-cold.sh` chiffre et envoie chaque fichier **une seule fois** sous `cold/game/<published_hash>.webp.age`, en tenant une liste locale des condensats déjà envoyés (la clé d'écriture seule ne permet pas de demander au stockage s'ils y sont).
+- **Fréquence** : **au moins hebdomadaire** (décision 18) ; `backup-cold.sh` est une tâche planifiée Plesk hebdomadaire, consignée dans `ops/plesk/settings.md`. Le passage **quotidien**, dans le même passage que le tier chaud, est **proposé au porteur** (N100-2) et ne devient la règle qu'avec son accord : au volume du J1 (quelques dizaines de mégaoctets), il ne coûte presque rien, et c'est lui seul qui tient les 24 h de perte maximum **pour la curation** — un dérivé publié dans la semaine n'existe hors machine qu'au passage froid suivant, et le re-dériver changerait son condensat, donc exigerait une nouvelle revue.
+- Commande `App\Console\Commands\BackupManifestCommand` [nouvelle], `backup:manifest {--cold}`. Tests : `tests/Feature/Deploy/BackupManifestCommandTest.php` — « liste chaque fichier du disque frames avec son condensat » ; « restreint le tier froid aux dérivés des frames publiées ».
+
+#### 13.4 Chiffrement, clés et stockage
+
+- **Chiffrement asymétrique** (outil de départ : `age`) : la **clé publique** est sur le VPS ; la **clé privée n'y est jamais**, elle vit hors machine en deux exemplaires (inventaire scellé et gestionnaire de secrets du porteur). **Pourquoi** : les sauvegardes restent inexploitables depuis une machine compromise (`questions-ouvertes.md` § Risques élevés), et la perte de la clé privée rendrait toute restauration impossible, d'où les deux exemplaires.
+- **`APP_KEY` (et `APP_PREVIOUS_KEYS`) est conservée hors machine, dans les deux mêmes exemplaires que la clé privée** (copiée à la mise en service, § 11.6, puis à chaque rotation, § 11.7), avec les codes de secours du second facteur de l'administrateur (§ 11.9). **Pourquoi** : Fortify chiffre `two_factor_secret` et `two_factor_recovery_codes` par `APP_KEY`. Après la perte du VPS, une base restaurée sous une nouvelle clé rendrait illisible le second facteur du seul administrateur, et la garde `admin.2fa` fermerait le back-office ; les `player_token` et les cookies chiffrés des joueurs seraient aussi invalidés, sans perte de donnée.
+- **Stockage objet UE, chez un fournisseur distinct de l'hébergeur du VPS** (décision 18), à nommer par le porteur (point ouvert). Bucket **versionné** (verrouillage d'objet si le fournisseur l'offre).
+- **Clé du VPS limitée au dépôt d'objets** (aucun droit de lecture, de liste ni de suppression) : la sauvegarde ne meurt pas avec la machine qu'elle protège. Outil d'envoi de départ : `rclone`, en mode sans lecture préalable **[à confirmer selon le fournisseur]**. Binaires `age` et `rclone` posés une fois **[à confirmer au relevé du VPS]**.
+- **Rétention** : règle de cycle de vie **côté fournisseur** — objets de `hot/` expirés à 30 jours, versions non courantes expirées à 30 jours ; objets courants de `cold/` jamais expirés (ils ne contiennent aucune donnée personnelle). Les 30 jours visent les données personnelles des vidages (10 § 11.1, n° 80). **Aucun élagage depuis le VPS** : l'élagage des objets orphelins (frames retirées, J2) se fait depuis le poste du porteur avec une clé distincte, capable de supprimer.
+
+#### 13.5 Restauration jouée
+
+**Une sauvegarde non restaurée n'existe pas** (décision 18). Deux jeux, au J1 :
+
+1. **Contrôle de lisibilité**, le lendemain de la première sauvegarde, avant de poursuivre la curation : téléchargement du dernier tier chaud sur le poste, déchiffrement, test d'intégrité, comparaison du manifeste au nombre de frames.
+2. **Restauration chronométrée**, avant la première vraie partie, sur une **cible jetable** — jamais la préproduction, qui ne reçoit jamais de données de production (n° 80) : base temporaire de l'abonnement, racine d'images temporaire sous le répertoire privé, copie temporaire de l'application avec son propre `.env` (base, racine, index Redis inutilisé), **portant l'`APP_KEY` de production lue dans l'exemplaire hors machine** (§ 13.4) — c'est ce qui prouve que la clé conservée est la bonne —, le tout supprimé ensuite.
+
+Déroulé normatif, chronométré de la décision de restaurer au dernier contrôle vert : (a) téléchargement et déchiffrement du dernier tier chaud et des objets froids sur le poste ; (b) import du vidage ; (c) dépôt de chaque dérivé publié à son `game_path` ; (d) `migrate:status` sans migration en attente ; (d bis) **`catalog:reproject`** (10 § 3.2, règle 3 : obligatoire après toute restauration ; idempotente et par différence) — sans elle, une projection `movie_projection` ou `answer_key` périmée fausserait le vivier, les leurres et la validation ; (e) **`backup:verify`** ; (f) **`purge:run --sync`** (règle 12 : une sauvegarde ne doit jamais ressusciter des données purgées) ; (g) `game:reschedule` (obligatoire après toute restauration de Redis, contrat C17 § 4.5 ; sans effet sur une cible jetable, joué pour que la procédure soit complète) ; (h) connexion de l'administrateur, **second facteur compris**, sur la cible jetable (§ 13.4). En restauration réelle, le trafic reste coupé (`php artisan down`, page d'erreur traduite de 90) jusqu'à l'étape (f) incluse, (d bis) comprise ; `takedown:reconcile` (20) s'ajoute au J2 avec le retrait juridique.
+
+`App\Console\Commands\BackupVerifyCommand` [nouvelle], `backup:verify` : code 0 si et seulement si chaque frame `published` a son fichier de jeu présent et de condensat égal à `published_hash` ; sinon code 1 et le nombre de fichiers manquants ou altérés. Tests : `tests/Feature/Deploy/BackupVerifyCommandTest.php` — « réussit quand chaque frame publiée a son fichier de jeu au bon condensat » ; « échoue en nommant le nombre de fichiers manquants ou altérés ».
+
+#### 13.6 Temps de restauration mesuré
+
+**Temps mesuré** (à inscrire ici après la première restauration jouée, avec la date et le volume) : — *non joué au 23/09*. Rejouée au J2 avant l'ouverture, avec le re-téléchargement des masters TMDB (section « Jalon 2 — à écrire »).
+
+### 14. Purge de rétention : moteur, ordonnancement, périmètres du J1
+
+**Partage** (arrêté le 23/09) : **10** possède le tableau de conservation, le périmètre de chaque purge, l'ordre de suppression et la table `purge_run` (10 § 11) ; **100** possède le **moteur** qui les exécute, son ordonnancement, sa surveillance, ses tests de survie et son rejeu après restauration ; 40 les parcours du compte (J2), 90 la publication du tableau.
+
+**Pourquoi au J1**, alors que la fenêtre de 12 mois ne peut pas échoir avant le J2 : (1) la restauration du § 13.5 exige de rejouer la purge (règle 12) ; (2) la curation vit en production dès le J1 (D1 du 23/09), donc une purge qui y tourne chaque nuit doit être **prouvée inoffensive pour le catalogue dès sa première exécution** ; (3) plusieurs fenêtres courtes portent des données personnelles de vrais invités dès la première partie (sessions et leurs IP, pseudos des sièges solo).
+
+**Moteur** :
+- Job `App\Jobs\Retention\RunRetentionPurge` [nouveau] : `ShouldQueue`, `ShouldBeUnique`, **file `default`, jamais `game`** (10 § 12). Il exécute, dans l'ordre du tableau de 10, chaque périmètre **implémenté**.
+- Service `App\Support\Retention\RetentionPurger` [nouveau] et un gestionnaire par périmètre ; `App\Enums\PurgeScope` [existant] reçoit `static implemented(): list<self>` — la liste des périmètres **exécutés par `RetentionPurger`**, qui exclut `StaleLobby`, exécuté par 50 (tableau ci-dessous) —, **déclaré dans le code et non en configuration** : un périmètre ne se désactive pas en silence par une variable. Chaque gestionnaire expose aussi `eligibleCount(): int`, le compte des lignes éligibles **par le prédicat même** qu'il supprime, que lit la sonde n° 4 (§ 15) : deux prédicats écrits à deux endroits divergeraient.
+- **Lots bornés** du plus ancien au plus récent, sur la colonne pilote indexée ; taille de lot `config('ops.purge.batch_size')` (défaut 500) et nombre maximal de lots par exécution `config('ops.purge.max_batches')` (défaut 200, soit au plus 100 000 lignes par périmètre et par nuit ; valeurs de départ, recalibrées par D33 du 23/09) : sur une base qui porte aussi sessions et cache, un `DELETE` unique verrouillerait la table et saturerait le binlog (`CLAUDE.md` §8).
+- **Résilient ligne à ligne** : une transaction par ligne, compteur d'échecs, reprise à la suivante, **jamais un lot entier annulé** — un lot trié qui bute sur un `restrict` resélectionnerait sinon éternellement la même ligne (10 § 11.3).
+- **Une ligne `purge_run` par (exécution, périmètre)**, même sans ligne éligible : `rows_deleted = 0` est une information, l'absence de ligne est une panne.
+- Durées : lues à une **source unique** en code, `App\Support\Retention\RetentionWindows` [nouveau], dont chaque constante reprend une ligne de 10 § 11.1 ; quand 50 déclare déjà l'une de ces durées (`App\Support\Room\RoomExpiry`), `RetentionWindows` lit la sienne — jamais deux constantes pour une durée.
+- Commandes [nouvelles] : `purge:run {--sync}` (restauration, contrôle manuel) ; `purge:suspend` et `purge:resume`, qui posent et lèvent un drapeau de cache. **Tant que la purge est suspendue, la sonde « purge » est en alerte** : l'interrupteur d'incident **déclenche** l'alerte au lieu de la masquer (`questions-ouvertes.md` § Risques élevés).
+
+**Périmètres implémentés au J1** — ceux dont la fenêtre peut échoir avant l'ouverture du J2 et qui portent une donnée réelle au J1 :
+
+| Périmètre (`PurgeScope`) | Règle (10 § 11.1) | Mise en œuvre |
+|---|---|---|
+| `framework_sessions` | suppression **déterministe quotidienne** au-delà de `session.lifetime`, jamais le seul tirage de `config/session.php` | lots sur `last_activity` |
+| `framework_failed_jobs` | 14 jours | `queue:prune-failed` |
+| `framework_reset_tokens` | défaut Fortify | `auth:clear-resets` |
+| `orphan_player`, branche **sièges solo** | pseudo (`player.nickname` **et** `player.nickname_normalized`, écrite dans la même écriture que le pseudo et effacée avec lui, 10 § 7.1), empreinte du jeton et pseudo figé effacés à 24 h de `last_seen_at` (`room_id IS NULL`), **les quatre colonnes dans une transaction** | effacement de colonnes, jamais suppression de ligne ; une forme repliée du pseudo qui survivrait douze mois serait encore le pseudo |
+| `stale_lobby` | lobby jamais lancé, `RoomExpiry::LOBBY_IDLE_MINUTES` sans activité : **archivage anticipé, jamais suppression** (E10-30) | **exécuté par 50, jamais par `RetentionPurger`** : balayage `room:archive-idle` toutes les `RoomExpiry::SWEEP_EVERY_MINUTES` (job `App\Jobs\Room\ArchiveIdleRooms`, file `default`), qui appelle `App\Actions\Room\ArchiveRoom(…, lobbyOnly: true)` et écrit lui-même sa ligne `purge_run` (50 § 16.2). Une exécution quotidienne de plus ici porterait la fenêtre annoncée de 2 h jusqu'à 26 h pour un balayage arrêté et ferait deux exécutants d'un même périmètre ; 100 n'en porte que la surveillance (§ 15) |
+| `stale_room` | salon non archivé après 48 h (filet d'un balayage d'archivage qui n'a jamais tourné, 50 § 16.1) | `App\Actions\Room\ArchiveRoom($room, $now − 48 h)` de 50, unique chemin d'archivage : archivage forcé, jamais suppression |
+| `purge_run` | 13 mois | auto-purge |
+
+Les autres périmètres (`game_facts`, `stale_game` par `FinalizeGame` (E10-62), la branche dépendante d'`orphan_player`, `seen_frame` (E10-56), `near_miss` (E10-63), `report`, `admin_action`, `data_export`, `takedown_identity`, `withdrawn_files`, `dormant_account`) arrivent au J2 : aucun n'a de ligne éligible ou de fonctionnalité avant lui.
+
+**Ordre de livraison au J1 (D37 du 23/09) — amendé le 23/09.** Tous les périmètres du tableau sont livrés au J1 (D35 du 23/09), en deux temps, pour que la purge ne retarde pas la curation. **D'abord, les seuls périmètres sans jeu** — `framework_sessions`, `framework_failed_jobs`, `framework_reset_tokens` et `purge_run` —, qui ne dépendent d'aucun lot de `50` ni de `60` : le moteur de purge part avec eux avant la première image curée, ce qui laisse la sauvegarde chaude, planifiée après la purge (§ 13.2), la précéder elle aussi ; le `purge:run --sync` de la restauration (§ 13.5) les exécute dès ce premier temps. **Ensuite, les périmètres du jeu**, chacun avec le lot qui crée ses lignes : `stale_room` dès `ArchiveRoom` de `50` (L50-8), la branche sièges solo d'`orphan_player` dès le démarrage solo de `60` (L60-15) ; les deux sont en service avant la première partie sur le VPS, raison (3) ci-dessus. `PurgeScope::implemented()` grandit d'autant, et les tests propres à un périmètre de jeu (« efface pseudo, forme normalisée du pseudo, empreinte du jeton et pseudo figé d'un siège solo inactif depuis 24 h, dans une transaction » ; « archive un salon oublié depuis 48 h par l'action d'archivage de 50, jamais par suppression ») s'écrivent avec lui ; `PurgePerimeterTest` se rejoue de lui-même à chaque ajout. La vérification `stale_lobby` de la sonde `purge` (§ 15) est branchée avec le balayage de `50` (L50-8) qui écrit sa ligne, jamais avant : elle serait sinon en alerte permanente.
+
+Tests :
+- `tests/Feature/Retention/PurgePerimeterTest.php` (noms de 10 § 11.2, horloge figée) : « une saved_config de 18 mois existe toujours après purge » ; « une frame de 13 mois survit à la purge ». Ils exécutent **tous** les périmètres implémentés, et se rejouent d'eux-mêmes à chaque périmètre ajouté.
+- `tests/Feature/Retention/RetentionPurgeTest.php` : « supprime par lots bornés, du plus ancien au plus récent » ; « écrit une ligne purge_run par périmètre et par exécution, même sans ligne éligible » ; « passe à la ligne suivante quand une ligne échoue, sans annuler le lot » ; « part sur la file default et jamais sur la file game » ; « n'exécute que les périmètres implémentés, chacun par un seul gestionnaire » ; « n'exécute jamais stale_lobby, confié au balayage de 50 » ; « efface pseudo, forme normalisée du pseudo, empreinte du jeton et pseudo figé d'un siège solo inactif depuis 24 h, dans une transaction » ; « archive un salon oublié depuis 48 h par l'action d'archivage de 50, jamais par suppression » ; « supprime les sessions au-delà de leur durée de vie sans dépendre du tirage » ; « compte les lignes éligibles de chaque périmètre par le prédicat même de son gestionnaire ». L'archivage anticipé du lobby est prouvé par 50 (R-04).
+- `tests/Feature/Retention/PurgeSuspensionTest.php` : « met la sonde purge en alerte tant que la purge est suspendue » ; « reprend la purge à la levée de la suspension ».
+
+### 15. Sondes externes, alertes et observabilité
+
+**Cadre** : toutes les sondes sont interrogées **de l'extérieur** (une machine ne peut pas alerter sur sa propre mort), le worker est mesuré par un **battement de cœur de la file `game`** et jamais par « l'unité est active », Reverb par un **vrai handshake `wss` de bout en bout**, et l'alerte part par e-mail **plus un second canal indépendant du SMTP de l'application** (`00` § Exploitation, `questions-ouvertes.md` § Sondes). Au J1, le jeu est **minimal** au sens de D30 du 23/09 : ce qui détecte une panne de partie, de sauvegarde ou de purge, rien de plus.
+
+**Points de sonde** : `routes/ops.php` [nouveau], chargé par `bootstrap/app.php` **hors du groupe `web`** (callback `then`), donc sans session, sans cookie et sans jeton CSRF, et invisible du balayage des routes joueur du contrat C15 ; pile `throttle:ops-probe` (limiteur déclaré avec les autres dans `FortifyServiceProvider::configureRateLimiting()`) puis `App\Http\Middleware\EnsureProbeToken` [nouveau], qui compare en temps constant l'en-tête `X-Probe-Token` à `config('ops.probe_token')`. Route `ops.probe`, `GET /ops/probe/{probe}`, `App\Http\Controllers\Ops\ProbeController@show` [nouveau]. Réponse : `200 {"status":"ok"}` ou `503 {"status":"stale"}`, **aucune autre donnée** ; `Cache-Control: no-store` ; `X-Robots-Tag: noindex, nofollow`. Un jeton absent ou faux rend **la même réponse qu'une sonde inconnue** (404) : l'existence des sondes ne se sonde pas. **Si `config('ops.probe_token')` est vide ou nulle**, `EnsureProbeToken` répond 404 à toute requête, en-tête présent ou non : `OPS_PROBE_TOKEN` est vide dans `.env.example` et forcé à vide dans `phpunit.xml` (§ 2.3), et `hash_equals('', '')` vaut vrai — sans cette garde, une production qui aurait omis la variable ouvrirait ses sondes à tous. L'oubli se voit aussitôt : toutes les sondes de la supervision passent en 404, donc en alerte.
+
+| Sonde | Mesure | Seuil | Fréquence |
+|---|---|---|---|
+| `/up` [existant, étendu] | l'application démarre ; un écouteur de `DiagnosingHealth` interroge la base, et Redis **seulement si** `cache.default` ou `queue.default` vaut `redis` — la CI (`phpunit.xml` : `array`, `sync`) n'a pas de Redis (§ 9), et `/up` doit y rester vert | 200 | 1 min |
+| `worker-game` | âge de la clé `ops:heartbeat:game`, écrite **par le worker qui exécute** `App\Jobs\Ops\WorkerHeartbeat` [nouveau], planifié toutes les 30 s sur la file `game` | ≤ `config('ops.heartbeat.game_stale_seconds')` = 90 s | 1 min |
+| `worker-default` | même mécanisme, planifié chaque minute sur la file `default` | ≤ `config('ops.heartbeat.default_stale_seconds')` = 600 s (la file peut être occupée par une série d'images ou par un balayage d'import, qui dure d'ordinaire moins d'une minute ; un import qui la tient plus de dix minutes est déjà un incident à voir, avant la borne de 900 s du job) | 5 min |
+| `reverb` | handshake WebSocket réel par la supervision sur `wss://<DOMAINE>/app/<REVERB_APP_KEY>` jusqu'au message d'établissement de connexion | ≤ 5 s | 1 min |
+| `load` | charge moyenne sur 5 minutes et mémoire disponible | charge ≤ `config('ops.load.max_per_cpu')` × vCPU ; mémoire disponible ≥ `config('ops.load.min_available_percent')` % (valeurs de départ 1,5 et 10) | 5 min |
+| `integrity` | sondes SQL 1 à 3 de 10 § 11.3 ; et les **quatre sondes de frame** de 20 § 5.9 (E10-18, E10-19, A16), dont 20 écrit les tests et que `100` exécute en production : frames `published` à `published_review_id IS NULL` ; `published_hash` différent du `reviewed_hash` de la revue désignée ; frames `ready` hors 1280×720 ou hors padding ; **requête d'audit du plancher** avec les valeurs courantes de `PlatformLimits` — c'est elle qui rend l'engagement « image transformée » démontrable sur les frames réelles (D6 du 23/09, A-36), ce qu'un test sur des données fictives ne prouve pas | toutes à 0 | 5 min |
+| `purge` | pour chaque périmètre de `PurgeScope::implemented()` **et** pour `stale_lobby` (ligne écrite par le balayage de 50) : dernière ligne `purge_run` de `status = 'completed'` ; drapeau de suspension ; **sonde n° 4 de 10 § 11.3** pour chaque périmètre de `PurgeScope::implemented()` : aucune ligne `purge_run` `completed` à `rows_deleted > 0` dans les `config('ops.purge.stale_hours')` dernières heures alors que `eligibleCount()` de son gestionnaire est positif. Un balayage `stale_lobby` bloqué est vu par la sonde n° 2 de `integrity` | dernière ligne `completed` < `config('ops.purge.stale_hours')` = 48 h, sonde n° 4 à 0, non suspendue | 1 h |
+| sauvegarde | battement sortant du script du tier chaud (§ 13.2) | < 26 h | continue |
+| langue et cache | deux `GET /` (`Accept-Language: fr` puis `en`) : `<html lang>` attendu, ni `Age`, ni `X-Cache`, ni `X-Proxy-Cache` | les deux vrais | quotidienne, et après toute modification nginx |
+
+- La lecture de la mémoire suppose que `/proc/meminfo` soit ajouté à l'`open_basedir` de l'abonnement **[à confirmer au relevé du VPS]** ; à défaut, la sonde `load` ne mesure que la charge et le relevé le consigne.
+- **Prestataire de supervision** : en UE, contractualisé, capable d'un vrai handshake `wss`, d'un en-tête personnalisé, d'un contrôle de mot-clé et d'un battement entrant, avec un second canal (notification poussée ou SMS). Son **nom** est un point ouvert du porteur. **Repli dégradé**, écrit comme tel : une sonde HTTP qui ouvre le `wss` public depuis le VPS lui-même n'est pas « de l'extérieur » et ne remplace pas le handshake du prestataire.
+- **Pourquoi la sonde n° 4 au J1** : la sonde `purge` qui ne lirait que la fraîcheur resterait verte sur un périmètre bloqué qui tourne chaque nuit sans rien supprimer — la panne typique d'un lot qui bute sur un `restrict` (§ 14) —, alors que les périmètres du J1 portent des données personnelles de vrais invités (sessions et leurs IP, pseudos des sièges solo). 10 § 11.3 exige quatre sondes **distinctes** de « la purge a tourné ».
+- **Sonde de force brute, branchée au J1** (défaut retenu Q70-5 : « accepter et sonder au J1, recalibrer avant l'onglet Avancé » ; 70 § 13.2, L70-11) : rapport hebdomadaire **non alertant**. Le job `App\Jobs\Ops\ReportBruteForce` [nouveau], planifié chaque lundi (§ 10.7) sur la file `default`, exécute la requête de `App\Support\Answers\BruteForceProbe` (70) sur `config('ops.brute_force.window_days')` = 7 jours, avec le seuil `K` = `config('ops.brute_force.k')` = 10 (valeur de départ : « manches gagnées au palier 1 après plus de dix tentatives », 10 § 15 ; recalibrée avec 70 et 50 avant l'onglet Avancé), et journalise le compte et la fenêtre sur le canal `game`, sans aucune donnée de joueur. `K` n'est jamais noté `N`, qui désigne `frames_per_round`. Le test de charge en mesure aussi le budget (§ 16.1). **Livraison** : ce rapport, seule part de L100-7 qui dépend de `70`, est livré **après L70-11** ; le reste de L100-7 (planificateur, battements, sondes, journaux) n'attend pas `70` et appartient au socle minimal qui précède la curation (D37 du 23/09 — amendé le 23/09).
+
+Tests : `tests/Feature/Deploy/ProbeEndpointTest.php` — « refuse toute sonde sans le jeton de supervision, avec la même réponse qu'une sonde inconnue » ; « refuse toute sonde quand aucun jeton de supervision n'est configuré » ; « déclare le worker game périmé au-delà du seuil » ; « ne rend qu'un statut, sans aucune donnée » ; « répond sans session ni cookie, en noindex et no-store » ; « signale une sonde d'intégrité non nulle » ; « signale une frame publiée hors du plancher de recadrage » ; « signale un périmètre qui n'a rien supprimé en 48 h alors que des lignes sont éligibles ». `tests/Feature/Deploy/WorkerHeartbeatTest.php` — « programme le battement de la file game et celui de la file default » ; « écrit l'instant du battement depuis le worker qui l'exécute ». `tests/Feature/Deploy/HealthCheckTest.php` — « fait échouer /up quand la base ne répond plus, ou Redis quand il est configuré ». `tests/Feature/Deploy/BruteForceReportTest.php` — « programme chaque semaine le rapport de force brute sur la file default » ; « journalise le compte de BruteForceProbe sans aucune donnée de joueur ».
+
+**Observabilité des manches** : au J1, le canal `game` (§ 10.9) et le journal de partie en base, qui reste la seule preuve opposable ; l'écran « inspecter une partie » est à 20, au J2 (partage des sujets arrêté le 23/09). Aucun outil de mesure de performance externe.
+
+**`ReceptionInstant`** (contrat C7, source « fixée par 60 avec 100 ») : 60 retient le middleware `App\Http\Middleware\CaptureReceptionInstant`, en tête du groupe `web`, et **écarte** `$_SERVER['REQUEST_TIME_FLOAT']`, qui échappe à `Date::setTestNow()` (60 § 2.2). `100` n'y ajoute que deux exigences d'exploitation : l'horloge du VPS synchronisée (NTP, § 10.1), et la **mesure, au test de charge, de l'attente dans la file de PHP-FPM**, que le middleware ne compte pas (limite nommée par 60 § 2.2 ; critère 1, § 16.4).
+
+### 16. Test de charge complet avant la première partie (D33 du 23/09)
+
+**Décision** : un test de charge **complet** — 20 salons, environ 150 joueurs simulés, **deux critères** (le jeu tient ; les sites voisins ne se dégradent pas) — est joué sur la machine réelle **avant la première vraie partie du J1** (D33 du 23/09, A-55). L'option « complet » retenue par le porteur (D33 du 23/09, non recommandée, appliquée telle quelle) comprend **la borne de 1 200 requêtes par seconde refusée proprement** avant la première partie : les scénarios A et B (§ 16.2, § 16.3) forment ensemble ce test, et aucun des deux ne se coupe. Il est exigé avant la première partie sur le VPS, **pas avant la curation** (D37 du 23/09) : le lot pilote et la curation du J1 commencent avant lui, qui suppose d'ailleurs un catalogue publié (§ 16.2) — amendé le 23/09. La grandeur mesurée est le **nombre de soumissions de réponses par seconde**, pas le nombre de connexions (`00` § Exploitation).
+
+#### 16.1 Outillage
+
+- Scénario k6 dans `tests/Load/` [nouveau], joué **depuis le poste du porteur, jamais depuis la CI** (la CI ne cible jamais la production, et k6 n'est pas une dépendance du dépôt). `tests/Load/**` est ajouté aux motifs ignorés du lint de `vite.config.ts` (les modules k6 ne se résolvent pas sous le lint à types). La cible vient de la variable `K6_BASE_URL`, jamais d'un littéral.
+- Chaque joueur simulé est un vrai client : cookie de siège, jeton CSRF lu dans le cookie `XSRF-TOKEN`, poignée de main d'horloge sur `clock.show`, battement, WebSocket Reverb (protocole Pusher 7) et autorisation des canaux de présence et privé par `/broadcasting/auth`, chargement de chaque image à son `fetchNotBefore`, soumissions au rythme du réglage (au réglage par défaut : 1 tentative par seconde, `RoomSettingsBounds::DEFAULT_ATTEMPTS_PER_SECOND`), et clic d'une proposition du QCM quand `seat.choices` arrive. Routes, en-têtes et événements sont ceux des contrats C6, C7, C8 et C10 : le scénario s'écrit **après** les lots correspondants de 50, 60 et 70.
+- **Aucune bonne réponse ne quitte le serveur pour le test** (règle 3) : les joueurs simulés soumettent des titres tirés d'une **liste des titres publiés** extraite une fois par le porteur (lecture en production), rangée dans `tests/Load/.data/` (ignoré par git), jamais exposée par une route. Au volume du J1, ce tirage à l'aveugle trouve régulièrement : il exerce la transaction de verrouillage de 70 et mesure du même coup le budget de force brute que 10 § 15 nomme.
+- Pseudos synthétiques à préfixe réservé (`k6-` suivi d'un numéro, dans la règle de pseudo de 40) ; le scénario écrit la liste des codes de salon créés dans `tests/Load/.data/`.
+
+#### 16.2 Scénario A — bloquant pour la première partie
+
+20 salons en parallèle, 7 à 8 joueurs chacun (environ 150), preset `SettingPresetKey::Classic` (au réglage par défaut : N = 3, D = 30 s, R = 8 s, M = 10), montée en 5 minutes, **palier soutenu d'au moins 15 minutes** (plus d'une partie complète par salon), puis une seconde vague de salons neufs (la non-répétition interdit de rejouer le même salon sur un catalogue du J1). Préalables : catalogue publié suffisant pour `M` plus la marge de tirage (`PlatformLimits::drawSubstituteMargin()`) dans chaque salon ; tier chaud actif ; sondes actives ; aucune partie réelle ; mesure de référence des sites voisins prise dans les 10 minutes qui précèdent, à la même heure.
+
+**Phase A2, 5 minutes, dans la même séance** : 20 salons **pleins**, `PlatformLimits::roomSeats()` joueurs simulés chacun (240 au réglage par défaut), soumettant à `RoomSettingsBounds::DEFAULT_ATTEMPTS_PER_SECOND` (1 par seconde au réglage par défaut), soit le budget de **240 soumissions par seconde** de `questions-ouvertes.md` § Déjà tranché (charge cible) — le coût du chemin chaud que 70 renvoie à ce test. Mêmes critères (§ 16.4).
+
+#### 16.3 Scénario B — rafale à la borne haute
+
+**20 salons pleins** — `PlatformLimits::roomSeats()` joueurs simulés chacun (240 au réglage par défaut de la capacité) —, chaque joueur soumettant à `RoomSettingsBounds::MAX_ATTEMPTS_PER_SECOND` sans s'arrêter aux refus, soit 20 × 12 × 5 = **1 200 requêtes par seconde** au réglage par défaut de la capacité. « Mêmes salons » que le scénario A ne suffirait pas : à 7 ou 8 joueurs, la rafale n'atteindrait qu'environ 750 requêtes par seconde. Au J1, aucun hôte ne peut régler cette cadence (onglet Simple seul), mais un client malveillant peut l'envoyer : l'excédent doit être **refusé proprement** par le limiteur de 70 (429), sans 5xx, et sans dégrader un voisin (critère 2). Résultat **bloquant pour la première vraie partie du J1**, comme le scénario A (D33 du 23/09) : un 5xx, ou la dégradation d'un voisin sous la rafale, arrête la mise en service ; la révision de la borne remonte à 50 (partage des sujets arrêté le 23/09) et la protection en amont de PHP est posée **avant** la première partie.
+
+#### 16.4 Critères d'acceptation
+
+**Critère 1 — le jeu tient** (palier soutenu du scénario A et phase A2 ; pour le scénario B, le premier et le dernier point seulement) :
+- aucune réponse 5xx ; les seuls refus sont les 429 attendus ; aucun échec de handshake ni de souscription ;
+- latence des soumissions mesurée côté k6, réseau compris : p95 ≤ 250 ms, p99 ≤ 1 s ;
+- **retard de diffusion des frontières** (`serverNow` de `tier.opened` − instant théorique `startsAt + startsAtOffsetMs`, tous deux côté serveur, relevé aussi dans le canal `game`) : p95 ≤ `PlatformLimits::tierGraceMs()`, maximum ≤ `EngineConstants::transitionMaxWaitMs()` + `PlatformLimits::tierGraceMs()`. Le retard mesuré se décompose en **sondage** (≤ 100 ms, `--sleep=0.1`, § 10.4) et **tête de file** (attente en processus d'un job réveillé tôt, 60 § 4.2) : c'est la seconde que visent les réactions écrites plus bas ;
+- **attente dans la file de PHP-FPM** (`listen queue` et `max listen queue` de la page de statut du pool, § 10.6) **[à confirmer au relevé du VPS]** : nulle pendant le palier soutenu du scénario A ; valeur consignée au § 16.6. `ReceptionInstant` ne la compte pas (60 § 2.2) : une attente en file décalerait l'instant de réception de chaque soumission, donc le palier retenu ;
+- chaque image demandée à son `fetchNotBefore` est servie (200) ; chaque manche lancée se clôt et se révèle ; en fin de scénario, `GamesInProgress::count()` revient à 0 ;
+- aucune unité redémarrée ni tuée par son cgroup (journal systemd), aucun refus mémoire de Redis.
+
+**Critère 2 — les voisins ne se dégradent pas** :
+- temps jusqu'au premier octet (TTFB) de la page d'accueil de chaque site voisin, échantillonné à faible cadence pendant le test : p95 ≤ 1,2 × p95 de référence ; aucune 5xx chez un voisin ;
+- mémoire disponible de la machine jamais sous le seuil de la sonde `load` ; aucun échange mémoire soutenu.
+
+Ces seuils sont des **critères d'exploitation**, pas des règles de jeu. **Réactions écrites d'avance** : critère 1 en échec sur le retard des frontières → second processus `game` (**signalé au porteur**, contrat C7 § 5) ou ajustement des valeurs de `EngineConstants` par 60 ; critère 2 en échec → resserrement de `CPUWeight`, `MemoryMax` et `pm.max_children` (§ 10) ; puis **nouvelle séance**. Le test n'ajuste **jamais** `tierGraceMs` ni `preloadLeadMs`, figés sur chaque partie et liés à `ScoringRules::VERSION` (contrat C13).
+
+#### 16.5 Nettoyage des données synthétiques
+
+Les parties du test créent de vrais faits de partie dans la base de production ; laissés en place, ils fausseraient pendant 12 mois les films « jamais trouvés » et les incidents par film (20). Commande `App\Console\Commands\LoadTestForgetCommand` [nouvelle], `loadtest:forget {file : liste des codes de salon produite par le scénario} {--dry-run}`, jouée **avant l'archivage** des salons (tant que les pseudos existent) : elle ne retient qu'un salon listé dont **chaque siège** porte le préfixe synthétique, puis supprime ses faits dans l'ordre imposé par les `restrictOnDelete` (10 § 11.3), ses sièges et le salon (la cascade emporte ses `seen_frame`). Elle ne touche **aucune** table du catalogue (règle 12 non requise, 10 § 11.2). Tests : `tests/Feature/Deploy/LoadTestForgetCommandTest.php` — « n'efface que les salons listés dont chaque siège porte le préfixe synthétique » ; « supprime les faits de ces salons dans l'ordre imposé par les restrict » ; « ne touche aucune table du catalogue » ; « ne fait rien sous --dry-run ».
+
+#### 16.6 Résultats
+
+**Résultats de la séance** (à inscrire ici : date, nombre de salons et de joueurs, soumissions par seconde atteintes en A, A2 et B, p95 et p99, retard des frontières, `max listen queue` de PHP-FPM, TTFB des voisins avant et pendant, nombre de processus `game` retenu, valeurs de plafonds retenues, part des 429 et absence de 5xx en B) : — *non joué au 23/09*.
+
+### 17. Dettes du starter et dérives documentaires
+
+**Purgé et vérifié au 23/09** (lot 0 de 10 § 13.2) : `RefreshDatabase` actif, Pint vert, PHPStan à `--memory-limit=1G`, `CarbonImmutable` partout, `APP_NAME=TripleFrames`. La dernière puce de `REPRISE.md` § Dettes du starter (`APP_NAME=Laravel`, `database.sqlite` dit « vestige ») le décrit encore comme ouvert (n° 77) ; `CLAUDE.md` §8 et `00` § Stack sont alignés depuis le 23/09. Les autres puces de cette section de `REPRISE.md` (Reverb, `predis`, Socialite, `.env.example`) sont des dettes réellement ouvertes, reprises ci-dessous. La correction de `REPRISE.md` est un travail de rédaction séparé, postérieur à cette spec — amendé le 23/09.
+
+**Dettes restantes et leur lot** :
+
+| Dette | Lot |
+|---|---|
+| `predis/predis` absent, `REDIS_CLIENT=phpredis` (n° 46) | L60-1 (60) |
+| `CACHE_STORE` et `QUEUE_CONNECTION` sur `database`, `BROADCAST_CONNECTION=log`, identifiants Reverb absents de `.env.example` | L60-1 (60), valeurs du § 10.10 |
+| Variables `ACCOUNTS_*`, indexation, drainage, sauvegarde, sonde, journaux, `REDIS_QUEUE_RETRY_AFTER` et `REVERB_ALLOWED_ORIGINS` absentes de `.env.example` | L100-4 |
+| `composer dev` sans Reverb ni files nommées ; `composer setup` sans identifiants Reverb | L100-4 |
+| `retry_after` de la connexion `redis` à 90 s, sous le `$timeout` de 900 s de `RunCatalogImport` | L100-4 |
+| Reverb, `laravel-echo`, `pusher-js` non installés | lot d'installation de 60 |
+| Licence `MIT`, identité du starter dans `composer.json`, aucun `LICENSE` (n° 75) | L100-2 |
+| `CLAUDE.md` ignoré par git (D9 du 23/09) : retrait de `/CLAUDE.md` du `.gitignore` **et**, dans le même commit, ajout de `'CLAUDE.md'` à `fmt.ignorePatterns` de `vite.config.ts` (A-78) | **faite le 23/09** (part D9 de L100-2), les deux changements destinés au même commit — amendé le 23/09 |
+| `public/robots.txt` qui autorise tout (n° 71) | L100-4 |
+| Socialite absent | 40 [J2] |
+
+---
+
+## Jalon 2 — à écrire
+
+Sujets que la carte des specs attribue à `100` et qui relèvent de l'ouverture publique. Ils ne sont **pas rédigés** ici ; chacun sera écrit avant le lot qui l'implémente.
+
+1. **Préproduction** : second abonnement `preprod.<DOMAINE>`, base et Redis séparés, `noindex` et authentification HTTP, jamais de données de production ; `main` la vise ; mise en production par **promotion manuelle en un geste** (branche avancée sur le même commit d'artefact, rendu possible par l'artefact indépendant de l'hôte, § 2.5). Services de préproduction : toujours actifs sous des plafonds serrés, ou unités utilisateur si Plesk le permet — **jamais un geste root par promotion** (n° 80).
+2. **Parcours Playwright** : créer-rejoindre-lancer, répondre-verrouiller-révéler, reconnexion ; joués à la main, jamais à chaque PR ; condition de la promotion. Question ouverte : l'outil (Vite+ fournit un fournisseur Playwright pour le mode navigateur de ses tests, pas un lanceur de parcours ; principe 11).
+3. **Sous-traitants nommés** : un nom par catégorie **branchée** (hébergeur, SMTP, stockage de sauvegarde, supervision, second canal ; suivi d'erreurs seulement s'il est branché, défaut retenu le 23/09), registrar, contrats et registre des traitements (décision 17, n° 78). Question ouverte : les noms, à fournir par le porteur, et la région UE du VPS.
+4. **Levée du `noindex`** : `SITE_INDEXABLE=true` en production seulement, sur les routes marquées par 90 ; vérification externe après levée.
+5. **Procédure de notification de violation** écrite d'avance : qui prévient, quoi, sous 72 h, modèle en français (principe 12, `questions-ouvertes.md` § Risques élevés).
+6. **Inventaire des accès scellé hors dépôt** et procédure de remise ; seconde adresse d'administration ; au moins deux administrateurs nominatifs. Questions ouvertes : la personne de confiance, le second administrateur.
+7. **Commande d'arrêt du service** `site:close` / `site:reopen` : actions `site.closed` et `site.reopened`, sujet `site`, acteur `console` (E10-05, contrat C14) ; page de fermeture et code HTTP par 90 ; routes exceptées (pages légales, contact, signalement) ; état persistant hors du chemin de déploiement ; indexation et inscriptions coupées, données intactes.
+8. **Purge complète et sondes du J2** : périmètres restants du § 14, sonde n° 4 de 10 § 11.3 étendue aux périmètres du J2, sonde « accusé de réception en retard » (`takedown_request` sans `acknowledged_at` au-delà d'un seuil de `config/ops.php` inférieur aux 72 h de l'engagement, 20 § 11.4), inventaire des cookies testé (n° 73 : 90 le tient, 100 le teste). La sonde de force brute, elle, est branchée dès le J1 (§ 15).
+9. **Restauration complète rejouée avant l'ouverture**, avec re-téléchargement des masters TMDB et `takedown:reconcile` (20) ; élagage des objets froids orphelins depuis le poste.
+10. **Développement local en HTTPS sur `dev.<DOMAINE>`** (DNS-01, RP ID `<DOMAINE>`), exigé par OAuth et les passkeys de 40-J2 (partage des sujets arrêté le 23/09).
+11. **Copies locales des photos provider** : racine hors du chemin de déploiement en variable d'environnement ; inclusion ou non au tier chaud (visages, 30 jours).
+12. **Relevé des licences tierces des dépendances** (composer et npm) et notice des bundles servis aux navigateurs ; le relevé des **actifs** tiers est tenu dès le J1 (§ 7.6) et s'étend aux actifs du J2 (logos des fournisseurs OAuth, par exemple).
+13. **Plafond global de parties simultanées** éventuel dans `PlatformLimits` après mesure (défaut retenu le 23/09 : aucun plafond au J1, décidé par 100 après le test de charge). La protection contre les rafales en amont de PHP, si le scénario B l'exige, est posée **avant la première partie du J1** (§ 16.3), pas au J2.
+14. **Dependabot** étendu ou non à composer et npm ; audit bloquant ou non.
+
+---
+
+## Exigences adressées à 10
+
+Cette spec ne crée **aucune table, aucune colonne, aucun cas d'enum ni aucun index**. Elle consomme les exigences consolidées suivantes :
+
+- **E10-05** — `admin_action` : cas `site.closed` et `site.reopened`, sujet `site`, acteur `console` ; émetteur 100 pour `site.*` (J2, commande d'arrêt).
+- **E10-13** — « Aucun SSR en v1 » : aucun processus Node en production (§ 10.2).
+- **E10-18** — géométrie des frames : plancher D6 vérifiable par la requête d'audit, sans colonne neuve ; la sonde `integrity` l'exécute en production (§ 15).
+- **E10-19** — sondes des frames : `published_hash = reviewed_hash` de la revue publiée, frames `ready` conformes, audit du plancher ; la sonde de production `integrity` les exécute **toutes**, avec `published_review_id IS NULL` (§ 15) ; 20 en écrit les tests.
+- **E10-30** — « purge du lobby » devient « archivage anticipé du lobby » (§ 14, périmètre `stale_lobby`, exécuté par 50).
+- **E10-36** — `ended_at IS NULL` ⟺ statut non terminal, écrit par `FinalizeGame` seul : fondement du prédicat que lisent `deploy:drain` et `deploy:guard` (§ 11.3).
+- **E10-56** — fenêtre unique de mémoire du salon, source de la purge `seen_frame` (J2).
+- **E10-59** — en-têtes de `/f/`, dont `X-Robots-Tag: noindex, nofollow` (§ 12).
+- **E10-62** — clôture forcée `stale_game` par `FinalizeGame` avant la purge (J2).
+- **E10-63** — rétention des quasi-justes en cache (J2).
+- **E10-67** — § 15 l.1419 : le placement des tests nommés par 10 est écrit par 100 (§ 3.3).
+
+**Exigence nouvelle, non consolidée** : aucune. Un écart de 10 est **signalé**, sans exigence : `10` § 1.7 écrit « 35 modèles » quand le test existant en balaie 36 (§ 3.3).
+
+---
+
+## Exigences adressées aux specs sœurs
+
+Exigences que cette spec pose à d'autres specs, consolidées ici pour qu'aucune ne reste éparse dans le texte. « Nouvelle » = absente des contrats du 23/09, **signalée au porteur**.
+
+| Spec | Exigence | Motif | Statut |
+|---|---|---|---|
+| 60 | `config/reverb.php`, créé par son lot d'installation, lit `REVERB_ALLOWED_ORIGINS` (défaut `*` sur le poste) | § 10.5 | nouvelle |
+| 60 | Chaque diffusion de frontière journalise sur le canal `game` son **retard réel** en millisecondes (`serverNow` d'émission − instant théorique) | critère 1 de D33 du 23/09 (§ 16.4) | nouvelle |
+| 60 | Le lot d'installation retire de `config/broadcasting.php` les connexions `pusher` et `ably`, ou ajoute le domaine de Pusher et ses sous-domaines à la liste d'autorisation de `NoLiteralDomainTest` dans le même commit | § 7.2 | nouvelle |
+| 60 | `60` § 19.5, première puce : `/apps/` n'est pas publié par nginx | § 10.5, N100-1 | appliquée (60 § 19.5) — amendé le 23/09 |
+| 50 | `App\Actions\Room\ArchiveRoom` appelable par le périmètre `stale_room` avec `$idleBefore = $now − 48 h` ; `room:archive-idle` écrit sa ligne `purge_run` `StaleLobby` à chaque passage | § 14, § 15 | consolidée (50 § 16.2) ; précision nouvelle : la ligne est écrite **même à zéro salon archivé** (§ 14 : l'absence de ligne est une panne), sans quoi la sonde `purge` ne distinguerait pas un balayage arrêté d'un balayage sans travail |
+| 70 | `App\Support\Answers\BruteForceProbe` appelable par `App\Jobs\Ops\ReportBruteForce`, avec `K` et la fenêtre en paramètres | § 15 ; Q70-5 | consolidée (70 § 13.2, L70-11) |
+| 30 | Scission de `PlatformDataSeeder` (presets réconciliés ; thèmes, libellés et sagas en insertion-si-absent), condition du premier déploiement par le hook | § 11.5, étape 6 | consolidée (contrat C18-bis § 6, L30-7) |
+| 20 | Les quatre requêtes de sonde de frame de 20 § 5.9 exposées par une classe que `ProbeController` appelle, pour qu'une seule copie de chaque requête existe | § 15 | nouvelle |
+| 20 | `catalog:import`, `catalog:import-discover` et `catalog:import-ids` (`--resync` compris), **lancées à la main** hors `local` et `testing`, appellent `backup:snapshot` avant leur première écriture et s'arrêtent sans rien écrire sur un code non nul ; l'invocation par `RunCatalogImport` en est dispensée (chemin d'import ordinaire, 30 § 13.2), par un moyen que 20 choisit. Tests proposés : `tests/Feature/Catalog/CatalogImportSnapshotTest.php` — « prend un instantané bloquant avant toute écriture d'une commande d'import lancée à la main hors local et testing » ; « n'écrit rien dans le catalogue quand l'instantané échoue » | règle 12, § 13.1 | nouvelle |
+| 20, 05 | Familles de clés `admin.console.{backup, reproject, purge, loadtest}.*` et `admin.console.deploy.phase.*` | règle 4, § 11.3 | nouvelle (contrat C15 § 2.4 ne porte que `deploy.*` et `first_admin.*`) |
+| 90 | L90-2 ne livre plus `config/app.php` › `indexable`, `public/robots.txt` ni le test de `robots.txt` ; L90-1 ne livre plus `EXEMPT`, `[unclassified]` ni `--list-unclassified` | § 7.4, § 12 ; R-04 | appliquée (90 § 5.1, § 9.3, L90-1, L90-2) |
+
+---
+
+## Amendements à d'autres documents
+
+Une spec ne modifie jamais `00`, `05`, `questions-ouvertes.md`, `CLAUDE.md` ni `REPRISE.md` ; l'application au corpus est un travail séparé. Amendements consolidés dont cette spec dépend :
+
+- **A-27** et **A-53** — Echo configuré à l'exécution, `VITE_REVERB_*` retirées (00 l.319, questions-ouvertes l.290) : condition de l'artefact indépendant de l'hôte (§ 2.5).
+- **A-30** — Vitest configuré au J1 (00 l.329).
+- **A-31** — déploiement manuel dans une fenêtre libre obtenue par drainage borné, non atomique assumé (00 l.345).
+- **A-32** — liste des specs du J1 : `100` [J1] (00 l.363).
+- **A-36** — principes 3, 12 et 13 : plancher de recadrage vérifiable par requête (sonde `integrity`, § 15) ; l'outillage couvre tout répertoire joueur créé, avec méta-vérification (§ 7.4).
+- **A-36bis** — montage (a) retenu : domaine acheté avant la semaine 4, socle minimal de production dès le J1 (00 l.471).
+- **A-36ter** — relevé du VPS avant tout déploiement, écriture sous hypothèse root (00 l.473).
+- **A-51** — `100` [J1] comprise dans le J1 (questions-ouvertes l.78).
+- **A-55** — test de charge complet avant la première partie du J1 (questions-ouvertes l.294).
+- **A-55bis** — relevé avant tout déploiement (questions-ouvertes l.268).
+- **A-56** — procédure de drainage borné sous la plume de 100 (questions-ouvertes l.296).
+- **A-57** — jobs CI `ci`, `artifacts`, `mysql-redis` ; suite `Concurrency` (questions-ouvertes l.299).
+- **A-64** — ordre d'écriture : `100` [J1] écrite maintenant (questions-ouvertes l.340-356).
+- **A-67** — `CLAUDE.md` §1 : comptes du J1 réduits au premier admin (le porteur, seul curateur) et aux comptes de test jetables (§ 9, § 11.6, § 11.9).
+- **A-71** — `CLAUDE.md` §3 : Plesk Git manuel, non atomique ; Echo configuré à l'exécution.
+- **A-72** — `CLAUDE.md` §4 : `composer test` sans les deux groupes ; `npm run test`, `composer test:mysql`, commandes `deploy:*`, `backup:snapshot`, `catalog:reproject`, `game:reschedule`.
+- **A-75** — `CLAUDE.md` §7, règle 5 : périmètre `WATCHED` du script anti-couleur (§ 7.4).
+- **A-76** — `CLAUDE.md` §8 : `extensions:` pour tout nouveau workflow ; suite `Concurrency`, Vitest configuré.
+- **A-77** — `CLAUDE.md` §9 : tableau des domaines de test.
+- **A-78** — `.gitignore` et `vite.config.ts` (D9 du 23/09) : versionner `CLAUDE.md` et l'exclure du formateur dans le même commit. Appliqué le 23/09 — amendé le 23/09.
+- **A-79** — `REPRISE.md` : ordre d'écriture.
+- **A-81** — `REPRISE.md` l.71 : relevé avant tout déploiement.
+
+**Amendements nouveaux, non consolidés, signalés au porteur** :
+
+- **N100-1** — `00` l.343, `questions-ouvertes.md` l.290 **et `60` § 19.5, première puce** : nginx publie `wss://<DOMAINE>/app/…` **seulement** ; `https://<DOMAINE>/apps/…` n'est pas publié, le serveur publiant en boucle locale (§ 10.5). Appliqué à `00`, `questions-ouvertes.md` et `60` § 19.5 — amendé le 23/09.
+- **N100-2** — `00` l.351, `questions-ouvertes.md` l.220 et `CLAUDE.md` §8 : tier froid « hebdomadaire » devient « au moins hebdomadaire ; quotidien tant que le volume le permet » (§ 13.3). **Proposé, non appliqué** : jusqu'à l'accord du porteur, le tier froid reste hebdomadaire (décision 18).
+- **N100-3** — `CLAUDE.md` §4 : ajouter `backup:manifest`, `backup:verify`, `backup:prune-snapshots`, `purge:run`, `purge:suspend`, `purge:resume`, `loadtest:forget` ; « `backup:snapshot` sans option, code 0 exigé, avant toute commande ou tout script lancé à la main qui écrit dans `movie`, `frame`, `movie_title`, `alias` ou `frame_review` » (règle 12, § 11.4, § 13.1) ; « jamais `cache:clear` en production ».
+- **N100-4** — `00` l.345 et `questions-ouvertes.md` l.289 : le hook complet et ordonné vit dans `100` § 11.5 ; les deux documents y renvoient au lieu d'en donner une liste partielle (n° 76).
+
+---
+
+## Lots d'implémentation
+
+Heures = **mesures de taille**, **barre « terminé » comprise** (tests, états, clavier quand un écran existe, facteur 1,5 à 2 intégré) ; jamais un calendrier ni un budget à tenir (D36 du 23/09 — amendé le 23/09). Le développement est confié à l'IA ; l'enveloppe d'environ 10 h par semaine du porteur couvre la curation, les décisions, les relectures et les **gestes humains**. Cette spec en porte plusieurs : l'achat du domaine (D1 du 23/09), le relevé puis le montage root du VPS (L100-9) et le déclenchement des déploiements manuels (D31 du 23/09), qui sont sur le **chemin critique humain** du J1 ; le choix du stockage de sauvegarde et la cérémonie des clés (L100-10), le choix de la supervision (L100-11) et la séance de charge (L100-13). Les lots d'exploitation sont terminés quand la procédure est **jouée sur la machine réelle** et consignée (§ 1). Cette spec ne recalcule pas l'arithmétique du J1 : `00` § Jalons consolide les tailles des sections « Lots » de toutes les specs. Dans le tableau ci-dessous, la colonne « Dépend de » de L100-5 à L100-10, L100-12 et L100-13 suit l'ordre « curation d'abord » (D37 du 23/09, paragraphe qui suit le tableau), et la part D9 de L100-2 est faite — amendé le 23/09.
+
+| Lot | Jalon | Objet | Dépend de | Heures |
+|---|---|---|---|---|
+| L100-1 | J1 | Groupes Pest, suites, scripts, job `mysql-redis` | — | 3-5 |
+| L100-2 | J1 | Gardes du dépôt, licence et relevé des actifs tiers, méta-vérification des tokens, `CLAUDE.md` versionné (part D9 **faite le 23/09**) | L100-1 ; livré avant L90-1 (§ 7.4) | 5-7 |
+| L100-3 | J1 | Vitest et matrice des réglages | L100-1 | 3-5 |
+| L100-4 | J1 | Environnement, indexation (variable et `robots.txt`), artefacts | L100-1 ; L60-1 (Reverb, `predis`, variables Redis et Reverb de `.env.example`) | 3-4 |
+| L100-5 | J1 | Drainage et garde | L100-4 ; L100-6 ; `GamesInProgress` et `game:reschedule` de 60 (L60-10) ; livré au plus tard avec le déploiement du moteur de 60, donc avant la première partie (§ 11, D37 du 23/09) | 3-4 |
+| L100-6 | J1 | Hook, instantanés et leur élagage, reprojection | L100-4 ; hook livré **sans drainage**, étapes 3 et 12 ajoutées par L100-5 (§ 11, D37 du 23/09) | 4-6 |
+| L100-7 | J1 | Planificateur, battements, sondes, rapport de force brute, journaux | L100-4 ; requêtes de sonde de frame de 20 (§ 5.9) ; rapport de force brute seul **après** `BruteForceProbe` de 70 (L70-11) (§ 15, D37 du 23/09) | 5-7 |
+| L100-8 | J1 | Moteur de purge, périmètres du J1 | L100-7 ; **périmètres sans jeu d'abord** ; `stale_room` après `ArchiveRoom` de 50 (L50-8), branche solo d'`orphan_player` après L60-15 (§ 14, D37 du 23/09) | 4-6 |
+| L100-9 | J1 | Mise en service du VPS, premier administrateur | domaine acheté (D1 du 23/09) ; relevé ; L100-4, L100-6 et L100-7 (sans drainage ni rapport de force brute, D37 du 23/09) ; installation Reverb de 60 (L60-1) ; L30-7 (scission de `PlatformDataSeeder`) ; `IndexingTest` de 90 (L90-2) vert | 7-9 |
+| L100-10 | J1 | Sauvegardes chaude et froide, restauration jouée | L100-9, L100-6, L100-8 (premier temps, § 14) ; restauration chronométrée avant la première partie (§ 11.6) | 6-8 |
+| L100-11 | J1 | Supervision externe | L100-7, L100-9 | 2-3 |
+| L100-12 | J1 | Test de charge : outillage et nettoyage | lots J1 de 50, 60 et 70 ; L100-9 ; L100-5 (le moteur en production l'exige, § 11) | 5-7 |
+| L100-13 | J1 | Test de charge : séance, recalibrage, consignation | L100-12, L100-10, L100-11 ; avant la première partie, jamais avant la curation (D33 et D37 du 23/09) | 3-5 |
+| L100-14 | J1 | Test de bout en bout du catalogue de démonstration | `LaunchGame` de 50, programmation de 60 | 2-3 |
+| L100-15 | J2 | Préproduction et promotion | J1 terminé | 5-7 |
+| L100-16 | J2 | Parcours Playwright | L100-15 | 6-8 |
+| L100-17 | J2 | Purge complète et sondes restantes | L100-8 ; gestes de 20 et 40 au J2 | 4-6 |
+| L100-18 | J2 | Arrêt du service | E10-05 appliquée ; page de 90 | 3-4 |
+| L100-19 | J2 | Conformité d'exploitation (sous-traitants, inventaire, violation, licences des dépendances) | noms fournis par le porteur | 4-6 |
+| L100-20 | J2 | Ouverture : levée du `noindex`, restauration complète rejouée, `dev.<DOMAINE>` | L100-15, L100-17 | 4-6 |
+
+**Écart signalé au porteur (D1 du 23/09).** D1 chiffrait le socle minimal de production à +10 à 14 h au J1. Les lots qui le réalisent — L100-4, L100-6, L100-7, L100-9, L100-10 et L100-11 — totalisent **27 à 37 h**, barre « terminé », relevé et restauration jouée compris ; s'y ajoutent L100-5 (drainage, 3-4 h, là où D32 du 23/09 en estimait le cœur à 2 h) et L100-8 (purge du J1, 4-6 h, que D1 ne comptait pas), et L100-12 + L100-13 totalisent 8 à 12 h pour les 8 à 10 h de D33 du 23/09. L'écart n'est pas absorbé en silence : il entre dans la consolidation de `00` § Jalons, qui seule fait l'arithmétique du J1, **comme mesure de taille et non comme dépassement d'un budget** — le développement étant confié à l'IA, l'enveloppe du porteur ne le borne plus (D36 du 23/09) ; il ne se paie ni par une coupe (D35 du 23/09 : aucune variable d'ajustement de développement) ni, jamais, par la barre « terminé » — amendé le 23/09.
+
+**Ordre « curation d'abord » (D37 du 23/09) — amendé le 23/09.** Les lots s'exécutent dans l'ordre qui libère d'abord le travail humain : le **lot pilote de `20` démarre dès que les lots J1 de `20` et le socle minimal de production ci-dessous sont livrés**, pendant que le moteur se construit. Les dépendances qui le retardaient sans nécessité sont levées : hook sans drainage tant qu'aucun moteur n'existe (§ 11), purge du J1 d'abord sur les seuls périmètres sans jeu (§ 14), rapport de force brute après L70-11 (§ 15).
+- **Livrables avant le moteur de `60` — socle de qualité et socle minimal de production** (de `60`, seule l'installation de Reverb et de `predis`, L60-1, les précède) : L100-1 à L100-4 ; L100-6 (hook sans les étapes 3 et 12) ; L100-7 sans le rapport de force brute ni la vérification `stale_lobby` de la sonde `purge` ; L100-8 dans son premier temps (`framework_sessions`, `framework_failed_jobs`, `framework_reset_tokens`, `purge_run`) ; L100-9 ; L100-10 pour ses tiers chaud et froid, actifs avant la première image curée (§ 13), et son contrôle de lisibilité, joué au lendemain de la première sauvegarde avant de poursuivre la curation (§ 13.5, point 1) ; L100-11.
+- **Avant la première partie sur le VPS**, pas avant la curation : L100-5 (drainage, D32 du 23/09), au plus tard dans le déploiement qui porte le moteur ; le second temps de L100-8 (`stale_room`, branche solo d'`orphan_player`) et la vérification `stale_lobby` de la sonde `purge`, avec L50-8 ; la restauration chronométrée de L100-10 (§ 13.5, point 2, dont l'étape (g) appelle `game:reschedule` de `60`) ; L100-12 et L100-13 (test de charge complet, D33 du 23/09).
+- **Après L70-11** : le rapport de force brute de L100-7 (`ReportBruteForce`, `BruteForceReportTest`). L100-14 suit simplement `LaunchGame` de `50` et la programmation de `60`.
+
+Tous restent des lots du J1 (D35 du 23/09) : l'ordre change, pas le périmètre ni la barre.
+
+**L100-1 — Groupes Pest, suites, scripts, job `mysql-redis`** (J1, 3-5 h). Fichiers : `tests/Pest.php`, `phpunit.xml`, `composer.json` (scripts `test`, `test:mysql`, `ci:check`), `.github/workflows/tests.yml` (`concurrency`), `.github/workflows/tests-mysql.yml` [nouveau], `tests/Concurrency/` [nouveau]. Tests : `tests/Feature/Architecture/TestGroupsTest.php` — « n'emploie que les groupes Pest connus », « fait échouer hors MySQL tout test du groupe mysql », « ne place un test locks-timing que sous tests/Concurrency » ; `tests/Feature/Schema/ColumnLengthTest.php` (groupe `mysql`) — « fait tenir la plus longue valeur d'enum dans chaque colonne castée en enum », « fait tenir un pseudo de longueur maximale en lettres latines étendues dans player.nickname et game_player.display_nickname » (exigence de 40, contrat C5), « déclare la même longueur pour les trois colonnes de clé d'avatar prédéfini » (10 § 14 A16).
+
+**L100-2 — Gardes du dépôt, licence et relevé des actifs tiers, méta-vérification** (J1, 5-7 h ; livré avant L90-1, qui n'écrit plus `EXEMPT`, `[unclassified]` ni `--list-unclassified`, § 7.4). Fichiers : `tests/Feature/Architecture/{ZeroSecretTest, NoLiteralDomainTest, NoRealFixtureTest, LicenseTest}.php`, `LICENSE` [nouveau], `THIRD_PARTY_NOTICES.md` [nouveau], `composer.json` (`license`, `name`, `description`), `package.json` (`license`), `scripts/check-theme-tokens.mjs` (`EXEMPT`, `[unclassified]`, `--list-unclassified`), `.github/pull_request_template.md` [nouveau], `.gitignore` (ajout de `/tests/Load/.data`). **Part D9 déjà faite le 23/09** : `/CLAUDE.md` retiré du `.gitignore` et `'CLAUDE.md'` ajouté à `fmt.ignorePatterns` de `vite.config.ts`, les deux changements destinés au même commit (D9 du 23/09, A-78) ; il ne reste au lot que le reste de ce paragraphe — amendé le 23/09. Tests : `tests/Feature/Architecture/ZeroSecretTest.php` — « ne référence aucun secret dans aucun workflow, hors jeton automatique », « ne persiste aucun identifiant hors du job artifacts », « livre vide chaque clé sensible de .env.example », « force à vide chaque identifiant externe dans phpunit.xml » ; `NoLiteralDomainTest.php` — « écrit <DOMAINE> au lieu de tout hôte littéral dans les specs, la configuration et .env.example », « reconnaît un hôte dans une URL, une adresse électronique et un nom nu, et ignore un flux php://stderr, une autorité construite par concaténation et une référence Classe@méthode » ; `NoRealFixtureTest.php` — « ne suit aucune image, aucun dump ni aucune archive hors de la liste d'autorisation », « ne suit aucun fichier sous tests/Load/.data » ; `LicenseTest.php` — « déclare le dépôt tous droits réservés dans LICENSE, composer.json et package.json », « trace la licence de chaque actif tiers livré au J1, attribution comprise pour une source CC BY ». La règle `[unclassified]` est prouvée par l'échec de `npm run check` sur un fichier témoin non classé, joué une fois à la livraison.
+
+**L100-3 — Vitest et matrice des réglages** (J1, 3-5 h). Fichiers : `vite.config.ts` (bloc `test`), `package.json` (`test`), `tsconfig.json`, `tests/Frontend/i18n/translate-choice.test.ts`, `tests/Support/Room/{RoomSettingsCase, RoomSettingsMatrix}.php`, `tests/Datasets/RoomSettingsMatrix.php`, `tests/Feature/Room/RoomSettingsMatrixTest.php`. Tests : `tests/Feature/Room/RoomSettingsMatrixTest.php` — « refuse exactement les champs déclarés pour chaque combinaison aux bornes », « lève exactement les avertissements déclarés pour chaque combinaison acceptée » ; `tests/Frontend/i18n/translate-choice.test.ts` — « choisit la même forme plurielle que le sélecteur de Laravel pour 0, 1 et plusieurs », « rend la clé telle quelle quand elle manque ». La garantie du cast par valeur sous MySQL est prouvée une seule fois, par `GameFrozenColumnsMysqlTest` de 50 (contrat C6 § 7, R-04), et non par un test de 100.
+
+**L100-4 — Environnement, indexation, artefacts** (J1, 3-4 h ; les tests d'en-têtes, prouvés par `IndexingTest` de 90, n'y sont plus comptés, § 12). Dépendances : L100-1 ; L60-1, qui installe Reverb et `predis` et écrit dans `.env.example` `CACHE_STORE`, `QUEUE_CONNECTION`, `REDIS_CLIENT`, `BROADCAST_CONNECTION` et les identifiants Reverb avec les valeurs du § 10.10 (n° 46), que les scripts `dev` et `setup` supposent. Fichiers : `.env.example` (seulement les variables propres à 100 : `ACCOUNTS_*`, `SITE_INDEXABLE`, `DEPLOY_*`, `BACKUP_*`, `OPS_PROBE_TOKEN`, `LOG_*`, `REDIS_QUEUE_RETRY_AFTER`, `REVERB_ALLOWED_ORIGINS` ; § 10.10 reste la référence consolidée de toutes les lignes), `composer.json` (`dev`, `setup`), `config/app.php` (`indexable`), `config/queue.php` (`retry_after`), `public/robots.txt`, job `artifacts` de `tests.yml`, `vite.config.ts` (`tests/Load/**` hors lint). Tests : `tests/Feature/Deploy/SiteIndexingTest.php` — « lit SITE_INDEXABLE en booléen dans config('app.indexable'), faux quand la variable est absente », « livre un robots.txt qui n'interdit que /admin et /f/ » ; `tests/Feature/Architecture/ReservedPathsTest.php` — « ne déclare aucune route sous /app/ ni /apps/, et aucune autre qu'ops.probe sous /ops/ ».
+
+**L100-5 — Drainage et garde** (J1, 3-4 h ; D32 du 23/09 en estimait le cœur à 2 h). Fichiers : `app/Enums/DrainPhase.php`, `app/ValueObjects/Deploy/DrainState.php`, `app/Support/Deploy/{DeployDrain, DrainAlreadyRunning}.php`, `app/Console/Commands/{DeployDrainCommand, DeployGuardCommand, DeployReleaseCommand}.php`, `config/deploy.php`, `HandleInertiaRequests` (prop `maintenance`), `resources/js/types/global.d.ts`, `lang/fr/admin.php` (`console.deploy.*`, `console.deploy.phase.*`). Tests : `tests/Feature/Deploy/DeployDrainCommandTest.php` — « ouvre une fenêtre libre après deux relevés consécutifs sans partie en cours », « abandonne et lève le drapeau quand l'échéance passe avec une partie en cours », « laisse le drapeau expirer de lui-même si la commande meurt », « refuse de lancer un second drainage », « appelle game:reschedule avant d'attendre », « dérive sa borne par défaut de maxNaturalDurationMs et d'une marge qui couvre une pause » (assertion : `drain_margin_minutes × 60 000 ≥ EngineConstants::pauseTimeoutMs() + EngineConstants::launchCountdownMs()`, § 11.3) ; `DeployGuardCommandTest.php` — « échoue tant qu'une partie est en cours », « échoue hors d'une fenêtre libre », « passe dans une fenêtre libre sans partie en cours » ; `DeployReleaseCommandTest.php` — « lève le drapeau quelle que soit sa phase » ; `MaintenanceBannerTest.php` — « partage le drapeau de drainage en booléen avec toute page joueur ». Les refus de lancement, de « Rejouer » et du solo sont prouvés par 50 et 60 (R-04). **Place dans l'ordre** : après le socle minimal et le début de la curation, au plus tard dans le déploiement qui porte le moteur de 60 en production ; le lot ajoute alors les étapes 3 et 12 au hook de L100-6 et à `DeployHookTest` (§ 11, D37 du 23/09 — amendé le 23/09).
+
+**L100-6 — Hook, instantanés et leur élagage, reprojection** (J1, 4-6 h). Fichiers : `ops/deploy/hook.sh`, `app/Console/Commands/{BackupSnapshotCommand, BackupPruneSnapshotsCommand, CatalogReprojectCommand}.php`, `config/backup.php` (`snapshot_dir`, `snapshot_keep_days`, `prune_at`), `routes/console.php` (planification de `backup:prune-snapshots`), `lang/fr/admin.php` (`console.backup.*`, `console.reproject.*`). Tests : `tests/Feature/Deploy/BackupSnapshotCommandTest.php` — « ne fait rien et réussit sans migration en attente sous --if-pending », « sort en échec quand l'instantané ne peut être écrit ou vérifié », « refuse un répertoire d'instantanés situé sous le chemin de déploiement hors local et testing », « exclut du vidage les données des sept tables exclues du tier chaud » ; `tests/Feature/Deploy/BackupPruneSnapshotsCommandTest.php` — « supprime les instantanés plus vieux que la rétention configurée, jamais au-delà de 30 jours », « ne touche aucun autre fichier du répertoire » ; `tests/Feature/Catalog/CatalogReprojectCommandTest.php` — « reprojette par différence et conserve les identifiants stables de answer_key », « est idempotente » ; `tests/Feature/Deploy/DeployHookTest.php` — « enchaîne les étapes du hook dans l'ordre du § 11.5, sous set -e », « n'appelle jamais cache:clear, systemctl ni un php du système ». La garde des commandes d'import lancées à la main est à 20 (« Exigences adressées aux specs sœurs »). **Livré sans drainage**, avant le moteur : hook sans les étapes 3 et 12, que L100-5 ajoute (§ 11, D37 du 23/09 — amendé le 23/09).
+
+**L100-7 — Planificateur, battements, sondes, rapport de force brute, journaux** (J1, 5-7 h). Fichiers : `routes/ops.php`, `bootstrap/app.php` (`then`), `app/Http/Controllers/Ops/ProbeController.php`, `app/Http/Middleware/EnsureProbeToken.php`, `app/Jobs/Ops/{WorkerHeartbeat, ReportBruteForce}.php`, `routes/console.php`, écouteur `DiagnosingHealth` dans `AppServiceProvider`, limiteur `ops-probe`, `config/ops.php` (`probe_token`, `heartbeat.game_stale_seconds` = 90, `heartbeat.default_stale_seconds` = 600, `load.*`, `purge.daily_at`, `purge.batch_size`, `purge.max_batches` = 200, `purge.stale_hours` = 48, `brute_force.k` = 10, `brute_force.window_days` = 7, `brute_force.report_at`), `config/logging.php` (canal `game`), `app/Support/Ops/RedactPersonalData.php`. Tests : `tests/Feature/Deploy/ProbeEndpointTest.php` — « refuse toute sonde sans le jeton de supervision, avec la même réponse qu'une sonde inconnue », « refuse toute sonde quand aucun jeton de supervision n'est configuré », « déclare le worker game périmé au-delà du seuil », « ne rend qu'un statut, sans aucune donnée », « répond sans session ni cookie, en noindex et no-store », « signale une sonde d'intégrité non nulle », « signale une frame publiée hors du plancher de recadrage », « signale un périmètre qui n'a rien supprimé en 48 h alors que des lignes sont éligibles » ; `WorkerHeartbeatTest.php` — « programme le battement de la file game et celui de la file default », « écrit l'instant du battement depuis le worker qui l'exécute » ; `HealthCheckTest.php` — « fait échouer /up quand la base ne répond plus, ou Redis quand il est configuré » ; `BruteForceReportTest.php` — « programme chaque semaine le rapport de force brute sur la file default », « journalise le compte de BruteForceProbe sans aucune donnée de joueur » ; `LogRedactionTest.php` — « retire du contexte de journal toute clé de la liste close des données personnelles ». **Deux temps** (D37 du 23/09 — amendé le 23/09) : le lot entre dans le socle minimal sans `ReportBruteForce` ni `BruteForceReportTest`, livrés **après L70-11**, et sans la vérification `stale_lobby` de la sonde `purge`, branchée avec L50-8 (§ 14, § 15).
+
+**L100-8 — Moteur de purge, périmètres du J1** (J1, 4-6 h). Fichiers : `app/Jobs/Retention/RunRetentionPurge.php`, `app/Support/Retention/{RetentionPurger, RetentionWindows}.php` et gestionnaires, `app/Enums/PurgeScope.php` (`implemented()`, sans `StaleLobby`), `eligibleCount()` par gestionnaire, commandes `purge:run`, `purge:suspend`, `purge:resume`, planification, `lang/fr/admin.php` (`console.purge.*`). Tests : `tests/Feature/Retention/PurgePerimeterTest.php` — « une saved_config de 18 mois existe toujours après purge », « une frame de 13 mois survit à la purge » (noms de 10 § 11.2) ; `RetentionPurgeTest.php` — « supprime par lots bornés, du plus ancien au plus récent », « écrit une ligne purge_run par périmètre et par exécution, même sans ligne éligible », « passe à la ligne suivante quand une ligne échoue, sans annuler le lot », « part sur la file default et jamais sur la file game », « n'exécute que les périmètres implémentés, chacun par un seul gestionnaire », « n'exécute jamais stale_lobby, confié au balayage de 50 », « efface pseudo, forme normalisée du pseudo, empreinte du jeton et pseudo figé d'un siège solo inactif depuis 24 h, dans une transaction », « archive un salon oublié depuis 48 h par l'action d'archivage de 50, jamais par suppression », « supprime les sessions au-delà de leur durée de vie sans dépendre du tirage », « compte les lignes éligibles de chaque périmètre par le prédicat même de son gestionnaire » ; `PurgeSuspensionTest.php` — « met la sonde purge en alerte tant que la purge est suspendue », « reprend la purge à la levée de la suspension ». **Deux temps** (§ 14, D37 du 23/09) : d'abord les périmètres sans jeu (`framework_sessions`, `framework_failed_jobs`, `framework_reset_tokens`, `purge_run`), dans le socle minimal qui précède la curation ; puis `stale_room` avec L50-8 et la branche solo d'`orphan_player` avec L60-15, avant la première partie, chacun avec ses tests. L'ancienne « réduction possible » des périmètres du J1 est **sans objet** : tous sont livrés au J1 (D35 du 23/09) — amendé le 23/09.
+
+**L100-9 — Mise en service du VPS, premier administrateur** (J1, 7-9 h, sous S2). Dépendances : voir le tableau ; L30-7 parce que le premier déploiement complet par le hook, condition de fin de ce lot, rejoue `PlatformDataSeeder` (étape 6) et que le seeder actuel réécrit thèmes, libellés et `sort_order` ; `IndexingTest` de 90 vert, parce que le `noindex` intégral est une condition du J1 (§ 12). Fichiers : `ops/redis/tripleframes-redis.conf`, `ops/systemd/{tripleframes-redis, tripleframes-worker@, tripleframes-reverb}.service` et leurs drop-ins, `ops/nginx/additional-directives.conf`, `ops/plesk/settings.md` [nouveau]. Travail : relevé (§ 10.1, consigné), abonnement, base, racines hors déploiement, Redis, unités, nginx, FPM, planificateur, Plesk Git, mise en service initiale (§ 11.6, vérification d'`APP_ENV=production` comprise), premier administrateur et son second facteur, codes de secours rangés (§ 11.9). Aucun test Pest : terminé quand `/up` et les sondes sont vertes, que le relevé et `ops/plesk/settings.md` sont consignés et qu'un premier déploiement complet par le hook (§ 11.4) a réussi, sous sa forme sans drainage puisque le moteur n'existe pas encore (§ 11, D37 du 23/09 — amendé le 23/09).
+
+**L100-10 — Sauvegardes et restauration jouée** (J1, 6-8 h). Fichiers : `ops/backup/{backup-hot, backup-cold}.sh`, `app/Console/Commands/{BackupManifestCommand, BackupVerifyCommand}.php`, `lang/fr/admin.php` (`console.backup.verify_*`). Travail : bucket, clés, cérémonie de la clé privée et d'`APP_KEY` (§ 13.4), contrôle de lisibilité, restauration chronométrée consignée (§ 13.6), `catalog:reproject` et connexion de l'administrateur, second facteur compris, sur la cible jetable (§ 13.5). Tests : `tests/Feature/Deploy/BackupManifestCommandTest.php` — « liste chaque fichier du disque frames avec son condensat », « restreint le tier froid aux dérivés des frames publiées » ; `BackupVerifyCommandTest.php` — « réussit quand chaque frame publiée a son fichier de jeu au bon condensat », « échoue en nommant le nombre de fichiers manquants ou altérés ». **Deux temps** (§ 11.6, D37 du 23/09 — amendé le 23/09) : tiers chaud et froid, clés et contrôle de lisibilité dans le socle minimal qui précède la curation ; restauration chronométrée avant la première partie, étape (g) comprise une fois `game:reschedule` livré par 60 (L60-10).
+
+**L100-11 — Supervision externe** (J1, 2-3 h). Aucun test Pest : terminé quand chaque sonde a déclenché une alerte volontaire sur les deux canaux. Choix du prestataire par le porteur ; configuration des neuf sondes du § 15, des deux canaux d'alerte et du battement de sauvegarde ; déclenchement volontaire d'une alerte par sonde pour la prouver.
+
+**L100-12 — Test de charge : outillage** (J1, 5-7 h). Fichiers : `tests/Load/game-load.js` (scénario A, phase A2 et scénario B à salons pleins), `app/Console/Commands/LoadTestForgetCommand.php`, `lang/fr/admin.php` (`console.loadtest.*`). Tests : `tests/Feature/Deploy/LoadTestForgetCommandTest.php` — « n'efface que les salons listés dont chaque siège porte le préfixe synthétique », « supprime les faits de ces salons dans l'ordre imposé par les restrict », « ne touche aucune table du catalogue », « ne fait rien sous --dry-run ». Répétition à petite échelle (deux salons) contre la production avant la séance.
+
+**L100-13 — Test de charge : séance** (J1, 3-5 h). Aucun test Pest : terminé quand les deux critères sont tenus sur les scénarios A et B et la phase A2, et les résultats consignés. Séance complète (§ 16.2 à § 16.4), relevé de la file PHP-FPM, recalibrage des plafonds et, s'il le faut, seconde séance ; `loadtest:forget` ; consignation (§ 16.6). D33 du 23/09 chiffrait l'ensemble L100-12 + L100-13 à 8-10 h ; il mesure ici 8 à 12 h (mesure de taille, D36 du 23/09). Séance jouée avant la première partie sur le VPS, jamais avant la curation (D37 du 23/09) — amendé le 23/09.
+
+**L100-14 — Test de bout en bout** (J1, 2-3 h). Fichier : `tests/Feature/Schema/DemoCatalogueChainTest.php` (nouveau test et en-tête corrigé). Test : « un salon créé sur le catalogue de démonstration peut lancer une partie de 10 manches » (§ 8).
+
+**Lots du J2** — estimations provisoires ; fichiers et tests nommés à l'écriture de la section « Jalon 2 » :
+- **L100-15 — Préproduction et promotion** (J2, 5-7 h) : second abonnement, promotion en un geste, services sans geste root (point 1 de la section J2).
+- **L100-16 — Parcours Playwright** (J2, 6-8 h) : trois parcours manuels outillés, condition de la promotion (point 2).
+- **L100-17 — Purge complète et sondes restantes** (J2, 4-6 h) : périmètres restants du § 14 et leurs tests, sonde n° 4 étendue, sonde de l'accusé de réception en retard (point 8).
+- **L100-18 — Arrêt du service** (J2, 3-4 h) : `site:close` et `site:reopen`, état persistant, journal `admin_action` (point 7).
+- **L100-19 — Conformité d'exploitation** (J2, 4-6 h) : sous-traitants, inventaire des accès, procédure de violation, licences des dépendances et des actifs du J2 (points 3, 5, 6, 12).
+- **L100-20 — Ouverture** (J2, 4-6 h) : levée du `noindex`, restauration complète rejouée et chronométrée, `dev.<DOMAINE>` (points 4, 9, 10).
+
+**Variables d'ajustement — amendé le 23/09** : **sans objet** (D35 du 23/09 : J1 complet, aucune coupe). Les variables de développement (recadreur minimal ; retardataires, D17 du 23/09 étant sans effet depuis D35 du 23/09) n'existent plus, et la réduction des périmètres de purge du J1 que cette spec proposait (L100-8) tombe avec elles : tous les lots J1 de cette spec sont livrés au J1, seul leur ordre suit D37 du 23/09. Le nombre de films du J1, réglé par le pilote (D10 du 23/09), porte sur la curation, non sur cette spec. Les scénarios A et B du test de charge, décidés ensemble (D33 du 23/09, option « complet » retenue telle quelle), ne se coupent pas.
+
+**Total J1 : 55 à 79 h. Total J2 (provisoire) : 26 à 37 h.** Mesures de taille, jamais un calendrier (D36 du 23/09) — amendé le 23/09.
+
+---
+
+## Ce que cette spec ne décide pas
+
+| Sujet | Propriétaire |
+|---|---|
+| Le schéma, le tableau de conservation, le périmètre et l'ordre de chaque purge, la liste fermée `admin_action` | `10-catalogue-et-modele-de-donnees.md` |
+| Les défauts, bornes et presets des réglages ; la règle d'interaction de deux verdicts dans la matrice ; la validité des presets (test) ; l'action d'archivage du salon, le balayage `room:archive-idle` qui **exécute** `stale_lobby`, et le comportement visible de l'archivage anticipé ; `GameFrozenColumnsMysqlTest` et `LateJoinConcurrencyTest` | `50-salon-reglages-presets-et-lobby.md` (contrats C0, C6) |
+| Le prédicat « partie en cours », `maxNaturalDurationMs()`, `game:reschedule`, `EngineConstants` et leur ajustement après D33 du 23/09, les événements journalisés, la source de `ReceptionInstant` (middleware `CaptureReceptionInstant`), l'installation de Reverb et de `predis`, de `config/reverb.php` et de `config/broadcasting.php` (par `config:publish broadcasting`, jamais `install:broadcasting`), et l'écriture dans `.env.example` des lignes Redis et Reverb aux valeurs du § 10.10 (L60-1, n° 46) ; les tests de fin anticipée et du battement que 10 nomme (§ 3.3) | `60-moteur-de-partie-temps-reel-et-mode-solo.md` (contrats C7, C8, C17) |
+| La sémantique du limiteur de soumission et du refus neutre ; la place des cas concurrents de verrouillage ; la requête de `BruteForceProbe` et le recalibrage du couple (`attemptsPerRound`, vivier) avant l'onglet Avancé | `70-validation-des-reponses.md` (contrats C10, C12) |
+| La formule du bonus, `ScoringRules::VERSION`, le gel du podium | `80-scoring-podium-et-fin-de-partie.md` (contrat C13) |
+| Le texte et le rendu du bandeau de maintenance, la page d'erreur (503 compris), le tableau d'indexation route par route, le middleware d'en-têtes et le drapeau de route **et leurs tests dans les deux états** (`IndexingTest`), la liste `WATCHED`, l'option `--perimeter` et les interdits de tokens ; le texte d'attribution des listes noires sur la page légale | `90-ecrans-etats-et-structure.md` (contrat C16) |
+| Les délais et essais du job de traitement d'image, le re-téléchargement des masters, `takedown:reconcile`, l'écran « inspecter une partie » ; les requêtes des sondes de frame (20 § 5.9) et leurs tests ; le moyen par lequel les commandes d'import distinguent un lancement à la main d'une invocation par `RunCatalogImport` ; les clés du domaine `admin` | `20-back-office-curation.md` (contrats C9, C15) |
+| La scission de `PlatformDataSeeder` (presets réconciliés, thèmes et sagas en insertion-si-absent) | `30-themes-vivier-et-tirage-des-variantes.md` (contrat C18-bis § 6) |
+| Le pack d'avatars et sa licence, les listes noires et leurs en-têtes (et leur test), la règle de pseudo, la procédure `player_token` hors rotation, `AccountSwitches` et la lecture des variables `ACCOUNTS_*` | `40-comptes-auth-sociale-et-avatars.md` [J1] (contrats C4, C5) |
+| La règle de langue, les domaines de traduction, les trois vérifications de couverture | `05-i18n-et-langues.md` (contrat C15) |
+| **Questions ouvertes** : le nom de domaine (décision 5, à acheter avant la semaine 4 selon D1 du 23/09) ; les résultats du relevé du VPS (S2) ; les noms du stockage de sauvegarde, du prestataire de supervision et du second canal d'alerte ; la personne de confiance et le second administrateur ; le nombre de processus `game` après D33 du 23/09 (signalé au porteur s'il dépasse un) ; le passage quotidien du tier froid (N100-2) ; la collision avec 60 sur `/apps/` (N100-1) ; les exigences nouvelles aux specs sœurs, dont la garde d'instantané des commandes d'import de 20. L'écart de D1 du 23/09 (Lots) n'est plus une question : c'est une mesure de taille depuis D36 du 23/09 — amendé le 23/09 | le porteur |
+| Les sujets de la section « Jalon 2 — à écrire » | `100`, section J2, à écrire |

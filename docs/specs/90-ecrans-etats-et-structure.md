@@ -1,0 +1,999 @@
+# Écrans, états et structure
+
+> **Spec partielle : section J1 seule.** Ce fichier contient la section du jalon 1 — **pages publiques et socle des écrans de jeu** (D3 du 23/09) — écrite en entier, puis une section « Jalon 2 — à écrire » qui liste, sans les rédiger, les sujets que la carte des specs (`00` § Carte des specs, ligne `90`) attribue encore à cette spec. Le titre du fichier ne change pas (notes du rédacteur en chef, point 9).
+
+Ce document est le **propriétaire de la structure des écrans joueurs** de TripleFrames : il décide dans quelle coquille chaque page est rendue, dans quel thème, avec quels domaines de traduction, quels composants de présentation elle a le droit de composer, comment une image de jeu est encadrée, comment une manche parle à un lecteur d'écran, ce que le pied de page contient sur chaque écran, écran de jeu compris, comment les pages publiques sont servies et lesquelles un robot a le droit d'indexer. Il possède en propre le contrat **C16** de la feuille de contrats du 23/09 (coquilles, conteneur d'image, annonceur `aria-live`). Il rédige aussi en entier, par délégation, les règles de **C15** (domaines et clés de traduction), dont la feuille de contrats nomme `05` propriétaire (index, C15 § 1) : `90` y fixe la table de déclaration par page, la propriété des préfixes et les clés figées, parce qu'elles découlent des coquilles ; la mécanique reste à `05`. Il ne possède **aucune table** : quand une donnée manque, l'exigence est adressée à `10`, seul propriétaire du schéma (`10` § 15). Il ne possède pas davantage le comportement de ce que les écrans montrent : le salon et le lobby sont à `50`, le moteur, la révélation et le solo à `60`, la saisie et le QCM à `70`, le score et le podium à `80`, l'identité invitée à `40` [J1], la frame servable et l'aperçu admin à `20`, la variable d'indexation, `robots.txt`, la méta-vérification du script anti-couleur, le drapeau de drainage et la CI à `100`. Il leur fournit le socle qu'ils consomment ; ils ne le redéfinissent pas.
+
+**Convention de renvoi, valable dans tout le document.** « règle N » = `CLAUDE.md` §7 ; « principe N » = `00-overview.md` § Principes directeurs ; « décision N » = une des 19 décisions du 22/09 (`questions-ouvertes.md`) ; « DN du 23/09 » = décisions du 23/09, consignées dans `questions-ouvertes.md` § Décisions du 23/09/2026 — jalon 1 ; « contrat Cn », « E10-nn », « A-nn », « R-nn » = feuille de contrats partagés du 23/09 (contrat, exigence consolidée adressée à `10`, amendement consolidé, conflit résolu) ; « n° N » = contradiction relevée par la pré-analyse, numérotée à partir de 0 ; « question écartée 90 Qn » = question de la pré-analyse non posée au porteur, dont le défaut retenu s'applique ; « boundary map n° N » = entrée de la carte de propriété des sujets de la pré-analyse ; « 10 § x » = section de la spec du schéma. Les numéros de ligne cités valent au commit `d167a6a`.
+
+> **État réel du dépôt au moment d'écrire, vérifié le 23/09 au commit `d167a6a`.**
+> - **Coquilles.** `resources/js/app.tsx` choisit la coquille par `switch` sur le nom de page : `welcome` → aucune coquille, `admin/*` → `AdminLayout`, `auth/*` → `AuthLayout`, `settings/*` → `[AppLayout, SettingsLayout]`, tout le reste → `AppLayout` (barre latérale du starter). **Aucun cas `game/*`, `legal/*` ni `error`.** `AppLayout` rend `app-sidebar.tsx`, dont le pied porte encore deux liens du starter (dépôt GitHub du kit, documentation Laravel ; clés `common.nav.repository` / `documentation`). Aucune page n'existe sous `pages/game`, `pages/room`, `pages/legal` ; aucun répertoire `layouts/game`, `layouts/public`, `components/{game,room,public,state}`, `hooks/game`, `lib/game`.
+> - **Forçage d'apparence.** Le mécanisme en trois moitiés existe, écrit pour le back-office **clair** : `App\Http\Middleware\ForceAdminAppearance` (alias `admin.appearance`, posé sur le groupe de `routes/admin.php`), attribut Blade `data-appearance-forced` de `resources/views/app.blade.php` (dont le commentaire dit « posé par `ForceAdminAppearance` et par lui seul »), hook générique `useForcedAppearance()` appelé en `'light'` par `admin-layout.tsx`. Aucun forçage sombre.
+> - **SSR.** `config/inertia.php` porte `'ssr' => ['enabled' => true]` sans entrée `ssr.tsx` ; `package.json` porte un script `build:ssr`. En développement, le greffon Vite d'Inertia retombe sur `app.tsx` et le rendu serveur fonctionne ; en production aucun processus Node n'est prévu (`00` § Exploitation). `10` § 1.7 et le docblock de `User.php` disent « le SSR est activé », le docblock de `use-forced-appearance.ts` dit l'inverse.
+> - **Indexation.** `public/robots.txt` vaut `User-agent: *` / `Disallow:` (tout explorable, `/admin` compris). **Zéro occurrence** de `X-Robots-Tag`, `noindex` ou `Referrer-Policy` dans `app/`, `config/`, `resources/`, `routes/`, `bootstrap/`, `public/`. `App\Http\Middleware\VaryOnLanguage` (drapeau de route `vary_language`, en tête du groupe `web`) n'est posé que sur `home` ; son docblock et le commentaire de `routes/web.php` disent les pages légales « mono-langue FR, cachables ».
+> - **Routes joueur.** `routes/web.php` : `home` (`translations:legal`), `locale.update`, `dashboard` (groupe `auth`, `verified`, **sans** `translations:`). `routes/settings.php` : `translations:account`. `config/fortify.php` : `'middleware' => ['web', 'translations:account']`, `home` = `/dashboard`, `Features::registration()` actif. **Aucun** `routes/legal.php`, `routes/game.php`, `routes/channels.php`. `resources/views/` ne contient que `app.blade.php` (`<html lang>` dynamique, style anti-flash en `oklch` littéral, `<title>` tiré de `config('app.name')`, aucune balise robots).
+> - **Traductions.** `lang/{fr,en}/legal.php` : `contact.{heading,description}` (`:email`), `french_only`, `footer.{notice,privacy,terms}`, `{notice,privacy,terms}.title`, `tmdb.attribution`, `updated_at` (`:date`). `lang/{fr,en}/game.php` : la seule clé `frame.alt` (`:index`, `:total`). `lang/{fr,en}/common.php` : `action.*`, `state.*`, `nav.*` (starter compris), `language.{change,current,label}`, `home.*` = textes du starter Laravel. `App\Avatars\AvatarRef::ALT_KEY_*` pointent un domaine `avatar.*` qui n'existe pas (n° 34). `TranslationDomains::KNOWN` = sept domaines ; `selected()` rend `['admin']` seul dès que `admin` est demandé.
+> - **Accueil.** `resources/js/pages/welcome.tsx` est la page du starter : couleurs hexadécimales, valeurs en `px`, variantes `dark:`, liens vers la documentation Laravel, lien « Register », aucun pied de page, aucun sélecteur de langue. `LanguageSwitcher` (`components/language-switcher.tsx`) existe et n'est **monté nulle part** ; son `Spinner` garde le `role="status"` du composant généré.
+> - **Composants.** `components/ui/` contient 29 composants : alert, avatar, badge, breadcrumb, button, card, checkbox, collapsible, dialog, dropdown-menu, icon, input-otp, input, label, navigation-menu, placeholder-pattern, select, separator, sheet, sidebar, skeleton, sonner, spinner, **table, tabs** (installés, contrairement à ce qu'écrivent `CLAUDE.md` §3 et `00` l.329), textarea, toggle-group, toggle, tooltip. Absents : slider, switch, progress, scroll-area, radio-group, popover, command — et `form`, refusé ici. La dépendance ombrelle `radix-ui` fournit déjà les primitives des cinq premiers. `ui/spinner.tsx` porte `role="status"` et `aria-label="Loading"` en dur ; `ui/sheet.tsx` (l.73-76) et `ui/dialog.tsx` (l.64-67) rendent après leurs enfants un bouton de fermeture au nom accessible « Close », en dur ; `ui/alert.tsx` porte `role="alert"` ; le `Toaster` de sonner, monté globalement par `withApp` d'`app.tsx`, rend toujours une section `aria-live="polite"`, même sans toast, et c'est lui qui consomme le flash `toast` (`hooks/use-flash-toast.ts`).
+> - **Script anti-couleur.** `scripts/check-theme-tokens.mjs`, branché sur `npm run check` (donc sur `composer ci:check` et la CI), refuse hexadécimal, fonctions de couleur, `px`, variante `dark:` et utilitaires de palette littérale. Son `WATCHED` ne couvre que le back-office (trois répertoires, six fichiers : 31 fichiers vérifiés au 23/09). Aucune liste `EXEMPT`, aucune méta-vérification. Hors périmètre : 66 fichiers `.ts`/`.tsx` joueurs, dont **21 en infraction** au relevé du 23/09, règles du script appliquées telles quelles (`welcome.tsx`, `dashboard.tsx`, `settings/profile.tsx`, `auth/two-factor-challenge.tsx`, `auth/forgot-password.tsx`, `auth/login.tsx`, `auth/verify-email.tsx`, les trois gabarits `layouts/auth/*`, `app-header.tsx`, `app-logo.tsx`, `appearance-tabs.tsx`, `delete-user.tsx`, `input-error.tsx`, `nav-footer.tsx`, `passkey-item.tsx`, `password-input.tsx`, `text-link.tsx`, `two-factor-setup-modal.tsx`, `user-info.tsx`).
+> - **Tokens.** `resources/css/app.css` : tokens shadcn *neutral* sur `:root` et `.dark`, `@custom-variant dark (&:is(.dark *))`. Aucun `--success`, aucun `--aspect-frame`.
+> - **Props partagées.** `HandleInertiaRequests::share()` : `name`, `auth.user` (modèle `User` entier), `sidebarOpen`, `locale`, `locales`, `translations`. Ni `frameFormat`, ni `maintenance`, ni `realtime`.
+> - **Tests.** Aucun `tests/Feature/Public/`, aucun `tests/Frontend/` ; `vite.config.ts` n'a aucun bloc `test` (Vitest non configuré). `tests/Feature/I18n/` : `LangVersionTest`, `SetLocaleTest`, `TranslationCoverageTest`.
+> - **Exceptions.** `bootstrap/app.php` ajoute `SetLocale`, `HandleAppearance` et `HandleInertiaRequests` en **fin** de groupe `web`, après `SubstituteBindings` ; `role` (`EnsureUserHasRole`) est placé avant `SubstituteBindings` par `prependToPriorityList`. `withExceptions()` ne déclare que `shouldRenderJsonWhen`. inertia-laravel 3 fournit `Inertia::handleExceptionsUsing()` et `ExceptionResponse::usingMiddleware()->withSharedData()` (`vendor/inertiajs/inertia-laravel/src/ExceptionResponse.php`).
+> - **Divers.** Pas de `public/brand/`, pas de `public/avatars/`, pas de `config/legal.php`. Le docblock d'`App\Models\TakedownRequest` évoque « la page publique de suivi », qu'aucune spec ne prévoit.
+>
+> Tout ce qui suit est à construire ou à corriger ; rien de ce qui existe n'est à défaire, hors les deux retraits nommés au § 2.2 (forçage clair, D8 du 23/09) et au § 6.6 (clés du starter).
+
+---
+
+## 1. Périmètre et découpage par jalon
+
+### 1.1 Ce que la section J1 couvre, et pourquoi elle est écrite avant `60`
+
+`00` l.363 ne donnait à `90`, au jalon 1, que « la seule section pages publiques ». Or le lobby, la manche, la révélation, le podium et le solo sont livrés au jalon 1, et leurs règles de structure — coquille plein écran, thème sombre forcé, composants autorisés, annonces d'accessibilité, contrainte portrait — appartiennent à `90` (`00` § Carte des specs). Sans elles, `60` et le code les auraient fixées au fil de l'eau, et le jalon 2 aurait repris des écrans déjà livrés. D3 du 23/09 tranche : la section J1 de `90` couvre **(a)** les pages publiques et **(b)** le socle de coquille de jeu, et elle est écrite **avant** `60` (A-51, A-64, A-79). Ces règles sont dues au jalon 1 quoi qu'il arrive ; les écrire une fois, dans leur spec propriétaire, coûte moins que les reprendre.
+
+| Partie | Contenu au J1 | Sections |
+|---|---|---|
+| (a) Pages publiques | Routes, pied de page sur **tous** les écrans (replié en jeu), mentions légales / CGU / confidentialité / « signaler un contenu » **en squelette**, textes provisoires marqués, attribution TMDB (pied et révélation), mention d'acceptation des CGU sur l'écran de pseudo, `<html lang>` et corps légal FR, accueil et son champ de code, pages d'erreur, `noindex` intégral et règles d'indexation écran par écran, `Referrer-Policy`, contenu exigé de `robots.txt` (fichier de 100) | § 3, § 4, § 5 |
+| (b) Socle des écrans de jeu | Cas `game/*` de `app.tsx`, `GameLayout` plein écran forcé sombre par les tokens, conteneur d'image 16:9 découplé réutilisé en aperçu admin, annonceur `GameAnnouncer`, contrainte portrait clavier ouvert, liste close des composants, composants shadcn par jalon, périmètre `WATCHED` du script anti-couleur, bandeau de maintenance, valeur du palier affichée, inventaire des écrans du J1 et de leurs états | § 2, § 6, § 7, § 8, § 9, § 10 |
+
+**Ce qui n'est pas au J1**, et reste listé au § 11 : tout écran de compte (40-J2), l'onglet Avancé et les configurations sauvegardées (50-J2), les pages légales opposables, le formulaire de retrait, la levée du `noindex`, la page de fermeture du service, le geste de signalement et le pseudo masqué. Au J1, le site est intégralement `noindex` et n'a aucun compte de production hors le premier admin (D1, D4 du 23/09) : **rien de juridique n'y est bloquant** (`00` § Jalons et budget-temps), mais le squelette existe, pour que le pied de page ne soit jamais un lien mort et que le jalon 2 ne soit qu'un remplissage.
+
+### 1.2 Contrats possédés et consommés
+
+| Contrat | Rôle de `90` | Ce qui en est rédigé ici |
+|---|---|---|
+| **C16** — coquilles, conteneur d'image, annonceur | Propriétaire (D3 du 23/09) | § 2, § 3, § 7, § 9, en entier |
+| **C15** — domaines et clés de traduction | Rédacteur délégué (propriétaire : `05`, C15 § 1) | § 6, en entier. La **mécanique** (`TranslationDomains`, `SelectTranslationDomains`, `t()`, `lang:types`) reste celle de `05` et ne change pas ; ce qui est rédigé ici — table de déclaration par page, propriété des préfixes, clés figées — découle entièrement des coquilles, d'où sa place. `05` reçoit de `90`, pour C15, les amendements A-37, A-39, A-40, A-42, A-48 et A-50 (C15 § 6). |
+| C5 — pseudo et avatars (40 [J1]) | Consommateur | Composants `player-avatar.tsx` et `avatar-picker.tsx` dans la liste close ; règle `alt` I5.9 |
+| C7 — canaux, événements, resynchronisation (60) | Consommateur | Les pages `game/*` consomment `state`, `seatToken`, `realtime`, `settingsNotice` ; la chronologie se construit sur `RoundTimeline` |
+| C9 — frame servable (20) | Consommateur | `FrameGeometry::GAME_WIDTH` / `GAME_HEIGHT` → prop `frameFormat` ; jeton `--aspect-frame` |
+| C13 — score, classement, podium (80) | Consommateur | `TierWindow`, fonction `tierValueAt` (D29 du 23/09), blocs `RoundFinder`, `Leaderboard`, `Podium` rendus tels quels |
+| C17 — prédicat « partie en cours » (60) | Consommateur | Aucun rendu : le bandeau ne dit jamais combien de parties sont en cours (C18-bis § 3) |
+| C18-bis — drainage et garde (100) | Consommateur | Prop `maintenance: boolean`, clés `common.maintenance.*`, bandeau |
+
+---
+
+## 2. Coquilles et thème (contrat C16 § 2.1-2.4, § 2.9)
+
+### 2.1 Le switch de `resources/js/app.tsx` [modifié]
+
+Le choix de coquille reste un `switch` sur le nom de page (`CLAUDE.md` §5), dans **cet ordre** :
+
+```tsx
+case name === 'welcome':
+case name === 'error':
+case name.startsWith('legal/'):   return PublicLayout;
+case name.startsWith('game/'):    return GameLayout;
+case name.startsWith('admin/'):   return AdminLayout;
+case name.startsWith('auth/'):    return AuthLayout;
+case name.startsWith('settings/'):return [AppLayout, SettingsLayout];
+case name === 'dashboard':        return AppLayout;   // page existante du starter, cible de fortify.home
+default:                          return PublicLayout;
+```
+
+Règles de répartition, et leur raison :
+
+- **Toute page nommée `game/*` est forcée en sombre, et elle seule** (principe 13, `questions-ouvertes` § Déjà tranché). Les pages `game/*` du J1 sont `game/lobby` et `game/room-expired` (50) et `game/solo` (60).
+- **Le salon multijoueur est une seule page, `game/lobby`, du lobby au podium.** Manche, joueur verrouillé, révélation, podium et retour au lobby après « Rejouer » en sont des **états**, jamais des pages distinctes : une visite Inertia entre deux états démonterait la page, donc la souscription Echo, l'horloge resynchronisée et le registre de l'annonceur, et ferait frapper un nouveau jeton d'onglet par `ClaimSeatTab` (C7 § 4.9). La même règle vaut pour `game/solo`. Le changement d'écran vient du magasin de 60 (`lib/game/store.ts`), jamais d'une navigation. Le nom `game/lobby` est celui figé par C16 ; il désigne la page du salon, pas seulement son attente. C16 § 2.1 ne nomme aucune page `game/room` : 50 § 7.2 et 60 § 10.1 rendent `game/lobby` en `lobby` comme en `playing`, podium compris, et toute mention résiduelle d'une page `game/room` dans une spec voisine est à retirer (points restés ouverts).
+- **Les pages d'entrée** — création d'un salon, entrée par code ou par lien (pseudo et avatar), démarrage du solo (choix d'un preset, D19 du 23/09, et identité au premier siège solo) — sont des pages `room/*`, rendues par le cas par défaut dans `PublicLayout` et **dans l'apparence du visiteur** : ce sont des formulaires ordinaires du site. Leurs noms appartiennent à 50 (salon : `room/create` par `room.create`, `room/join` par `room.entry`) et à 60 (solo : `room/solo` par `solo.create`, 60 § 16.4). La **bascule vers le sombre a lieu à l'entrée du lobby**, et elle est assumée : le lobby est un écran temps réel qui se prolonge sans navigation en manche, et c'est entre le lobby et la première manche qu'aucune bascule ne doit se produire (C16 § 2.1). Une bascule au moment où le joueur change d'écran de toute façon ne clignote pas : la moitié cliente du forçage s'applique en `useLayoutEffect`, avant la peinture (§ 2.2).
+- Le reste suit la préférence du visiteur, back-office compris (D8 du 23/09).
+
+### 2.2 Forçage sombre en trois moitiés, et retrait du forçage clair (D8 du 23/09)
+
+Une moitié seule ne suffit pas, et le montage du back-office l'a prouvé : la moitié serveur couvre le premier chargement (Blade), la moitié cliente couvre la navigation Inertia (qui ne repasse jamais par Blade), et l'attribut empêche `initializeTheme()` de reposer la préférence stockée entre les deux.
+
+1. **Serveur** — `App\Http\Middleware\ForceGameAppearance` [nouveau], alias `game.appearance` déclaré dans `bootstrap/app.php` : `View::share('appearance', 'dark')` et `View::share('appearanceForced', true)`, avant `$next`. Posé sur le groupe de `routes/game.php` qui rend les pages `game/*`. **Règle de groupe** : une route portant `game.appearance` ne rend **que** des pages `game/*`. La vue est rendue avant que le middleware reprenne la main, il ne peut donc pas décider après coup ; une route qui doit rendre soit le lobby soit un formulaire d'entrée (lien de salon ouvert sans siège) se découpe : elle redirige le visiteur sans siège vers la page d'entrée `room/*`, hors du groupe. Testé par `ShellTest` (« ne marque jamais une page publique comme d'apparence forcée »).
+2. **Blade** — l'attribut `data-appearance-forced` de `resources/views/app.blade.php` [existant] ; seul son commentaire est corrigé (il est posé par `ForceGameAppearance`, et par lui seul depuis D8 du 23/09).
+3. **Client** — `useForcedAppearance('dark')` (`hooks/use-forced-appearance.ts`, [existant]) appelé par `GameLayout`. Son compteur de montages au niveau module résiste au double montage de `strictMode` ; la restauration au dernier démontage recalcule la préférence stockée.
+
+**Retraits (D8 du 23/09)**, tous dans le lot **L90-1**, livré avant tout lot du back-office de 20 : L20-2 en dépend et ne retire rien lui-même, pour que ces retraits, propriété de C16 (§ 2.2 du contrat), n'aient qu'un écrivain. Sont retirés : `App\Http\Middleware\ForceAdminAppearance`, l'alias `admin.appearance` et son usage dans `routes/admin.php`, l'appel `useForcedAppearance('light')` de `layouts/admin/admin-layout.tsx` et son docblock. Avec eux, **tout commentaire qui décrit encore un back-office « forcé en clair »** ou `ForceAdminAppearance` comme poseur de l'attribut, pour qu'aucun docblock ne mente après le lot : `resources/js/app.tsx` (commentaire du cas `admin/*`, l.18-19, et de `progress`, l.40-41) ; `resources/views/app.blade.php` (commentaire de l'attribut, l.7-11) ; `hooks/use-forced-appearance.ts` (docblock, l.12-18 : un seul forçage, sombre) ; `hooks/use-appearance.tsx` (docblock de l'attribut, l.45) ; le docblock du groupe de `routes/admin.php`, où la puce `admin.appearance` disparaît et le décompte suit le groupe réel (le groupe final compte **cinq** middlewares, puisque L20-2 ajoute et décrit `admin.2fa`, 20 § 2.3) ; `components/admin/admin-input-error.tsx` l.13 (fichier de 20) ; `scripts/check-theme-tokens.mjs` l.15. L90-7, qui crée `ForceGameAppearance`, le nomme ensuite comme moitié serveur dans le commentaire d'`app.blade.php` et dans le docblock d'`use-forced-appearance.ts` : aucun commentaire ne cite ainsi une classe qui n'existe pas encore. Le back-office suit désormais l'apparence choisie : forcer le clair n'avait d'autre motif qu'une préférence, alors que la revue d'image exige de voir l'image **telle qu'elle sera servie en jeu** (`questions-ouvertes` § Déjà tranché, grille d'exclusion), ce que seul un cadre sombre local donne.
+
+**Portée sombre locale** — `resources/js/components/game/game-theme-scope.tsx` [nouveau] : `GameThemeScope({ children, className }: { children: ReactNode; className?: string })` rend `<div className={cn('dark bg-background text-foreground', className)}>`. La classe `dark` redéfinit les tokens pour le seul sous-arbre (`.dark` de `app.css`), sans toucher `<html>`. Usage **réservé** aux cadres de revue et de prévisualisation du back-office (20, C9-bis) ; **aucun portail** (`Dialog`, `Sheet`, `DropdownMenu`) n'y est ouvert, puisqu'un portail se rend hors du sous-arbre et perdrait la portée.
+
+**Aucun SSR en v1** (n° 70, E10-13). `config/inertia.php` passe à `'ssr' => ['enabled' => false]`. Motif : la production n'a que trois briques système (Redis, deux workers, Reverb, `00` § Exploitation) et aucun processus Node ; garder le SSR actif en développement seulement ferait diverger dev et production sur le rendu initial, donc sur le forçage d'apparence et l'indexation. Les docblocks de `User.php` et de `use-forced-appearance.ts` sont corrigés en conséquence ; la justification de `#[Hidden]` (`10` § 1.7) reste entière, puisque `data-page` sérialise les props partagées dans le HTML de toute façon. Le script `build:ssr` reste inutilisé.
+
+### 2.3 `GameLayout` [nouveau] — `resources/js/layouts/game/game-layout.tsx`
+
+Export par défaut `GameLayout({ children }: GameLayoutProps)` ; `GameLayoutProps = { children: ReactNode }` rejoint `resources/js/types/ui.ts`.
+
+De haut en bas, la coquille contient **exactement** :
+
+1. `MaintenanceBanner` (§ 3.3), et sous lui, le cas échéant, l'avis de page expirée (ci-dessous) ;
+2. `<main id="game-main" className="min-h-0 flex-1">` — la page ;
+3. une ligne basse contenant **exactement** `LanguageSwitcher iconOnly` [existant] et le déclencheur de `SiteFooter variant="collapsed"` (§ 3.1) ;
+4. `GameAnnouncer` (§ 7.4), une seule région.
+
+Comportement :
+
+- **Hauteur** : variable CSS `--game-viewport-height`, tenue par `resources/js/hooks/game/use-visual-viewport.ts` [nouveau] depuis `window.visualViewport` (hauteur visible, clavier ouvert compris) et écrite sur `document.documentElement` ; repli `100dvh`, jamais `100vh` (principe 5), par la classe `h-[var(--game-viewport-height,100dvh)]` sur la racine de la coquille. Le hook suit le patron du compteur de module de `useForcedAppearance` (double montage) et retire la variable au dernier démontage. C'est la seule valeur mesurée en pixels que le socle écrit, et elle n'est pas une valeur de design.
+- **Défilement** : la racine de la coquille est `overflow-hidden` ; un état qui doit défiler (révélation, podium, lobby rempli jusqu'à `PlatformLimits::roomSeats()` sièges) le fait dans une `ScrollArea` à l'intérieur de `main`, jamais la page. `resources/js/hooks/game/use-overscroll-lock.ts` [nouveau] pose `overscroll-behavior-y: none` sur `<html>` et `<body>` pendant le montage (pull-to-refresh désactivé, principe 5), même patron de compteur.
+- **Ni barre latérale, ni fil d'Ariane, ni en-tête** : l'écran appartient à l'image, au chrono et à la saisie.
+- **Aucun toast de jeu, et aucun `Toaster` sur une page de jeu.** La section que rend le `Toaster` de sonner est une région `aria-live` **toujours présente**, même vide ; laissée dans `withApp` d'`app.tsx`, elle ferait deux régions vivantes sur chaque page de jeu, contre C16 § 4 (« une seule région `aria-live` par page de jeu »). `<Toaster />` sort donc de `withApp` [`app.tsx` modifié] et est monté par `PublicLayout`, `AuthLayout`, `AppLayout` et `AdminLayout`, **jamais par `GameLayout`**. Aucune page, aucun composant ni aucun hook de jeu n'émet de toast, et aucun contrôleur de `routes/game.php` ne pose de flash `toast` : un message de jeu passe par du texte à l'écran et par l'annonceur.
+- **Seul flash subi : l'expiration de page** (419 sur une visite Inertia, § 4.8). `GameLayout` le lit par `useFlashNotice(): string | null` (`resources/js/hooks/game/use-flash-notice.ts` [nouveau], même événement `router.on('flash')` que `hooks/use-flash-toast.ts`), le rend en texte sous `MaintenanceBanner`, dans un `Alert` au rôle `note`, jusqu'à la visite suivante, et l'annonce par `announce()` (§ 7.4) : le message reste visible sans créer de seconde région.
+- **Exigence à 50** : les refus du lobby (50 § 8.1, état « erreur ») s'affichent dans la page — erreurs de champ liées par `aria-describedby`, refus de lancement ou de « Rejouer » en `Alert` au rôle `note` portant `room.refusal.*` ou `common.maintenance.launch_blocked` — et s'annoncent par `announce()`, **jamais par un toast `sonner`** : sur une page de jeu, un toast n'aurait d'ailleurs plus aucun `Toaster` pour s'afficher. La mention « toasts `sonner` » de 50 § 8.1 est à retirer avant L50-4 (points restés ouverts).
+
+### 2.4 `PublicLayout` [nouveau] et coquilles du starter
+
+`resources/js/layouts/public/public-layout.tsx` se compose de :
+
+- un lien d'évitement vers `main` (première cible de tabulation, clé `common.nav.skip_to_content`) ;
+- `components/public/public-header.tsx` : nom du site **en texte** (prop partagée `name`, aucun logo : principe 13), `LanguageSwitcher` **avec libellé visible** (principe 8 : « étiqueté, présent dès l'accueil »), et `components/public/appearance-toggle.tsx` (clés `common.appearance.{label,light,dark,system}`), parce que la page de réglage d'apparence du starter est derrière `auth` et qu'un invité doit pouvoir choisir son thème (principe 13 : « le reste du site suit le choix d'apparence du joueur ») ;
+- `MaintenanceBanner` ;
+- `<main id="public-main">` ;
+- `SiteFooter variant="full"` ;
+- `GameAnnouncer` (§ 7.4), pour l'annonce `common.language.changed` du `LanguageSwitcher` de l'en-tête ;
+- `<Toaster />` de sonner (§ 2.3). Hors jeu, l'annonceur et la section du `Toaster` coexistent : l'invariant d'une seule région vivante ne vise que les pages de jeu (C16 § 4).
+
+Les liens de connexion et d'inscription relèvent des interrupteurs de 40 : `public-header.tsx` les rend — helpers Wayfinder `login` et `register`, clés `common.nav.log_in` et `common.nav.register` [existantes] — **si et seulement si** la prop partagée `accountsOpen: boolean` (40 § 8.2, `registrationOpen()`) est vraie. Elle vaut faux en production au J1, puisqu'aucun compte de production n'existe hors le premier admin (D1 et D4 du 23/09 ; boundary map n° 39) : d'où leur absence, sans qu'aucun littéral d'environnement n'entre dans l'en-tête. `AuthLayout` et `AppLayout`, fichiers du starter, reçoivent `SiteFooter variant="full"` sous leur contenu, et `<Toaster />` comme `AdminLayout` (§ 2.3). `dashboard` reste dans `AppLayout` (cas explicite de C16 § 2.1) : page du starter conservée au J1 comme cible de `fortify.home`, son retrait relève de 40-J2. Les deux liens du starter de `app-sidebar.tsx` sont retirés avec leurs clés (§ 6.6).
+
+### 2.5 Règle de coquille mobile (dette REPRISE n° 24)
+
+Sous le point d'arrêt mobile, `components/ui/sidebar.tsx` rend la barre latérale dans un `Sheet` dont le titre et la description accessibles (« Sidebar », « Displays the mobile sidebar. ») sont **en dur, en anglais**, et non supplantables de l'extérieur. `components/ui/*` ne se modifie pas. D'où la règle générique (A-80) :
+
+- ne **jamais** s'appuyer sur le `Sheet` mobile intégré de `ui/sidebar` ;
+- toute coquille mobile compose son propre `<SheetContent>` avec un `SheetTitle` et une `SheetDescription` **traduits** ;
+- côté joueur, les clés sont `common.nav.menu` [existante] et `common.nav.menu_description` ; côté back-office (20), `admin.a11y.nav_mobile` et `admin.a11y.nav_mobile_description` ;
+- **le bouton de fermeture généré n'est jamais exposé.** `SheetContent` et `DialogContent` rendent toujours, après leurs enfants, un bouton dont le nom accessible est « Close », en dur et en anglais, sans prop pour le remplacer (`ui/sheet.tsx` l.73-76, `ui/dialog.tsx` l.64-67) : un lecteur d'écran francophone l'entendrait sur chaque écran qui ouvre une feuille, contre la règle 4. Toute `SheetContent` ou `DialogContent` d'un fichier surveillé le masque donc par `className="[&>button:last-child]:hidden"` (patron de REPRISE n° 24, restreint au dernier enfant pour ne pas masquer le bouton propre) et compose son propre `<SheetClose>` ou `<DialogClose>`, étiqueté `common.action.close` [existante] côté joueur, par une clé `admin.*` de 20 côté back-office. Chaque feuille porte un `SheetTitle` et une `SheetDescription` traduits : `SiteFooter` replié (§ 3.1), `GameHelp` (§ 7.7, `game.help.description`), et toute feuille à venir.
+
+Au J1, `GameLayout` et `PublicLayout` n'ont pas de navigation mobile ; `SiteFooter variant="collapsed"` compose son propre `SheetContent` (§ 3.1). `AppLayout` garde la barre latérale du starter pour `dashboard` et `settings/*`, que ne voient au J1 que le porteur et les comptes de test : **dette assumée et nommée**, soldée au J2 quand 40 réécrit les écrans de compte sous une coquille à en-tête (question écartée « 90 Q3 » : en-tête simple hors partie).
+
+---
+
+## 3. Pied de page, attribution TMDB et bandeau de maintenance
+
+### 3.1 `SiteFooter` [nouveau] — `resources/js/components/public/site-footer.tsx`
+
+`SiteFooter({ variant }: { variant: 'full' | 'collapsed' })`. Les pages légales doivent être atteignables depuis le pied de page de **tous** les écrans, écran de jeu compris (`00` § Fonctionnalités v1, « Site public et conformité » ; principe 12).
+
+- **Liens**, toujours par Wayfinder (principe 11) : `legal.notice`, `legal.terms`, `legal.privacy`, `takedown.create` ; libellés `legal.footer.{notice,terms,privacy,report}`. Il intègre `TmdbAttribution` (§ 3.2).
+- **Forme `full`** (`PublicLayout`, `AuthLayout`, `AppLayout`) : une rangée de liens et l'attribution ; les liens sont des `<Link>` Inertia, puisqu'on quitte une page ordinaire pour une autre.
+- **Forme `collapsed`** (`GameLayout`) : une seule ligne, un bouton `legal.footer.label` qui ouvre un `Sheet side="bottom"` (titre `legal.footer.label`, description `legal.footer.sheet_description` en `sr-only`, règle § 2.5) contenant les quatre liens et l'attribution. Liens **`target="_blank" rel="noopener"`**, suffixés de `legal.new_tab` en `sr-only`. **Jamais de visite Inertia depuis la page de jeu** : quitter la page démonterait la souscription et ferait courir le délai de grâce de déconnexion (`00` § Déroulé d’une partie, cycle de vie) — la partie n'est jamais quittée pour lire des mentions légales. Cette forme repliée est la seule qui tienne à la fois la présence sur tous les écrans et le principe 5 : une rangée complète coûterait deux lignes à 360 de large, prises sur l'image (question écartée « 90 Q4 »).
+- Le pied du back-office est `resources/js/components/admin/admin-footer.tsx` (20), sur les clés `admin.footer.*` : le back-office ne reçoit jamais le domaine `legal` (§ 6.3).
+
+### 3.2 `TmdbAttribution` et marques tierces
+
+`resources/js/components/public/tmdb-attribution.tsx` [nouveau] : `TmdbAttribution()` affiche la mention `legal.tmdb.attribution` [existante] et `<img src="/brand/tmdb.svg" alt={t('legal.tmdb.logo_alt')}>`. Il est rendu dans `SiteFooter` **et sur l'écran de révélation** (principe 12 ; `00` § Ouverture, conformité et gouvernance, point 4) — c'est 60 qui le place dans l'état de révélation (§ 10). Aucun lien vers TMDB : l'attribution n'en exige pas, et chaque lien sortant depuis une page de jeu est un départ de page de plus.
+
+**Exception fermée des marques tierces** (n° 72). Principe 13 interdit « tout asset de marque » et le script refuse toute couleur littérale ; les marques imposées par un tiers ne peuvent pas passer par les tokens. Elles vivent donc en **fichiers officiels statiques dans `public/brand/`**, rendus par `<img>`, **jamais en SVG en ligne** dans un fichier surveillé. Au J1, un seul : `public/brand/tmdb.svg`, téléchargé depuis la page officielle des logos de TMDB, ses conditions d'usage recopiées avec la date de récupération dans `public/brand/LICENSE.md` (le test `NoRealFixtureTest` de 100 autorise nommément `public/brand/*` avec ce fichier). Google et Discord rejoignent l'exception au J2. Aucun appel à TMDB n'est fait pour afficher le logo (règle 6).
+
+### 3.3 `MaintenanceBanner` [nouveau] (D32 du 23/09, contrat C18-bis)
+
+`resources/js/components/public/maintenance-banner.tsx` : `MaintenanceBanner()` lit la prop partagée **`maintenance: boolean`** (C18-bis § 2 : `app(DeployDrain::class)->isDraining()`, vraie dans les deux phases du drainage) et, si elle est vraie, rend le texte `common.maintenance.banner`. Monté par `PublicLayout` et `GameLayout`, c'est-à-dire partout où un lancement peut être demandé (création, solo, lobby, « Rejouer »).
+
+- **Il ne dit ni l'heure, ni la phase, ni le nombre de parties en cours** : la prop est un booléen et rien d'autre (C18-bis § 3). Une heure affichée serait une promesse que le déploiement manuel (D31 du 23/09) ne tient pas.
+- **Il n'est pas une garantie.** Aucune diffusion Reverb au J1 : le bandeau apparaît à la réponse Inertia suivante. La seule garantie est le refus serveur de tout lancement, de « Rejouer » et du démarrage solo, avec **l'unique message** `common.maintenance.launch_blocked`, résolu côté serveur (C6, C17 § 4, R-09). L'écran l'affiche là où la page affiche ses refus (50, 60).
+- **Il ne parle pas** : rendu par `Alert` avec `role="note"` (qui supplante le `role="alert"` du composant généré), il n'est pas une région `aria-live`. Un bandeau inséré au rendu n'a rien à interrompre, et la seule région qui parle sur une page de jeu est `GameAnnouncer` (§ 7.4).
+- Il ne coupe, ne retarde ni ne signale jamais une partie en cours : le drainage n'agit que sur les lancements (C18-bis § 4).
+
+---
+
+## 4. Pages publiques
+
+### 4.1 Routes — `routes/legal.php` [nouveau], requis par `routes/web.php`
+
+| Nom | Méthode et chemin | Jalon | Middleware et défauts | Page Inertia |
+|---|---|---|---|---|
+| `legal.notice` | GET `/legal/notice` | J1 | `translations:legal` ; `VaryOnLanguage::ROUTE_FLAG` ; `RobotsDirectives::ROUTE_FLAG` | `legal/show` |
+| `legal.terms` | GET `/legal/terms` | J1 | idem | `legal/show` |
+| `legal.privacy` | GET `/legal/privacy` | J1 | idem | `legal/show` |
+| `takedown.create` | GET `/report-content` | J1 | `translations:legal` ; `VaryOnLanguage::ROUTE_FLAG` ; **jamais** `RobotsDirectives::ROUTE_FLAG` | `legal/show` |
+| `takedown.store` | POST `/report-content` | **J2** | `throttle:takedown` | — |
+
+Routes en anglais, noms en dot-case, pas de préfixe de locale (`05` § Pas de préfixe). Contrôleur `App\Http\Controllers\Legal\LegalPageController` [nouveau], une méthode par page (`notice`, `terms`, `privacy`, `report`), toutes rendant `legal/show` pour un cas de l'enum `App\Enums\LegalPage: string` [nouveau] — `Notice = 'notice'`, `Terms = 'terms'`, `Privacy = 'privacy'`, `Report = 'report'` — qui porte `titleKey()` (`legal.notice.title`, `legal.terms.title`, `legal.privacy.title`, `legal.report.title`) et `viewPath(): string` (`resource_path("views/legal/{$this->value}.fr.blade.php")`). L'enum est le seul endroit où la liste des pages publiques est écrite. Un **chemin** et non un nom de vue : le chercheur de vues de Laravel remplace chaque point d'un nom par `/` (`FileViewFinder`), si bien que `legal.notice.fr` chercherait `legal/notice/fr.blade.php` et lèverait « View not found » sur le fichier `legal/notice.fr.blade.php` que fixent `05` l.141 et C16 § 8.
+
+### 4.2 Rendu : habillage traduit, corps en français, `<html lang>` du visiteur
+
+Le **corps** des pages légales est rédigé en français seulement (décision 4) et vit **hors des dictionnaires**, en partiels Blade `resources/views/legal/{notice,terms,privacy,report}.fr.blade.php` (`05` § Contenus traduits). L'**habillage** — titre, bandeau provisoire, avertissement « disponible en français seulement », date de mise à jour, bloc de contact, pied de page — passe par le domaine `legal`, symétrique FR/EN.
+
+- Le contrôleur rend le partiel par `view()->file($page->viewPath())->render()` et le transmet en prop `body` ; la page `resources/js/pages/legal/show.tsx` [nouveau] l'injecte dans **`<div lang="fr">`**. C'est le cas d'usage principal de la règle « tout fragment dans une autre langue porte son `lang` » (`05` § Attribut `lang`).
+- **`<html lang>` suit la locale du visiteur**, pas `fr` (n° 69, A-42) : l'habillage est dans sa langue, et un lecteur d'écran doit le prononcer dans sa langue ; seul le corps est balisé `fr`. `legal.french_only` est affiché quand la locale du visiteur n'est pas `fr`.
+- **`Vary: Accept-Language`** est posé sur les quatre routes (défaut `VaryOnLanguage::ROUTE_FLAG`), puisque leur habillage varie avec la locale ; « cachables » est retiré du docblock de `VaryOnLanguage` et du commentaire de `routes/web.php` (n° 69). Une réponse avec session sort de toute façon en `Cache-Control: private`, et la règle réelle est « aucun cache HTTP de page complète » (`CLAUDE.md` §3).
+- **Contenu venu du dépôt seulement**, jamais de la base : c'est ce qui rend sûre l'injection de HTML. Déplacer un jour ces textes en base (outil d'édition) ouvrirait une faille XSS et exigerait un assainissement ; ce n'est pas prévu en v1.
+- Mise en forme du corps par des sélecteurs descendants aux tokens posés sur le conteneur (`[&_h2]:…`, `[&_table]:…`) : les partiels n'ont aucune classe, un re-skin ne les touche pas.
+
+Props de `legal/show` (type `LegalPageProps` dans `resources/js/types/legal.ts` [nouveau]) :
+
+```ts
+export type LegalPageName = 'notice' | 'terms' | 'privacy' | 'report';
+export type LegalPageProps = {
+  page: LegalPageName;
+  body: string;                 // HTML du partiel FR, contenu du dépôt seulement
+  provisional: boolean;         // config('legal.pages.{page}.provisional')
+  updatedAt: string | null;     // AAAA-MM-JJ, config('legal.pages.{page}.updated_at'), formaté par Intl.DateTimeFormat côté client, avec timeZone: 'UTC'
+  contactEmail: string | null;  // config('legal.contact_email') ?: null ; null → legal.contact.unavailable
+};
+```
+
+Deux pièges tranchés dans ces types. `LEGAL_CONTACT_EMAIL=` vide dans `.env` donne une **chaîne vide**, pas `null` (`Env::get` ne rend `null` que pour une variable absente ou écrite `null`) : sans `?: null`, le repli `legal.contact.unavailable` ne se déclencherait jamais et la page afficherait « écrivez à . ». Une date `AAAA-MM-JJ` est lue par le navigateur comme minuit UTC : formatée dans le fuseau local, elle s'afficherait la veille pour tout visiteur à l'ouest de Greenwich, d'où `timeZone: 'UTC'`.
+
+Le titre de page passe par une table `Record<LegalPageName, TranslationKey>` écrite dans la page, jamais par une clé construite à l'exécution (§ 6.7).
+
+### 4.3 `config/legal.php` [nouveau]
+
+```php
+return [
+    'contact_email' => env('LEGAL_CONTACT_EMAIL'),   // vide dans .env.example
+    'pages' => [
+        'notice'  => ['provisional' => true, 'updated_at' => null],
+        'terms'   => ['provisional' => true, 'updated_at' => null],
+        'privacy' => ['provisional' => true, 'updated_at' => null],
+        'report'  => ['provisional' => true, 'updated_at' => null],
+    ],
+];
+```
+
+- `LEGAL_CONTACT_EMAIL=` est ajouté **vide** à `.env.example` dans le même commit (`CLAUDE.md` §8 : CI à zéro secret, `composer setup` copie le fichier). Tant qu'il est vide — c'est le cas jusqu'à l'achat du domaine (D1 du 23/09) —, le bloc de contact affiche `legal.contact.unavailable` au lieu d'une adresse : une adresse publiée qui ne répond pas est pire qu'aucune (`00` § Ouverture, point 6). Aucun nom de domaine littéral n'entre dans ce fichier (test `NoLiteralDomainTest` de 100).
+- `provisional` passe à `false` page par page quand le texte du porteur ou de son conseil remplace le squelette (J2) ; c'est un commit, jamais une valeur de base.
+- La version des CGU et l'âge minimum (15 ans) ne sont pas au J1 : ils arrivent avec l'écran d'acceptation (40-J2).
+
+### 4.4 Squelette du J1 : textes provisoires marqués
+
+Au J1, chaque page porte le bandeau `legal.provisional` (« Texte provisoire, sans valeur contractuelle » ou équivalent) tant que `provisional` est vrai (`00` § Jalons et budget-temps : « textes provisoires marqués comme tels »). Le bandeau ne couvre **pas** un contenu faux : un texte provisoire qui promettrait un délai non tenu, un sous-traitant non contractualisé ou un service « non commercial » deviendrait une déclaration publique fausse à une URL de production. D'où une règle d'écriture stricte des partiels du J1 : **ils ne contiennent que des faits déjà vrais**, et des marqueurs visibles `[À FOURNIR : …]` partout ailleurs.
+
+| Page | Contenu du squelette du J1 |
+|---|---|
+| Mentions légales | Éditeur : personne physique (décision 4), `[À FOURNIR : nom]` ; contact : renvoi au bloc de contact de l'habillage ; adresse communiquée sur demande ; directeur de la publication `[À FOURNIR]` ; hébergeur `[À FOURNIR : relevé du VPS]` ; propriété intellectuelle : les photogrammes restent des œuvres protégées de leurs ayants droit, TMDB n'en est pas titulaire (principe 12), renvoi à « signaler un contenu » ; mention d'attribution TMDB. |
+| CGU | Objet du service ; jeu sans compte (principe 10) ; règle du pseudo (renvoi à 40) ; origine des images et possibilité de retrait ; comptes, âge minimum, responsabilité, droit applicable, version : `[À FOURNIR]`. |
+| Confidentialité | Responsable : personne physique `[À FOURNIR : nom]` ; données d'un invité, telles que listées au principe 12 ; base légale : exécution du service ; destinataires en **trois catégories** (`00` § Ouverture : sous-traitants UE, destinataires activés par le joueur, tiers sans donnée joueur), **noms `[À FOURNIR]` tant que non contractualisés** (la page ne nomme que les tiers réellement branchés) ; durées de conservation `[À FOURNIR : tableau de 10 § 11.1]` ; inventaire des cookies (§ 4.6, factuel dès le J1) ; aucune mesure d'audience. |
+| Signaler un contenu | Objet : signaler une image ou un film à retirer ; canal : renvoi au bloc de contact ; procédure et engagements de délai `[À FOURNIR : publiés à l'ouverture]`. **Aucun formulaire au J1.** |
+
+Interdits, sans exception, dans les partiels comme dans `lang/*/legal.php` : toute qualification du service comme « non commercial » (principe 12, décision 2) — vérifiée par un test —, tout nom de sous-traitant et tout délai d'engagement — vérifiés à la relecture du lot. Au J1, la procédure de retrait n'est pas encore outillée (la file de 20 et la suspension en un clic sont au J2, R-33) : publier « accusé sous 72 h » serait faux.
+
+### 4.5 « Signaler un contenu » au J1
+
+Page statique `takedown.create`, **sans formulaire** : route, lien de pied de page et texte provisoire, rien d'autre (question écartée « 90 Q5 »). Le formulaire complet — ligne `takedown_request`, accusé automatique FR/EN, garde anti-automate — suppose un SMTP (sous-traitant) et la file de retrait de 20, tous deux au J2 ; le brancher au J1 créerait des demandes qu'aucun écran ne traite.
+
+- **`noindex` permanente**, y compris après l'ouverture (question écartée « 90 Q8 », A-42) : le noindex n'est levé que sur l'accueil et les trois pages légales (`questions-ouvertes` § Déjà tranché, Indexation ; `05` § Pas de préfixe de locale dans les URL). Un ayant droit arrive à la procédure depuis les mentions légales, indexées et porteuses du contact.
+- **Pas de page de suivi** d'une demande (question écartée « 90 Q7 ») : l'accusé de réception et la notification de décision par e-mail remplissent l'engagement, sans surface d'énumération de plus. La mention « la page publique de suivi » est retirée du docblock d'`App\Models\TakedownRequest` ; `#[RouteKey('reference')]` reste utile au back-office.
+
+### 4.6 Inventaire des cookies — normatif, publié sur la page de confidentialité
+
+« Pas de bannière » repose sur une conclusion écrite, pas supposée : tous les cookies posés sont strictement nécessaires ou mémorisent une préférence exprimée par l'utilisateur (principe 12). L'inventaire du principe 12 était incomplet face au code (n° 73) ; voici la liste normative, reprise telle quelle par le partiel de confidentialité :
+
+| Nom | Finalité | Durée | Nature |
+|---|---|---|---|
+| cookie de session (`config('session.cookie')`, dérivé d'`APP_NAME`) | Session : authentification d'un compte, jeton anti-falsification, messages flash | `session.lifetime` (120 min glissantes par défaut) | HttpOnly, chiffré ; strictement nécessaire |
+| `XSRF-TOKEN` | Protection contre la falsification de requête | celle de la session | lisible par le client ; strictement nécessaire |
+| `remember_web_*` | « Se souvenir de moi », seulement si l'utilisateur l'a coché | durée par défaut du garde de Laravel (400 jours) | HttpOnly, chiffré ; demandé par l'utilisateur |
+| `player_token` | Siège d'invité et reprise, langue et avatar prédéfini (C4) | 30 jours après la dernière prise de siège ou le dernier changement de langue (`PlayerTokenCookie::LIFETIME`, glissant à chaque re-signature : `resign()` repose le cookie avec `LIFETIME`, C4 I4.5 et I4.8 ; 40 § 3.2) | HttpOnly, chiffré ; strictement nécessaire |
+| `locale` | Langue choisie | 1 an (`LocaleCookie::LIFETIME`) | en clair ; préférence |
+| `appearance` | Apparence choisie (clair, sombre, système) | 365 jours | en clair ; préférence |
+| `sidebar_state` | Barre latérale ouverte ou repliée (back-office, écrans de compte) | 7 jours | en clair ; préférence |
+| stockage local `appearance` | Miroir client de l'apparence | persistant | préférence |
+
+L'« état OAuth » du principe 12 est une clé de session, pas un cookie distinct (J2). Tout nouveau cookie amende ce tableau **avant** sa mise en service ; le test qui échoue sur un nom de cookie non inventorié appartient à 100.
+
+### 4.7 L'accueil (J1)
+
+`welcome` est **réécrit** dans `PublicLayout` (boundary map n° 38 : l'accueil entre dans la section « pages publiques » de 90 au J1, c'est la page indexée en anglais au J2). Contenu (`00` § Déroulé d’une partie, étape 1) : le jeu expliqué en une phrase, dans la langue négociée ; trois entrées — **Créer un salon** (lien Wayfinder `room.create`, 50), **Rejoindre** (champ de code, ci-dessous), **Jouer en solo** (lien Wayfinder `solo.create`, 60 § 16.4) ; le sélecteur de langue est dans l'en-tête. Aucun compte requis, aucun lien de connexion ni d'inscription en production au J1 (§ 2.4).
+
+- **« Rejoindre » est un champ de code sur l'accueil, pas un lien** : aucune page d'entrée n'existe sans code, `room.entry` et `room.show` exigent `{room}` (50 § 7.2), et `00` prévoit l'entrée « par code ou lien ». `Input` à libellé visible `common.home.room_code_label`, `autoComplete="off"`, `autoCapitalize="characters"`, `spellCheck={false}`, et un bouton `common.home.join_room`. À l'envoi, le client passe la saisie par `normalizeRoomCode()` (`lib/game/room-code.ts`, 50). Si le code normalisé n'est pas bien formé — prédicat `isWellFormedRoomCode()`, miroir client de `RoomCode::isWellFormed()` demandé à 50 (exigences aux specs voisines) —, `common.home.room_code_invalid` s'affiche sous le champ, lié par `aria-describedby`, **sans requête**. Sinon, `router.visit(show.url({ room: code }))` (Wayfinder `room.show`, `/r/{code}`, 50 § 20.4) : `room.show` rend le lobby à un siège déjà tenu, redirige vers `room.entry` un visiteur sans siège et rend `game/room-expired` pour un salon archivé. Un code bien formé mais inconnu rend la page `error` 404 (50 § 7.2 ; page `error` : § 4.8 ci-dessous). C'est une navigation `GET`, donc `router.visit`, jamais `<Form>` ; aucune route de recherche de salon n'est ajoutée, et aucune longueur ni alphabet de code n'est écrit dans l'accueil.
+- Domaines : `common` et `legal`, et rien d'autre (§ 6.3). C'est pourquoi le choix du preset solo ne vit pas sur l'accueil : les libellés de preset sont dans `room.presets.*`, donc sur la page d'entrée `room/solo` du solo (60 § 16.4).
+- Clés : `common.home.{heading,tagline,create_room,join_room,room_code_label,room_code_invalid,play_solo}` [nouvelles, 90, sans placeholder] ; les clés du starter sont retirées (§ 6.6).
+- Le fichier sort d'`EXEMPT` et entre dans `WATCHED` dans le commit qui le réécrit (§ 9.3).
+
+### 4.8 Pages d'erreur
+
+Page Inertia `error` [nouvelle] (`resources/js/pages/error.tsx`), dans `PublicLayout`, props `{ status: 403 | 404 | 419 | 429 | 500 | 503 }`, clés `common.error.{forbidden,not_found,page_expired,too_many_requests,server_error,service_unavailable}.{title,description}` et `common.error.back_home` (`05` § Erreurs : pages d'erreur traduites).
+
+Rendu par `Inertia::handleExceptionsUsing()` (inertia-laravel 3), déclaré dans `bootstrap/app.php › withExceptions()`, **hors mode debug** :
+
+- requête qui attend du JSON (`shouldRenderJsonWhen` [existant] : routes `api/*` ou `expectsJson()`, dont `room.state`, `solo.state` et les soumissions de 70) : JSON, jamais la page ; le client de jeu traite ses codes lui-même (409 `seat_superseded`, 429 : 60 et 70) ;
+- 403, 404, 419 sur un chargement complet, 429, 500, 503 : `$response->render('error', ['status' => $status])->usingMiddleware(HandleInertiaRequests::class)->withSharedData()`, au statut d'origine, sauf si le domaine `admin` a été sélectionné avant l'exception, auquel cas la page `admin/error` de 20 la rend (C15 § 2.3) ;
+- 419 sur une visite Inertia : `back()` avec un flash `toast` dont le message `common.error.page_expired.description` est résolu côté serveur (destinataire unique, `05` § Erreurs) ; sur une page de jeu, ce flash est rendu en texte et annoncé, jamais en toast (§ 2.3).
+
+**Pourquoi `withSharedData()` et une résolution de locale propre au rendu.** Les erreurs les plus fréquentes naissent **avant** `SetLocale` et `HandleInertiaRequests`, que `bootstrap/app.php` ajoute en fin de groupe `web` : une URL inconnue ne traverse aucun groupe ; une liaison de route introuvable (un code de salon inconnu ou mal formé, 50 § 7.2 — la première erreur d'un joueur), `role:curator` et `throttle:*` lèvent dans `SubstituteBindings` ou avant lui ; le jeton CSRF et le mode maintenance aussi. Or `HandleInertiaRequests` est le seul à poser `locale`, `locales`, `translations`, `name` et `maintenance` : sans eux, `useTranslations()` appelle `locales.find` sur `undefined`, `PublicLayout` plante, et la page d'erreur n'est ni rendue ni traduite (règle 4). Avant le rendu, le gestionnaire fait donc, dans l'ordre :
+
+1. **locale** : `App::setLocale(app(SetLocale::class)->resolve($request)->value)`, où `SetLocale::resolve(Request $request): Locale` [nouveau, méthode publique] est la chaîne de résolution existante extraite de `handle()`, **sans effet de bord** (`handle()` l'appelle et garde seul la pose du cookie de négociation). Pour une URL inconnue, ni session ni cookie chiffré ne sont lisibles : la résolution retombe sur le cookie `locale` (en clair), puis `Accept-Language`, puis la locale de repli ;
+2. **domaine** : `app(TranslationDomains::class)->need('legal')` ;
+3. **apparence** : `View::share('appearanceForced', false)` et `View::share('appearance', $request->cookie('appearance') ?? 'system')`. `ForceGameAppearance` partage l'apparence forcée **avant** `$next` (§ 2.2) : sans cette remise à zéro, une exception levée dans un contrôleur de jeu rendrait la page publique `error` avec `class="dark"` et `data-appearance-forced`, qu'aucun `useForcedAppearance` monté ne retirerait ensuite, contre C16 § 4 (« aucune page hors `game/*` n'est forcée »).
+
+**Erreur du back-office : seule l'étape 3.** Les étapes 1 et 2 ne valent que pour la page `error` joueur. Quand `admin` a été sélectionné avant l'exception (`TranslationDomains::selected()` rend alors `['admin']`), la locale reste `fr`, posée par `ForceAdminLocale` (20 § 13.2), et seul le domaine `admin` est joint ; le gestionnaire n'applique que l'étape 3. Motif : le domaine `admin` n'existe qu'en français (`lang/fr/admin.php`, exclu de la symétrie de clés, § 6.8) ; réimposer la locale du visiteur à un administrateur dont le cookie `locale` vaut `en` chargerait un dictionnaire `admin` vide, et la page `admin/error` afficherait des clés brutes (règle 4).
+
+Conséquence voulue : un joueur refusé par `role:curator` voit une page d'erreur joueur, traduite dans sa langue, puisque `role` s'exécute avant `admin.locale`. Une page d'erreur est toujours `noindex` (§ 5). Le lien d'un salon archivé n'est **jamais** une 404 : il rend `game/room-expired` (50, `10` § 6.2, `room_code_idx`).
+
+---
+
+## 5. Indexation, `robots.txt` et en-têtes
+
+### 5.1 Au J1 : `noindex` intégral
+
+Le site du J1 est déployé sur le VPS de production dès le jalon 1 (D1 du 23/09), sur le domaine définitif `<DOMAINE>` : il est donc atteignable par un robot. Il est **intégralement `noindex`** (D30 du 23/09 ; `00` § Jalons et budget-temps). La levée sélective est une **variable d'environnement de production**, jamais une valeur du dépôt, pour qu'aucun déploiement ne puisse l'inverser ni la rétablir par accident (`CLAUDE.md` §1). **Partage** (boundary map n° 37, 100 § 12) : la variable `SITE_INDEXABLE` (nom confirmé par 100, fausse par défaut), la clé `config('app.indexable')`, sa ligne de `.env.example`, `public/robots.txt`, leur preuve (`tests/Feature/Deploy/SiteIndexingTest.php`) et la procédure de levée appartiennent à 100 (lot L100-4). Cette spec possède le **tableau route par route**, le drapeau `RobotsDirectives::ROUTE_FLAG` et le **middleware d'en-têtes**, donc la preuve de leur comportement dans les deux états de la variable (`IndexingTest`, R-04 : une seule preuve, chez le propriétaire du comportement).
+
+### 5.2 Mécanisme — `App\Http\Middleware\RobotsDirectives` [nouveau]
+
+```php
+final class RobotsDirectives
+{
+    public const string ROUTE_FLAG = 'indexable';                          // ->defaults(RobotsDirectives::ROUTE_FLAG, true)
+    public const string NOINDEX = 'noindex, nofollow';
+    public const string REFERRER_POLICY = 'strict-origin-when-cross-origin';
+    public function handle(Request $request, Closure $next): Response;
+}
+```
+
+- **Middleware global** (`$middleware->append(...)` dans `bootstrap/app.php`), et non du groupe `web` : une URL inconnue lève avant tout middleware de route, et une 404 doit porter `noindex` comme le reste. Il agit **après** `$next`, quand la route est résolue et la réponse rendue.
+- **`X-Robots-Tag: noindex, nofollow`** sur toute réponse, **sauf** si les quatre conditions sont réunies : `config('app.indexable') === true` (clé de 100, `(bool) env('SITE_INDEXABLE', false)`, posée par L100-4 ; tant qu'elle manque, `config()` rend `null`, donc `noindex`) ; la route porte le défaut `ROUTE_FLAG` ; la méthode est `GET` ou `HEAD` ; le statut est 200. Une erreur sur une route indexable reste `noindex`.
+- **Il n'écrase jamais un `X-Robots-Tag` déjà posé** : la réponse d'image de `/f/{serveToken}` et de l'aperçu admin pose le sien (`FrameImageResponse`, C8, C9, E10-59), et c'est elle qui fait foi.
+- **`Referrer-Policy: strict-origin-when-cross-origin`** sur toute réponse qui n'en porte pas déjà une (`00` § Ouverture, conformité et gouvernance, point 5) : un lien de salon suivi vers un site tiers ne doit pas lui transmettre son `room_code`.
+- **La directive est portée par l'en-tête seul, jamais par une balise `<meta name="robots">`** : une balise dans `app.blade.php` devrait recalculer la même décision à un autre moment du cycle (la vue est rendue avant que le middleware voie le statut), et deux sources finissent par diverger. L'en-tête est lu par les moteurs visés et testable en Pest.
+- **Qui peut porter `ROUTE_FLAG`** : exactement `home`, `legal.notice`, `legal.terms`, `legal.privacy`, déclarés dès le J1 (sans effet tant que la variable est fausse). Un test refuse tout autre porteur.
+
+### 5.3 Tableau écran par écran
+
+| Écran ou route | J1 | Après la levée (J2) | `Vary: Accept-Language` | Canonique (J2) | `<html lang>` |
+|---|---|---|---|---|---|
+| Accueil `home` `/` | `noindex` | **indexable**, dans la locale de repli (EN) | oui | URL nue | locale du visiteur |
+| Mentions, CGU, confidentialité (`legal.*`) | `noindex` | **indexables**, corps en FR | oui (habillage) | URL nue | locale du visiteur, corps `lang="fr"` |
+| Signaler un contenu (`takedown.create`) | `noindex` | `noindex` permanent | oui | — | locale du visiteur, corps `lang="fr"` |
+| Pages d'entrée `room/*` (création, entrée, démarrage solo) | `noindex` | `noindex` permanent (écrans de jeu) | — | — | locale du visiteur |
+| Toute URL portant un `room_code` (`/r/{room}` et dérivées) | `noindex` | `noindex` permanent | — | — | idem |
+| Pages `game/*` (`game/lobby`, `game/solo`, `game/room-expired`) | `noindex` | `noindex` permanent | — | — | idem |
+| Images `/f/{serveToken}` | `noindex, nofollow` posé par la réponse (C8) + `Disallow` | idem | — | — | — |
+| Routes JSON et techniques (`room.state`, `solo.state`, `clock.show`, `/broadcasting/auth`, `/up`) | `noindex` | `noindex` | — | — | — |
+| Sondes `/ops/*` (100 § 15) | `noindex` | `noindex` permanent | — | — | — |
+| Écrans de compte (`auth/*`, `settings/*`, `dashboard`) | `noindex` | `noindex` permanent | — | — | idem |
+| Back-office `/admin/*` | `noindex` + `Disallow` | `noindex` + `Disallow`, inconditionnels | — | — | `fr` forcé |
+| Page `error`, URL inconnue | `noindex` | `noindex` | — | — | idem |
+
+La **balise canonique** vers l'URL nue et le dispositif qui la pose n'arrivent qu'avec la première page indexable (J2, § 11).
+
+### 5.4 `robots.txt` (propriété de 100, rappel)
+
+`public/robots.txt`, son contenu, sa justification et son test appartiennent à 100 (100 § 12, L100-4). Cette spec, propriétaire du tableau du § 5.3, en exige seulement la cohérence avec les directives (`00` § Ouverture, conformité et gouvernance, point 5) : `Disallow: /admin` et `Disallow: /f/`, rien d'autre, **jamais `Disallow: /`** — un robot qui ne peut pas explorer une page ne lit pas son `noindex`, et pourrait indexer l'URL nue depuis un lien externe, un lien de salon partagé publiquement étant le premier cas. On n'interdit que ce qui ne doit même pas être exploré : le back-office (`noindex` et `disallow` inconditionnels, `questions-ouvertes` § Déjà tranché) et les images signées.
+
+### 5.5 Titres de page, Open Graph et absence de préfixe de locale
+
+- Le `<title>` est composé par `app.tsx` (`${title} - ${appName}`) à partir de `<Head title={t(…)}>` ; **aucun `room_code`, aucun titre de film** n'entre jamais dans un titre de page (`00` § Ouverture, conformité et gouvernance, point 5 ; règle 3). Une page de salon passe un `t()` sans paramètre.
+- **Aucune balise Open Graph au J1** : l'aperçu d'un lien partagé se contente du `<title>` générique. Des balises génériques, sans image ni `room_code`, sont un sujet J2 (§ 11).
+- **Conséquence de l'absence de préfixe de locale** (`05` § Pas de préfixe) : une page indexable n'expose qu'une langue à un robot. On assume que l'accueil est indexé dans la locale de repli (EN) et que les pages légales, rédigées en FR, sont indexées en FR, chacune à son URL ; `hreflang` n'est déclaré nulle part en v1, faute de version linguistique réelle d'une même URL.
+
+---
+
+## 6. Domaines et clés de traduction (contrat C15, rédigé en entier)
+
+### 6.1 Mécanique existante, inchangée
+
+- `App\Support\I18n\TranslationDomains` [existant] : `BASE = 'common'`, `ADMIN = 'admin'`, `KNOWN = ['common','game','room','account','legal','mail','admin']` ; `need(string ...$domains): void` lève sur un domaine inconnu ; `selected(): list<string>` rend `['admin']` seul dès que `admin` est demandé.
+- `App\Http\Middleware\SelectTranslationDomains` [existant], alias `translations`, s'emploie ainsi : `->middleware('translations:game,room,legal')`.
+- `App\Http\Middleware\ForceAdminLocale` [existant], alias `admin.locale`.
+- `App\Support\I18n\Translations::flatten(Locale, list<string>): array<string,string>` [existant].
+- `App\Console\Commands\LangTypesCommand` (`lang:types`, `--check`) et `LangHashCommand` (`lang:hash`) [existants].
+- Côté client : `resources/js/lib/i18n.ts` (`t`, `tChoice`, `translate`, `translateChoice`), `resources/js/hooks/use-translations.ts` (`useTranslations(): Translator`) et `resources/js/types/translations.d.ts` (généré, jamais édité) [existants].
+
+### 6.2 Liste close des domaines : inchangée, sept domaines
+
+Aucun nouveau domaine : pas de `avatar` (n° 34), pas de `curation` (n° 6), pas de `deploy`. Un domaine de plus pour une douzaine de clés serait un fourre-tout, et chaque domaine est un poste du calibrage de la charge utile (`05` § Dictionnaire front).
+
+### 6.3 Règle « `legal` déclaré sur toute route joueur » (n° 68, D3 du 23/09)
+
+Toute route qui rend une page Inertia **joueur** déclare `legal`, parce que le pied de page est présent sur tous les écrans. Le back-office ne reçoit jamais `legal` : il porte ses propres clés `admin.footer.*`.
+
+| Nom de page Inertia | Coquille (C16) | Domaines déclarés (`common` joint d'office) | Lieu de la déclaration |
+|---|---|---|---|
+| `welcome` | `PublicLayout` | `legal` | `routes/web.php` [existant] |
+| `legal/*` | `PublicLayout` | `legal` | `routes/legal.php` [nouveau, 90] |
+| `error` | `PublicLayout` | `legal` | rendu d'exception de `bootstrap/app.php`, par `app(TranslationDomains::class)->need('legal')` |
+| `auth/*` | `AuthLayout` | `account`, `legal` | `config/fortify.php` : `'middleware' => ['web', 'translations:account,legal', 'accounts.switches']` [modifié ; `legal` ajouté par L90-3, `accounts.switches` posé par L40-7, 40 § 8.2, qui ferme l'inscription et les passkeys en production au J1 : aucun des deux lots ne retire ce que l'autre a posé] |
+| `settings/*` | `AppLayout` + `SettingsLayout` | `account`, `legal` | les deux groupes de `routes/settings.php` passent à `translations:account,legal` [modifié] |
+| `dashboard` [existant] | `AppLayout` (cas explicite, § 2.1) | `account`, `legal` | groupe `auth`, `verified` de `routes/web.php` : `translations:account,legal` [modifié] |
+| `game/*` | `GameLayout` | `game`, `room`, `legal` | groupe de `routes/game.php` (50/60) |
+| `room/*` (`room/create`, `room/join` de 50 ; `room/solo` de 60) | `PublicLayout` | `room`, `legal` | `routes/game.php` (50, 60), hors du groupe `game.appearance` |
+| `admin/*` | `AdminLayout` | `admin` seul | `ForceAdminLocale` [existant] |
+
+Rendu d'erreur : par la page `admin/error` (20, domaine `admin`) si `admin` a été sélectionné avant l'exception ; sinon par `error` (domaines `common` et `legal`). Une page de jeu embarque donc `common`, `game`, `room` et `legal` (A-40, amendement de `05` l.111).
+
+### 6.4 Propriété des préfixes de clés
+
+Chaque préfixe a un seul rédacteur de texte, pour éviter les collisions entre rédacteurs parallèles. Ce tableau entre dans `05`, propriétaire de C15, par A-50 ; une fois A-50 appliqué, la source unique est `05`, et ce paragraphe y renvoie (une décision ne vit qu'à un seul endroit).
+
+| Préfixe | Rédacteur | Jalon |
+|---|---|---|
+| `common.nav.*`, `common.action.*`, `common.state.*`, `common.language.*`, `common.appearance.*`, `common.error.*`, `common.maintenance.*`, `common.connection.*`, `common.home.*` | 90 | J1 |
+| `common.avatar.*` | 40 (texte) ; forme des clés figée ici | J1 |
+| `common.player.*` (pseudo masqué) | 90, sur la règle de 40 | J2 |
+| `common.closure.*` (page de fermeture) | 90 | J2 |
+| `game.frame.*`, `game.a11y.*`, `game.help.*` | 90 ; texte de `game.help.prefix` fourni par 70, de la famille `game.help.scoring.*` par 80 | J1 |
+| `game.round.*` (chrono, palier, statuts, affichage `game.round.lone_player` quand un seul siège est connecté en multijoueur : C7 § 2.7, A-04 ; 60 § 9.3) | 60, sauf `game.round.tier_value` : forme figée ici (D29 du 23/09), texte par 80 | J1 |
+| `game.seat.*` (second onglet, expulsion), `game.pause.*`, `game.host.*`, `game.errors.*` | 60 | J1 |
+| `game.reveal.*`, `game.solo.*` | 60 | J1 |
+| `game.answer.*` (saisie, refus neutre, tentatives) | 70 | J1 |
+| `game.choices.*` (QCM) | 70 | J1 |
+| `game.leaderboard.*`, `game.podium.*`, `game.recap.*`, `game.score.*` | 80 | J1 |
+| `room.*` (dont `room.presets.*` [existant], `room.settings.*`, `room.warnings.*`, `room.pool.*`, `room.refusal.*`, `room.join.kicked`) | 50 | J1 |
+| `account.*` | 40 | J2 (écrans du starter existants) |
+| `legal.*` | 90 | J1 |
+| `mail.*` | 20 (retrait), 40 (compte) | J2 |
+| `validation.room_settings.*` [existant], `validation.attributes.<champ de réglage>` | 50 | J1 |
+| `validation.nickname.*`, `validation.attributes.nickname`, `validation.attributes.avatar` | 40 | J1 |
+| `validation.attributes.answer`, `validation.attributes.choice` | 70 | J1 |
+| `admin.*` | 20 | J1 |
+| `admin.exclusion_grid.*`, `admin.footer.*` | 20 ; forme figée ici | J1 |
+| `admin.console.first_admin.*` [existant] | 20 | J1 |
+| `admin.console.deploy.*` | 100 (C18-bis) | J1 |
+
+### 6.5 Clés nouvelles figées, avec leurs placeholders
+
+Le texte est libre ; les placeholders sont contractuels.
+
+| Clé | Placeholders / forme | Jalon |
+|---|---|---|
+| `common.avatar.alt.preset`, `common.avatar.alt.provider`, `common.avatar.alt.initials` | aucun (à côté d'un pseudo, l'image est décorative, `alt=""`, règle I5.9 de 40) | J1 |
+| `common.avatar.preset.{presetKey}`, `presetKey` ∈ `preset-01`…`preset-24` | aucun ; une clé par clé de `AvatarPresetCatalog::keys()` (`PlatformLimits::avatarPresets()`, 24 par défaut), FR et EN | J1 |
+| `common.error.{forbidden,not_found,page_expired,too_many_requests,server_error,service_unavailable}.{title,description}`, `common.error.back_home` | aucun | J1 |
+| `common.maintenance.banner`, `common.maintenance.launch_blocked` | aucun ; `launch_blocked` est **l'unique** message du refus de drainage (C6, C7, C18-bis, R-09) | J1 |
+| `common.connection.reconnecting`, `common.connection.offline`, `common.connection.restored` | aucun ; seules clés du bandeau de connexion (R-38) | J1 |
+| `common.language.changed` | `:language` | J1 |
+| `common.nav.menu_description` | aucun (`SheetDescription` d'une coquille mobile) | J1 |
+| `common.appearance.{label,light,dark,system}` | aucun (bascule d'apparence de l'en-tête public) | J1 |
+| `game.round.tier_value` (D29 du 23/09) | pluriel `tChoice(key, points, { points })` ; `:points` est l'entier formaté par `Intl.NumberFormat(locale)` | J1 |
+| `game.frame.loading`, `game.frame.unavailable` | aucun | J1 |
+| `game.a11y.halfway`, `game.a11y.last_quarter`, `game.a11y.choices_shown`, `game.a11y.round_ended` | aucun | J1 |
+| `game.a11y.seconds_left` | pluriel, `:count` | J1 |
+| `game.a11y.tier_opened` | `:index`, `:total` | J1 |
+| `game.help.prefix` | aucun | J1 |
+| `game.help.scoring.{tier_values,speed_bonus,tie_break,no_penalty,cancelled_round}` ; `.scoreless` au J2 | `:percent` pour `speed_bonus` (C13) ; `game.help.scoring` est un nœud, jamais une feuille (R-38) | J1 |
+| `legal.footer.report`, `legal.footer.label`, `legal.footer.sheet_description`, `legal.new_tab`, `legal.provisional`, `legal.contact.unavailable`, `legal.tmdb.logo_alt`, `legal.tmdb.attribution` [existante], `legal.report.title` | aucun | J1 |
+| `admin.exclusion_grid.v{n}.{slug}.label`, `admin.exclusion_grid.v{n}.{slug}.help` | aucun ; neuf slugs pour v1 (R-47) | J1 |
+| `admin.footer.{label,notice,terms,privacy,tmdb_attribution,tmdb_logo_alt}` | aucun ; FR seul | J1 |
+| `common.player.masked` | `:ordinal` (n° 74) | J2 |
+| `common.closure.*` | libre | J2 |
+
+Sous-clés ajoutées par cette spec dans ses propres préfixes (§ 6.4, C15 § 8) : `common.nav.skip_to_content`, `common.home.{heading,tagline,create_room,join_room,room_code_label,room_code_invalid,play_solo}`, `game.help.{title,description,open}`, `legal.terms_notice` (mention d'acceptation des CGU de l'écran de pseudo, § 10). Aucune n'a de placeholder. Clés existantes réemployées : `common.action.close` (fermeture propre des feuilles, § 2.5), `common.nav.log_in` et `common.nav.register` (liens de compte de l'en-tête public, § 2.4).
+
+### 6.6 Renommages et retraits
+
+- `App\Avatars\AvatarRef` **[renommé, n° 34]** : les constantes `ALT_KEY_PRESET`, `ALT_KEY_PROVIDER` et `ALT_KEY_INITIALS` passent de `avatar.alt.*` à `common.avatar.alt.*` (lot de 40, C5). Un avatar s'affiche au lobby, en jeu, au podium et en compte : `common` est le seul domaine joint partout (A-39 amende `05` l.94 en ce sens).
+- `App\Support\Curation\ExclusionGrid` **[renommé, n° 6]** : préfixe `admin.exclusion_grid.`, suffixe `.label`, `helpKey()` (C14-bis).
+- Clés **[brouillon]** remplacées à la fusion (R-38), aucune n'existe dans `lang/` : `game.help.prefix_rule` → `game.help.prefix` ; `game.rules.scoring.*` → `game.help.scoring.*` ; `game.lone_player.notice` → `game.round.lone_player`. Clés abandonnées : `game.connection.*`, `game.errors.draining`, `room.refusal.draining`.
+- **Retraits du J1** : `common.home.{deploy,description,documentation,intro,title,tutorials}` et `common.nav.{repository,documentation}`, textes et liens du starter (avec les deux liens de pied d'`app-sidebar.tsx`) ; `validation.attributes.{frames_per_round,rounds_count}`, libellés snake_case sans consommateur (n° 41).
+- `App\Http\Middleware\VaryOnLanguage` [existant] : docblock et commentaire de `routes/web.php` corrigés (n° 69). Les routes `legal.*` et `takedown.create` portent `->defaults(VaryOnLanguage::ROUTE_FLAG, true)`.
+
+### 6.7 Clés construites à l'exécution
+
+Une clé composée par gabarit (`` t(`common.avatar.preset.${k}`) ``) est **interdite** : `t()` est typé par `TranslationKey`, et une clé construite échappe à la vérification « clés réellement appelées » (`05` § Couverture).
+
+- Toute famille énumérable passe par une table `Record<Valeur, TranslationKey>`, sur le patron de `resources/js/lib/admin-enum-keys.ts` [existant] — cas connus : `PoolFault`, `PoolRemedyKind`, `RoomRefusal`, `InputState`, avatars prédéfinis, `LegalPageName`, statuts HTTP de la page `error`.
+- Côté serveur, par une méthode `…Key()`, sur le patron de `SettingPresetKey::labelKey()` [existant] (ici : `LegalPage::titleKey()`).
+
+### 6.8 Formes de données et invariants
+
+- Props partagées existantes, inchangées : `locale: string` ; `locales: {value, label, bcp47, dir}[]` ; `translations: Record<TranslationKey, string>`, plat, limité aux domaines déclarés.
+- Un dictionnaire est un fichier statique du dépôt : il ne transporte **aucune donnée de manche**, donc jamais une réponse (règle 3).
+- Un message à destinataire unique est résolu côté serveur (exemple : `common.maintenance.launch_blocked`). Un message diffusé part en données, et le client formate par `Intl.NumberFormat` et `Intl.DateTimeFormat` dans la locale du joueur ; `fr` forcé au back-office (n° 10, A-48).
+- **Invariants** : les sept domaines forment une liste close et `need()` lève sur un domaine inconnu ; `admin` n'est jamais mêlé à un domaine joueur ; symétrie FR/EN des clés et des placeholders pour tous les domaines sauf `admin` (`mail` compris) ; aucune chaîne littérale comme clé dans le code du projet (`lang/*.json` reste réservé au framework et à Fortify) ; toute clé construite par du code livré est couverte par le test d'énumération ; `translations.d.ts` est régénéré et la CI refuse toute dérive (`lang:types --check`).
+- **Provenance** : locales de `App\Enums\Locale` ; domaines de `TranslationDomains::KNOWN` ; nombre de clés `common.avatar.preset.*` = `PlatformLimits::avatarPresets()` ; clés de grille = `ExclusionGrid::versions()` × `slugs($v)`. Aucune valeur de jeu n'est en jeu dans ce contrat.
+
+---
+
+## 7. Socle des écrans de jeu
+
+### 7.1 Le conteneur d'image `GameFrame` (D5, D7, D8 du 23/09)
+
+`resources/js/components/game/game-frame.tsx` [nouveau] :
+
+```ts
+export type FrameFormat = { width: number; height: number };
+export type GameFrameProps = {
+  src: string | null;        // URL fournie par le serveur, jamais reconstruite par Wayfinder (R-37) : URL d'objet produite par frame-loader à partir de TierImageRef.url (C7, C8), ou game_url de l'aperçu admin (C9) ; null = rien de servable
+  alt: string;               // déjà traduit par l'appelant (game.frame.alt en jeu ; admin.frame.preview.alt en aperçu)
+  loadingLabel: string;      // déjà traduit (game.frame.loading en jeu)
+  unavailableLabel: string;  // déjà traduit (game.frame.unavailable en jeu)
+  format: FrameFormat;       // prop partagée `frameFormat`
+  className?: string;
+};
+```
+
+**Aucun appel à `t()`, aucune dépendance à Inertia** : c'est ce qui le rend réutilisable tel quel dans l'aperçu du back-office, sous `GameThemeScope` (D8 du 23/09, C9-bis) — la revue voit l'image exactement comme un joueur, cadre et tokens sombres compris.
+
+Cadre et états :
+
+- **Cadre neutre à dimensions fixes** : utilitaire `aspect-frame` (jeton `--aspect-frame: 16 / 9` de C9, D5 du 23/09), sans aucun style en ligne. Le cadre occupe sa place avant toute image : rien ne saute à l'arrivée des octets.
+- `<img width={format.width} height={format.height} decoding="async" draggable={false}>` en `object-contain`, `alt={alt}`.
+- **Aucun LQIP, aucun flou** (D7 du 23/09, E10-60). Sans image chargée, le cadre affiche un aplat `bg-muted`, un `Spinner` neutralisé (`aria-hidden="true"`, `role="presentation"` : sinon le `role="status"` du composant généré ferait une seconde région vivante) et porte `aria-busy="true"` avec `loadingLabel` en `sr-only`. En cas d'échec, l'aplat reste et `unavailableLabel` s'affiche en clair. Le serveur ne décale jamais le chrono pour un client lent (`00` § Partie et temps réel).
+- **Au changement de `src`, l'image précédente reste jusqu'au `load` de la suivante** : aucun flash d'aplat entre deux paliers. Un cadre neuf est monté par manche (`key` fourni par 60) : l'image d'une manche ne survit jamais dans la suivante.
+- **Anti-recherche inversée** (principe 3) : `draggable={false}`, `onContextMenu` et `onDragStart` empêchés, classes `select-none` et `[-webkit-touch-callout:none]`. Ce n'est pas incassable, c'est une friction ; le `src` est une URL d'objet locale, jamais l'URL signée elle-même.
+- `alt` est **neutre** : `game.frame.alt` (« Image `i` sur `N` de la manche en cours »), jamais descriptif (principe 8, et anti-triche : un texte alternatif descriptif serait une réponse).
+
+**Prop partagée** [nouvelle] : `HandleInertiaRequests::share()` ajoute `'frameFormat' => ['width' => FrameGeometry::GAME_WIDTH, 'height' => FrameGeometry::GAME_HEIGHT]` (C9 : 1280 × 720, jamais surchargeable), augmentée dans `types/global.d.ts`. Elle est globale et identique pour tous, sans aucune donnée de manche. `frameFormat` ne sert qu'aux attributs `width`/`height` ; le ratio du cadre vient du jeton, source unique (R-37).
+
+### 7.2 Portrait, clavier ouvert : le principe 5 rendu mesurable
+
+Principe 5 : image visible sur au moins **40 % de la hauteur**, aucun défilement pendant une manche, chrono et champ toujours visibles, QCM en grille 2×2 au pouce. D5 du 23/09 fixe le cas de mesure : **clavier ouvert**, sur la hauteur visible `--game-viewport-height` (§ 2.3), et le ratio 16:9. Le viewport minimal supporté est déclaré à **360 × 640** (constante de présentation de cette spec, pas une valeur de jeu).
+
+- **Budget vertical d'une manche en portrait**, de haut en bas : une ligne d'état (manche `k`/`M`, chrono en texte et barre `Progress`, valeur du palier § 7.3) ; la **zone image** ; la saisie (`answer-input.tsx` de 70, ou `choice-grid.tsx` de 70 en `grid grid-cols-2`) ; une bande horizontale des joueurs (`ScrollArea` horizontale, avatars et badge « a trouvé ») ; la ligne basse de `GameLayout`. Au viewport minimal clavier ouvert, **la somme des lignes hors image ne dépasse jamais 60 % de `--game-viewport-height`** ; la zone image prend le reste, en `min-h-0 flex-1`.
+- **Dimensionnement du cadre** par requête de conteneur : la zone image est un conteneur (`@container`), et le cadre y prend la plus grande taille 16:9 qui tienne, `w-[min(100cqw,calc(100cqh*var(--aspect-frame)))]`, centré. Aucun `px`, aucun ratio écrit ailleurs que dans le jeton.
+- **Cibles tactiles** : `min-h-11 min-w-11` (2,75 rem, soit 44 px à la taille de police racine : principe 8), exprimées en `rem` pour le script.
+- **Champ de saisie** (mise en page de 70, en accord avec cette spec) : `autoComplete="off"`, `autoCorrect="off"`, `autoCapitalize="none"`, `spellCheck={false}`, `enterKeyHint="send"`, `maxLength` tiré de `maxAnswerLength` du réglage figé (C0), jamais d'un littéral. Son transport, en salon comme en solo, est `GameStatePacket.maxAnswerLength: number | null`, exigence de 70 à 60 (70 § 16, écart à C7 signalé par 70) ; tant qu'il manque, l'attribut est omis et la borne reste serveur (422).
+- **Desktop = élargissement**, jamais une autre règle : la bande des joueurs devient une colonne à droite à partir du point d'arrêt `lg`, rien d'autre ne change (règle 10).
+- **Vérification** : au J1, contrôle manuel sur un téléphone réel à 360 × 640, clavier ouvert, de `game/lobby` (lobby, manche, révélation, podium) et de `game/solo`, porté par le lot L90-9 de cette spec, propriétaire de la règle, une fois les écrans de 50, 60, 70 et 80 livrés — aucun lot de 60 ne l'a repris ; au J2, parcours Playwright (100).
+
+### 7.3 Chronologie cliente et valeur du palier affichée (D29 du 23/09)
+
+`resources/js/lib/game/round-timeline.ts` [nouveau] est la **seule** implémentation client du palier courant et de sa valeur (R-35) :
+
+```ts
+import type { RoundTimeline } from '@/types/game-wire';   // charge de C7
+import type { TierWindow } from '@/types/scoring';        // C13
+export type LiveRoundTimeline = {
+  key: string;                 // `${gameRef}:${sequenceIndex}`, clé opaque, jamais un identifiant interne
+  startedAtMs: number;         // parseIsoMs(RoundTimeline.startsAt), epoch ms UTC (instant serveur)
+  durationMs: number;          // round.duration_ms (D)
+  tiers: readonly TierWindow[];
+  closed: boolean;             // vrai dès l'événement serveur de clôture (round.closed, C7)
+};
+export function toLiveTimeline(gameRef: string, round: RoundTimeline, closed: boolean): LiveRoundTimeline;
+export function currentTier(t: LiveRoundTimeline, serverNowMs: number): TierWindow | null;
+export function tierValueAt(tiers: readonly TierWindow[], elapsedMs: number): number | null; // fonction de 80 (C13) : points du palier contenant elapsedMs, null hors [0, D), sans grâce ni bonus
+export function announcementThresholds(t: LiveRoundTimeline): ReadonlyArray<{ id: string; atMs: number; kind: 'halfway'|'last_quarter'|'last_tenth'|'tier' ; tierIndex?: number }>;
+```
+
+- **Entrées** : `RoundTimeline` de `round.scheduled` (C7), diffusé au salon — `startsAt`, `durationMs`, et pour chaque palier `tierIndex`, `startsAtOffsetMs`, `durationMs`, `points` (`TierWindow`). Ces champs ne révèlent rien : le barème est un réglage public figé au lancement ; `RoundTimeline` ne porte jamais `frame_id`, `frame_level`, `movie_id` ni `round.id`. Les URL d'images voyagent à part, en `TierImageRef` ; une URL transmise avant sa garde reste refusée par le serveur jusqu'à `Tᵢ − preload_lead_ms` (R-34).
+- **Horloge** : `serverNow()` resynchronisée de 60 (`lib/game/server-clock.ts`), jamais `Date.now()` nu.
+- **Valeur affichée (D29 du 23/09)** : la valeur **entière** du palier courant, **sans bonus**, rendue par 60 à côté du chrono : `tChoice('game.round.tier_value', tier.points, { points: fmt(tier.points) })`, `fmt` = `Intl.NumberFormat(locale)`. Au réglage par défaut (`N` = 3, barème `(N − i + 1) × 100`), elle vaut 300, 200 puis 100. Elle disparaît dès que `closed` est vrai ou hors de `[0, D)`.
+- **L'image affichée et la valeur affichée basculent au même instant**, celui de `currentTier(timeline, serverNow())` ; l'événement `tier.opened` confirme et apporte l'URL suivante, il ne déclenche pas la bascule. Si l'image du palier `i` n'est pas encore chargée, `GameFrame` garde l'image `i − 1` tandis que la valeur affiche déjà celle du palier `i`, selon l'horloge resynchronisée. Cet affichage est **indicatif** (D29 du 23/09) : c'est la valeur du palier ouvert à l'instant affiché, pas une promesse de crédit. Le serveur crédite le palier qui contient `answeredAtMs − tierGraceMs` (C13 § 4.1, principe 4) : une réponse reçue dans les `tierGraceMs` qui suivent `Tᵢ` vaut encore le palier `i − 1`. Au barème décroissant — le seul possible au J1, où l'onglet Avancé n'existe pas (80 § 2) —, le crédit ne vaut donc jamais moins que la valeur affichée, à l'écart d'horloge près : l'affichage ne promet jamais plus que ce qui sera crédité.
+- **Ne décide rien** : la chronologie, sa valeur et les annonces n'écrivent rien, ne soumettent rien et n'influencent aucun score (règle 1, L3 de `10` § 1.8). Une interpolation client d'**affichage** est permise ; **aucun minuteur client ne décide** (règle 8 reformulée, n° 74, A-75).
+
+### 7.4 L'annonceur `GameAnnouncer` : seuils relatifs, fusion, fin sur événement serveur
+
+**Magasin** — `resources/js/lib/game/announcer.ts` [nouveau] :
+
+- constantes `ANNOUNCER_MERGE_WINDOW_MS = 1000`, `FINAL_ANNOUNCEMENT_CAP_MS = 5000`, `HALFWAY_DIVISOR = 2`, `LAST_QUARTER_DIVISOR = 4`, `LAST_TENTH_DIVISOR = 10` — **constantes de présentation du principe 8**, dans ce seul fichier ; elles ne touchent ni palier, ni score, ni chrono, et ne sont donc pas des valeurs de jeu au sens de la règle 2 ;
+- `announce(message: string): void` ; `subscribeAnnouncements(listener: () => void): () => void` ; `currentAnnouncement(): readonly string[]` ; `resetAnnouncer(): void`.
+
+**Région** — `resources/js/components/game/game-announcer.tsx` [nouveau] : `GameAnnouncer()` rend **une seule** région par page de jeu, `<div role="status" aria-live="polite" aria-atomic="true" className="sr-only">`, un `<span>` par message fusionné, lu par `useSyncExternalStore` (résiste au double montage). Montée par `GameLayout` **dès le montage de la coquille**, puisqu'une région vivante doit exister avant son premier message ; `PublicLayout` la monte aussi, pour la seule annonce de changement de langue.
+
+**Hook** — `resources/js/hooks/game/use-round-announcements.ts` [nouveau] : `useRoundAnnouncements(timeline: LiveRoundTimeline | null, serverNow: () => number): void`, appelé dans les états de manche de 60, montés par `game/lobby` (en partie) et par `game/solo`.
+
+Seuils, en millisecondes entières depuis le début de manche (C16 § 4) :
+
+| Seuil | Instant | Message | Au réglage par défaut (`D` = 30 s, `N` = 3) |
+|---|---|---|---|
+| mi-manche | `D − ⌊D/2⌋` | `game.a11y.halfway` | 15 s |
+| dernier quart | `D − ⌊D/4⌋` | `game.a11y.last_quarter` | 22,5 s |
+| dernier dixième | `D − min(⌊D/10⌋, FINAL_ANNOUNCEMENT_CAP_MS)` | `game.a11y.seconds_left` (`:count` = secondes restantes, arrondies au supérieur) | 27 s (3 s restantes) |
+| palier `i ≥ 2` | `startsAtOffsetMs` du palier | `game.a11y.tier_opened` (`:index`, `:total`) | 10 s, 20 s |
+| fin | passage de `closed` à vrai | `game.a11y.round_ended` | à `D` ou à la fin anticipée |
+| QCM en Normal | arrivée des propositions (`T_N`, et état « texte épuisé, QCM attendu », D20 du 23/09) | `game.a11y.choices_shown` | 20 s |
+
+Règles, et pourquoi :
+
+- **Seuils relatifs, jamais absolus** (principe 8) : `D` va de `RoomSettingsBounds::MIN_ROUND_DURATION` à `MAX_ROUND_DURATION` (10 à 120 s aujourd'hui), et un seuil fixe « à 10 s de la fin » n'aurait aucun sens à la borne basse. Le dernier dixième est plafonné par `FINAL_ANNOUNCEMENT_CAP_MS` pour qu'une manche à la borne haute n'annonce pas ses douze dernières secondes.
+- **Fusion** : une fenêtre de `ANNOUNCER_MERGE_WINDOW_MS` s'ouvre à la première annonce en attente ; toute annonce reçue avant sa fermeture la rejoint, et la région reçoit le lot entier à la fermeture. Deux annonces séparées d'**exactement** 1 000 ms ne fusionnent pas (fenêtre semi-ouverte). Sans fusion, une manche à la borne basse de `D` et à `N` = 2 (deux paliers égaux) déclencherait mi-manche et changement de palier au même instant.
+- **La fin n'est annoncée qu'au passage de `closed` à vrai**, donc sur l'événement serveur (`round.closed` en multijoueur, paquet `solo.state` en solo), jamais par minuteur client ; la fin anticipée « saisie close » passe par le même chemin (règle 1, n° 74).
+- **Jamais rétroactivement** : un seuil déjà passé au montage (resynchronisation, arrivée en cours de manche) est marqué annoncé sans être lu.
+- **Une fois par couple (`timeline.key`, `id`)**, le registre des seuils déjà annoncés vivant au niveau du module du hook, pour résister au double montage ; il est purgé des clés anciennes à l'arrivée d'une nouvelle manche.
+- Le hook arme un seul `setTimeout` vers le prochain seuil, recalculé à chaque resynchronisation et nettoyé au démontage (`CLAUDE.md` §8 : effets montés deux fois).
+- **Changement de langue** : `LanguageSwitcher` annonce `common.language.changed` par `announce()` une fois le dictionnaire reçu (principe 8 : « changement annoncé ») ; son `Spinner` est neutralisé (`aria-hidden`) et le bouton porte `aria-busy` pendant l'aller-retour.
+- **Reconnexion** : `common.connection.restored` est annoncé par `announce()` à la transition vers l'état `connected`, **par le hook de 60 qui fournit l'état de connexion** (`hooks/game/use-game-state.ts`), jamais par `ConnectionBanner`, qui ne lit ni Echo ni horloge et ne rend rien à `connected` (§ 7.6, exigence à 60).
+- **Une seule région qui parle.** `GameAnnouncer` est la **seule** région `aria-live` d'une page de jeu (C16 § 4) : aucun `Toaster` n'y est monté (§ 2.3), `MaintenanceBanner`, l'avis de page expirée et les composants d'état ne sont pas des régions vivantes (`Alert` au rôle `note`), et tout `Spinner` d'un fichier surveillé est neutralisé.
+
+### 7.5 Focus et clavier
+
+- À l'ouverture de manche, le focus va au champ de saisie, ou au premier bouton du QCM en Facile.
+- **L'apparition du QCM en Normal** (à `T_N`, et pour l'état « texte épuisé, QCM attendu », D20 du 23/09) est annoncée par `game.a11y.choices_shown` **sans déplacer le focus** : voler le focus à un joueur qui tape lui ferait perdre sa frappe.
+- À la révélation, le focus va au titre de révélation (`tabIndex={-1}`) ; au podium, au titre du podium. Sur mobile, ce déplacement ferme le clavier, ce qui est voulu : la saisie est close.
+- Tout geste est atteignable au clavier : `Entrée` soumet la réponse, `Tab` parcourt les quatre propositions dans l'ordre visuel, `Échap` ferme `Sheet` et `Dialog` (Radix).
+- Aucun changement de palier ne déplace le focus.
+
+### 7.6 Composants d'état [nouveaux]
+
+Les quatre composants de `components/state/` reçoivent des chaînes **déjà traduites** et n'appellent jamais `t()`, pour rester découplés de leur habillage (règle 5). `ConnectionBanner` et `MaintenanceBanner`, bandeaux de coquille sans prop de texte, font exception : ils résolvent eux-mêmes leurs seules clés (`common.connection.*`, `common.maintenance.banner`) par `useTranslations()`, et `MaintenanceBanner` lit `usePage().props.maintenance` ; aucun des deux ne lit Echo ni horloge.
+
+| Fichier | Signature | Rôle |
+|---|---|---|
+| `resources/js/components/state/loading-state.tsx` | `LoadingState({ label })` | Chargement : `Spinner` neutralisé et libellé visible |
+| `resources/js/components/state/empty-state.tsx` | `EmptyState({ title, description?, action? })` | État vide |
+| `resources/js/components/state/error-state.tsx` | `ErrorState({ title, description?, onRetry?, retryLabel? })` | Erreur rejouable d'un bouton |
+| `resources/js/components/state/read-only-notice.tsx` | `ReadOnlyNotice({ message })` | Lecture seule : second onglet (`game.seat.superseded`), réglages verrouillés d'un non-hôte |
+| `resources/js/components/game/connection-banner.tsx` | `ConnectionBanner({ state }: { state: 'connected' \| 'reconnecting' \| 'offline' })` | Bandeau de connexion, textes `common.connection.*` (R-38) ; rien n'est rendu à `connected` |
+| `resources/js/components/public/maintenance-banner.tsx` | `MaintenanceBanner()` | § 3.3 |
+
+`ConnectionBanner` est monté par les pages de 60, avec l'état fourni par 60. Pendant une déconnexion, le serveur continue : le chrono ne s'arrête pas, et l'écran le dit.
+
+### 7.7 L'écran d'aide `GameHelp` [nouveau, ajout de cette spec]
+
+`resources/js/components/game/game-help.tsx` : `GameHelp({ speedBonusMaxPercent }: { speedBonusMaxPercent: number })` rend un bouton `game.help.open` qui ouvre un `Sheet` (titre `game.help.title`, description `game.help.description`, fermeture propre, § 2.5) contenant `game.help.prefix` (texte de 70, 70 § 17) et la famille `game.help.scoring.*` (textes de 80, `:percent` = `speedBonusMaxPercent`). La règle du préfixe est expliquée **ici et une fois pour toutes, jamais en manche** : le refus reste neutre, sans « presque ! » (`questions-ouvertes` § Déjà tranché ; boundary map n° 31). **L'aide ne parle jamais du salon, du tirage ni de films « jouables »** : l'ambiguïté d'un préfixe ou d'un sous-titre se mesure sur le catalogue publié entier, jamais sur le vivier (`00` § Le jeu en une manche, `CLAUDE.md` §2, 70), et un texte qui la rattacherait au salon inviterait le joueur à lire une acceptation comme un renseignement sur le tirage. Le texte actuel de 70 (« quand plusieurs épisodes d'une saga sont **jouables** »), repris de `questions-ouvertes` § Déjà tranché, prête à cette lecture, puisque « jouable » définit le vivier au lexique de `00` : signalé à 70 et au porteur (points restés ouverts), avec la proposition « quand le site compte plusieurs films d'une même saga ». Le déclencheur est rendu dans le lobby et dans le solo, **jamais pendant qu'un palier est ouvert**.
+
+**Provenance de `speedBonusMaxPercent`** — `PlatformLimits::toArray().speedBonusMaxPercent`, indexé par `N` (C0, D22 du 23/09), jamais un littéral, pour le `N` affiché : celui du réglage en cours au lobby, celui de la partie figée pendant une partie, celui de la partie en cours ou du preset choisi en solo. Sur `game/lobby`, la valeur vient de la prop de page `limits` (50 § 8.1). `PlatformLimits::toArray()` est une prop de page, pas une prop partagée (C0 § 3) : **exigence à 60**, `solo.show` passe la même prop `limits: PlatformLimits::toArray()` à `game/solo`, sans quoi l'aide du solo n'a pas de valeur à afficher.
+
+---
+
+## 8. Accessibilité : périmètre assumé du principe 8
+
+**Ce qui n'est pas accessible, et pourquoi on l'écrit.** La boucle de jeu est irréductiblement visuelle : reconnaître un film sur une image n'a pas d'équivalent pour un joueur non voyant, et un texte alternatif descriptif serait la réponse. `alt` reste donc neutre (§ 7.1). On ne promet rien de plus.
+
+**Ce qui est pleinement accessible**, et comment :
+
+| Surface | Mise en œuvre |
+|---|---|
+| Lobby | Liste des sièges lisible (pseudo en texte, avatar décoratif à côté, règle I5.9), état de connexion en texte, réglages en contrôles natifs (curseurs Radix exposant valeur, bornes et pas ; `aria-valuetext` avec l'unité ; messages de bornes croisées liés par `aria-describedby`, textes de 50) |
+| Chrono | Secondes restantes en texte, barre `Progress`, annonces aux seuils relatifs (§ 7.4) ; **jamais signalé par la seule couleur** |
+| Statuts | « A trouvé » : badge `--success` **et** icône **et** texte ; tentatives restantes en texte (70) |
+| Révélation | Titre dans la langue du joueur avec son `lang`, titre original avec le sien, année, liste des trouveurs en texte ; focus au titre |
+| Podium | Classement en liste ordonnée, rang et score en texte, récapitulatif avec `lang` sur chaque titre ; focus au titre |
+| Langue | Sélecteur étiqueté, au clavier, présent dès l'accueil et dans la barre de jeu, changement annoncé (motif ARIA ci-dessous) ; `<html lang>` suit la locale ; tout fragment dans une autre langue porte son `lang` (`05` § Attribut `lang`), QCM compris (attribut `lang` sur le conteneur de `choice-grid.tsx`, C11, A-44) |
+
+**Sélecteur de langue** (`05` délègue à `90` l'écran, ses états, son motif ARIA et sa place dans la navigation, `05` § Ce que cette spec ne décide pas). Motif ARIA *menu button*, celui que donne `LanguageSwitcher` [existant] sur `DropdownMenu` : déclencheur `button` (`aria-haspopup="menu"` et `aria-expanded` posés par Radix), nom accessible `common.language.current` ; options `menuitemradio` (`DropdownMenuRadioItem`, `aria-checked`) dans un groupe étiqueté `common.language.label`, chaque langue écrite dans sa propre langue et portant son propre `lang`. Places : en-tête public avec libellé visible (§ 2.4), ligne basse de `GameLayout` en icône seule (§ 2.3). États : repos ; **aller-retour en cours** — déclencheur `aria-busy`, options désactivées, `Spinner` neutralisé — ; changement reçu, annoncé par `common.language.changed` (§ 7.4). `Échap` referme le menu sans changer de langue.
+
+Règles transversales : cibles ≥ 44 px (`min-h-11 min-w-11`) ; contrastes suffisants — les valeurs `oklch` de `--success` et `--success-foreground` sont choisies à 4,5:1 au moins sur leur fond, dans les deux thèmes, et vérifiées à la relecture du lot ; `prefers-reduced-motion` respecté (toute animation d'un fichier surveillé porte `motion-reduce:animate-none`, `Spinner` et `Skeleton` compris) ; **aucune information par l'audio** (principe 9) ; `R` sous `RoomSettingsBounds::RECOMMENDED_MIN_REVEAL_DURATION` (5 s aujourd'hui) reste légal mais averti, parce que l'annonce de fin et la reprise de focus ont besoin de temps (`00` borne croisée 4, motif d'accessibilité seul depuis A-01). Onglets au motif ARIA *tabs* : onglet Avancé, J2.
+
+---
+
+## 9. Design minimal et re-skin sûr : le principe 13 outillé
+
+### 9.1 Tokens
+
+- Tout passe par les tokens de `resources/css/app.css` ; aucune couleur ni taille en dur dans un fichier surveillé ; aucune variante `dark:` — les forçages passent par la classe `dark` posée à la racine ou sur `GameThemeScope`, jamais par un composant.
+- **Ajouts du J1** : `--success` et `--success-foreground` sur `:root` et `.dark`, plus `--color-success` et `--color-success-foreground` dans `@theme`, pour le badge « a trouvé » ; `--aspect-frame: 16 / 9` dans `@theme` (C9), qui produit l'utilitaire `aspect-frame`. Ce jeton est un livrable de 20 : il est posé par L20-4, le lot qui crée `FrameGeometry`, et prouvé par `FrameGeometryTest` (« frame-geometry.ts, le jeton --aspect-frame et la prop frameFormat reflètent FrameGeometry ») ; L90-6a, qui le consomme, en dépend, et complète ce test de l'assertion sur `frameFormat`, puisque la prop naît dans L90-6a, après L20-4. Un seul écrivain par jeton.
+- Un re-skin ne touche que `app.css` et la présentation : c'est la contrepartie d'une v1 sans direction artistique (principe 13, règle 5).
+
+### 9.2 Liste close des composants de présentation
+
+- **Installés** (`components/ui/*`) : alert, avatar, badge, breadcrumb, button, card, checkbox, collapsible, dialog, dropdown-menu, icon, input-otp, input, label, navigation-menu, placeholder-pattern, select, separator, sheet, sidebar, skeleton, sonner, spinner, table, tabs, textarea, toggle-group, toggle, tooltip.
+- **À installer au J1**, par la CLI shadcn en style *new-york*, **jamais édités ensuite** : `slider` (réglages du lobby), `switch` (interrupteurs du lobby), `progress` (chrono), `scroll-area` (bande des joueurs, révélation, podium), `radio-group` (avatars, presets, difficulté de saisie).
+- **À installer au J2** : `popover`, `command` (sélecteur de thèmes, masqué au J1 sous son seuil, `00` § Jalons et budget-temps).
+- **Refusés** : `form`, enveloppe de react-hook-form qui doublerait `<Form>` d'Inertia (n° 42, `CLAUDE.md` §5, principe 11) ; toute autre bibliothèque d'interface ou d'animation.
+- Les composants de `components/{game,room,public,state}` ne composent que :
+  - ces primitives ;
+  - les composants propres de cette spec (§ 2 à § 7 : `GameLayout`, `PublicLayout`, `GameThemeScope`, `GameFrame`, `GameAnnouncer`, `GameHelp`, `SiteFooter`, `TmdbAttribution`, `PublicHeader`, `AppearanceToggle`, `MaintenanceBanner`, `ConnectionBanner`, les quatre composants d'état) ;
+  - `player-avatar.tsx` et `avatar-picker.tsx` (C5), `answer-input.tsx` (C10), `choice-grid.tsx` (C11), et `components/language-switcher.tsx` [existant, `WATCHED`], que composent `PublicHeader` et `GameLayout` ;
+  - nommément, à la demande de 80 (80 § 1.4, L80-7) : `standings-table.tsx`, `round-recap.tsx`, `podium-highlights.tsx` et `podium.tsx` ; et ceux de 50 sous `components/room/` (50 § 8.1) : `seat-list.tsx`, `share-code.tsx`, `seat-actions.tsx`, `replay-button.tsx`, `room-settings-form.tsx`, `preset-picker.tsx`, `pool-status.tsx`, `settings-warnings.tsx`, `settings-changes.tsx` ;
+  - plus généralement, **tout autre composant de ces quatre répertoires**, soumis aux mêmes règles (props seulement, tokens seulement, fichier `WATCHED`) : `podium.tsx` compose le classement, le récapitulatif et les faits marquants, les composants de salon se composent entre eux, et 60 nomme librement ses composants d'état de manche (60 L60-14) ; une liste nominative seule rendrait ces compositions illégales ;
+  - les icônes lucide ; les tokens.
+
+  Ils n'importent jamais `components/admin/*`, un composant hérité du starter hors `components/ui/*` (hors périmètre surveillé, souvent en infraction, voués à la réécriture par 40 au J2, § 9.3 — `input-error.tsx` en tête), ni une bibliothèque absente de cette liste. C'est une extension de C16 § 2.9 par son propriétaire, à reporter dans la feuille de contrats (points restés ouverts).
+- **Composants découplés** : un composant de `components/game/` ne lit ni Echo ni horloge ; il reçoit des props. Souscriptions et horloges vivent dans `hooks/game/` et `lib/game/`.
+- `choice-grid.tsx` (70) : aucune couleur ni aucun ordre qui dépende d'autre chose que la charge reçue ; ni `data-*`, ni `key`, ni classe ne distinguent une proposition d'une autre (règle 3). Au J1, aucun indice visuel « titres originaux » : l'attribut `lang` suffit (C11 § 8 laissé à 90).
+
+### 9.3 Le script `scripts/check-theme-tokens.mjs` : périmètre, méta-vérification, fichiers hérités
+
+**`WATCHED`**. Les entrées existantes restent (`pages/admin`, `components/admin`, `layouts/admin`, `lib/admin-catalog-query.ts`, `lib/admin-enum-keys.ts`, `lib/admin-format.ts`, `lib/roles.ts`, `hooks/use-forced-appearance.ts`, `types/admin.ts`). Ajouts du J1, tous sous `resources/js/`, **dès leur création** :
+
+- `pages/game`, `pages/room`, `pages/legal`, `pages/error.tsx` ;
+- `pages/welcome.tsx`, à sa réécriture en accueil ;
+- `layouts/game`, `layouts/public` ;
+- `components/game`, `components/room`, `components/public`, `components/state` ;
+- `hooks/game`, `lib/game` ;
+- `components/language-switcher.tsx`, `app.tsx` ;
+- fichiers nominatifs créés par les contrats hors de ces répertoires (R-36) : `types/game-wire.ts`, `types/answers.ts`, `types/scoring.ts`, `types/pool.ts`, `types/player.ts`, `types/room-settings.ts`, `lib/room-settings.ts`, `lib/frame-geometry.ts` ; et, par cette spec, `types/legal.ts` ;
+- `hooks/admin`, `lib/admin`, répertoires du back-office créés par 20, **dès leur création** : inscrits par L20-9a, son premier lot à y créer un fichier (exigence EN20-2 de 20, C16 § 2.11), et ratifiés ici par le propriétaire du périmètre. Sans eux, la méta-vérification refuserait les fichiers de 20 comme non classés.
+
+**Méta-vérification et `EXEMPT` : propriété de 100** (100 § 7.4, lot L100-2, livré avant L90-1 ; boundary map n° 41). Rappel de ce qu'elle garantit : tout fichier `.ts` ou `.tsx` sous `resources/js` est soit sous un chemin `WATCHED`, soit dans `EXEMPT`, sinon la règle `[unclassified]` fait échouer le script ; sans elle, un nouveau répertoire joueur échapperait au script par simple oubli de déclaration — c'est exactement ce qui s'est produit pour les 66 fichiers joueurs actuels. `EXEMPT` est la liste nominative, en tête du script, des fichiers du starter non surveillés au commit de gel ; elle **ne fait que décroître** : un fichier en sort quand il est réécrit ou supprimé, aucun n'y entre. Sont exemptés en permanence, hors liste : `components/ui/**` (générés, jamais édités), `routes/**`, `actions/**`, `wayfinder/**` et `types/translations.d.ts`. Seule exception hors script, parce que non balayée : le style anti-flash en ligne de `app.blade.php`, en Blade. **Cette spec en fixe le périmètre** : la liste `WATCHED` ci-dessus, la règle d'entrée des fichiers hérités ci-dessous, le motif obligatoire de l'échappatoire, et le contenu initial d'`EXEMPT`, que L90-1 régénère par `--list-unclassified` (option de 100) à son commit de gel et relit (100 § 7.4). L'option `--perimeter`, ajoutée par L90-1, imprime `{ watched, exempt }` en JSON pour `ThemeTokensPerimeterTest`.
+
+**Règle d'entrée des fichiers hérités.** Nettoyer en bloc les fichiers du starter serait du travail perdu : la plupart seront réécrits par 40 au J2. D'où :
+
+1. un fichier hérité **réécrit** — son rendu remplacé, pas seulement ses types ou un import — sort d'`EXEMPT` et entre dans `WATCHED` **dans le même commit** (au J1 : `welcome.tsx` ; au J2 : les écrans de compte de 40) ;
+2. un fichier hérité **propre** (aucune entorse au script) qu'un lot modifie entre dans `WATCHED` dans le même commit : c'est gratuit (au J1 : `layouts/app-layout.tsx`, `layouts/auth-layout.tsx`, `components/app-sidebar.tsx`, `types/ui.ts`, `types/global.d.ts`) ;
+3. un fichier hérité **en infraction** qu'un lot doit seulement retoucher (garde de nullabilité, clé renommée) reste dans `EXEMPT` ; la retouche n'introduit aucune entorse nouvelle.
+
+**Échappatoire** : `// theme-tokens-ignore <motif>` sur la ligne précédente, pour les rares cas physiques ; elle reste nominative, son motif est obligatoire et chaque usage se relit.
+
+### 9.4 Revue
+
+Le principe 13 prévoit une « revue de PR qui refuse tout CSS hors thème ». Le porteur étant seul, la revue est la liste « terminé » de chaque lot d'écran : script vert, aucune échappatoire sans motif, tokens seulement, états chargement/erreur/déconnexion rendus, parcours clavier vérifié (`00` § Jalons et budget-temps, « ce qui n’est pas coupable »).
+
+---
+
+## 10. Inventaire des écrans du J1 et de leurs états
+
+« Minimal » n'autorise pas à sauter les états de chargement, d'erreur et de déconnexion (principe 13). Ce tableau est la forme exécutable de la barre « terminé » côté écrans : chaque ligne est un écran, chaque état cité est dû au J1, et la colonne « comportement » nomme la spec qui décide ce que l'état contient. Cette spec décide où il s'affiche et avec quels composants.
+
+| Écran | Page Inertia · coquille · thème | Domaines | Comportement |
+|---|---|---|---|
+| Accueil | `welcome` · `PublicLayout` · apparence du visiteur | `common`, `legal` | 90 (§ 4.7) |
+| Pseudo et avatar (entrée dans un salon) | `room/join` (50, `room.entry`) · `PublicLayout` · apparence du visiteur | `room`, `legal` | 50 (flux), 40 (règles, C5) |
+| Création de salon | `room/create` (50, `room.create`) · `PublicLayout` · apparence du visiteur | `room`, `legal` | 50 |
+| Démarrage solo | `room/solo` (60, `solo.create`, 60 § 16.4) · `PublicLayout` · apparence du visiteur | `room`, `legal` | 60 (D19 du 23/09) |
+| Lobby | `game/lobby` · `GameLayout` · sombre | `game`, `room`, `legal` | 50 (contenu), 60 (transport) |
+| Manche | état de `game/lobby` ou de `game/solo` | idem | 60 (moteur), 70 (saisie), 80 (texte de D29 du 23/09) |
+| Joueur verrouillé | état de la manche | idem | 70 (réponse), 80 (points), 60 (liste) |
+| Révélation | état de `game/lobby` ou de `game/solo` | idem | 60 (contenu), 80 (classement) |
+| Podium | état de `game/lobby` ou de `game/solo` | idem | 80 (contenu), 50 (« Rejouer ») |
+| Solo | `game/solo` · `GameLayout` · sombre | idem | 60 |
+| Salon expiré | `game/room-expired` · `GameLayout` · sombre | idem | 50 |
+| Erreurs | `error` · `PublicLayout` | `common`, `legal` | 90 (§ 4.8) |
+| Pages légales | `legal/show` · `PublicLayout` | `legal` | 90 (§ 4) |
+
+Détail des états, écran par écran :
+
+- **Accueil.** Nominal ; bandeau de maintenance ; champ de code : code mal formé (`common.home.room_code_invalid`, sans requête), navigation en cours (bouton désactivé), code inconnu (page `error` 404). Aucune autre donnée à charger. Aucun lien de compte en production au J1 (`accountsOpen` faux, § 2.4).
+- **Pseudo et avatar.** Formulaire `<Form>` d'Inertia (jamais `useForm` maison) : pseudo (bornes `{min, max}` reçues en props depuis `NicknameNormalizer`, jamais écrites en dur, C5 § 3) et sélecteur d'avatar (`avatar-picker.tsx`, `RadioGroup` de `PlatformLimits::avatarPresets()` avatars ; libellé `common.avatar.preset.*` par option ; avatars déjà pris signalés **par texte** `common.avatar.picker.taken`, jamais par la seule couleur ; présélection `suggest()`). États : soumission en cours (bouton désactivé, `Spinner` neutralisé) ; erreur de validation (un seul message parmi les sept de `validation.nickname.*`, lié au champ par `aria-describedby`, rendu aux tokens — `text-destructive` —, jamais par le composant hérité `input-error.tsx`, en infraction au script) ; les cinq états `entry` de 50 § 7.2 : `kicked` (aucun formulaire, `room.join.kicked`), `full` (aucun formulaire, salon plein : capacité, `PlatformLimits::roomSeats()` sièges au plus), `late_join` (formulaire et `room.join.late_join` : retardataire admis, qui entre à la manche suivante avec un score initial de 0, 50 § 15), `in_progress` (formulaire et `room.join.in_progress` : attente de la partie suivante), `open` ; trop de requêtes (429) ; salon archivé → `game/room-expired`. `late_join` dépend de `allowLateJoin`, réglage de l'onglet Simple au J1, défaut faux, éditable par l'hôte (C0, ligne 9 ; 50 § 8.1, `lateJoinAvailable`) ; il n'est jamais masqué au J1 : D17 du 23/09 n'a plus d'effet depuis D35 du 23/09 (J1 complet), et `late_join` survient dès que l'hôte active le réglage — amendé le 23/09. **Mention d'acceptation des CGU** sous le bouton d'envoi : texte `legal.terms_notice`, lien Wayfinder `legal.terms` en nouvel onglet (`target="_blank" rel="noopener"`, `legal.new_tab` en `sr-only` : quitter la page perdrait la saisie). Elle s'affiche **sans rien stocker**, le jeton ne portant aucun consentement (`questions-ouvertes` § Déjà tranché, « L'invité n'a rien à stocker » ; 40 § 2.1) ; tant que `config('legal.pages.terms.provisional')` est vrai, le lien mène au texte provisoire, marqué comme tel (§ 4.4).
+- **Création de salon.** Pseudo et avatar de l'hôte, même formulaire et même mention des CGU ; ce que la création règle d'emblée et ce que le lobby règle ensuite appartient à 50. États : soumission, erreurs de validation, 429. La création reste possible pendant un drainage : seul le lancement est refusé.
+- **Démarrage solo.** Choix de l'un des presets du site (`SettingPresetKey::cases()`, `RadioGroup`) et, pour un jeton sans siège solo, identité (C5, 60 § 16.2), avec la même mention des CGU. États : soumission ; refus de drainage `common.maintenance.launch_blocked` ; vivier insuffisant (message de 60, résolu côté serveur). Le `N` ramené d'office (D19 du 23/09) est annoncé sur `game/solo`, pas ici.
+- **Lobby.** Liste des sièges (`SeatView` : avatar, pseudo, badge d'hôte, état `connected` / `disconnected` / `left`, expulsé) ; code et lien de partage copiables (le code est à l'écran, jamais dans le `<title>`) ; réglages de l'onglet Simple, éditables par l'hôte, en lecture seule pour les autres (`ReadOnlyNotice`) ; compteur de vivier ; vivier bloqué avec cause et remède en données (D28 du 23/09 : la non-répétition seule → « nouveau salon ») ; lancement indisponible sous `RoomSettingsBounds::MIN_CONNECTED_PLAYERS_TO_LAUNCH` joueurs connectés, avec la raison en texte ; refus de lancement ou de « Rejouer » (`room.refusal.*`, ou `common.maintenance.launch_blocked`), rendu dans la page en `Alert` au rôle `note` et annoncé, jamais en toast (§ 2.3) ; transfert d'hôte ; bandeau de connexion ; second onglet en lecture seule (`seat.superseded`) ; expulsion (`seat.kicked` : message, lien vers l'accueil) ; archivage (`room.archived` → salon expiré) ; aide (`GameHelp`). Défilement dans une `ScrollArea` si les sièges dépassent la hauteur.
+- **Manche.** Décompte de lancement (programmée, `startsAt` à venir) ; palier `i` ouvert : cadre d'image, chrono, valeur du palier (D29 du 23/09), saisie selon la difficulté de saisie (`input_difficulty`) — Facile : QCM dès `T₁` ; Normal : texte, puis QCM à `T_N` ; Expert : texte seul ; image en chargement ou indisponible (§ 7.1) ; « texte épuisé, QCM attendu » en Normal (D20 du 23/09 : saisie texte fermée, QCM à venir, annonce sans vol de focus) ; QCM indisponible (en Normal le texte reste seul ; en Facile la manche est annulée, C11) ; un seul joueur connecté (`game.round.lone_player`, affichage seul) ; manche close avant la révélation (`game.round.time_up`) ; manche annulée (`game.round.cancelled`, sans motif ni titre) ; partie en pause avec l'heure d'interruption formatée par le client (`game.pause.interrupts_at`) ; reprise ; déconnexion (`ConnectionBanner`, le chrono continue) ; second onglet en lecture seule ; **siège en attente**, dû au J1 : retardataire admis avant sa première manche (`member` faux jusqu'à `firstRoundNumber`, C7 ; 50 § 15) ou siège entré en `in_progress`, en attente de la partie suivante (`room.lobby.waiting_next_game`) — ni saisie ni image de la manche en cours, que le service d'image lui refuse (E10-20), chrono et liste des joueurs visibles ; comportement de 50 § 15 et de 60. Les retardataires sont livrés au J1 (D35 du 23/09 ; D17 du 23/09 n'a plus d'effet) — amendé le 23/09. **Aucun défilement.** Aucun titre, aucune réponse d'autrui, aucun point d'autrui à l'écran avant la révélation (règle 3, `10` § 7.6).
+- **Joueur verrouillé.** Points gagnés tout de suite depuis la réponse HTTP de 70 (`TierScore` : `pointsTotal` en grand, `pointsTier` + `pointsBonus` en détail quand le bonus n'est pas nul) ; rang d'arrivée (`lockRank`) ; liste en direct de qui trouve (`player.locked` : `publicId` et `lockRank` seulement) ; chrono restant ; images qui continuent (`00` § Le jeu en une manche, écran du joueur verrouillé). Jamais le titre, jamais la réponse saisie.
+- **Révélation.** Les images des paliers **ouverts** avant la clôture, par `tierIndex` croissant — `N` si la manche a couru jusqu'à `D`, moins après une fin anticipée (`round.revealed.images`, `RoundState.images`, C7) —, chacune dans un `GameFrame`, depuis les blobs gardés par `frame-loader` (60) ; jamais un cadre pour un palier non ouvert (D14 du 23/09 ; URL valables jusqu'à `revealEndsAt`, E10-65) ; titre dans la langue du joueur et titre original s'il diffère, chacun avec son `lang`, et l'année (`RevealMovie`, R-24) ; trouveurs (`RoundFinder` : rang, points, temps formaté par `Intl.NumberFormat`) ; classement intermédiaire (`Leaderboard`, identité lue dans `seats`) ; **`TmdbAttribution`** ; hôte : « manche suivante » (`game.host.next_round`) ; solo : « manche suivante » (`game.solo.next_round`). Défilement permis, dans une `ScrollArea` ; focus au titre.
+- **Podium.** `Podium` de 80 : classement final (`standings`, avatars), récapitulatif des films avec `lang` sur chaque titre, faits marquants (D25 du 23/09), partie interrompue « à la manche `k` sur `M` » ; hôte : « Rejouer » (refusé pendant un drainage, message unique) ; autres : attente de l'hôte ; solo : rang affiché « — ». Pas de crochet de compte au J1 (principe 10, § 11). Focus au titre.
+- **Solo.** Tous les états de manche, de révélation et de podium, sans autres joueurs et sans canal ; siège solo sans partie en cours ni podium à montrer : choix du preset pour relancer (60 § 16.4) ; gestes d'entraînement « Voir la réponse » et « Passer la manche » (D18 du 23/09 : `game.solo.reveal_answer`, `game.solo.skip_round`) ; `N` ramené d'office annoncé par la prop `settingsNotice` (`game.solo.frames_adjusted`, D19 du 23/09) ; client hors ligne (`ConnectionBanner` à l'état `offline` quand la lecture de `solo.state` échoue).
+- **Salon expiré.** Message de 50 et lien vers l'accueil pour créer un salon ; jamais une 404.
+- **Erreurs.** § 4.8.
+
+---
+
+## 11. Jalon 2 — à écrire
+
+Sujets que la carte des specs (`00` § Carte des specs) attribue à `90`, **listés sans être rédigés**. Ils s'écrivent après 40-J2 et 80 (ordre d'écriture, A-64), sur le socle ci-dessus.
+
+1. **Écrans de compte et de conformité**, sur les règles de 40 : acceptation des CGU et déclaration d'âge à l'inscription (Fortify et interstitiel avant toute création de compte OAuth, cases distinctes non pré-cochées) ; re-acceptation après changement de version ; profil, langue et avatar ; comptes liés et boutons Google/Discord conformes à leurs règles de marque (extension de l'exception § 3.2) ; « Mes parties » et ses quatre compteurs (fenêtre affichée, date de la plus ancienne partie, bouton « Exporter ») ; export ; suppression de compte avec le cas curateur/admin (`10` § 5.5), et correction du texte actuel de `account.delete_account.dialog_description`, qui promet un effacement total contraire à l'anonymisation. États de ces écrans, relevés par la pré-analyse : compte sans e-mail (dégradé, et l'interface le dit), liaison refusée, déliaison refusée, pseudo du fournisseur proposé à valider, copie de la photo du fournisseur en échec avec « Réessayer », notification de masquage. Reprise dans l'inventaire de `auth/login` et `auth/confirm-password`, dont le masquage du lien d'inscription et du bouton de passkey sur `canRegister` et `canUsePasskeys` est livré par exception au J1 par L40-7 (40 § 9). La mention d'acceptation des CGU de l'invité, elle, est due dès le J1 (§ 10).
+2. **Coquille des écrans de compte** : sortie de la barre latérale du starter côté joueur (dette n° 24 côté joueur, § 2.5), réécriture aux tokens des fichiers hérités en infraction, retrait éventuel de `dashboard`.
+3. **Geste de signalement** d'un pseudo ou d'une copie provider (où, comment, retour identique à la seconde tentative) et **pseudo masqué** (`common.player.masked` avec ordinal dérivé au rendu, n° 74).
+4. **Onglet Avancé** (motif ARIA *tabs*, feuille plein écran sur mobile, onglet intégré sur desktop), **configurations sauvegardées**, **sélecteur de thèmes** (`popover`, `command`) dès son seuil.
+5. **Pages légales opposables** : textes du porteur ou de son conseil, sous-traitants nommés, tableau de conservation publié par renvoi à `10` § 11.1, phrase publique sur l'adresse IP de session corrigée par `10` (n° 73, exigence nouvelle ci-dessous), échéance d'archivage d'un salon augmentée de l'intervalle de balayage (50, points restés ouverts n° 4) ; texte public de l'engagement de retrait en **7 jours ouvrés**, reprenant mot pour mot la définition de `BusinessDays` (lundi à vendredi hors jours fériés légaux de France métropolitaine, 20 § 11.4 ; boundary map n° 12) ; dans la page de confidentialité, l'adresse IP du curateur transmise à TMDB quand son navigateur charge les visuels en curation (n° 9, 20) et le nom réel conservé pour les comptes privilégiés, y compris après anonymisation (40 § 8.4, D12 du 23/09) ; attribution CC BY des listes noires de pseudos, reprise du relevé `THIRD_PARTY_NOTICES.md` (100 § 7.6) ; levée sélective du `noindex` (variable de 100), puis vérification que l'accueil, rendu sans SSR, est réellement indexé — à réévaluer sinon, sans ajouter de processus Node non mesuré sur le VPS (risque relevé par la pré-analyse) ; balise canonique ; balises Open Graph génériques sans image ni `room_code`.
+6. **Formulaire « signaler un contenu »** (`takedown.store`, `throttle:takedown`) : champs = colonnes remplissables de `takedown_request`, locale déclarée par le demandeur, garde anti-automate sans cookie ni tiers, accusé FR/EN dans le domaine `mail` ; toujours sans page de suivi.
+7. **Page de fermeture du service** (`site:close` de 100, `common.closure.*`) et ses exceptions (pages légales, signalement, connexion, export, suppression, `/up`), avec un accusé de retrait sans engagement de délai en mode fermeture.
+8. **Crochet de compte** en fin de partie (principe 10), rendu si et seulement si la prop partagée `accountsOpen` (40 § 8.2) est vraie, comme les liens de compte de l'en-tête public (§ 2.4) ; le lien d'inscription suit la même prop.
+9. **Affichage du mode sans score** (80) et `game.help.scoring.scoreless` ; masquage de la ligne `game.help.scoring.speed_bonus` quand `speedBonus` est faux dans le contexte affiché, sans quoi l'aide annoncerait un bonus que le salon a coupé : `GameHelp` reçoit alors une prop `speedBonus: boolean` (exigence de 80 § 1.4, non consolidée).
+10. **Indice visuel « titres originaux »** du QCM, s'il se justifie.
+11. **Liste des écrans des parcours Playwright** (100), viewport minimal clavier ouvert compris.
+12. **Chiffrage des lots du J2** de cette spec.
+
+Questions déjà connues comme ouvertes, à poser à l'écriture de 40-J2 et reprises ici pour leurs écrans : effet de « bannir un pseudo » (`nickname.banned`) ; preuve du consentement aux données provider (cas `provider_data` de `ConsentKind` à arbitrer par `10`) ; avatar d'un invité qui crée un compte.
+
+---
+
+## Arbitrages propres à cette spec
+
+Décisions de rédaction prises dans l'espace que C15 § 8 et C16 § 8 laissent à `90`, chacune motivée à sa section :
+
+1. **Le salon est une seule page, `game/lobby`, du lobby au podium** ; manche, révélation et podium en sont des états (§ 2.1). Motif : aucune visite Inertia ne doit démonter souscription, horloge, annonceur ni jeton d'onglet.
+2. **Les pages d'entrée sont des pages `room/*`, dans l'apparence du visiteur** ; la bascule vers le sombre a lieu à l'entrée du lobby (§ 2.1, vérification n° 11 des éléments non couverts).
+3. **Une route du groupe `game.appearance` ne rend que des pages `game/*`** (§ 2.2) : la vue est rendue avant que le middleware reprenne la main.
+4. **`RobotsDirectives` est global et la directive est portée par l'en-tête seul**, sans balise `meta` (§ 5.2) : une 404 doit être couverte, et une seule source ne diverge pas.
+5. **Aucune balise Open Graph au J1** (§ 5.5).
+6. **L'accueil ne déclare que `common` et `legal`** ; le choix du preset solo vit sur une page `room/*` (§ 4.7), pour ne pas élargir la table de C15.
+7. **`GameHelp` rejoint la liste close** comme composant propre de 90, accessible hors palier ouvert (§ 7.7).
+8. **Une seule région qui parle** : `MaintenanceBanner` n'est pas vivant, les `Spinner` surveillés sont neutralisés, aucun toast de jeu, et aucun `Toaster` monté sur une page de jeu — `<Toaster />` quitte `app.tsx` pour les coquilles hors jeu (§ 2.3, § 3.3, § 7.4).
+9. **Pages légales servies par une page `legal/show` unique** et un enum `LegalPage` (§ 4.1, § 4.2).
+10. **Règle d'entrée des fichiers hérités** en trois cas (§ 9.3).
+11. **Liste close étendue à la composition interne** des quatre répertoires de présentation, composants de 80 et de 50 nommés (§ 9.2) : une liste nominative seule rendait illégales les compositions de `podium.tsx` et des composants de salon.
+12. **Fermeture propre de toute feuille et de toute boîte de dialogue** (§ 2.5) : le « Close » généré par `components/ui/*`, non traduisible, n'est jamais exposé.
+13. **Page d'erreur rendue avec les props partagées, sa propre résolution de locale et une apparence non forcée** (§ 4.8), parce que les erreurs les plus fréquentes naissent avant `SetLocale` et `HandleInertiaRequests` ; l'erreur du back-office garde `fr` et le seul domaine `admin`, qui n'existe qu'en français.
+
+---
+
+## Exigences adressées aux specs voisines
+
+Consolidées ici pour qu'aucune ne reste éparse dans le texte. « Nouvelle » = absente de la feuille de contrats du 23/09, **signalée au porteur**.
+
+| Spec | Exigence | Motif | Statut |
+|---|---|---|---|
+| 50 | L'état « erreur » du lobby (50 § 8.1) rend ses refus dans la page (`Alert` au rôle `note`, `room.refusal.*` ou `common.maintenance.launch_blocked`) et les annonce par `announce()` ; « toasts `sonner` » est retiré de 50 § 8.1 | § 2.3 ; C16 § 4 | nouvelle (contradiction signalée) |
+| 50 | `lib/game/room-code.ts` exporte aussi `isWellFormedRoomCode(code: string): boolean`, miroir client de `RoomCode::isWellFormed()`, prouvé identique par un test de 50 (patron du miroir `frame-geometry.ts` de 20) | § 4.7 : le champ de code refuse un code mal formé sans requête, et sans écrire ailleurs longueur ni alphabet | nouvelle |
+| 50, 60 | Mention d'acceptation des CGU (`legal.terms_notice`, lien `legal.terms`) sous le bouton d'envoi du formulaire de pseudo et d'avatar de `room/create`, `room/join` (50) et `room/solo` (60) | § 10 ; `questions-ouvertes` § Déjà tranché ; 40 § 2.1 | demandée par 40 (40 § 9) ; nouvelle côté 50 et 60, qui rendent ces pages |
+| 50, 60 | Retirer toute mention résiduelle d'une page `game/room` (au relevé du 23/09 : dans 50, la ligne de 60 de « Ce que cette spec ne décide pas » et le point resté ouvert n° 1, qui la disent « confirmée ») | § 2.1 ; C16 § 2.1, qui ne la nomme pas | nouvelle (alignement) |
+| 60 | `solo.show` passe à `game/solo` la prop de page `limits: PlatformLimits::toArray()`, comme le lobby | § 7.7 : `speedBonusMaxPercent` de `GameHelp` en solo | nouvelle |
+| 60 | Le hook qui fournit l'état de connexion (`hooks/game/use-game-state.ts`) annonce `common.connection.restored` par `announce()` à la transition vers `connected` | § 7.4, § 7.6 : `ConnectionBanner` ne lit ni Echo ni horloge | nouvelle |
+| 60 | L60-9 dépend, pour le socle de 90, de L90-6a (`GameFrame`, `ConnectionBanner`) et de L90-6b (`round-timeline.ts`), jamais de L90-3b ni de L90-7, qui attendent le drainage (L100-5 → L60-10) | 60 § 23 : un lot de 60 ne dépend d'aucun lot d'autre spec qui attend un lot postérieur de 60 | nouvelle (précision de « 90, C16 ») |
+| 70 | Relire le texte de `game.help.prefix` : « jouables » désigne le vivier au lexique de `00` ; proposition « quand le site compte plusieurs films d'une même saga » | § 7.7 ; `00` § Vocabulaire ; `CLAUDE.md` §2 | nouvelle, à arbitrer par le porteur (le texte vient de `questions-ouvertes` § Déjà tranché) |
+| 20 | Toute `SheetContent` ou `DialogContent` du back-office masque le « Close » généré et compose sa fermeture sur une clé `admin.*` ; `admin-layout.tsx` monte `<Toaster />` (fait par L90-3) ; commentaire de `admin-input-error.tsx` corrigé (fait par L90-1) | § 2.3, § 2.5, § 2.2 | nouvelle |
+| 20 | L20-2 dépend de L90-1 et **ne retire rien lui-même** : `ForceAdminAppearance`, l'alias `admin.appearance` (dans `bootstrap/app.php` et `routes/admin.php`) et l'appel `useForcedAppearance('light')` d'`admin-layout.tsx` sortent de ses fichiers, puisque L90-1 les retire ; L20-2 garde ses propres ajouts (`admin.2fa` et sa description dans le docblock du groupe, pied, `admin/error`, coquille mobile) | § 2.2 ; C16 § 2.2, retraits possédés par 90 | nouvelle (alignement de L20-2, double écrivain supprimé) |
+| 20 | L20-2 écrit dans `tests/Feature/Public/SiteFooterTest.php` de 90 le cas « envoie au back-office les clés du pied admin et aucune clé legal », puisqu'il livre `admin.footer.*` (dépendance inversée, comme `ShellTest` par L50-4) | L90-3 : sans cette inversion, L90-3 attendrait L20-2, qui attend les routes légales de L90-4, qui attend L90-3 | nouvelle (alignement de L20-2 ; 20 renvoie déjà la preuve du pied à ce fichier) |
+| 20 | Dans `FrameGeometryTest` (L20-4), le test « frame-geometry.ts, le jeton --aspect-frame et la prop frameFormat reflètent FrameGeometry » n'asserte pas la prop, qui n'existe qu'après L90-6a : L90-6a l'y ajoute | § 9.1 ; L90-6a dépend de L20-4 | nouvelle (alignement de L20-4) |
+| 20 | L20-10 et L20-12 ne dépendent, pour le socle de 90, que de L90-6a (`GameFrame`, `GameThemeScope`), jamais de L90-7 | L90-6a ; § 10.3 de 20 ; ordre « curation d'abord » (D37 du 23/09) : le lot pilote démarre dès que les lots J1 de 20 et le socle de production minimal de 100, sans moteur, sont livrés — amendé le 23/09 | nouvelle (précision de « socle de `90` ») |
+
+## Exigences adressées à 10
+
+Aucune colonne, aucun cas d'enum, aucun index nouveau. Exigences consolidées dont cette spec est émettrice ou consommatrice :
+
+- **E10-13** (émise par 90) — `10` § 1.7 l.134 et docblock de `User.php` : « Aucun SSR en v1. »
+- **E10-60** (émise par 90, avec 60 et 20) — `10` § 10 : aucun LQIP ; le repli d'un client lent est un cadre fixe 16:9, un aplat au token et un indicateur (§ 7.1).
+- **E10-01** (consommée) — `player.kicked_at` : état « expulsé » du lobby et de l'écran d'entrée (§ 10).
+- **E10-06** (consommée) — cas `text_exhausted` de `round_player.input_state` : état « texte épuisé, QCM attendu » de l'écran de manche (§ 7.5, § 10).
+- **E10-52** (consommée) — points et paliers publiables dès `revealing` : trouveurs et classement de l'écran de révélation (§ 10).
+- **E10-65** (consommée) — URL des paliers **ouverts** servables jusqu'à `reveal_ends_at` : les images de la révélation, `N` au plus (§ 10).
+- **E10-20** (consommée) — prédicat de service de `/f/` : un retardataire admis ne reçoit aucune image de la manche en cours, d'où l'état « siège en attente » sans image (§ 10).
+- **E10-53** (consommée) — fin anticipée : `text_exhausted` n'est pas une saisie close ; l'état « texte épuisé, QCM attendu » n'annonce donc pas la fin (§ 7.4, § 10).
+- **E10-59** (consommée) — en-têtes de `/f/`, dont `X-Robots-Tag: noindex, nofollow`, posés par `FrameImageResponse` : `RobotsDirectives` ne les écrase jamais (§ 5.2).
+
+**Exigence nouvelle, non consolidée** (émise par 90, n° 73, résolution retenue) : `10` § 11.1 l.1148 — la phrase publique « l'adresse IP de session vit quelques heures en base » devient « … au plus 24 h après la fin de la session ». Aucune E10 consolidée ne la porte ; elle conditionne la page de confidentialité publiée au J2 (§ 11, point 5).
+
+## Amendements à d'autres documents
+
+Amendements consolidés dont `90` est émettrice ; leur application au corpus est un travail séparé (notes du rédacteur en chef, point 7).
+
+- **A-02** (`00` l.97, l.171, principe 6) — retirer le LQIP : cadre fixe 16:9, aplat au token, indicateur (D7 du 23/09).
+- **A-23** (`00` l.214, l.222) — « prévisualisation en conditions de jeu » = `GameFrame` dans `GameThemeScope` ; pied de page replié en jeu.
+- **A-30** (`00` l.329) — `tabs` et `table` installés, `form` exclu, composants par jalon ; Vitest configuré au J1.
+- **A-32** (`00` l.363) — liste des specs du J1 : 90 J1 = pages publiques **et** socle de coquille de jeu.
+- **A-36** (`00` principes 5, 8, 13) — 40 % clavier ouvert ; fin de manche annoncée à l'événement serveur ; back-office suivant l'apparence, périmètre `WATCHED` et méta-vérification, exception des marques tierces.
+- **A-37** (`05` l.100) — attributs de validation en camelCase, `validation.nickname.*`, `validation.attributes.avatar`.
+- **A-39** (`05` l.94) — `common` porte avatars, erreurs HTTP, bandeaux, apparence ; liste close réaffirmée.
+- **A-40** (`05` l.111) — une page de jeu embarque `common`, `game`, `room`, `legal` ; toute page joueur embarque `legal` ; le back-office `admin` seul.
+- **A-42** (`05` l.141, l.253) — `<html lang>` du visiteur, corps FR dans `<div lang="fr">`, `Vary` étendu, « cachables » retiré, « signaler un contenu » `noindex` permanente.
+- **A-44** (`05` l.179) — charge du QCM : quatre chaînes, drapeau, `lang` unique (consommé par `choice-grid.tsx`).
+- **A-46** (`05` l.189) — exemples du sous-titre (texte d'aide).
+- **A-48** (`05` l.237) — formatage client en `fr` au back-office.
+- **A-50** (`05`, nouvelle section) — tableau de propriété des préfixes (§ 6.4).
+- **A-51** (`questions-ouvertes` l.78) — 90 J1 couvre pages publiques et socle de coquille.
+- **A-62** (`questions-ouvertes` l.328, l.330) — back-office suivant l'apparence ; `WATCHED` et méta-vérification.
+- **A-64** (`questions-ouvertes` l.340-356) — 90 J1 avant 60 ; section J2 « à écrire ».
+- **A-71** (`CLAUDE.md` §3) — liste des composants shadcn par jalon, `form` exclu.
+- **A-73** (`CLAUDE.md` §5) — switch de `app.tsx` et coquilles.
+- **A-74** (`CLAUDE.md` §6) — domaine de traduction : liste close de sept, `legal` sur toute route joueur.
+- **A-75** (`CLAUDE.md` §7) — règle 5 : périmètre `WATCHED` ; règle 8 : « aucun minuteur client ne décide ».
+- **A-79** (`REPRISE` l.134) — ordre d'écriture : 90 J1 avant 60.
+- **A-80** (`REPRISE`, dette n° 24) — tranchée par la règle de coquille mobile (§ 2.5).
+
+---
+
+## Lots d'implémentation
+
+Estimations en heures, **barre « terminé » comprise** (tests verts, CI verte, FR et EN complets, états chargement/erreur/déconnexion, parcours clavier ; facteur 1,5 à 2 intégré, `00` § Jalons et budget-temps). Ces heures sont des mesures de taille, jamais un calendrier ni un budget à tenir (D36 du 23/09 : le développement est confié à l'IA). Une partie de ces heures était comptée implicitement par `00` § Jalons dans les postes « moteur » et « socle i18n » ; c'est `00` qui consolide la taille du J1 à partir des sections « Lots » de toutes les specs (notes du rédacteur en chef, point 8). **Aucune variable d'ajustement** : depuis D35 du 23/09, le J1 est livré complet, les variables d'ajustement de développement (recadreur minimal, retardataires) sont sans objet — D17 du 23/09 n'a plus d'effet —, et le nombre de films du J1, réglé par le verdict du pilote (D10 du 23/09), relève de la curation ; le socle est dû tel quel. — amendé le 23/09
+
+| Lot | Objet | Jalon | Dépend de | Heures |
+|---|---|---|---|---|
+| L90-1 | Périmètre anti-couleur, tokens, composants du J1 et retrait du forçage clair | J1 | L100-2 | 3-4 |
+| L90-2 | Indexation intégrale et `Referrer-Policy` (en-têtes) | J1 | — | 1,5-2,5 |
+| L90-3 | Coquille publique, pied de page, attribution TMDB, `Toaster` hors jeu, domaine `legal` | J1 | L90-1 ; L40-7 (`accountsOpen`) | 5-6,5 |
+| L90-3b | Bandeau de maintenance | J1 | L90-3 ; L100-5 (C18-bis) | 0,5-1 |
+| L90-4 | Pages légales et « signaler un contenu » en squelette, mention des CGU | J1 | L90-2, L90-3 | 4-6 |
+| L90-5 | Pages d'erreur et composants d'état | J1 | L90-3 ; L20-2 (`admin/error`) | 3,5-5,5 |
+| L90-6a | Conteneur d'image, portée sombre locale, bandeau de connexion et annonceur | J1 | L90-1 ; L20-4 (C9) ; L100-3 (Vitest) | 3,5-4,5 |
+| L90-6b | Chronologie cliente et annonces de manche | J1 | L90-6a ; L60-2, L80-3 (types) | 3-4 |
+| L90-7 | Coquille de jeu, forçage sombre, aide | J1 | L90-3b, L90-6a | 3,5-5,5 |
+| L90-8 | Accueil et champ de code | J1 | L90-3 ; L50-3, L60-15 (routes d'entrée) | 3,5-5 |
+| L90-9 | Recette portrait et accessibilité des écrans de jeu | J1 | L90-7 ; L50-4, L50-5, L60-14, L60-16, L70-10, L80-7 | 2-3 |
+
+### L90-1 — Périmètre anti-couleur, tokens, composants du J1 et retrait du forçage clair
+
+- **Jalon** : J1. **Dépendances** : L100-2 (100 § 7.4), qui pose `EXEMPT`, la règle `[unclassified]` et l'option `--list-unclassified`, et qui est livré avant ce lot ; ce lot doit lui-même précéder la création du premier répertoire joueur, que la méta-vérification refuserait sinon. **L20-2 en dépend et ne retire rien lui-même** : 90, propriétaire des retraits de D8 du 23/09 (C16 § 2.2), en est l'unique écrivain, et les place dans son premier lot pour que le back-office de 20 naisse déjà dans l'apparence du visiteur (exigences aux specs voisines).
+- **Fichiers** : `scripts/check-theme-tokens.mjs` [modifié : ajouts `WATCHED` du § 9.3, option `--perimeter`, motif obligatoire de l'échappatoire, `EXEMPT` régénéré par `--list-unclassified` au commit de gel et relu, docblock l.15 (« back-office en clair » retiré, D8 du 23/09)] ; `resources/css/app.css` [modifié : `--success`, `--success-foreground`, `--color-success*` ; `--aspect-frame` n'est pas écrit ici, il appartient à L20-4] ; `resources/js/components/ui/{slider,switch,progress,scroll-area,radio-group}.tsx` [nouveaux, CLI shadcn] ; `package.json` et `package-lock.json` si la CLI ajoute une dépendance. **Retraits du § 2.2** : `app/Http/Middleware/ForceAdminAppearance.php` [retiré] ; `bootstrap/app.php` [retrait de l'alias `admin.appearance`] ; `routes/admin.php` [retrait du middleware ; docblock du groupe : puce `admin.appearance` retirée, décompte aligné sur le groupe réel, `admin.2fa` ajouté et décrit par L20-2] ; `resources/js/layouts/admin/admin-layout.tsx` [retrait de `useForcedAppearance('light')`, docblock] ; `resources/js/app.tsx` [commentaires l.18-19 et l.40-41] ; `resources/views/app.blade.php` [commentaire de l'attribut : `ForceAdminAppearance` n'y figure plus] ; `resources/js/hooks/use-forced-appearance.ts`, `resources/js/hooks/use-appearance.tsx` [docblocks : un seul forçage, sombre] ; `resources/js/components/admin/admin-input-error.tsx` [commentaire l.13, fichier de 20, coordonné].
+- **Tests** :
+  - `tests/Feature/Public/ComponentListTest.php` : « n'installe que la liste close des composants de présentation » ; « n'installe jamais l'enveloppe react-hook-form ».
+  - `tests/Feature/Public/ThemeTokensPerimeterTest.php` : « surveille chaque répertoire joueur créé depuis le jalon 1 » ; « ne garde dans EXEMPT que des fichiers existants hors du périmètre surveillé ». La règle `[unclassified]` elle-même est prouvée par 100 (L100-2), pas ici (R-04).
+  - `tests/Feature/Public/ShellTest.php` [nouveau, complété par L90-7 et L90-9] : « laisse le back-office suivre l'apparence du visiteur » (route existante `admin.dashboard`, curateur, cookie `appearance=dark` puis `light` : aucun `data-appearance-forced`, classe `dark` selon le cookie seul).
+- **Heures** : 3-4 (les heures d'`EXEMPT` et de la méta-vérification sont comptées une seule fois, dans L100-2 ; les retraits, ≈ 1 h selon D8 du 23/09, viennent de L90-7). **Variable d'ajustement** : aucune.
+
+### L90-2 — Indexation intégrale et `Referrer-Policy` (en-têtes)
+
+- **Jalon** : J1 (D30 du 23/09 : `noindex` intégral dès le premier déploiement). **Dépendances** : aucune. `config('app.indexable')`, `public/robots.txt` et la ligne `.env.example` de `SITE_INDEXABLE` appartiennent à L100-4 (100 § 12) : tant que la clé manque, `config()` rend `null`, donc `noindex`, qui est l'état voulu ; les tests de l'état levé fixent la clé par `config(['app.indexable' => true])`. L100-9 (mise en service) attend que `IndexingTest` soit vert.
+- **Fichiers** : `app/Http/Middleware/RobotsDirectives.php` [nouveau] ; `bootstrap/app.php` [modifié : ajout global] ; `routes/web.php` [modifié : drapeau sur `home`, commentaire] ; `app/Http/Middleware/VaryOnLanguage.php` [modifié : docblock, n° 69].
+- **Tests** — `tests/Feature/Public/IndexingTest.php` :
+  - « émet X-Robots-Tag noindex, nofollow sur toute réponse tant que l'indexation n'est pas levée »
+  - « émet noindex sur une page d'erreur et sur une URL inconnue »
+  - « ne lève le noindex que sur une route marquée indexable quand l'indexation est levée »
+  - « ne marque indexables que l'accueil et les trois pages légales »
+  - « garde noindex le lien d'un salon, les pages de jeu, signaler un contenu et le back-office quand l'indexation est levée »
+  - « n'écrase jamais l'X-Robots-Tag posé par une réponse d'image »
+  - « pose Referrer-Policy strict-origin-when-cross-origin sur toute réponse »
+  - « n'écrit jamais un room_code ni un paramètre dans le titre d'une page de salon » (balayage statique des `<Head title>` de `pages/game` et `pages/room`)
+  - Le contenu de `robots.txt` et la lecture de `SITE_INDEXABLE` sont prouvés par `tests/Feature/Deploy/SiteIndexingTest.php` de 100 (L100-4), jamais ici (R-04).
+- **Heures** : 1,5-2,5. **Variable d'ajustement** : aucune.
+
+### L90-3 — Coquille publique, pied de page, attribution TMDB, `Toaster` hors jeu, domaine `legal`
+
+- **Jalon** : J1. **Dépendances** : L90-1 ; la prop `accountsOpen` de 40 (§ 8.2, lot L40-7) pour les liens de compte de l'en-tête. **Aucune dépendance au drainage** : `MaintenanceBanner` et son montage sont isolés dans L90-3b, seul lot de cette spec qui attend L100-5. Sans cette isolation, L100-5 dépendant de `GamesInProgress` et de `game:reschedule` de 60 (L60-10, lui-même au bout de L60-5 → L60-6 → L60-7), la coquille publique, donc les routes légales de L90-4, dont dépend L20-2, et avec lui tout le back-office J1 et le lot pilote de 20 (20 § 10.3), attendraient le moteur de partie, contre l'ordre « curation d'abord » (D37 du 23/09 : le lot pilote démarre dès que les lots J1 de 20 et le socle de production minimal de 100, sans moteur, sont livrés — amendé le 23/09) ; et `ConnectionBanner`, alors livré par L90-5, qui dépend de ce lot, et consommé par L60-9, antérieur à L60-10, aurait enfreint la règle d'ordre de 60 § 23 (il est désormais livré par L90-6a).
+- **Fichiers** : `resources/js/layouts/public/public-layout.tsx` ; `resources/js/components/public/{public-header,appearance-toggle,site-footer,tmdb-attribution}.tsx` [nouveaux] ; `public/brand/tmdb.svg` et `public/brand/LICENSE.md` [nouveaux] ; `resources/js/app.tsx` [modifié : cas `legal/*`, `dashboard`, défaut `PublicLayout` ; `<Toaster />` retiré de `withApp`, § 2.3] ; `resources/js/layouts/{app-layout,auth-layout}.tsx` [modifiés : `SiteFooter variant="full"`, `<Toaster />`, entrée dans `WATCHED`] ; `resources/js/layouts/admin/admin-layout.tsx` [modifié : monte `<Toaster />`, coordonné avec 20, pour que le back-office garde ses toasts dans le même commit] ; `resources/js/components/app-sidebar.tsx` [modifié : retrait des deux liens du starter] ; `config/fortify.php` [modifié : `translations:account,legal`, sans retirer `accounts.switches` posé par L40-7, § 6.3] ; `routes/settings.php`, `routes/web.php` [modifiés : `legal` déclaré] ; `lang/{fr,en}/legal.php` [`footer.{report,label,sheet_description}`, `new_tab`, `tmdb.logo_alt`] ; `lang/{fr,en}/common.php` [`appearance.*`, `maintenance.*`, `nav.{menu_description,skip_to_content}` ; retrait de `nav.{repository,documentation}`]. Les clés `common.maintenance.*` restent posées ici, et non dans L90-3b : `launch_blocked` est résolue côté serveur par la garde de lancement de 50 (L50-7a), qui dépend de L50-3, donc de ce lot, et non de L90-3b.
+- **Tests** :
+  - `tests/Feature/Public/SiteFooterTest.php` : « envoie les clés du pied de page à toute page joueur ». Le cas « envoie au back-office les clés du pied admin et aucune clé legal » est écrit dans ce fichier par **L20-2**, qui livre `admin.footer.*` (dépendance inversée, comme `ShellTest` par L50-4) ; 90 ne le duplique pas (R-04). Placé ici, il aurait fermé un cycle : L20-2 dépend des routes légales de L90-4, qui dépend de ce lot.
+  - `tests/Feature/I18n/TranslationDomainDeclarationTest.php` : « déclare le domaine legal sur toute route joueur » (balayage de `Route::getRoutes()` : routes GET ou HEAD du groupe `web`, noms hors `admin.*`, exclusions fermées et nommées dans le test — `well-known.passkeys`, `storage.local`, `frame.serve`, `clock.show`, et par URI la route sans nom `/broadcasting/auth`) ; « n'envoie que le domaine admin au back-office » ; « n'appelle que des clés des domaines déclarés pour son préfixe de page » (balayage statique de `pages/<préfixe>/**` et des répertoires rattachés : `components/game` et `components/room` à `game/*`, `components/public` limité à `common` et `legal`, `components/state` limité à `common`).
+  - Vérifié à la main dans la liste « terminé » (aucun DOM en Pest ni en Vitest au J1, C18 § 2.4) : liens de compte de l'en-tête absents quand `accountsOpen` est faux et présents sinon ; toasts du back-office et des écrans de compte toujours affichés après le déplacement du `Toaster` ; feuille du pied replié fermée par son bouton propre, jamais par le « Close » généré.
+- **Heures** : 5-6,5 (0,5-1 h passées à L90-3b). **Variable d'ajustement** : aucune.
+
+### L90-3b — Bandeau de maintenance
+
+Lot court, isolé à dessein : il porte **la seule dépendance** de la coquille publique envers le drainage de 100, donc, par L100-5, envers le moteur de 60 (L60-10). Tout ce qui ne dépend pas du drapeau reste dans L90-3 et se livre avant.
+
+- **Jalon** : J1 (D32 du 23/09). **Dépendances** : L90-3 (`PublicLayout`) ; L100-5, qui pose `DeployDrain` et la prop partagée `maintenance` (C18-bis). Consommé par L90-7, qui monte le bandeau dans `GameLayout` (§ 2.3). Le drainage étant obligatoire avant la première partie sur le VPS et jamais avant la curation (D37 du 23/09), ce lot suit le moteur sans retarder le lot pilote. — amendé le 23/09
+- **Fichiers** : `resources/js/components/public/maintenance-banner.tsx` [nouveau, § 3.3] ; `resources/js/layouts/public/public-layout.tsx` [modifié : monte `MaintenanceBanner`, § 2.4].
+- **Tests** :
+  - Consommé, propriété de 100 : `tests/Feature/Deploy/MaintenanceBannerTest.php` › « partage le drapeau de drainage en booléen avec toute page joueur ».
+  - Vérifié à la main dans la liste « terminé » : bandeau rendu au rôle `note` quand `maintenance` est vrai, absent sinon, sans heure, phase ni nombre de parties (C18-bis § 3), en FR et en EN.
+- **Heures** : 0,5-1 (prises sur L90-3). **Variable d'ajustement** : aucune.
+
+### L90-4 — Pages légales et « signaler un contenu » en squelette
+
+- **Jalon** : J1. **Dépendances** : L90-2 (drapeau d'indexation), L90-3 (coquille, pied).
+- **Fichiers** : `routes/legal.php` [nouveau] et son `require` dans `routes/web.php` ; `app/Enums/LegalPage.php` ; `app/Http/Controllers/Legal/LegalPageController.php` ; `config/legal.php` [nouveaux] ; `.env.example` [`LEGAL_CONTACT_EMAIL=`] ; `resources/views/legal/{notice,terms,privacy,report}.fr.blade.php` [nouveaux] ; `resources/js/pages/legal/show.tsx`, `resources/js/types/legal.ts` [nouveaux] ; `resources/js/app.tsx` [cas `legal/*` s'il n'est pas déjà posé] ; `lang/{fr,en}/legal.php` [`provisional`, `contact.unavailable`, `report.title`, `terms_notice`] ; `app/Models/TakedownRequest.php` [docblock]. La mention d'acceptation des CGU est rendue par les pages d'entrée de 50 et de 60 (exigences aux specs voisines) ; ce lot en livre la clé et la cible.
+- **Tests** — `tests/Feature/Public/LegalPagesTest.php` :
+  - « rend le corps légal dans un fragment français quelle que soit la locale du visiteur »
+  - « garde le lang de html d'une page légale sur la locale du visiteur »
+  - « fait varier chaque page légale sur Accept-Language »
+  - « rend le partiel de chaque cas de LegalPage » (itère `LegalPage::cases()`, garde du § 4.1 contre un nom de vue pointé)
+  - « affiche le bandeau provisoire tant que la configuration le demande »
+  - « remplace un contact absent par la mention traduite »
+  - « traite une adresse de contact vide comme absente »
+  - « ne livre aucun texte légal qualifiant le service de non commercial »
+  - « rend signaler un contenu sans formulaire ni route d'écriture au jalon 1 »
+- **Heures** : 4-6. **Variable d'ajustement** : aucune.
+
+### L90-5 — Pages d'erreur et composants d'état
+
+- **Jalon** : J1. **Dépendances** : L90-3 ; la page `admin/error` de 20 (L20-2) pour la moitié back-office du test de domaines.
+- **Fichiers** : `resources/js/pages/error.tsx` [nouveau] ; `bootstrap/app.php` [modifié : `Inertia::handleExceptionsUsing()`, § 4.8] ; `app/Http/Middleware/SetLocale.php` [modifié : `resolve()` extrait, sans effet de bord] ; `resources/js/app.tsx` [cas `error`] ; `resources/js/components/state/{loading-state,empty-state,error-state,read-only-notice}.tsx` [nouveaux] ; `lang/{fr,en}/common.php` [`error.*`]. `ConnectionBanner` et les clés `common.connection.*` sont livrés par L90-6a : L60-9 les consomme, et un lot de 60 ne dépend que de lots d'autres specs qui n'attendent aucun lot postérieur de 60 (60 § 23) ; placés ici, ils attendraient en outre la porte `/admin` de 20 (L20-2), sans aucun rapport avec eux.
+- **Tests** :
+  - `tests/Feature/Public/ErrorPagesTest.php` : « rend la page error traduite pour 403, 404, 429, 500 et 503 hors mode debug » ; « rend la page error traduite et complète pour une URL inconnue, une liaison de route introuvable, un refus de rôle et un 429 levés avant le middleware Inertia » (props `locale`, `locales`, `translations`, `name` et `maintenance` présentes, texte dans la locale du cookie `locale`) ; « rend l'erreur du back-office en français quel que soit le cookie locale » (exception levée derrière `admin.locale`, cookie `locale=en` : page `admin/error`, locale `fr`, domaine `admin` seul, § 4.8) ; « ne marque jamais la page error comme d'apparence forcée, même levée dans une route de jeu » (route déclarée dans le test sous `game.appearance`, cookie `appearance=light`) ; « renvoie à la page précédente avec un message traduit sur une page expirée en visite Inertia » ; « répond en JSON aux requêtes qui l'attendent, jamais par la page error ».
+  - `tests/Feature/I18n/TranslationDomainDeclarationTest.php` : « rend les pages d'erreur joueur avec le domaine legal et les erreurs du back-office avec le domaine admin ».
+  - `tests/Feature/I18n/TranslationCoverageTest.php` › `carries every key built by an enumerable key constructor` [existant, nom conservé] : extension aux six erreurs HTTP.
+- **Heures** : 3,5-5,5 (rendu d'exception hors pile Inertia, résolution de locale extraite, remise à zéro de l'apparence ; 0,5 h de `ConnectionBanner` passée à L90-6a). **Variable d'ajustement** : aucune.
+
+### L90-6a — Conteneur d'image, portée sombre locale, bandeau de connexion et annonceur
+
+Scindé de la chronologie pour que `GameLayout` (L90-7), dont dépend le lobby de 50 (L50-4), n'attende pas les types de 60 et de 80 : sans cette scission, la coquille de jeu serait bloquée derrière L50-1 → L80-1 → L80-2 → L80-3, qui crée `types/scoring.ts`. **`GameFrame` et `GameThemeScope`, consommés par l'aperçu et la revue de 20 (L20-10, L20-12), ne dépendent d'aucun lot du moteur** : ils vivent ici, et non dans L90-7, qui attend le drainage (L90-3b → L100-5 → L60-10), pour que la curation en production et le lot pilote (20 § 10.3) n'attendent pas le moteur de partie, selon l'ordre « curation d'abord » (D37 du 23/09) — amendé le 23/09. `ConnectionBanner`, consommé par L60-9, vit ici pour la même raison (60 § 23).
+
+- **Jalon** : J1. **Dépendances** : L90-1 (répertoires surveillés) ; L20-4, qui crée `FrameGeometry` et le jeton `--aspect-frame` (C9) ; L100-3, qui configure Vitest (C18 § 2.4).
+- **Fichiers** : `resources/js/components/game/{game-frame,game-announcer,game-theme-scope,connection-banner}.tsx`, `resources/js/lib/game/announcer.ts` [nouveaux] ; `app/Http/Middleware/HandleInertiaRequests.php` [`frameFormat`] ; `resources/js/types/global.d.ts` [`frameFormat`] ; `lang/{fr,en}/game.php` [`frame.{loading,unavailable}`, `a11y.*`] ; `lang/{fr,en}/common.php` [`connection.*`] ; `tests/Frontend/game/announcer.test.ts` [nouveau].
+- **Tests** :
+  - `tests/Feature/Public/SharedPropsTest.php` : « partage le format d'image fixe en deux entiers ».
+  - `tests/Feature/Curation/FrameGeometryTest.php` (fichier de 20) [complété] : assertion `frameFormat` = `{ width: FrameGeometry::GAME_WIDTH, height: FrameGeometry::GAME_HEIGHT }` du test « frame-geometry.ts, le jeton --aspect-frame et la prop frameFormat reflètent FrameGeometry » (§ 9.1). L20-4, qui écrit ce test avant que la prop existe, n'en couvre que le miroir client et le jeton ; `SharedPropsTest` prouve la forme de la prop (deux entiers, aucune donnée de manche), `FrameGeometryTest` son égalité à la source (R-04 : une preuve par propriété).
+  - Vitest `tests/Frontend/game/announcer.test.ts` : « fusionne en une seule les annonces séparées de moins d'une seconde » ; « garde séparées deux annonces distantes d'exactement une seconde ».
+  - Le comportement DOM de `GameFrame` (image précédente gardée jusqu'au `load`, aplat, blocages), de `GameThemeScope` (tokens sombres dans le seul sous-arbre) et de `ConnectionBanner` (rien rendu à `connected`, textes `common.connection.*` sinon) est vérifié à la main dans la liste « terminé » du lot : Vitest n'a aucun environnement DOM au J1 (C18 § 2.4).
+- **Heures** : 3,5-4,5 (dont 0,5 h de `ConnectionBanner`, venue de L90-5 ; `GameThemeScope`, un seul `div`, venu de L90-7). **Variable d'ajustement** : aucune.
+
+### L90-6b — Chronologie cliente et annonces de manche
+
+- **Jalon** : J1. **Dépendances** : L90-6a (`announce()`) ; L60-2, qui crée `types/game-wire.ts`, et L80-3, qui crée `types/scoring.ts` (R-27 : un seul fichier déclarant par type). Consommé par L60-9 et par L80-6, qui y écrit le corps de `tierValueAt` (D29 du 23/09, fonction de 80).
+- **Fichiers** : `resources/js/lib/game/round-timeline.ts` [nouveau : `LiveRoundTimeline`, `toLiveTimeline`, `currentTier`, `announcementThresholds` ; `tierValueAt` écrit par L80-6] ; `resources/js/hooks/game/use-round-announcements.ts` [nouveau] ; `tests/Frontend/game/round-timeline.test.ts` [nouveau] ; `tests/Frontend/game/announcer.test.ts` [complété].
+- **Tests** :
+  - Vitest `tests/Frontend/game/round-timeline.test.ts` : « rend le palier dont la fenêtre contient l'instant serveur » ; « rend null avant le début et après D » ; « calcule en millisecondes entières les seuils de mi-manche, de dernier quart et de dernier dixième plafonné ». Le test « tierValueAt rend la valeur entière du palier courant, sans grâce ni bonus » (C16 § 7) est écrit dans ce même fichier par L80-6, avec la fonction (80 § 14, R-04).
+  - Vitest `tests/Frontend/game/announcer.test.ts` : « ne rejoue jamais un seuil déjà annoncé après un remontage » ; « saute les seuils déjà passés à la resynchronisation » ; « n'annonce la fin que lorsque le serveur clôt la manche ».
+- **Heures** : 3-4. **Variable d'ajustement** : aucune.
+
+### L90-7 — Coquille de jeu, forçage sombre, aide
+
+- **Jalon** : J1. **Dépendances** : L90-3b (`MaintenanceBanner`, monté en tête de `GameLayout`, § 2.3 ; et par lui L90-3 : `SiteFooter`, `PublicLayout`), L90-6a (`GameAnnouncer`, `announce()`, `ConnectionBanner`). Le retrait du forçage clair n'est plus ici : il est fait une seule fois, par L90-1 (§ 2.2).
+- **Fichiers** : `resources/js/layouts/game/game-layout.tsx`, `resources/js/components/game/game-help.tsx`, `resources/js/hooks/game/{use-visual-viewport,use-overscroll-lock,use-flash-notice}.ts`, `app/Http/Middleware/ForceGameAppearance.php` [nouveaux] ; `bootstrap/app.php` [alias `game.appearance`] ; `resources/js/app.tsx` [cas `game/*`] ; `resources/views/app.blade.php` [commentaire : l'attribut est posé par `ForceGameAppearance`, et par lui seul] ; `config/inertia.php` [`ssr.enabled` faux] ; `app/Models/User.php` [docblock : aucun SSR] ; `resources/js/hooks/use-forced-appearance.ts` [docblock : moitié serveur = `ForceGameAppearance`, aucun SSR] ; `resources/js/layouts/public/public-layout.tsx` [modifié : monte `GameAnnouncer`, § 2.4] ; `resources/js/types/ui.ts` [`GameLayoutProps`] ; `resources/js/components/language-switcher.tsx` [annonce `common.language.changed`, `Spinner` neutralisé, `aria-busy`, options désactivées pendant l'aller-retour, § 8] ; `lang/{fr,en}/common.php` [`language.changed`] ; `lang/{fr,en}/game.php` [`help.{title,description,open,prefix}`, `help.scoring.*`, textes tirés de 70 et 80].
+- **Tests** — `tests/Feature/Public/ShellTest.php` [complété ; créé par L90-1, qui y écrit « laisse le back-office suivre l'apparence du visiteur »] :
+  - « garde le tableau de bord du starter dans AppLayout »
+  - « ne marque jamais une page publique comme d'apparence forcée »
+  - « garde le rendu côté serveur désactivé »
+  - « n'émet aucun toast depuis une page, un composant ou un hook de jeu » (balayage statique de `pages/game`, `components/game`, `hooks/game`, `lib/game`, et des contrôleurs de `routes/game.php` pour un flash `toast`)
+  - « ne monte ni Toaster ni seconde région aria-live sur une page de jeu » (balayage statique de `layouts/game`, `pages/game`, `components/{game,room,state}` et `hooks/game` : aucun `Toaster`, aucun `aria-live` hors `game-announcer.tsx`, tout `Alert` au rôle `note`)
+  - « ne rend aucune SheetContent ni DialogContent sans masquer la fermeture générée en anglais » (balayage statique des fichiers `WATCHED`, § 2.5)
+  - « rend le lobby en sombre quelle que soit l'apparence du visiteur » (C16 § 7) : écrit dans ce fichier par **L50-4**, qui l'a repris, parce que `game/lobby` est la première page de jeu servie par une vraie route (dépendance inversée) ; 90 ne le duplique pas (R-04).
+- **Heures** : 3,5-5,5 (retraits du forçage clair, ≈ 1 h, passés à L90-1 ; `GameThemeScope` passé à L90-6a). **Variable d'ajustement** : aucune.
+
+### L90-8 — Accueil et champ de code
+
+- **Jalon** : J1. **Dépendances** : L90-3 ; L50-3, qui crée `room.create`, `room.show`, `room.entry` et `lib/game/room-code.ts` (`normalizeRoomCode()`, et `isWellFormedRoomCode()` demandé à 50) ; L60-15, qui crée `solo.create` — Wayfinder ne génère un helper qu'après la route (`CLAUDE.md` §8), et aucune URL n'est écrite en dur.
+- **Fichiers** : `resources/js/pages/welcome.tsx` [réécrit : sort d'`EXEMPT`, entre dans `WATCHED`] ; `resources/js/app.tsx` [cas `welcome` → `PublicLayout`] ; `lang/{fr,en}/common.php` [`home.{heading,tagline,create_room,join_room,room_code_label,room_code_invalid,play_solo}` ; retrait de `home.{deploy,description,documentation,intro,title,tutorials}`].
+- **Tests** — `tests/Feature/Public/HomePageTest.php` : « rend l'accueil avec les seuls domaines common et legal » ; « propose créer un salon, un champ de code pour rejoindre et jouer en solo » ; « ne contient plus aucun lien ni texte du starter ». Vérifié à la main dans la liste « terminé » : code saisi en minuscules ou avec tiret accepté après normalisation, code mal formé refusé sous le champ sans requête, code inconnu menant à la page `error` 404, parcours clavier du champ.
+- **Heures** : 3,5-5. **Variable d'ajustement** : aucune.
+
+### L90-9 — Recette portrait et accessibilité des écrans de jeu
+
+Le principe 5 et l'invariant « une seule région qui parle » sont des règles de cette spec ; aucun lot d'une spec voisine n'en a repris la vérification sur les écrans réels (§ 7.2). Ce lot la porte, une fois ces écrans livrés.
+
+- **Jalon** : J1. **Dépendances** : L90-7 ; L50-4 et L50-5 (lobby), L60-14 (états de manche, de révélation et de pause), L60-16 (partie solo), L70-10 (saisie et QCM), L80-7 (classement et podium).
+- **Fichiers** : aucun fichier de production ; `tests/Feature/Public/ShellTest.php` [complété].
+- **Tests** — `tests/Feature/Public/ShellTest.php` : « rend le solo et le salon expiré en sombre quelle que soit l'apparence du visiteur » (routes réelles `solo.show` avec un siège solo et `room.show` sur un salon archivé, cookie `appearance=light` : `class="dark"` et `data-appearance-forced="dark"` dans le HTML Blade ; C16 § 4, « chaque page `game/*` porte les trois moitiés du forçage sombre »).
+- **Recette manuelle consignée** dans la liste « terminé » : téléphone réel à 360 × 640, clavier ouvert, sur `game/lobby` (lobby, manche en Facile, Normal et Expert, joueur verrouillé, révélation, podium) et `game/solo` — image sur au moins 40 % de `--game-viewport-height`, aucun défilement en manche, chrono et champ visibles, QCM en grille 2×2, bandeaux de connexion et de maintenance compris ; lecteur d'écran réel (TalkBack ou VoiceOver) : seuils annoncés une fois, fin annoncée à l'événement serveur, aucune seconde région, aucun « Close » anglais.
+- **Heures** : 2-3. **Variable d'ajustement** : aucune.
+
+**Total J1 : 33 à 47,5 h.**
+**Total J2 : 0 h chiffrée ici** — la section J2 de cette spec est « à écrire » (§ 11) et chiffrera ses propres lots ; ordre de grandeur indicatif, à remplacer : 30 à 50 h.
+
+---
+
+## Ce que cette spec ne décide pas
+
+| Sujet | Spec propriétaire |
+|---|---|
+| Toute table, colonne, index ou cas d'enum ; le tableau de conservation ; la phrase publique sur l'adresse IP de session (n° 73, exigence nouvelle ci-dessus) | `10-catalogue-et-modele-de-donnees.md` |
+| La mécanique de la règle de langue : négociation, `t()`, `lang:types`, `lang:hash`, chaîne de repli d'un titre ; la propriété de C15, dont `90` rédige les règles par délégation | `05-i18n-et-langues.md` (amendée, pour ce qu'en émet `90`, par A-37, A-39, A-40, A-42, A-44, A-46, A-48 et A-50) |
+| La frame servable, `FrameGeometry`, le jeton `--aspect-frame` (L20-4), l'aperçu admin et sa taille d'affichage, le pied du back-office (`admin-footer.tsx`) et le cas back-office de `SiteFooterTest`, la page `admin/error`, le middleware `admin.2fa` du groupe `/admin` et sa description dans le docblock du groupe, la coquille mobile de `admin-sidebar.tsx`, la file de retrait, la définition de `BusinessDays` que reprend le texte public | `20-back-office-curation.md` |
+| Le vivier, son rapport en données, le seuil du sélecteur de thèmes | `30-themes-vivier-et-tirage-des-variantes.md` |
+| La règle de pseudo, la liste noire, le registre des avatars, le `player_token` et sa durée, l'interrupteur d'inscription, son intergiciel `accounts.switches` (posé dans `config/fortify.php` à côté des domaines de § 6.3) et la prop `accountsOpen`, dont dépendent les liens de compte et, au J2, le crochet de compte ; au J2 : écrans de compte (règles), `nickname.banned`, preuve du consentement provider, avatar d'un invité qui crée un compte | `40-comptes-auth-sociale-et-avatars.md` |
+| Le contenu du lobby, les libellés et bornes des réglages, les messages de bornes croisées et de refus, les noms des pages d'entrée du salon, `normalizeRoomCode()` et le prédicat de forme du code, les états `entry` et les retardataires, le message du salon expiré, la garde de lancement et « Rejouer » | `50-salon-reglages-presets-et-lobby.md` |
+| Le moteur, les événements, la resynchronisation (dont le transport de `maxAnswerLength`), le contenu de la révélation, le solo et sa page d'entrée `room/solo`, l'état de connexion fourni à `ConnectionBanner` et son annonce, l'horloge, `frame-loader`, la place de `TmdbAttribution` dans la révélation, le prédicat « partie en cours » | `60-moteur-de-partie-temps-reel-et-mode-solo.md` |
+| La saisie, le refus neutre, le QCM (`answer-input.tsx`, `choice-grid.tsx`), le texte de `game.help.prefix` | `70-validation-des-reponses.md` |
+| Le calcul du score, `tierValueAt` (définition et corps, L80-6), le classement, le podium, les faits marquants, les textes de `game.round.tier_value` et `game.help.scoring.*` | `80-scoring-podium-et-fin-de-partie.md` |
+| La variable `SITE_INDEXABLE`, `config('app.indexable')`, `public/robots.txt` et leur preuve (`SiteIndexingTest`), la procédure de levée ; la méta-vérification du script anti-couleur (`EXEMPT`, `[unclassified]`, `--list-unclassified`) ; le drapeau de drainage et les commandes `deploy:*`, le test des cookies non inventoriés, le relevé des licences tierces (`THIRD_PARTY_NOTICES.md`), Vitest et les groupes Pest, les parcours Playwright | `100-qualite-tests-et-ci.md` |
+| Les textes définitifs des pages légales, les noms des sous-traitants, l'adresse de contact publique | Le porteur ou son conseil |
+
+**Points restés ouverts**, signalés au porteur plutôt que corrigés en silence :
+
+1. **Page unique du salon** : 50 et 60 ont d'abord prévu une page `game/room` pour la partie ; C16 § 2.1 ne la nomme pas, et 50 § 7.2 comme 60 § 10.1 rendent désormais `game/lobby` du lobby au podium (§ 2.1). Toute mention résiduelle de `game/room` dans une spec voisine est à retirer (exigences aux specs voisines).
+2. **Toasts du lobby** prévus par 50 § 8.1, contraires au § 2.3 et à l'invariant de C16 § 4 : à retirer de 50 avant le lot L50-4.
+3. **Texte de `game.help.prefix`** : « jouables » vient de `questions-ouvertes` § Déjà tranché, mais désigne le vivier au lexique de `00` ; proposition à 70 et au porteur (§ 7.7).
+4. **Ligne de cookie `player_token`** : le texte figé en C4 § 6 (« 30 jours après la dernière prise de siège ») est à aligner sur le § 4.6 et sur 40 § 3.2 (écart signalé par 40).
+5. **Extensions de C16 par son propriétaire, à reporter dans la feuille de contrats** : composition interne des quatre répertoires de présentation et composants de 80 et 50 dans la liste close (§ 9.2) ; `hooks/admin` et `lib/admin` dans `WATCHED` (§ 9.3, EN20-2) ; fermeture propre des feuilles (§ 2.5) ; `Toaster` hors des pages de jeu (§ 2.3).
+6. **Exigences nouvelles à 20, 50 et 60** (`isWellFormedRoomCode()`, prop `limits` de `game/solo`, annonce de reconnexion, mention des CGU ; alignement de L20-2, qui dépend de L90-1 pour le retrait du forçage clair et écrit le cas back-office de `SiteFooterTest`) : listées dans « Exigences adressées aux specs voisines », à consolider.
+7. **Recouvrement des estimations** : les 33 à 47,5 h de cette spec recoupent en partie les postes « moteur » et « socle i18n » de `00` § Jalons ; le recouvrement est à trancher par `00`, pour la seule consolidation de la taille du J1 : ces heures sont des mesures de taille, jamais un budget à tenir (D36 du 23/09) — amendé le 23/09. La hausse sur la version précédente (30 à 43 h) vient de la page d'erreur rendue hors pile Inertia, du champ de code de l'accueil, du `Toaster` hors jeu et de la recette portrait L90-9 ; elle est compensée en partie par le retrait des doublons avec 100 (`robots.txt`, méta-vérification). Le redécoupage qui sort la coquille publique, `GameThemeScope` et `ConnectionBanner` de la dépendance au moteur (L90-3b, retraits passés à L90-1, déplacements vers L90-6a) ne change pas ce total. L90-3b (0,5-1 h) est plus court que la taille ordinaire d'un lot : il n'isole qu'une dépendance, et le fondre dans L90-3 rendrait au back-office de 20 son attente du moteur.
+8. **J2 non chiffré** : ordre de grandeur indicatif de 30 à 50 h, à remplacer par les lots de la section J2.
+9. **Dette n° 24 côté joueur** : `AppLayout` garde au J1 la feuille mobile anglaise du starter, visible des seuls comptes du J1 ; soldée au J2.
+10. **Valeur littérale de `config/fortify.php` › `middleware`** : C15 § 2.3 écrit `['web', 'translations:account,legal']` ; 40 § 8.2 l'étend d'`accounts.switches` (L40-7), sans lequel l'inscription et les passkeys rouvriraient en production au J1. Le § 6.3 reprend la valeur étendue ; la feuille de contrats est à mettre à jour.
+11. **Ligne `game.round.*` du tableau de propriété de C15** : elle dit `game.round.lone_player` affiché « à deux joueurs connectés », contre C7 § 2.7, A-04 et 60 § 9.3 (un seul siège connecté en multijoueur). Le § 6.4 suit C7 ; la ligne de la feuille de contrats est à corriger, et A-50 reportera la forme corrigée dans `05`.

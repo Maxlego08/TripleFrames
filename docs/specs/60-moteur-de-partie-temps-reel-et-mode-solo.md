@@ -1,0 +1,1308 @@
+# Moteur de partie, temps réel et mode solo
+
+Ce document est le **propriétaire du comportement d'une partie** de TripleFrames : la machine à états de la partie, de la manche, du palier et du siège ; le cadencement par un job par frontière de palier ; l'horloge ; la frappe des jetons d'image, le préchargement par palier et la route `GET /f/{serveToken}` ; les canaux Reverb et le contrat d'événements serveur → client ; la resynchronisation, la reconnexion et le second onglet ; la fin anticipée ; la révélation et l'enchaînement des manches ; la pause, la reprise et la clôture ; l'échec technique ; le mode solo ; et le prédicat « partie en cours » que le drainage de déploiement consomme. Il possède trois contrats partagés, écrits ici en règles complètes et nommés à la lettre : **contrat C7** (canaux, événements, resynchronisation), **contrat C8** (frappe du `serve_token` et route `/f/{serveToken}`), **contrat C17** (prédicat « partie en cours »).
+
+Il ne possède **pas** : le schéma (`10`, seul propriétaire ; toute donnée nouvelle est une exigence E10) ; les réglages, leurs bornes, `PlatformLimits`, la transaction de lancement, le lobby, l'expulsion, le transfert d'hôte et « Rejouer » (`50`, contrats C0 et C6) ; le vivier, le tirage et le choix d'une variante de substitution (`30`, contrats C2 et C3) ; le `player_token` et l'identité affichée (`40` [J1], contrats C4 et C5) ; la saisie, la validation et la composition du QCM (`70`, contrats C10 et C11) ; le calcul des points, le classement, le podium et le gel (`80`, contrat C13) ; les coquilles, le conteneur d'image et l'annonceur (`90`, contrat C16) ; la frame servable et `FrameImageResponse` (`20`, contrat C9) ; la CI, le drainage et le montage de production (`100`, contrats C18 et C18-bis). Quand il en a besoin, il les **cite** par leur contrat et ne les redéfinit jamais.
+
+Convention de renvoi, valable dans tout le document : « règle N » désigne `CLAUDE.md` §7 ; « principe N » désigne `00-overview.md` § Principes directeurs ; « décision N » désigne l'une des 19 décisions du 22/09 (`questions-ouvertes.md`) ; « DN du 23/09 » désigne l'une des décisions du 23/09 consignées dans `questions-ouvertes.md` § « Décisions du 23/09/2026 — jalon 1 » ; « contrat CN » désigne un contrat partagé entre specs, figé le 23/09 ; « 10 § x » renvoie au schéma ; « E10-nn » et « A-nn » renvoient aux exigences et amendements listés aux § 21 et § 22. « SN du 23/09 » désigne le cadre de la session du 23/09 (S1 à S4) ; « contrat C10, étape Sn » désigne une étape du service de soumission de 70 ; « 10 § 14 An » désigne un arbitrage de 10, à ne jamais confondre avec l'amendement « A-nn ». Les écarts de cette spec à la lettre de la feuille de contrats sont listés et signalés au porteur au § 22 bis.
+
+> **Hypothèse d'exécution — S2 du 23/09 : le VPS n'est pas relevé.** Cette spec est écrite en supposant un **accès SSH root** au VPS Plesk (décision 16), donc une instance Redis dédiée, deux workers systemd (`tripleframes-worker@game`, `@default`) et un service Reverb en écoute sur la boucle locale, publié en `wss://<DOMAINE>/app/…` par les directives nginx additionnelles de l'abonnement (D1 du 23/09). **Le relevé se fait avant tout déploiement**, et non avant l'écriture de cette spec : la formule « à relever avant l'écriture de `60` » est retirée partout (A-36ter, A-55bis, A-64, A-81 et l'amendement nouveau A-N6, § 22).
+>
+> **Dépend du relevé** — chaque occurrence est marquée « à confirmer au relevé du VPS » (§ 2.2, § 19.1, § 19.5) : la faisabilité même du montage (Redis dédié, unités systemd, Reverb derrière nginx) ; les plafonds de cohabitation (`MemoryMax`, `CPUWeight`, `pm.max_children`, connexions Reverb) ; le **nombre de processus** du worker `game` (un au J1, § 19.5) ; les ports de bouclage libres ; le client Redis de production (`predis` de référence, `phpredis` admis) ; le fuseau UTC du serveur MySQL (10 § 13.4) ; les valeurs par défaut de `EngineConstants`, recalibrées après le test de charge complet (D33 du 23/09).
+>
+> **N'en dépend pas** — c'est l'essentiel de ce document, identique en local, en CI et en production : la machine à états, l'arithmétique entière du temps, les jobs et leur file, les canaux et le contrat d'événements, la resynchronisation, le préchargement et la route de service, la présence et le second onglet, l'échec technique, le solo, le prédicat « partie en cours » et les tests nommés.
+>
+> **Sans root**, ni Redis dédié, ni workers, ni Reverb : pas de temps réel sur cette machine. Le repli connu (un second VPS minimal) contredit la décision 16 ; il appartient au porteur, pas à cette spec, et **ne change aucune règle ci-dessous** — seulement l'hôte d'exécution.
+
+> **État réel du dépôt au moment d'écrire, vérifié au commit `d167a6a`.**
+> - **Modèles et enums présents, aucun comportement.** `Round::isEarlyEndReached()` existe et teste `RoundPlayerInputState::isClosed()` (tout état autre que `open`) ; `RoundPlayer` a les scopes `participants()` (connecté **et** `left_at IS NULL`) et `open()`. `RoundTier` a `absoluteStartsAt()`, `servingOpensAt()`, `isOpenForServing()` (palier 1 compris, **sans** exception de manche 1) et `containsOffsetMs()` ; son docblock fige encore « `serve_token` écrit à l'ouverture du palier » (E10-47). `Frame::isServable()` et `FrameStoragePrefix::Game->owns()` existent. `Player` porte `#[RouteKey('public_id')]` mais ni `kicked_at` (E10-01), ni `heldByToken()`.
+> - `RoundStatus` (`pending`, `running`, `revealing`, `completed`, `cancelled`), `GameStatus` (`running`, `paused`, `completed`, `interrupted`), `PlayerConnectionState`, `GamePlayerStatus`, `GameMode` et `InputDifficulty::choicesOpenTierIndex()` existent. `RoundPlayerInputState` n'a pas encore `text_exhausted` (E10-06, lot de 70) ; `RoundIncidentReason` n'a que `frame_unavailable`, `no_variant_available`, `movie_withdrawn`.
+> - `PlatformLimits` déclare `DEFAULT_TIER_GRACE_MS = 300`, `DEFAULT_PRELOAD_LEAD_MS = 2000` et les bornes 1 500 / 2 500 **sans les appliquer**, et lit `game.platform.*` alors que **`config/game.php` n'existe pas** : les défauts s'appliquent toujours.
+> - **Rien du moteur n'existe** : ni `app/Events`, ni `app/Broadcasting`, ni `routes/game.php`, ni `routes/channels.php` ; `app/Jobs` ne contient que `Catalog/RunCatalogImport.php`, `app/Actions` que `Fortify`. `bootstrap/app.php` n'appelle pas `withBroadcasting()`.
+> - `composer.json` : ni `laravel/reverb`, ni `predis/predis` ; le script `dev` lance `queue:listen --tries=1 --timeout=900` sur la seule file par défaut, sans `reverb:start` — ce `--timeout=900` est la seule borne active de `RunCatalogImport` (docblock du job, faute de `pcntl`). `package.json` : ni `laravel-echo`, ni `pusher-js`, aucun script `test`. `.env.example` : `BROADCAST_CONNECTION=log`, `QUEUE_CONNECTION=database`, `CACHE_STORE=database`, `REDIS_CLIENT=phpredis`, aucune variable `REVERB_*` ; `FRAMES_DISK_ROOT` est présent.
+> - `config/inertia.php` a le SSR **activé** (retiré par 90, E10-13) ; le disque `frames` est en `'serve' => false`. `lang/{fr,en}/game.php` ne portent qu'une clé, `frame.alt`. Aucun `resources/js/pages/game`, `hooks/game` ni `lib/game` ; le switch de `app.tsx` n'a pas de cas `game/*`.
+> - `tests/Pest.php` applique `RefreshDatabase` ; il n'existe ni `tests/Concurrency`, ni domaine de test `Game`.
+> - Vérifié dans `vendor/` : `InteractsWithTime::availableAt()` tronque tout délai à la seconde (`getTimestamp()`) ; sous `--tries=1`, un job relâché échoue sans s'exécuter (`Worker::markJobAsFailedIfAlreadyExceedsMaxAttempts`) ; `ShouldDispatchAfterCommit`, `ShouldBroadcastNow`, `ShouldRescue`, `PreventRequestForgery` et `Sleep::until()` existent.
+>
+> - Vérifié dans `vendor/` : `php artisan install:broadcasting` crée `routes/channels.php`, ajoute `channels:` à `withRouting()`, écrit `BROADCAST_CONNECTION` dans `.env` et injecte `configureEcho` dans `resources/js/app.tsx` (`BroadcastingInstallCommand`) ; `delay()` d'un job lit un entier en **secondes** et une chaîne n'y est pas admise (`InteractsWithTime::availableAt()`) ; `Sleep::until()` n'a aucun plafond.
+>
+> Tout ce qui suit est à construire. Sont à **modifier** : deux docblocks (`RoundTier`, `RoundTierFactory::served()`, E10-47), les valeurs `BROADCAST_CONNECTION`, `QUEUE_CONNECTION`, `CACHE_STORE` et `REDIS_CLIENT` de `.env.example` (L60-1, § 19.5) et `config/broadcasting.php`, qui porte les connexions `pusher` et `ably` (L60-1). Le script `dev` de `composer.json` est modifié par L100-4, seul écrivain (contrat C7 § 5, 100 § 2.4).
+
+---
+
+## 1. Principes du moteur et vocabulaire opérationnel
+
+### 1.1 Cinq règles qui gouvernent tout le reste
+
+1. **Le serveur est autoritaire** (règle 1, principe 1). Chaque instant d'une manche se **calcule** depuis `round.started_at` et les lignes `round_tier` matérialisées au lancement. Un job **réveille** le moteur à une frontière ; il ne la **décide** pas (00 § Stack & contraintes techniques, « Cadencement »). Un job en retard, rejoué ou perdu décale un affichage — jamais un score, jamais le journal : les instants écrits sont les instants **théoriques**.
+2. **Aucune valeur de jeu en dur** (règle 2). Durées, `N`, `R`, barème, difficulté de saisie et délai de déconnexion viennent du `RoomSettings` figé dans `game.settings_snapshot` (contrat C0) et matérialisé dans `round_tier` ; les constantes serveur viennent de `PlatformLimits` (C0) et des colonnes figées de `game` ; les constantes du moteur viennent de `EngineConstants` (§ 19). Provenance complète au § 19.2.
+3. **Jamais la bonne réponse avant la révélation** (règle 3) : ni dans une diffusion, ni dans un envoi ciblé, ni dans un paquet de resynchronisation (§ 11.7).
+4. **Redis n'est jamais source de vérité du temps, ni d'un verrou de cohérence** (contrat C7 § 4.3, 10 § 13.4). Il porte la file et le cache ; les verrous sont des lignes MySQL prises `FOR UPDATE`, et l'état se reconstruit sans aucun événement. `questions-ouvertes.md` « Redis » le dit depuis l'amendement A-N8 du 23/09 (§ 22) — amendé le 23/09.
+5. **Aucun minuteur client ne décide** (règle 8 reformulée, A-75). Le client affiche une chronologie reçue, recalée par un décalage d'horloge ; il n'ouvre aucun palier, ne clôt aucune manche, ne ferme aucune saisie et ne retient aucun palier (§ 2.6).
+
+### 1.2 Vocabulaire opérationnel
+
+Termes employés à la lettre dans toute la suite ; ils complètent le lexique normatif de 00 sans le contredire.
+
+| Terme | Définition | Source |
+|---|---|---|
+| **Instant théorique d'une étape** | `Tᵢ = round.started_at + round_tier[i].starts_at_offset_ms` ; clôture à `D` = `started_at + round.duration_ms` ; début de révélation = `ended_at + game.tier_grace_ms` ; fin de révélation = `round.reveal_ends_at`. | 10 § 7.4 |
+| **Participant d'une manche** | Ligne `round_player` de la manche dont le `player` est `connected` **et** `left_at IS NULL`. | 10 § 7.7 |
+| **Siège non parti** | `connection_state ∈ {connected, disconnected}`, `left_at IS NULL`, `kicked_at IS NULL`. Naissance des `round_player`, destinataires du QCM. | E10-49 |
+| **Siège présent d'une partie** | Ligne `game_player` non expulsée dont le `player` est `connected`. Critère de la pause. | § 14.1 |
+| **Manche jouée** | `round.started_at IS NOT NULL AND started_at <= now` (T₁ franchi), quel que soit son statut. | contrat C2 |
+| **Manche suivante à jouer** | Manche `pending` **numérotée** (`round_number IS NOT NULL`) de plus petit `round_number`. Une manche de réserve n'est jouée qu'après avoir reçu le numéro d'une manche annulée. | contrat C3 ; E10-45 |
+| **Deux grâces** | `game.tier_grace_ms` (constante serveur, frontière de palier) et `disconnectGraceSeconds` (réglage d'hôte, délai avant « parti ») : le mot « grâce » ne s'emploie jamais seul. | 10 § 1.3 |
+| **`lone_player`** | Affichage d'un salon **multijoueur** où un seul siège est connecté. **Jamais** « solo », qui désigne `game.mode = solo`. | A-04 |
+| **« Durée » du principe 2** | La durée **du film**, métadonnée de catalogue, que le message d'ouverture de manche ne porte jamais. `D`, `dᵢ` et les valeurs de palier sont des réglages publics et transitent. | principe 2 |
+
+---
+
+## 2. Horloge et temps
+
+### 2.1 Origine unique et arithmétique entière
+
+L'**origine unique** d'une manche est `round.started_at`, écrite par `ScheduleRound` (§ 5.2). Tant que la manche est `pending`, elle se réécrit (reprogrammation, pause, « manche suivante ») ; **dès T₁, elle est immuable** (contrat C7 § 4.2).
+
+Tout calcul se fait en **millisecondes entières** (10 § 1.2). `App\Support\Game\RoundClock` est la **seule formule** de décalage, 70 compris :
+
+- `RoundClock::offsetMs(Round $round, CarbonImmutable $instant): int` = `intdiv((int) $instant->format('Uu') - (int) $round->started_at->format('Uu'), 1000)` — sur les microsecondes, pour qu'un verrouillage et son rejeu ne diffèrent jamais d'un arrondi ;
+- `RoundClock::currentTierIndex(Round $round, CarbonImmutable $instant): ?int` rend l'index du palier dont la fenêtre `[starts_at_offset_ms, starts_at_offset_ms + duration_ms)` contient `offsetMs`, **sans grâce**, ou `null` hors de `[0, D)` ou si la manche n'a pas démarré.
+
+Les `timestamp(3)` sont la trace de record, jamais l'entrée d'un calcul (10 § 1.2).
+
+### 2.2 Instant de réception
+
+`App\Support\Game\ReceptionInstant::of(Request $request): CarbonImmutable` rend l'instant serveur capturé **une fois**, à l'entrée de la requête, **avant tout verrou et tout travail de validation** (contrat C10 L3). La source est un middleware [nouveau] `App\Http\Middleware\CaptureReceptionInstant`, placé **en tête** du groupe `web` (`$middleware->web(prepend: […])`, avant `VaryOnLanguage`), qui range `Date::now()` dans l'attribut de requête `tripleframes.received_at`. `ReceptionInstant::of()` lit cet attribut, avec repli sur `Date::now()`.
+
+`$_SERVER['REQUEST_TIME_FLOAT']` est écarté : il échappe à `Date::setTestNow()`, donc aucun test à horloge figée ne pourrait prouver la fenêtre d'acceptation (10 § 1.2, contrat C18). Le coût du démarrage du framework avant le middleware est uniforme pour tous les joueurs et reste sous `tier_grace_ms`. **Limite connue** : ni ce middleware ni `REQUEST_TIME_FLOAT` ne comptent l'attente d'une requête dans la file de PHP-FPM sous saturation ; un horodatage posé par nginx la compterait, au prix d'un en-tête de confiance à écraser en entrée. Le J1 retient le middleware ; l'écart est mesuré au test de charge D33 du 23/09 et le choix est **à confirmer au relevé du VPS**.
+
+### 2.3 `tier_grace_ms` : un décalage unilatéral, constante serveur
+
+`game.tier_grace_ms` est figée au lancement depuis `PlatformLimits::tierGraceMs()` (300 ms, `PlatformLimits::DEFAULT_TIER_GRACE_MS`), comme `game.preload_lead_ms` depuis `PlatformLimits::preloadLeadMs()` (2 000 ms, bornes [1 500, 2 500]). Ce sont des **constantes d'instance non surchargeables par configuration**, au même régime que `B_max` (D22 du 23/09) : seul un changement de leur défaut dans le code est possible, et il incrémente `ScoringRules::VERSION` (contrat C13 § 4.7). Le moteur ne relit **jamais** ces valeurs en configuration pendant une partie : il lit les colonnes de `game` (10 § 7.2).
+
+La grâce est un **décalage unilatéral** appliqué à la réception, jamais une fenêtre symétrique « ±300 ms » ni une correction de RTT (invariant L3 de 10 § 1.8 ; A-21 ; amendement nouveau A-N7 de 00 l.94) :
+
+- palier retenu et bonus : ligne qui contient `max(0, answered_at_ms − tier_grace_ms)`, calculés par `ScoreCalculator::forGuess()` (contrat C13, 10 § 7.5) ;
+- fenêtre d'acceptation : `receivedAt < (round.ended_at ?? started_at + D) + tier_grace_ms` (contrat C10, E10-48) ;
+- début de la révélation : `ended_at + tier_grace_ms` (§ 9.4). Aucune soumission reçue après l'émission des titres n'est donc acceptable.
+
+### 2.4 Poignée de main d'horloge, pour l'affichage seulement
+
+`resources/js/lib/game/server-clock.ts` mesure le décalage entre l'horloge du navigateur et celle du serveur, **à des fins d'affichage uniquement** (L3, A-21) :
+
+1. **Poignée de main** au montage d'une page `game/*`, à chaque reconnexion d'Echo et à chaque retour de visibilité : `clockSamples` requêtes `GET clock.show` (`EngineConstants::clockSamples()`, 3 par défaut) ; pour chacune, `offset = serverNow − (t₀ + t₁) / 2` ; le décalage retenu est la **médiane**.
+2. **Recalage** sur chaque `serverNow` reçu (événement ou paquet) : un message ne pouvant arriver avant d'avoir été émis, `serverNow − arrivéeLocale` est un minorant du décalage ; s'il dépasse le décalage courant, celui-ci est **relevé** à cette valeur. Un événement ne l'abaisse jamais ; seule une nouvelle poignée de main le fait.
+3. `serverNow()` = `Date.now() + offset`, lu par tous les modules de `lib/game/` et par `round-timeline.ts` (contrat C16).
+
+### 2.5 Valeur du palier affichée (D29 du 23/09)
+
+L'écran de manche affiche la **valeur entière du palier courant**, sans bonus : `tierValueAt(tiers, serverNow() − startsAt)` de `resources/js/lib/game/round-timeline.ts` (contrat C16, fonction définie par 80, contrat C13 § 2.4), rendue par `tChoice('game.round.tier_value', tier.points, { points: fmt(tier.points) })`, où `fmt` est `Intl.NumberFormat` de la locale courante (contrats C15 § 2.5 et C16 § 2.6) : aucun nombre n'est formaté côté serveur (05). C'est **un affichage** : le serveur seul retient le palier d'une réponse, à l'instant de réception.
+
+**Masquage** (exigence de 80 § 14 et § 1.4, portée ici) : la valeur n'est affichée qu'en phase `running`. Elle est masquée dès `round.closed` (ou un paquet en phase `closed`), en révélation, en pause et hors manche — une valeur de palier affichée après la clôture promettrait des points qu'aucune soumission ne peut plus gagner. **Au J2**, elle est masquée aussi quand `leaderboard.scoreless` est vrai (mode sans score, `ScoringRules::isScoreless()`, 80 § 14) : tous les paliers valant 0, « 0 point » n'apprendrait rien. Les deux masquages sont décidés par le sélecteur `visibleTierValue()` de `lib/game/store.ts` (L60-14 ; J2 : L60-17), jamais par un composant.
+
+### 2.6 Ce qu'aucun minuteur client ne décide
+
+- Le client **n'ouvre** aucun palier et ne demande jamais une image avant `fetchNotBefore` (§ 7.6).
+- Il **ne ferme pas** la saisie quand son chrono atteint zéro : il la ferme à la réception de la phase `closed` (événement `round.closed`, ou paquet de resynchronisation) ou d'un verdict `closed` de 70. Entre les deux, une soumission part et le serveur la juge.
+- Il **n'annonce** la fin d'une manche qu'à l'événement serveur (contrat C16 § 4).
+- Il **n'envoie** aucun horodatage, aucun RTT, aucun décalage (contrat C10 L3).
+- La valeur de palier et les annonces `aria-live` ne décident rien : elles n'écrivent rien, ne soumettent rien, n'influencent aucun score.
+
+---
+
+## 3. Machines à états
+
+### 3.1 Partie — `game.status`
+
+| Depuis | Vers | Déclencheur | Écrivain | Événement |
+|---|---|---|---|---|
+| — | `running` | Lancement multijoueur (50) ou démarrage solo (§ 16) | `OpenGame` (contrat C6) | `game.launched` (50, multijoueur) |
+| `running` | `paused` | Fin de révélation sans siège présent, alors qu'une manche reste à jouer | `PauseGame` (§ 14.1) | `game.paused` |
+| `paused` | `running` | Retour d'un siège de la partie avant `paused_at + pauseTimeoutMs` | `ResumeGame` (§ 14.2) | `game.resumed`, puis `round.scheduled` (multijoueur) |
+| `running` | `completed` | Fin de révélation de la dernière manche ; annulation sans manche restante, hors révélation en cours (§ 15.2) ; « Passer la manche » sur la dernière manche solo (§ 16.5) | `FinalizeGame` (contrat C13), appelé par `EndReveal`, `CancelRound` ou `SkipSoloRound` | `game.ended` (multijoueur) |
+| `paused` | `interrupted` | `paused_at + pauseTimeoutMs` atteint, constaté par `InterruptPausedGame` ou par un battement tardif (§ 14.2) | `InterruptPausedGame` ou `ResumeGame` → `FinalizeGame` | `game.ended` (multijoueur) |
+| `running`, `paused` | `interrupted` | Partie bloquée (§ 14.4), nouveau lancement solo (§ 16.6) | `FinalizeGame` | `game.ended` (multijoueur) |
+
+Invariant : `game.ended_at IS NOT NULL` **si et seulement si** `status ∈ {completed, interrupted}`, et `FinalizeGame` est le seul écrivain de `ended_at` (E10-36, contrat C17 § 4.1). Aucun état `pending` : la partie naît au lancement, tirage figé (10 § 7.2).
+
+### 3.2 Manche — `round.status` et phase dérivée
+
+| Depuis | Vers | Déclencheur, instant | Écrivain | Événement |
+|---|---|---|---|---|
+| (lancement) | `pending` | Matérialisation, `started_at` NULL | `MaterializeDraw` | — |
+| `pending` | `pending` programmée | `started_at` posé | `ScheduleRound` | `round.scheduled` |
+| `pending` programmée | `pending` | Pause : `started_at` remis à NULL | `PauseGame` | `game.paused` |
+| `pending` | `running` | `T₁` | `OpenTier(1)` | `tier.opened` |
+| `running` | `running`, `ended_at` posé | `D`, ou fin anticipée | `CloseRound` | `round.closed` |
+| `running` | `revealing` | `ended_at + tier_grace_ms` | `RevealRound` | `round.revealed` |
+| `revealing` | `completed` | `reveal_ends_at` | `EndReveal` | — |
+| `running` | `completed` | « Passer la manche », solo seulement | `SkipSoloRound` (§ 16.5) | — (aucune diffusion en solo) |
+| `pending`, `running` | `cancelled` | Échec technique | `CancelRound` (§ 15.2) | `round.cancelled` |
+
+**`CloseRound` écrit `ended_at` sans changer `round.status`**, qui reste `running` jusqu'à `RevealRound` (contrat C7 § 4.6) : c'est ce qui garde recevable une soumission reçue dans la grâce finale. Une manche de réserve reste `pending`, `round_number` NULL et `started_at` NULL tant qu'elle ne remplace rien (E10-45).
+
+**Phase dérivée**, jamais stockée, exposée par `RoundState.phase` (§ 12) :
+
+| Phase | Condition |
+|---|---|
+| `scheduled` | `status = pending` et `started_at` non nul |
+| `running` | `status = running` et `ended_at` nul |
+| `closed` | `status = running` et `ended_at` non nul (`[endedAt, revealStartsAt)`) |
+| `revealing` | `status = revealing` |
+| `cancelled` | `status = cancelled` (état transitoire d'un rattrapage : une annulation programme toujours la suite dans la même transaction) |
+
+### 3.3 Palier — `round_tier`
+
+Un palier passe par trois états, chacun écrit **une seule fois** par un écrivain unique (contrat C8 § 2) : **matérialisé** (`serve_token` NULL) → **frappé** (`serve_token`, `served_frame_id`, éventuellement `substitution_reason`, par `MintTierServeToken`) → **ouvert** (`served_at` théorique et `seen_frame`, par `OpenTier`). Aucune colonne de temps ni de points de `round_tier` n'est jamais réécrite (10 § 7.4).
+
+### 3.4 Siège — `player.connection_state`
+
+| Depuis | Vers | Condition | Écrivain | Effets |
+|---|---|---|---|---|
+| `connected` | `disconnected` | Aucun battement depuis `disconnectAfterMs` | `SweepSeatPresence` (§ 13.2) | `disconnected_at` ; sort des participants |
+| `disconnected` | `left` | `disconnected_at + disconnectGraceSeconds` atteint (**jamais en solo**, § 13.3) | `SweepSeatPresence` | `left_at` ; `game_player.status = left` ; transfert d'hôte si c'était l'hôte |
+| `disconnected`, `left` | `connected` | Battement reçu d'un siège non expulsé | contrôleur de battement (§ 13.1) | efface `disconnected_at` et `left_at` ; `game_player.status = playing` ; reprise d'une partie en pause |
+| tout état | `left` + `kicked_at` | Expulsion par l'hôte | action d'expulsion (50, contrat C4 I4.9) | terminal dans ce salon jusqu'à l'archivage (D15 du 23/09) |
+
+Chaque transition émet `seat.updated`, **en multijoueur seulement** (§ 11.6). La présence Reverb ne fait **jamais** foi (contrat C7 § 4.10).
+
+### 3.5 Saisie, vue du moteur
+
+`round_player.input_state` appartient à 70 (contrat C10). Le moteur y **écrit** seulement la naissance de la ligne à `T₁` (`open`, E10-49) et les deux états du solo, `revealed` et `skipped` (D18 du 23/09). Il y **lit** deux prédicats de 70 : `acceptsChoice()` pour les destinataires du QCM (`open` et `text_exhausted`, D20 du 23/09) et `isClosed()` pour la fin anticipée — `text_exhausted` n'est **pas** une saisie close (E10-06, E10-53).
+
+### 3.6 Journal rejouable de la chronologie
+
+La chronologie d'une partie se reconstruit **sans aucun événement ni aucune donnée Redis** (10 § 13.4), depuis les seules colonnes du journal de 10 § 7 : `round.started_at`, `ended_at`, `reveal_ends_at`, `status`, `cancel_reason`, `cancelled_at` et `round_number` ; `round_tier` (offsets, durées, valeurs, `served_frame_id`, `served_at`, `substitution_reason`) ; `game.paused_at`, `total_paused_ms`, `tier_grace_ms`, `preload_lead_ms`, `settings_snapshot` ; `round_player` (qui était là, et dans quel état de saisie). Comme toutes les écritures de transition portent l'**instant théorique** (§ 4.3), le rejeu de chronologie redonne, pour chaque manche, quelle image a été montrée, quand, et pourquoi une manche a été annulée ou remplacée ; le rejeu des points, lui, appartient à 80 (`ScoreReplayer`, contrat C13). **Aucune manche close ne rapporte de points après coup** : aucun chemin du moteur ne réécrit un `guess`. L'écran « inspecter une partie » qui lira ce journal est un écran admin de 20, au J2 ; le J1 n'écrit que la garantie.
+
+---
+
+## 4. Programmation : un job par frontière, des écritures toujours exécutées
+
+### 4.1 Étapes et instants théoriques
+
+L'enum hors schéma `App\Support\Game\RoundStep` nomme les quatre étapes d'une manche : `OpenTier` (à `Tᵢ`, `i` = 1..N), `Close` (à `started_at + D`, sauf fin anticipée), `Reveal` (à `ended_at + tier_grace_ms`), `EndReveal` (à `reveal_ends_at`). S'y ajoutent deux échéances de partie et de siège : `InterruptPausedGame` (§ 14.3) et `SweepSeatPresence` (§ 13.2).
+
+**Ordre à instant égal** : `EndReveal(k)` précède `OpenTier(k+1, 1)`, dans le job comme dans le rattrapage (contrat C7 § 4.14). Ailleurs, l'ordre est chronologique ; à l'intérieur d'une manche, deux étapes ne tombent jamais au même instant (`dᵢ ≥ MIN_TIER_DURATION` s, `tier_grace_ms > 0`).
+
+### 4.2 Le job `AdvanceRound`
+
+`App\Jobs\Game\AdvanceRound` [nouveau] est **le** job de frontière (règle 8 : un job par frontière de palier, ni ordonnanceur à la minute, ni minuteur client). Construit par `__construct(public readonly int $gameId, public readonly int $roundId, public readonly RoundStep $step, public readonly ?int $tierIndex, public readonly string $dueAt, public readonly bool $retried = false)`, avec `$dueAt` en `IsoMs` ; `onQueue('game')`, jamais relâché.
+
+1. **Qui le dispatche.** La transition qui fixe l'instant de l'étape suivante, **après commit** : `ScheduleRound` programme `OpenTier(1)` ; `OpenTier(i)` programme `OpenTier(i+1)`, ou `Close` après le dernier palier ; `CloseRound` programme `Reveal` ; `RevealRound` et `AdvanceToNextRound` programment `EndReveal`. Chaque partie en cours a ainsi toujours au moins un job en file (contrat C17 § 4.2), sauf dans les deux cas nommés au § 17.3, point 2.
+2. **Délai.** `->delay(CarbonImmutable::parse($this->dueAt))` : **tout délai de job du moteur s'exprime en instant**, jamais en chaîne (`$dueAt` est une `IsoMs`, que `delay()` n'admet pas) ni en entier (lu en **secondes** par `InteractsWithTime::availableAt()`, vérifié). La même règle vaut pour `InterruptPausedGame`, `SweepSeatPresence` et `BroadcastLobbyState`. `availableAt()` tronque à la seconde (vérifié) : le job peut se réveiller jusqu'à 999 ms trop tôt, jamais plus.
+3. **Attente en processus.** Réveillé tôt, le job attend `Sleep::for(min(max(0, $restantMs), EngineConstants::transitionMaxWaitMs()))->milliseconds()`, où `$restantMs` = `dueAt − Date::now()` en millisecondes entières — **jamais `Sleep::until()` nu**, qui n'a aucun plafond (vérifié). `transitionMaxWaitMs` vaut 1 000 ms par défaut (`EngineConstants`, garde « couvre la troncature à la seconde »). Le job **ne se relâche jamais** : sous `--tries=1`, un job relâché échoue sans s'exécuter (vérifié, A-29, A-54). Cette attente immobilise le processus `game` : c'est le risque de **tête de file** que mesure le test de charge D33 du 23/09, et la raison principale d'un éventuel second processus (§ 19.5). Un job qui attend derrière un autre part en retard, ce qui décale un affichage et jamais un score.
+4. **Travail.** `CatchUpGame::handle($game, Date::now())` (§ 4.4). Le job ne porte aucune décision propre : `$step` et `$tierIndex` ne servent qu'au délai et à la journalisation. Un doublon, un rejeu ou un job périmé exécutent donc le même rattrapage, qui ne fait rien s'il n'y a rien d'échu.
+5. **Filet de dérive d'horloge.** Si, après l'attente maximale, l'étape n'est toujours pas échue (horloges de processus désaccordées, jamais attendu), le job dispatche un job **neuf** pour le même `$dueAt` et se termine — ce n'est pas un relâchement.
+
+### 4.3 Validité, péremption et idempotence
+
+**Les écritures de transition sont idempotentes et toujours exécutées ; seule la diffusion se périme** (contrat C7 § 4.5, A-29). « Toujours exécutées » ne vise que les étapes **encore valides** :
+
+| Étape | Valide si | Déjà faite si |
+|---|---|---|
+| toute étape de manche | `game.ended_at IS NULL` et `game.status = running` | — |
+| `OpenTier(i)` | `round.status ∈ {pending, running}`, `started_at` non nul, `Tᵢ ≤ now`, **et** non (`ended_at` non nul et `Tᵢ ≥ ended_at`) | `round_tier[i].served_at` non nul |
+| `Close` | `status = running`, `started_at + D ≤ now` | `ended_at` non nul |
+| `Reveal` | `status = running`, `ended_at` non nul, `ended_at + tier_grace_ms ≤ now` | `status ∈ {revealing, completed}` |
+| `EndReveal` | `status = revealing`, `reveal_ends_at ≤ now` | `status = completed` |
+
+Une étape **périmée** n'écrit rien et n'émet rien : ni `served_at`, ni `seen_frame`, ni frappe du palier suivant, ni composition du QCM (contrat C8 § 4.3). Un palier jamais ouvert n'est jamais marqué servi (10 § 7.9). La première ligne du tableau — **ajout de 60 à la règle du contrat C7 § 4.5**, écart (e) du § 22 bis — périme aussi toute étape d'une partie close ou en pause : les manches `pending` qu'un gel laisse intactes (contrat C13 § 4.5) ne s'ouvrent jamais.
+
+### 4.4 Rattrapage synchrone `CatchUpGame` et diffusion après rattrapage
+
+`App\Actions\Game\CatchUpGame::handle(Game $game, CarbonImmutable $now): void` exécute **toutes les étapes échues, dans l'ordre chronologique**, chacune dans sa propre transaction, jusqu'à ce qu'aucune ne soit plus due :
+
+1. partie en pause : seulement la clôture si `now ≥ paused_at + pauseTimeoutMs` (§ 14.3) ;
+2. sinon, pour la manche courante puis la suivante : `OpenTier(1..N)` échus, `Close`, `Reveal`, `EndReveal`, et ainsi de suite tant que la manche suivante programmée a elle-même des étapes échues.
+
+**Appelants** : le job `AdvanceRound`, 70 **avant tout jugement** (contrat C10, étape S3), `room.state` et `solo.state` (§ 12), `game:reschedule` (§ 17.5), les gestes `AdvanceToNextRound`, `RevealSoloAnswer` et `SkipSoloRound`, **avant de lire la phase** (§ 5.4, § 16.5), et `StartSoloGame` sur la partie solo en cours du siège, avant de l'interrompre (§ 16.6) : sans ce rattrapage, un geste jugerait une manche que son job en retard n'a pas encore close, et écrirait un instant qui dépend de ce retard.
+
+**Diffusion après rattrapage.** Un passage qui n'exécute qu'une étape — le cas nominal d'un job à l'heure — émet l'événement de cette étape. Un passage qui en rattrape plusieurs **n'émet que l'état courant** :
+
+- par manche touchée, seul l'événement de la **dernière** étape exécutée est émis (`tier.opened` du palier courant, ou `round.closed`, ou `round.revealed`), plus `round.scheduled` de la manche suivante si le passage l'a programmée ;
+- `seat.choices` n'est émis que si le palier du QCM est encore le palier courant et `ended_at` nul ;
+- ne se périment jamais : `round.cancelled`, `game.paused`, `game.resumed`, `game.ended` (et `player.locked`, qui n'est pas une étape).
+
+Un client qui apprend ainsi un `sequenceIndex` inconnu, ou un saut d'étape, se resynchronise (§ 12.6).
+
+### 4.5 Verrous
+
+Ordre global, imposé à tout écrivain : **room → player → game → round → round_player** (contrat C7 § 4.3, E10-51). Les transitions de rattrapage et toute action qui touche la partie ou plus d'une manche prennent **`game` `FOR UPDATE` d'abord**, puis les manches touchées par `sequence_index` croissant. Ne verrouillent jamais `game` : `SeatInputClosed` (qui ne touche que sa manche) et les écritures de 70, à savoir la transaction de verrouillage (`round FOR UPDATE`, contrat C10), le refus S8a (`round FOR SHARE`, 70 § 7.5), le clic faux (`UPDATE round_player`, 70 § 7.6) et le cas défensif de `ChoicesPresenter` (écriture conditionnelle de `round_player`, 70 § 10.8). Toutes respectent l'ordre `round` → `round_player`. Aucun verrou Redis de cohérence.
+
+### 4.6 Échec d'une transition ou d'une diffusion
+
+- **Exception dans une transition** : la transaction est annulée, rien n'est émis (`ShouldDispatchAfterCommit`), le job échoue. Sa méthode `failed()` dispatche **un** job neuf pour le même instant, retardé de `transitionMaxWaitMs`, marqué `$retried = true` ; un second échec n'est pas redispatché. Filets suivants : tout `CatchUpGame` déclenché par une requête, `game:reschedule` (§ 17.5), la partie bloquée (§ 14.4) et la sonde n° 1 de 10 § 11.3.
+- **Diffusion en échec** (Reverb indisponible) : les deux bases d'événements implémentent **`ShouldRescue`** (§ 11.2, écart (d) du § 22 bis) ; l'échec est journalisé sur le canal `game` (§ 4.7) et avalé, il n'annule ni l'écriture de transition ni la programmation du job suivant. Les clients se rattrapent par le filet de resynchronisation (§ 12.6).
+
+### 4.7 Journal `game`
+
+Le moteur journalise sur le **canal `game` de 100** (100 § 10.9 : lignes JSON, 14 jours, processeur `RedactPersonalData`), par `App\Support\Game\GameJournal` [nouveau], **sans pseudo, `room_code`, `player_token` ni IP** : une partie s'y désigne par `gameRef` (§ 10.4), une manche par `sequenceIndex`, un palier par `tierIndex`, un siège jamais. Pourquoi : 100 laisse à 60 le choix des événements journalisés, et le critère 1 du test de charge D33 du 23/09 (« le jeu tient ») se mesure sur ce canal.
+
+- **Événements journalisés** : ouverture de manche (`OpenTier(1)`) et clôture (`CloseRound`, avec la cause : `D` ou fin anticipée) ; substitutions (`MintTierServeToken`, `substitution_reason`) ; annulations (`CancelRound`, `cancel_reason`, remplacée ou non) ; pauses et reprises (`PauseGame`, `ResumeGame`) et clôtures de partie (`FinalizeGame` appelé par 60, issue) ; resynchronisations de partie (`room.state`, `solo.state` avec une partie, une ligne par requête, sans rien du paquet) ; diffusions en échec (`ShouldRescue`, § 4.6) ; second échec d'une transition (§ 4.6).
+- **Retard réel de chaque diffusion de frontière** (exigence de 100 § 10.9) : `round.scheduled`, `tier.opened`, `round.closed` et `round.revealed` portent `delayMs` = `serverNow` d'émission − instant théorique de l'étape émettrice (§ 1.2), en millisecondes entières. Il est mesuré dans `broadcastWith()` des bases (§ 11.2), où `serverNow` est pris, contre l'instant théorique précalculé sous le verrou ; pour une émission d'un geste (lancement, « manche suivante », reprise), l'instant théorique est celui de sa transaction.
+- **Jamais** : un titre, un alias, une chaîne du QCM, une saisie, un score d'autrui ; journaliser n'annule jamais une transition (un échec d'écriture du journal est avalé).
+
+---
+
+## 5. Lancement et enchaînement des manches
+
+### 5.1 Matérialisation
+
+`App\Actions\Game\MaterializeDraw::handle(Game $game, DrawResult $result): void` [nom figé, contrat C6 O8] est appelée par `OpenGame` (50, contrat C6 O8), donc au lancement multijoueur comme au démarrage solo (`StartSoloGame` → `OpenGame`, § 16.2). `StartSoloGame` ne l'appelle jamais directement : un appel direct matérialiserait le tirage solo une seconde fois. Elle écrit, dans la transaction :
+
+- **les `K` manches** du `DrawResult` (contrat C3), réserve comprise : `game_id`, `room_id = game.room_id` (NULL en solo), `sequence_index`, `round_number` (NULL pour la réserve), `movie_id`, `status = pending`, `started_at` NULL, `duration_ms = settings_snapshot->roundDuration() × 1000` ;
+- **`N` lignes `round_tier` par manche** : `tier_index`, `frame_id`, `frame_level` (du tirage), `starts_at_offset_ms = settings_snapshot->tierStartOffsetMs(i)`, `duration_ms = tierDurations[i−1] × 1000`, `points = tierPoints[i−1]`, `serve_token` NULL.
+
+Par construction, `SUM(duration_ms) = round.duration_ms`, chaque `duration_ms % 1000 = 0`, et `points` égale le barème figé (10 § 7.4 ; 10 § 14, arbitrage A16).
+
+### 5.2 Programmation d'une manche et décompte de lancement
+
+`App\Actions\Game\ScheduleRound::handle(Round $round, CarbonImmutable $startsAt): void` [nom figé] exige `round.status = pending` et une partie `running`. Dans la transaction appelante :
+
+1. écrit `round.started_at = $startsAt` (réécriture permise tant que la manche est `pending`) ;
+2. frappe le jeton du palier 1 par `MintTierServeToken` (§ 6.2), idempotent — la frappe peut annuler la manche (§ 15.2) ;
+3. après commit : dispatche `AdvanceRound(OpenTier, 1)` à `$startsAt` et, en multijoueur, émet `round.scheduled`.
+
+**Manche 1** : 50 appelle `ScheduleRound($round1, $now + launchCountdownMs)` dans la transaction de lancement (contrat C6 O9) ; en solo, `OpenGame` fait le même appel (O9). Le **décompte de lancement** remplace l'ancienne fenêtre `P` (A-01) : il couvre le passage de la page `game/lobby` à l'état de partie sans navigation et la resynchronisation qui peut le suivre (§ 11.8), la poignée de main d'horloge et le préchargement du palier 1, qui devient servable à `T₁ − preload_lead_ms` **comme tout palier, sans exception pour la manche 1** (E10-60). Garde-fou testé : `launchCountdownMs ≥ PlatformLimits::MAX_PRELOAD_LEAD_MS + nextRoundMarginMs`. Les lignes `round_player` naissent à `T₁`, jamais ici (E10-49).
+
+### 5.3 Enchaînement
+
+`RevealRound(k)` appelle `ScheduleRound(k+1, reveal_ends_at(k))` dès que la révélation de `k` commence, s'il reste une manche à jouer : **`T₁(k+1) = reveal_ends_at(k)`**, sans intervalle (contrat C7 § 4.14). Le palier 1 de `k+1` devient donc servable dans les `preload_lead_ms` finales de `R`, et lui seul ; le garde-fou `MIN_REVEAL_DURATION × 1000 > MAX_PRELOAD_LEAD_MS` (contrat C0 § 4.8) garantit que cette fenêtre tient toujours dans la révélation. `EndReveal(k)` précède `OpenTier(k+1, 1)` à instant égal ; s'il ne reste aucune manche, il gèle la partie (§ 14.5). La formule de durée maximale du contrat C17 suppose cet enchaînement.
+
+### 5.4 « Manche suivante »
+
+Geste de l'hôte (`room.round.next`, policy `RoomPolicy::advanceRound` relue sous verrou, contrat C6) et geste du joueur solo (`solo.next`). Tous deux appellent `App\Actions\Game\AdvanceToNextRound`, après `CatchUpGame` (§ 4.4) :
+
+1. verrous `room` (multijoueur) → `game` → manche `k` → manche `k+1`, dans l'ordre du § 4.5 ; en multijoueur, `RoomPolicy::advanceRound` est évaluée **après** le verrou `room`, sur `room.host_player_id` relu : un transfert d'hôte concurrent, qui verrouille le salon (50), est ainsi sérialisé avec le geste ;
+2. précondition : phase `revealing` de `k` et `now < reveal_ends_at(k)` — sinon **409** `{ "code": "not_revealing" }`, rendu par `game.errors.not_revealing`. Le geste **raccourcit `R`, jamais `D`**, et ne touche aucune manche en cours (00 § Déroulé d'une partie, « Pouvoirs de l'hôte en partie ») ;
+3. `$newEnd = now + preload_lead_ms + nextRoundMarginMs` (`EngineConstants`, 1 000 ms par défaut) : jamais moins, sans quoi le palier 1 suivant n'aurait aucune fenêtre de préchargement ;
+4. si `$newEnd ≥ reveal_ends_at(k)`, rien (204 pour l'hôte, paquet inchangé en solo) ; sinon `reveal_ends_at(k) = $newEnd`, `ScheduleRound(k+1, $newEnd)` s'il reste une manche (réémission de `round.scheduled`, contrat C7 § 4.2), et un job `EndReveal` à `$newEnd`.
+
+Le client tient la révélation pour close à `min(revealEndsAt, startsAt de la manche suivante reçue)`.
+
+---
+
+## 6. Ouverture d'un palier et frappe du jeton d'image
+
+### 6.1 Écrivains uniques
+
+`App\Actions\Game\MintTierServeToken::handle(RoundTier $tier, CarbonImmutable $now): void` écrit `serve_token`, `served_frame_id` et `substitution_reason`. `App\Actions\Game\OpenTier::handle(RoundTier $tier, CarbonImmutable $now): void` écrit `served_at` et fait l'upsert de `seen_frame`. **Aucun autre code** n'écrit ces cinq colonnes (contrat C8 § 2, E10-47) ; la route de service est en lecture seule (10 § 7.4).
+
+### 6.2 Frappe et substitution
+
+- **Instant** : le jeton du palier 1 est frappé dans `ScheduleRound`, dans la transaction qui écrit `started_at` ; celui du palier `i ≥ 2`, dans `OpenTier(i−1)`. La frappe **un cran à l'avance** est ce qui rend le préchargement possible sans qu'une substitution ne change jamais les octets derrière une URL déjà transmise.
+- **Idempotence** : si `serve_token` est non nul, rien n'est écrit. Le jeton n'est jamais régénéré ; il vaut `bin2hex(random_bytes(16))`, est UNIQUE (`round_tier_serve_token_uq`) et **lié à une manche, pas à une frame** : deux manches portant la même frame reçoivent deux jetons (10 § 7.10).
+- **Substitution décidée à la frappe** (E10-25) : la frappe retient `frame_id` si `Frame::isServable()` est vrai **et** si le fichier existe sur le disque `frames` (`Storage::disk(FrameStoragePrefix::DISK)->exists($frame->game_path)`). Sinon elle prend `VariantChooser::substitute($round, $tier, $excluded, $now)` (contrat C3 : même `frame_level`, servable, fichier présent, PRF déterministe) avec `substitution_reason = frame_unavailable`, en rappelant la méthode, bornée par le nombre de candidats, tant qu'un fichier manque. Sans candidat : `CancelRound(no_variant_available)`, **aucun jeton frappé**. `served_frame_id` et `substitution_reason` s'écrivent une seule fois.
+
+### 6.3 `OpenTier(i)`, dans cet ordre
+
+Exécuté à `Tᵢ` sous les verrous `game` → `round` :
+
+1. **Péremption** (§ 4.3) : si l'étape est périmée, rien du tout.
+2. **Revérification** de `servedFrame->isServable()` : faux → `CancelRound(frame_unavailable)`, jamais de seconde substitution (contrat C8 § 4.3), fin.
+3. **`i = 1`** : `round.status = running` ; création d'une ligne `round_player` (`input_state = open`) pour chaque **siège non parti** éligible dans `game_player` — `status ≠ kicked` et `first_round_number` NULL ou `≤ round_number` (E10-49). Un joueur déconnecté cinq secondes à `T₁` peut donc répondre à son retour.
+4. **`i = InputDifficulty::choicesOpenTierIndex(N)`** (`T₁` en Facile, `T_N` en Normal, jamais en Expert) : `ComposeChoiceSets::handle($round, Tᵢ)` (contrat C11), avec l'instant **théorique** `Tᵢ`. Rendu faux en **Facile** : `CancelRound(choices_unavailable)` (E10-07), fin. En **Normal** : la manche continue en saisie texte seule, 70 fermant les sièges `text_exhausted` (contrat C11 § 4).
+5. **`i < N`** : `MintTierServeToken` du palier `i+1` ; **si cette frappe annule la manche** (§ 6.2), fin, sans `served_at(i)` ni `seen_frame`. Sinon, étape 6.
+6. `served_at(i)` = **instant théorique** `Tᵢ`, même si le job est en retard (E10-47) ; en multijoueur seulement, upsert `seen_frame(room_id, served_frame_id, last_seen_at = served_at)` (10 § 7.9).
+7. **Après commit** : en multijoueur, `tier.opened` puis, au palier du QCM, `seat.choices` (§ 8.3), **seulement si `ComposeChoiceSets::handle()` a rendu vrai** à l'étape 4 ; dispatch du job suivant (`OpenTier(i+1)` à `Tᵢ₊₁`, ou `Close` à `started_at + D`).
+
+**Toute annulation décidée par `OpenTier(i)` précède l'écriture de `served_at(i)`** : un palier dont l'ouverture annule la manche n'est jamais marqué servi. L'ordre « `round_player`, puis QCM, puis émission » est celui du contrat C7 § 4.8 : dans l'ordre inverse, aucun siège ne recevrait `choices_locale` ni `seat.choices`.
+
+---
+
+## 7. Préchargement et service d'image
+
+### 7.1 Règle de préchargement
+
+**Tout palier est servable dès `Tᵢ − game.preload_lead_ms`, jamais avant — palier 1 et manche 1 compris** (10 § 10, E10-60, A-01). La marge réelle de préchargement est `preload_lead_ms`, jamais la durée d'un palier : 150 Ko en 2 s au défaut, soit environ 600 kbit/s. `R` et le décompte de lancement ne sont plus des fenêtres de préchargement. **Le repli d'un client lent est le cadre fixe 16:9, un aplat au token de thème et un indicateur** (D7 du 23/09, contrat C16 § 2.5) : jamais un LQIP, jamais un élargissement de la fenêtre, jamais un décalage du chrono (principe 6 amendé, A-02).
+
+### 7.2 Prédicat de service `ServeGuard`
+
+`App\Support\Game\ServeGuard` [nouveau, `final readonly`] est le **seul prédicat**, appelé par la route et par `GameStateBuilder` pour choisir les URL d'un paquet (contrat C8 § 2, E10-20) :
+
+- `allows(RoundTier $tier, ?string $requesterTokenHash, CarbonImmutable $now): bool` = conjonction des trois parties publiques suivantes ;
+- `catalogueAllows(RoundTier $tier): bool` — (1) `servedFrame` non nul, `isServable()` vrai, `FrameStoragePrefix::Game->owns(game_path)` ;
+- `timeAllows(RoundTier $tier, CarbonImmutable $now): bool` — (2) :
+  - `round.status ∈ {pending, running}` : `game.status = running`, `started_at` non nul, `isOpenForServing($now, $game->preload_lead_ms)` — la garde relit `preload_lead_ms` sur `game`, jamais en configuration — **et**, si `round.ended_at` est non nul, `Tᵢ < ended_at` [précision de 60, écart (f) du § 22 bis : un palier que la fin anticipée a empêché de s'ouvrir n'est pas servi pendant la grâce finale, même si le job de révélation tarde]. `timeAllows` n'a **pas de borne haute** pendant la manche : un palier passé y reste servable, pour qu'un client lent finisse de charger l'image en cours. C'est `GameStateBuilder`, pas le prédicat, qui borne le nombre d'URL d'un paquet (§ 12.4) ;
+  - `revealing` : `served_at` non nul **et** `now < reveal_ends_at` (D14 du 23/09 : jamais un palier non ouvert) ;
+  - `completed`, `cancelled` : refus ;
+- `membershipAllows(RoundTier $tier, ?string $requesterTokenHash): bool` — (3) un hash non nul **et** une ligne `game_player gp` jointe à `player p` avec `gp.game_id = round.game_id`, `p.player_token_hash = :hash`, `p.kicked_at IS NULL`, `gp.status <> 'kicked'` et `gp.first_round_number` NULL ou `≤ round.round_number`. Un retardataire en attente est refusé sur la manche en cours (contrat C8 § 4.4, contrat C4 I4.9).
+
+`$requesterTokenHash = PlayerTokenManager::current($request)?->hash()` (contrat C4) : le siège n'est jamais identifié autrement.
+
+### 7.3 La route `GET /f/{serveToken}`
+
+| Élément | Valeur |
+|---|---|
+| Nom, chemin | `frame.serve`, `GET /f/{serveToken}`, `->where('serveToken', '[0-9a-f]{32}')` |
+| Contrôleur | `App\Http\Controllers\Game\FrameServeController@show(Request $request, string $serveToken): Response` |
+| Middleware | `signed:relative`, `throttle:frame-serve` ; `->withoutMiddleware([StartSession::class, ShareErrorsFromSession::class, PreventRequestForgery::class, AddQueuedCookiesToResponse::class])` — `EncryptCookies` reste, pour lire le `player_token` |
+| Traitement | jeton → `round_tier` par `round_tier_serve_token_uq`, avec `round.game` et `servedFrame` ; inconnu → 404 ; `ServeGuard::allows()` faux → 404 ; sinon `FrameImageResponse::make(FrameStoragePrefix::Game, $servedFrame->game_path)` (contrat C9) |
+| Écritures | **aucune** : ni transition, ni rattrapage, ni `seen_frame` (10 § 7.4). Coût : environ cinq lectures par clé, aucun index nouveau (E10-66) |
+
+`{serveToken}` est le paramètre de route ; `serve_token` ne désigne que la colonne. La prose qui écrit `/f/{serve_token}` désigne cette même route (A-28, A-76). Pourquoi retirer `PreventRequestForgery` et `AddQueuedCookiesToResponse` : sur un GET, le premier lit la session pour poser `XSRF-TOKEN`, et le second émettrait le cookie `locale` que `SetLocale` met en file — la réponse doit partir **sans session ni `Set-Cookie`**. Pile explicite équivalente admise (contrat C8 § 2).
+
+### 7.4 La réponse
+
+- **200** : corps = octets de `game_path` ; `Content-Type: image/webp` ; `Content-Length` = `frame.game_bytes`, multiple de 8 192 ; `Cache-Control: no-store, private` ; `X-Robots-Tag: noindex, nofollow` ; `X-Content-Type-Options: nosniff` ; `Cross-Origin-Resource-Policy: same-origin`.
+- **Jamais** : `Content-Disposition`, `Last-Modified`, `ETag`, `Accept-Ranges`, `Expires`, `Set-Cookie` (E10-59) ; jamais un `BinaryFileResponse` ni `Storage::response()`.
+- **404, corps vide, réponse identique quelle que soit la cause** : jeton inconnu, prédicat refusé, fichier absent (ce dernier journalisé en avertissement par `FrameImageResponse`, sans pseudo ni IP). **403** : signature invalide ou expirée. **429** : débit dépassé.
+
+### 7.5 L'URL
+
+`App\Support\Game\ServeUrl::for(RoundTier $tier): string` = `URL::temporarySignedRoute('frame.serve', $expiresAt, ['serveToken' => $tier->serve_token], absolute: false)`. Signature **relative** : l'URL ne dépend pas de `APP_URL`, seulement de `APP_KEY`. Elle est produite par le serveur, jamais reconstruite par Wayfinder, **jamais stockée**, et recalculée à chaque émission avec
+
+`expiresAt = (round.reveal_ends_at ?? started_at + duration_ms + tier_grace_ms + R × 1000) + serveUrlExpiryMarginMs`
+
+(`EngineConstants`, 5 000 ms par défaut). L'expiration borne la réutilisation ; c'est `ServeGuard`, à chaque service, qui borne l'accès.
+
+### 7.6 Côté client
+
+`resources/js/lib/game/frame-loader.ts` [nouveau] :
+
+- ne demande une URL qu'à partir de `fetchNotBefore` (horloge de § 2.4), par `fetch(url, { credentials: 'same-origin', cache: 'no-store' })` — le cookie `player_token` doit partir pour la partie (3) du prédicat ;
+- produit un blob, une URL d'objet, appelle `decode()` sur une image hors DOM, puis passe l'URL d'objet en `src` de `GameFrame` (contrat C16) : aucun flash d'aplat entre deux paliers ;
+- **politique de nouvelle tentative** (contrat C7 § 8) : un 404 reçu avant `Tᵢ` (décalage d'horloge) est retenté après `max(FRAME_RETRY_DELAY_MS, fetchNotBefore − serverNow())`, jusqu'à `FRAME_MAX_ATTEMPTS` essais ; un 404 persistant affiche `game.frame.unavailable` et déclenche **une** resynchronisation ; un 403 (signature expirée) déclenche une resynchronisation, qui rend une URL fraîche ; un 429 attend puis retente une fois. Les deux constantes (250 ms et 8 au défaut) sont des **constantes de transport** déclarées dans ce seul module, au même titre que les constantes de présentation de `announcer.ts` : elles ne touchent ni palier, ni score, ni chrono ;
+- garde les blobs des paliers ouverts jusqu'à la fin de la révélation (D14 du 23/09 : la révélation remontre les `N` images), puis **révoque** toutes les URL d'objet au changement de manche — des blobs accumulés sur mobile modeste sont une fuite mémoire.
+
+---
+
+## 8. Pendant la manche
+
+### 8.1 Réception d'une soumission
+
+La soumission, sa recevabilité et la transaction de verrouillage appartiennent à 70 (contrat C10). Le moteur lui fournit : `ReceptionInstant` et `RoundClock` (§ 2) ; `CatchUpGame` appelé **avant** la lecture de `round.status` (contrat C10, étape S3) ; le middleware `seat.active` (§ 10.2) ; l'ordre de verrouillage (§ 4.5) ; et la garantie que `round.status` reste `running` jusqu'à `RevealRound`, les titres ne partant qu'à `ended_at + tier_grace_ms`. **Aucune manche close ne rapporte de points après coup** (00 § Déroulé d'une partie, « Reconnexion ») : une soumission reçue hors fenêtre est 409 `closed` et n'est pas comptée.
+
+### 8.2 Crochets de fin de saisie
+
+Des écouteurs [nouveaux, noms libres, enregistrés dans `AppServiceProvider::boot()` faute d'`EventServiceProvider`] des événements de domaine `AnswerAccepted` et `InputClosed` de 70 (livrés après commit, jamais diffusés) appellent `App\Actions\Game\SeatInputClosed::handle(Round $lockedRound, RoundPlayer $roundPlayer, ?Guess $guess, CarbonImmutable $now): void` dans **leur propre transaction**, qui reprend `round FOR UPDATE` (contrat C7 § 2.5). `SeatInputClosed` :
+
+1. **en multijoueur seulement**, si `$guess` est non nul, émet `player.locked` `{ sequenceIndex, publicId, lockRank }` — rien d'autre, ni points, ni palier, ni chaîne (10 § 7.6) ;
+2. si `round.status = running`, `ended_at` nul et `Round::isEarlyEndReached()` vrai, appelle `CloseRound($round, $now)` (§ 9.1).
+
+Comme chaque écriture qui clôt une saisie est suivie, après son commit, d'une réévaluation sous le verrou `round`, **le dernier à clore voit toujours l'état complet** : deux derniers verrouillages concurrents clôturent la manche une seule fois. Les écouteurs sont idempotents ; un `player.locked` redélivré est dédoublonné par le client sur (`gameRef`, `sequenceIndex`, `publicId`).
+
+### 8.3 QCM : envoi ciblé
+
+À l'ouverture du palier `choicesOpenTierIndex(N)`, après commit, **en multijoueur seulement**, le moteur émet un `seat.choices` **par ligne `round_player`** de la manche dont `input_state->acceptsChoice()` est vrai — `open` **et** `text_exhausted` (D20 du 23/09) — et dont le siège n'est **ni parti ni expulsé**, déconnectés compris (contrat C7 § 4.8). Charge : `{ sequenceIndex }` plus `ChoicesPresenter::forSeat($roundPlayer)->toArray()` (contrat C11) : quatre chaînes permutées pour **ce** siège, `useOriginalTitle`, `lang`. **Dans le cas terminal de C11** (`ComposeChoiceSets::handle()` rend faux : en Facile la manche est annulée, § 6.3 étape 4 ; en Normal la saisie texte reste le seul mode), **aucun `seat.choices` n'est émis** et `SelfState.input.choices` reste nul : le QCM n'apparaît pas (note n° 3 du rédacteur en chef), et `forSeat()`, qui rend alors `null`, n'est jamais appelé. En solo, le QCM n'est livré que par `solo.state` (`SelfState.input.choices`). Un siège revenu après `T_N` l'obtient par la resynchronisation ; **les mêmes quatre chaînes sont rejouées en toute circonstance**, changement de langue compris (05 § QCM, contrat C11).
+
+### 8.4 Écran du joueur verrouillé
+
+Le joueur verrouillé voit ses points par la réponse HTTP de 70 (`TierScore`, destinataire unique) et, après une resynchronisation, par `SelfState.input.locked` ; les autres ne voient que `player.locked`. Le classement montré à quiconque reste **gelé à la dernière manche révélée** : jamais les points d'autrui de la manche en cours (E10-14, E10-52). Les images continuent de défiler, le chrono reste affiché, et aucun canal ne permet de souffler la réponse (00 § Le jeu en une manche, « Écran du joueur verrouillé » ; principe 3).
+
+### 8.5 Ce qui ne part jamais
+
+Une mauvaise réponse n'est jamais diffusée ; `InputClosed` ne l'est jamais (`qcm_wrong` révélerait une mauvaise réponse) ; `input_state` d'un autre siège ne quitte jamais le serveur (10 § 7.6).
+
+---
+
+## 9. Clôture, fin anticipée et révélation
+
+### 9.1 `CloseRound`
+
+`App\Actions\Game\CloseRound::handle(Round $round, CarbonImmutable $endedAt): void`, sous le verrou `round`, idempotent (`ended_at` non nul → rien). L'instant demandé est toujours borné : `ended_at = min($endedAt, started_at + D)`.
+
+- **à `D`** : le job passe `started_at + D`, instant théorique ;
+- **fin anticipée** : `SeatInputClosed` passe son `$now`, qui est l'**instant de l'événement déclencheur tel qu'il est écrit en base** (contrat C7 § 4.6), jamais l'heure d'exécution de l'écouteur : pour `AnswerAccepted` et `InputClosed`, `round_player.input_closed_at` du siège qui vient de clore (instant de réception de 70) ; pour le balayage de présence, le `disconnected_at` ou le `left_at` qu'il vient d'écrire ; pour un départ ou une expulsion, `left_at` ; pour « Voir la réponse », `input_closed_at` du geste. Un écouteur en retard ne décale donc jamais `ended_at`, ni la fenêtre d'acceptation qui en dépend ;
+- `reveal_ends_at = ended_at + tier_grace_ms + R × 1000` (`R` = `settings_snapshot->revealDuration`) ; `round.status` reste `running` ;
+- après commit : `round.closed` en multijoueur ; job `Reveal` à `ended_at + tier_grace_ms`.
+
+### 9.2 Fin anticipée
+
+Prédicat de 10 § 7.7, amendé par D20 du 23/09 (E10-53) : **fin anticipée si et seulement si `COUNT(participants) ≥ 1` ET tous les participants ont `input_state NOT IN ('open', 'text_exhausted')`**. Il est implémenté par `Round::isEarlyEndReached()` [existant], via `RoundPlayerInputState::isClosed()` amendé par 70 (E10-06). **Zéro participant ne clôt jamais une manche** : elle va au bout de `D`, et c'est la pause qui arme ensuite la clôture (§ 14).
+
+Le prédicat est réévalué par `SeatInputClosed` après : chaque verrouillage ou clôture de saisie (§ 8.2) ; chaque transition de présence qui fait sortir un siège des participants (§ 13.2) ; chaque départ volontaire et chaque expulsion (appel de `SeatInputClosed` par `KickSeat` ou `LeaveRoom` de 50, § 13.4) ; chaque geste solo « Voir la réponse » (§ 16.5). Un joueur déconnecté ne bloque jamais la fin anticipée ; un siège `text_exhausted` l'empêche jusqu'à ce qu'il clique ou que la manche atteigne `D` (D20 du 23/09).
+
+### 9.3 Salon à deux joueurs, ou à un seul joueur connecté
+
+À deux joueurs, la fin anticipée peut ramener une manche à quelques secondes : c'est la règle, elle n'est pas corrigée. S'il ne reste **qu'un seul siège connecté** en multijoueur, la fin anticipée reste active et l'écran affiche `game.round.lone_player` — calculé par le client sur `seats` (un seul `SeatView` `connected` et non expulsé). Cet affichage est **cosmétique** : il ne change ni `game.mode`, ni le rang, ni les compteurs (A-04), et **aucun geste d'entraînement** (« Voir la réponse », « Passer la manche ») n'y est jamais proposé — la barrière 1 de 10 § 7.10 l'interdit structurellement.
+
+### 9.4 `RevealRound`
+
+À `ended_at + tier_grace_ms`, sous les verrous `game` → manche `k` → manche `k+1` :
+
+1. `round.status = revealing` : points et `tier_index` de la manche deviennent **publiables** (E10-52) ;
+2. s'il reste une manche à jouer : `ScheduleRound(k+1, reveal_ends_at(k))` (§ 5.3) ;
+3. après commit : en multijoueur, `round.revealed` (§ 11.5), puis `round.scheduled` de `k+1` ; job `EndReveal` à `reveal_ends_at(k)`.
+
+**Crochet de fin de saisie d'une manche [J2]** (exigence de 70 § 11). Après le commit de toute transition de 60 qui fait quitter `running` à une manche — `RevealRound`, `SkipSoloRound` (§ 16.5), `CancelRound` d'une manche `running` (§ 15.2), clôture d'une manche par une relance solo (§ 16.6) —, le moteur émet l'événement de domaine `App\Events\Game\RoundAnswersClosed` [nouveau, J2] `{ roundId }`, livré après commit et **jamais diffusé**, auquel 70 (L70-12) abonne `AggregateNearMisses`, file `default`, jamais `game` (70 § 11). **Jamais après `CloseRound`** : une soumission reste recevable `tier_grace_ms` après `ended_at` (§ 2.3), et son refus écrirait dans le tampon de quasi-justes après l'agrégation. Un événement plutôt qu'un dispatch direct du job : L70-12 dépend de ce crochet, et un dispatch direct ferait dépendre L60-17 de L70-12, soit un cycle (§ 23). Au J1, rien n'est émis (D24 du 23/09).
+
+### 9.5 Contenu de la révélation (D14 du 23/09)
+
+La révélation montre, et rien d'autre :
+
+- **les images de la manche déjà servies** — les paliers ouverts (`served_at` non nul), dans l'ordre des paliers ; une manche close par fin anticipée n'en montre que les paliers ouverts, jamais un palier non ouvert ;
+- le **titre dans la langue du joueur** (chaîne de repli de 05, attribut `lang` de la locale atteinte), le **titre original s'il diffère** (translittération latine s'il en existe une) et l'**année** — discriminant des homonymes et des remakes ;
+- **qui a trouvé**, à quel palier, en combien de temps et pour combien de points (`finders`, contrat C13), le **classement intermédiaire** avec avatars (avatars lus dans `seats`) ;
+- l'**attribution TMDB** (`TmdbAttribution`, contrat C16 ; principe 12).
+
+« Affiche » est retirée : aucune affiche n'est stockée ni licite (A-03). Une révélation déjà affichée ne se recompose pas au changement de langue (05) ; le paquet porte les titres de **toutes** les locales activées, chaque client choisit le sien.
+
+**Assistant client unique de rendu des titres** (propriété de 60, 80 § 21) : `resources/js/lib/game/reveal-titles.ts` [nouveau, L60-9] exporte `revealTitles(movie: RevealMovie, locale: LocaleCode): { title: RevealTitle; original: RevealTitle | null; year: number | null }`. `title` = `movie.titles[locale]`, avec son `lang` ; `original` = `originalTitleLatin ?? originalTitle`, de `lang` = `originalLanguage` suffixé `-Latn` quand la translittération est rendue, et **nul quand il égale `title.text`** (« titre original s'il diffère ») ; `year` = `movie.year`. L'écran de révélation (60) et le récapitulatif du podium (80, L80-7) le consomment tous deux : ni l'un ni l'autre ne réimplémente ce choix.
+
+### 9.6 `EndReveal`
+
+À `reveal_ends_at(k)`, sous les verrous `game` → manche `k` → manche `k+1` :
+
+1. `round.status = completed` ; `game.rounds_completed = COUNT(round WHERE status = completed)`, maintenu par 60 et écrasé au gel (E10-36) ;
+2. aucune manche à jouer : `FinalizeGame::handle($game, GameStatus::Completed, reveal_ends_at(k))` (contrat C13) ;
+3. une manche reste et **aucun siège présent** (§ 1.2) : `PauseGame` (§ 14.1). Contrat C7 § 2.3, § 4.11 et § 4.14 écrivent « aucun participant connecté » ; entre deux manches il n'existe pas de participant au sens de 10 § 7.7, et un retardataire admis à `k+1` et connecté doit empêcher la pause : écart (b) du § 22 bis ;
+4. sinon rien : `k+1` est déjà programmée.
+
+**Personne n'a trouvé** : révélation normale, zéro point, et la manche `completed` à `found_count = 0` alimente la file « films jamais trouvés » de 20, agrégée sans identité (10 § 7.4).
+
+---
+
+## 10. Routes, canaux et autorisation
+
+### 10.1 Routes
+
+`routes/game.php` [nouveau], `require`-é par `routes/web.php`. `{room}` est le `room_code` résolu par `Room::resolveRouteBinding()` [existant]. Seuls les **noms** font contrat.
+
+| Nom | Méthode, chemin | Contrôleur (`App\Http\Controllers\Game\`) | Middleware | Réponse |
+|---|---|---|---|---|
+| `room.state` | GET `/r/{room}/state` | `RoomStateController@show` | `translations:game,room,legal`, `throttle:game-read` | JSON `GameStatePacket` ; 403 sans siège tenu par le jeton |
+| `room.heartbeat` | POST `/r/{room}/heartbeat` | `RoomHeartbeatController@store` | `throttle:game-write` | 204 ; 403 sans siège ou siège expulsé |
+| `room.round.next` | POST `/r/{room}/round/next` | `NextRoundController@store` | `seat.active`, `throttle:game-write`, policy `RoomPolicy::advanceRound` relue sous verrou (§ 5.4) | 204 ; 409 `not_revealing` hors révélation |
+| `solo.create` [ajout de 60, écart (l) du § 22 bis] | GET `/solo/new` | `SoloGameController@create` → `Inertia::render('room/solo', ['presets' => …, 'avatars' => …, 'nickname' => …])` | `translations:room,legal`, `throttle:game-read` | Inertia (`PublicLayout`, apparence du visiteur) ; 303 → `solo.show` si le jeton tient déjà un siège solo |
+| `solo.store` | POST `/solo` | `SoloGameController@store`, FormRequest `SoloStartRequest` | `throttle:game-write` | redirection vers `solo.show` |
+| `solo.show` | GET `/solo` | `SoloGameController@show` → `Inertia::render('game/solo', ['state' => …, 'seatToken' => …, 'settingsNotice' => …, 'limits' => PlatformLimits::toArray(), 'presets' => …])` (§ 16.4) | `game.appearance`, `translations:game,room,legal`, `throttle:game-read` | Inertia ; 303 → `solo.create` sans siège solo tenu par le jeton (§ 16.4) |
+| `solo.state` | GET `/solo/state` | `SoloStateController@show` | `translations:game,room,legal`, `throttle:game-read` | JSON `GameStatePacket` ; 403 sans siège solo |
+| `solo.heartbeat` | POST `/solo/heartbeat` | `SoloHeartbeatController@store` | `throttle:game-write` | 204 ; 403 sans siège solo |
+| `solo.reveal` | POST `/solo/round/reveal` | `SoloRoundController@reveal` | `seat.active`, `throttle:game-write` | JSON `GameStatePacket` |
+| `solo.skip` | POST `/solo/round/skip` | `SoloRoundController@skip` | idem | idem |
+| `solo.next` | POST `/solo/round/next` | `SoloRoundController@next` | idem | idem |
+| `clock.show` | GET `/clock` | `ClockController@show` | `throttle:game-read`, même pile sans session que `frame.serve` | `{ "serverNow": IsoMs }` |
+| `frame.serve` | GET `/f/{serveToken}` | `FrameServeController@show` | § 7.3 | octets ou 404 |
+
+Les routes de soumission `round.answer.store` et `round.choice.store` appartiennent à 70 (contrat C10), dans le même fichier, sous `seat.active`.
+
+**Domaines de traduction et apparence.** Toutes les routes GET de 60 dans `routes/game.php` portent `translations:game,room,legal` (contrat C15 § 2.3 : `legal` sur toute route joueur, parce que le pied de page est sur tous les écrans), sauf `solo.create`, qui rend une page `room/*` et porte `translations:room,legal`, et sauf `frame.serve` et `clock.show`, exclues nommément par `TranslationDomainDeclarationTest` (90). Seules les routes qui rendent une page `game/*` portent `game.appearance` (contrat C16) : c'est pourquoi l'entrée du solo a sa propre route, comme `room.entry` à côté de `room.show` chez 50 — une page d'entrée suit l'apparence du visiteur (90 § 2.1).
+
+**La partie multijoueur est un état de la page `game/lobby`** (contrat C16 § 2.1, 90 § 2.1) : manche, joueur verrouillé, révélation, pause et podium s'y succèdent **sans navigation**, par le magasin `lib/game/store.ts` (§ 11.8). Une visite Inertia entre deux états démonterait la souscription Echo, l'horloge resynchronisée et l'annonceur, et ferait frapper un nouveau jeton d'onglet (§ 12.7). `room.show` (50) rend `game/lobby` en `lobby` comme en `playing`, podium compris, avec les props `state` (`GameStateBuilder::build()`, `$game` non nul en `playing`), `seatToken` et la prop partagée `realtime`. Aucune page `game/room` n'existe : 50 § 7.2 et § 21, et 90 § 2.1, l'ont arrêté (écart (m) du § 22 bis fermé ; points restés ouverts de 50, n° 0).
+
+### 10.2 Middleware `seat.active`
+
+`App\Http\Middleware\EnsureActiveSeat` [nouveau], alias `seat.active` dans `bootstrap/app.php`. Il résout le siège **exclusivement** par le hash du jeton courant (contrat C4 I4.9) — siège du salon `{room}` par `seatIn()`, siège solo, ou siège lié `{player:public_id}` qui doit être tenu par ce jeton et non expulsé (contrat C10) —, compare l'en-tête `X-Seat-Token` à `player.active_seat_token`, répond **409 `{ "code": "seat_superseded" }`** en cas d'écart, **403** sans siège, et met en mémoire sur la requête le siège résolu **et sa partie courante** au sens du contrat C17 — la partie `Game::inProgress()` (§ 17.2 : `ended_at IS NULL AND status IN ('running', 'paused')`) du salon du siège, ou sa partie solo en cours —, ou NULL. Le limiteur `answer` et la règle `max` d'`AnswerStoreRequest` de 70 les lisent là (contrat C10 § 2, 70 § 7.1 et § 8) : sans la partie, ni la cadence ni `maxAnswerLength` du snapshot n'auraient de source.
+
+**Rang dans la pile** (exigence de 70 § 8). `bootstrap/app.php` inscrit `$middleware->prependToPriorityList(ThrottleRequests::class, EnsureActiveSeat::class)`, **après** l'inscription de `SetLocale` (05 ; la pile réelle devient `SetLocale`, `EnsureActiveSeat`, `ThrottleRequests`, `SubstituteBindings`). Sans elle, Laravel trierait `ThrottleRequests` avant tout middleware de route absent de sa liste de priorité, et un limiteur nommé ne verrait jamais le siège. Conséquence : `EnsureActiveSeat` s'exécute **avant la liaison implicite** et lit `{room}` (le `room_code`) et `{player}` (le `public_id`) comme **paramètres bruts** — `(string) $request->route('room')`, `(string) $request->route('player')` —, jamais comme modèles liés ; les contrôleurs reçoivent ensuite leurs modèles liés, `SubstituteBindings` passant après lui.
+
+### 10.3 Limiteurs
+
+Déclarés dans `FortifyServiceProvider::configureRateLimiting()` [existant], clés sur le hash du `player_token` avec repli sur l'IP (cache, jamais une table de domaine) : `game-read` (`gameReadsPerMinute`), `game-write` (`gameWritesPerMinute`), `frame-serve` (`frameServePerMinute`). Valeurs au § 19.1. `answer` appartient à 70.
+
+### 10.4 Canaux
+
+Aucun canal en solo (10 § 7.10, barrière 2).
+
+| Nom Echo | Nom Pusher | Autorisation | Nature |
+|---|---|---|---|
+| `room.{roomKey}` | `presence-room.{roomKey}` | `App\Broadcasting\RoomPresenceChannel` | diffusion au salon, lobby et partie |
+| `seat.{publicId}` | `private-seat.{publicId}` | `App\Broadcasting\SeatPrivateChannel` | envoi ciblé à un siège |
+
+- **`roomKey`** = `ChannelNames::roomKey(Room $room)` = `substr(hash_hmac('sha256', 'tf:room-channel:'.$room->id, (string) config('app.key')), 0, 32)`. **Jamais `room_code`**, recyclé à l'archivage (10 § 6.2) — un onglet resté abonné recevrait le salon suivant —, jamais `room.id` en clair, aucune colonne (E10-31). `ChannelNames::room(Room)` rend `'room.'.roomKey`, `ChannelNames::seat(Player)` rend `'seat.'.$seat->public_id`.
+- **`gameRef`** = `GameRef::for(Game $game)` = `substr(hash_hmac('sha256', 'tf:game-ref:'.$game->id, (string) config('app.key')), 0, 16)` : identifiant public d'une partie, sans colonne, qui sépare les parties successives d'un même salon.
+- **Garde `player`** : `config/auth.php` reçoit `'player' => ['driver' => 'player-token']` ; `AppServiceProvider::boot()` déclare `Auth::viaRequest('player-token', …)`, qui ne lit que `PlayerTokenManager::current($request)?->hash()` et rend un `App\Support\Realtime\SeatPrincipal` (`final`, `Authenticatable`, `__construct(public readonly string $tokenHash)`, `bindSeat()` / `boundSeat()`, identifiant de diffusion = `public_id` du siège lié, **jamais le hash** ; méthodes de mot de passe et de souvenir neutres). `Player` n'implémente pas `Authenticatable` ; `web` reste le garde par défaut, et Fortify ne voit jamais `player`.
+- **`routes/channels.php`** [nouveau], enregistré par `->withBroadcasting(__DIR__.'/../routes/channels.php', ['middleware' => ['web', 'throttle:game-read']])` :
+  - `Broadcast::channel('room.{roomKey}', RoomPresenceChannel::class, ['guards' => ['player']])` ;
+  - `Broadcast::channel('seat.{publicId}', SeatPrivateChannel::class, ['guards' => ['player']])`.
+- **`RoomPresenceChannel::join(SeatPrincipal $principal, string $roomKey): array|false`** accepte s'il existe un `player p` tel que `p.player_token_hash = tokenHash`, `p.room_id` non nul, salon non archivé, `p.kicked_at` nul et `hash_equals(ChannelNames::roomKey(p.room), $roomKey)` ; il appelle `bindSeat(p)` et rend `['publicId' => p.public_id]`. L'état de connexion est indifférent.
+- **`SeatPrivateChannel::join(SeatPrincipal $principal, string $publicId): bool`** exige `p.public_id = $publicId`, le même hash, un salon non archivé et `kicked_at` nul.
+- **Membre de présence** : `user_id` = `public_id`, `user_info` = `{ "publicId": string }`, rien d'autre. Point d'authentification : `/broadcasting/auth`, chemin fixe du framework, hors Wayfinder.
+
+### 10.5 Echo côté client
+
+`resources/js/lib/game/echo.ts` instancie Echo **paresseusement**, `broadcaster: 'reverb'`, configuré **à l'exécution** depuis la prop partagée `realtime` et `window.location`, jamais depuis `VITE_REVERB_*` (A-27) : un artefact construit en CI se promeut ainsi sans rebuild. La prop `realtime` = `{ key, host, port, scheme, heartbeatIntervalMs, clockSamples }` (`HandleInertiaRequests::share()`, augmentée dans `types/global.d.ts`) ; `host`, `port`, `scheme` à `null` signifient « prendre `window.location` ». Les écoutes emploient le nom `broadcastAs` préfixé d'un point (`.round.scheduled`). Une page quitte ses canaux à `seat.kicked`, à `room.archived` et au démontage ; les souscriptions vivent dans `hooks/game/use-game-channel.ts`, en `useSyncExternalStore`, idempotentes sous React Compiler et en mode strict.
+
+---
+
+## 11. Contrat d'événements
+
+### 11.1 Enveloppe
+
+Présente dans chaque événement et en tête de tout paquet de resynchronisation :
+
+```ts
+type IsoMs = string; // 'YYYY-MM-DDTHH:mm:ss.sssZ', UTC, millisecondes (05 : instants ISO-8601 UTC)
+interface WireEnvelope { v: 1; serverNow: IsoMs; gameRef: string | null } // gameRef null : événement de lobby hors partie
+```
+
+`v` = `App\Support\Realtime\GameWire::VERSION` (constante de version, 1), miroir de `GAME_WIRE_VERSION` dans `resources/js/lib/game/wire.ts` ; `GameWire::envelope(?Game $game, CarbonImmutable $now): array` ; `WireTime::iso(CarbonImmutable $instant)` rend `$instant->utc()->format('Y-m-d\TH:i:s.v\Z')`. Durées et décalages : **entiers en millisecondes** ; instant absolu d'un palier = `startsAt + startsAtOffsetMs`.
+
+### 11.2 Transport
+
+Deux bases abstraites [nouvelles, `app/Events/Game/`] : `RoomBroadcast(Room $room, ?Game $game, array $payload)`, `broadcastOn(): PresenceChannel` ; et `SeatBroadcast(Player $seat, ?Game $game, array $payload)`, `broadcastOn(): PrivateChannel`, qui lève une `LogicException` si `$seat->room_id === null`. Toutes deux implémentent `ShouldBroadcastNow` et `ShouldDispatchAfterCommit` — **et `ShouldRescue`, ajout de 60** (§ 4.6, écart (d) du § 22 bis) —, déclarent `final public function broadcastWith(): array` (enveloppe puis charge) et `abstract public function broadcastAs(): string`. La charge est **précalculée sous le verrou** par la transition ; `serverNow` est pris **à l'émission**, dans `broadcastWith()`. Une transaction annulée n'émet rien.
+
+**Garde de mode, imposée à tout émetteur.** `RoomBroadcast` et `SeatBroadcast` ne sont **jamais instanciés** pour une partie `solo` ni pour un siège sans salon : tout émetteur teste d'abord `game.mode = multiplayer`, ou, hors partie, `seat.room_id` non nul (contrat C7 § 4.12). Sans ce test, recharger `game/solo` lèverait la `LogicException` de `SeatBroadcast` à la prise d'onglet (§ 12.7). Les émetteurs concernés sont nommés « en multijoueur seulement » à chaque occurrence (§ 3.4, § 6.3, § 8.2, § 9.1, § 12.7, § 13.1, § 13.2, § 14.1, § 14.2, § 14.5, § 15.2).
+
+**`App\Jobs\Game\BroadcastLobbyState`** [nouveau, nom figé par le contrat C7 § 2.5, consommé par 50] : `__construct(public int $roomId)`, `onQueue('game')`, `ShouldBeUniqueUntilProcessing`, `uniqueId()` = `$roomId` : unique par salon jusqu'à son traitement. 50 le dispatche après chaque écriture de réglages et après un refus `pool_insufficient` (contrat C0 § 3.4, 50 § 8.3), `->afterCommit()`, avec un délai exprimé **en instant, arrondi à la seconde supérieure** — `$now->addMilliseconds(PlatformLimits::lobbyBroadcastDebounceMs())->ceilSecond()`, formule écrite par l'appelant (50 § 8.3) — et jamais par l'entier `lobbyBroadcastDebounceMs()`, que `delay()` lirait en **secondes** (§ 4.2 ; écart de lettre (n) du § 22 bis). L'arrondi compense la troncature à la seconde de `availableAt()` : la fenêtre réelle est comprise entre `lobbyBroadcastDebounceMs()` et `lobbyBroadcastDebounceMs()` + 1 s, jamais plus courte. La coalescence est au mieux, jamais une règle de jeu. À l'exécution, il ne fait **rien** si le salon n'existe plus ou si `room.status ≠ lobby` ; sinon il relit `RoomSettingsPresenter::state($room, Date::now())` (50) et émet `SettingsChanged`. Relire au moment d'émettre fait partir le **dernier** état : c'est la seule émission coalescée de la liste close, et une écriture postérieure au début du traitement dispatche un nouveau job, sans numéro de révision stocké.
+
+### 11.3 Liste close du J1 : dix-neuf événements
+
+| `broadcastAs` | Classe `App\Events\Game\…` | Canal | Émetteur et instant | Charge, hors enveloppe |
+|---|---|---|---|---|
+| `seat.joined` | `SeatJoined` | salon | prise de siège (50) ; admission d'un retardataire (50) | `{ seat: SeatView }` |
+| `seat.updated` | `SeatUpdated` | salon | transition de présence (60) ; expulsion (50) ; masquage (40, J2) | `{ seat: SeatView }` |
+| `host.changed` | `HostChanged` | salon | transfert d'hôte (50) | `{ hostPublicId: string, previousHostPublicId: string \| null }` |
+| `settings.changed` | `SettingsChanged` | salon | `BroadcastLobbyState` après écriture de réglages (50) ; refus `pool_insufficient` (50) | `RoomSettingsState` (contrat C0) |
+| `room.replayed` | `RoomReplayed` | salon | `ReplayRoom` (50), après commit | `RoomSettingsState` recalculé |
+| `game.launched` | `GameLaunched` | salon | transaction de lancement (50), après commit | `{ mode: 'multiplayer', roundsCount, framesPerRound, inputDifficulty, revealDurationMs, speedBonus, seats: SeatView[] }` |
+| `room.archived` | `RoomArchived` | salon | archivage (50) | `{}` |
+| `round.scheduled` | `RoundScheduled` | salon | `ScheduleRound` : manche 1, manche `k+1` au début de la révélation de `k`, reprise, remplacement, « manche suivante » | `{ round: RoundTimeline, image: TierImageRef }` (palier 1) |
+| `tier.opened` | `TierOpened` | salon | `OpenTier` à `Tᵢ`, `i` = 1..N | `{ sequenceIndex, roundNumber, tierIndex, opensAt: IsoMs, next: TierImageRef \| null }` |
+| `player.locked` | `PlayerLocked` | salon | `SeatInputClosed`, sur `AnswerAccepted` (70) | `{ sequenceIndex, publicId, lockRank }` |
+| `round.closed` | `RoundClosed` | salon | `CloseRound`, à `D` ou à la fin anticipée | `{ sequenceIndex, roundNumber, endedAt, revealStartsAt, revealEndsAt }` |
+| `round.revealed` | `RoundRevealed` | salon | `RevealRound`, à `ended_at + tier_grace_ms` | `{ sequenceIndex, roundNumber, revealEndsAt, movie: RevealMovie, images: TierImageRef[], finders: RoundFinder[], leaderboard: Leaderboard }` |
+| `round.cancelled` | `RoundCancelled` | salon | `CancelRound` | `{ sequenceIndex, roundNumber }` — aucun motif, aucun titre |
+| `game.paused` | `GamePaused` | salon | `EndReveal` sans siège présent (écart (b) du § 22 bis) | `{ pausedAt, interruptsAt }` |
+| `game.resumed` | `GameResumed` | salon | retour d'un siège pendant la pause | `{ resumedAt }`, suivi de `round.scheduled` |
+| `game.ended` | `GameEnded` | salon | écouteur de `GameFinalized` (contrat C13), après le gel | `{ podium: Podium }` |
+| `seat.choices` | `SeatChoicesOffered` | **siège** | `OpenTier` au palier du QCM | `{ sequenceIndex }` + `ChoicesPayload` : `{ choices: [string, string, string, string], useOriginalTitle: bool, lang: string \| null }` |
+| `seat.superseded` | `SeatSuperseded` | **siège** | `ClaimSeatTab`, si un jeton de siège actif précédent existait | `{}` |
+| `seat.kicked` | `SeatKicked` | **siège** | expulsion (50), après commit | `{}` |
+
+Tout nouvel événement amende cette spec et entre dans `EventPayloadTest`. Le J1 n'a **aucun événement de résultat propre** (pas de `seat.locked`) : les points du joueur verrouillé passent par la réponse HTTP de 70, à destinataire unique, et par `SelfState.input.locked` à la resynchronisation. Au J2, sur le même transport : `nickname: null` pour un pseudo masqué (40) et le contenu Avancé de `settings.changed` (50). `resources/js/types/game-wire.ts` exporte l'union `GameEventName` des dix-neuf noms [ajout de 60, écart (i) du § 22 bis].
+
+### 11.4 Types partagés
+
+`resources/js/types/game-wire.ts` [nouveau, dans `WATCHED`] ; les types d'autres contrats sont **importés, jamais redéclarés**. Le fichier se remplit **en trois lots**, pour qu'aucun lot ne déclare un type dont le fichier importé n'existe pas encore (`tsc` échouerait, `npm run types:check`) et que le graphe des lots reste sans cycle (§ 23) :
+
+- **L60-2** — les seuls types sans import d'une autre spec : `IsoMs`, `WireEnvelope` (§ 11.1), `LocaleCode`, `RevealTitle`, `RevealMovie`, `TierImageRef`. `types/scoring.ts` de 80 (L80-3) importe `RevealMovie` d'ici ;
+- **L60-4** — `SeatView`, `RoundTimeline`, `RoundState`, `SelfState` et `GameStatePacket` (§ 12.1), qui importent `types/player.ts` (L40-6), `types/answers.ts` (70, déclaré dès L70-4) et `types/scoring.ts` (80, `Podium` compris, déclaré dès L80-3) ;
+- **L60-9** — les charges typées en `RoomSettingsState` (`settings.changed`, `room.replayed`) et l'union `GameEventName` (§ 11.3), qui importent `types/room-settings.ts` (50, livré par L50-2).
+
+```ts
+// L60-2 : aucun import d'une autre spec
+type LocaleCode = 'fr' | 'en';                                   // Locale::cases()
+interface TierImageRef { tierIndex: number; url: string; fetchNotBefore: IsoMs }
+interface RevealTitle { text: string; lang: string }
+interface RevealMovie { titles: Record<LocaleCode, RevealTitle>; originalTitle: string; originalTitleLatin: string | null;
+  originalLanguage: string; year: number | null }                 // aussi TitlePacket du récapitulatif (C13)
+
+// L60-4
+import type { AvatarData, PlayerIdentity } from '@/types/player';                    // C5
+import type { TierWindow, RoundFinder, Leaderboard, Podium } from '@/types/scoring';   // C13
+import type { InputState, ChoicesPayload, SeatInputView } from '@/types/answers';      // C10, C11
+interface SeatView extends PlayerIdentity {   // PlayerIdentity::toArray() (C5) + état de siège
+  isHost: boolean; connection: 'connected' | 'disconnected' | 'left'; kicked: boolean; firstRoundNumber: number | null }
+  // En partie : PlayerIdentity::fromGamePlayer (pseudo et avatar GELÉS) ; au lobby : PlayerIdentity::fromSeat.
+interface RoundTimeline { sequenceIndex: number; roundNumber: number; roundsCount: number; startsAt: IsoMs;
+  durationMs: number; tiers: TierWindow[]; choicesAtTierIndex: number | null }
+
+// L60-9
+import type { RoomSettingsState } from '@/types/room-settings';                        // C0
+```
+
+`RoundTimeline` entrant en L60-4, la chronologie cliente de 90 (L90-6b, qui l'importe) dépend de L60-4 et non de L60-2 (signalé à 90, § 22 bis).
+
+### 11.5 Charges, champ par champ
+
+| Champ | Provenance |
+|---|---|
+| `SeatView` | `PlayerIdentity::fromGamePlayer()` en partie, `fromSeat()` au lobby (contrat C5) ; `isHost` = `room.host_player_id = player.id` ; `connection` = `player.connection_state` ; `kicked` = `kicked_at` non nul ; `firstRoundNumber` = `game_player.first_round_number` (NULL au lobby) |
+| `game.launched` | `roundsCount` = `game.rounds_count` ; `framesPerRound` = `game.frames_per_round` ; `inputDifficulty` = `game.input_difficulty` ; `revealDurationMs` = `settings_snapshot->revealDuration × 1000` ; `speedBonus` = `settings_snapshot->speedBonus` ; `seats` = les lignes `game_player`, par `game_player.id` croissant |
+| `RoundTimeline` | `sequenceIndex`, `roundNumber` de `round` ; `roundsCount` = `game.rounds_count` ; `startsAt` = `started_at` ; `durationMs` = `round.duration_ms` ; `tiers` = `TierWindow::fromRoundTier()` des `N` lignes, par `tier_index` (contrat C13) ; `choicesAtTierIndex` = `game.input_difficulty->choicesOpenTierIndex(N)` |
+| `TierImageRef` | `url` = `ServeUrl::for($tier)` ; `fetchNotBefore` = `Tᵢ − preload_lead_ms` |
+| `tier.opened` | `opensAt` = `Tᵢ` théorique (= `served_at`) ; `next` = référence du palier `i+1`, frappé dans la même transition, NULL au dernier palier |
+| `round.closed` | `endedAt` = `ended_at` ; `revealStartsAt` = `ended_at + tier_grace_ms` ; `revealEndsAt` = `reveal_ends_at` |
+| `RevealMovie` | composé par le **seul** constructeur `App\Support\Game\RevealMovieBuilder::build(Movie $movie): array` [nouveau, L60-6], appelé par `RevealRound`, par `GameStateBuilder` (`round.reveal`) et par `Scoreboard::podium()` de 80 (paquet de titres du récapitulatif, contrat C7 § 3) — une seule composition, pour que la révélation et le récapitulatif ne divergent jamais : `titles` : pour **chaque** `Locale::cases()`, `DisplayTitleResolver::resolve($movie, $locale)` (contrat C11) → `text` et `lang` = `Locale::bcp47()` de la locale atteinte, ou, au rang 3, `movie.original_language` suffixé `-Latn` si la translittération est servie ; `originalTitle` = `title_original` ; `originalTitleLatin` = `title_original_latin` ; `originalLanguage` = `original_language` ; `year` = `release_year` |
+| `round.revealed` | `images` = une `TierImageRef` par palier **ouvert**, par `tier_index` ; `finders` = `Scoreboard::roundFinders($round)` ; `leaderboard` = `Scoreboard::leaderboard($game, $round)` (contrat C13) |
+| `game.paused` | `pausedAt` = `paused_at` ; `interruptsAt` = `paused_at + pauseTimeoutMs` |
+| `game.ended` | `podium` = `Scoreboard::podium($game)` ; issue, manches jouées et prévues sont dans `Podium` |
+| `seat.choices` | `ChoicesPresenter::forSeat($roundPlayer)->toArray()` (contrat C11) |
+
+**Exemple** — `tier.opened` au palier 2 d'une manche à N = 3, au réglage par défaut :
+
+```json
+{ "v": 1, "serverNow": "2026-09-23T14:05:13.004Z", "gameRef": "3f9a0c1d2e4b5a69",
+  "sequenceIndex": 4, "roundNumber": 4, "tierIndex": 2, "opensAt": "2026-09-23T14:05:13.000Z",
+  "next": { "tierIndex": 3, "url": "/f/9c1e…d2?expires=1790172346&signature=…", "fetchNotBefore": "2026-09-23T14:05:21.000Z" } }
+```
+
+`expires` suit § 7.5 : `started_at` = 14:05:03.000Z, donc `(started_at + D + tier_grace_ms + R) + serveUrlExpiryMarginMs` = 14:05:41.300Z + 5 s = 14:05:46.300Z, soit 1790172346 après la troncature à la seconde de `URL::temporarySignedRoute()`.
+
+### 11.6 Diffusé ou ciblé
+
+Tout ce qui est au tableau du § 11.3 avec le canal « salon » est **diffusé**, contenu identique pour tous. `seat.choices`, `seat.superseded` et `seat.kicked` sont **ciblés**. Un paquet de resynchronisation est une **réponse HTTP à destinataire unique**. Aucun événement n'est émis en solo : aucune instance de `RoomBroadcast` ni de `SeatBroadcast` (contrat C7 § 4.12).
+
+### 11.7 Jamais dans une charge — diffusée, ciblée ou de resynchronisation (règle 3, 10 § 1.1)
+
+- **Avant `revealStartsAt`** : ni `movie_id`, ni année, ni titre, ni alias du film de la manche **hors des quatre chaînes du QCM** (`seat.choices`, `SelfState.input.choices`) ; dans ces chaînes, la cible ne porte ni index, ni drapeau, ni position conventionnelle, ni métadonnée par proposition, et l'ordre est permuté par siège (05, contrat C11).
+- **À aucun moment** : `round.id`, `game.id`, `room.id`, `player.id`, `frame.id`, `frame_level`, `served_frame_id`, `game_path`, `draw_seed`, `draw_pool_size`, `choice_1` en position identifiable, `input_state` d'autrui, `active_seat_token` (sauf la prop `seatToken` de l'onglet qui vient de le frapper).
+- **Avant la révélation** : les points et le `tier_index` d'autrui.
+- **Le genre, le studio et la durée du film** (principe 2).
+- **Aucune phrase formatée côté serveur**, à la seule exception des quatre chaînes du QCM et des titres de la révélation, qui sont des données (05).
+
+### 11.8 Réception côté client
+
+`resources/js/lib/game/store.ts` [nouveau] est un magasin externe **idempotent** sur (`gameRef`, `sequenceIndex`, `tierIndex`, événement). Pour une même manche `pending`, le `round.scheduled` au `serverNow` le plus grand l'emporte (contrat C7 § 4.2). **C'est lui, jamais une navigation, qui fait passer `game/lobby` d'un état à l'autre** (§ 10.1) :
+
+- à `game.launched`, le magasin passe à l'état de partie, applique la charge (sièges gelés, réglages de partie) et range tout `round.scheduled` de ce `gameRef`, quel que soit leur ordre d'arrivée ; s'il ne détient pas encore le `round.scheduled` de la manche 1 à la réception de `game.launched`, il se resynchronise une fois par `room.state` (§ 12.6), dont la réponse, construite après le commit du lancement, porte la manche 1 programmée ;
+- à `room.replayed`, il repasse à l'état lobby avec le `RoomSettingsState` reçu, sans navigation ;
+- à `room.archived` et à `seat.kicked` — les deux seuls cas où la page du salon cesse d'être la bonne —, il quitte les canaux et visite `room.show`, qui rend le salon expiré (50) ou redirige vers le formulaire d'entrée en état `kicked` (50 § 8.2).
+
+---
+
+## 12. Resynchronisation, reconnexion et second onglet
+
+### 12.1 Le paquet `GameStatePacket`
+
+Une seule forme, sortie d'un seul constructeur, `App\Support\Game\GameStateBuilder::build(?Game $game, Player $seat, CarbonImmutable $now, ?string $presentedSeatToken): array`. C'est à la fois la prop initiale `state` de toute page `game/*`, la réponse de `room.state` et celle de `solo.state`. **`room.state` et `solo.state` appellent `CatchUpGame` avant de construire le paquet**, qui décrit donc toujours l'état échu.
+
+```ts
+interface GameStatePacket extends WireEnvelope {
+  mode: 'multiplayer' | 'solo';
+  channels: { room: string; seat: string } | null;          // null en solo ; présent au lobby comme en partie
+  status: 'running' | 'paused' | 'completed' | 'interrupted' | null;
+  roundsCount: number | null; roundsCompleted: number | null; framesPerRound: number | null;
+  inputDifficulty: 'easy' | 'normal' | 'expert' | null;
+  maxAnswerLength: number | null;                            // snapshot de la partie ; null sans partie (écart (r))
+  seats: SeatView[];                                         // solo : [soi]
+  pause: { pausedAt: IsoMs; interruptsAt: IsoMs } | null;
+  round: RoundState | null;
+  self: SelfState;
+  leaderboard: Leaderboard;                                  // C13, portée Publishable, gelé à la dernière manche révélée
+  podium: Podium | null;                                     // si completed | interrupted
+  nextTransitionAt: IsoMs | null;
+}
+interface RoundState extends RoundTimeline {
+  phase: 'scheduled' | 'running' | 'closed' | 'revealing' | 'cancelled';
+  currentTierIndex: number | null;
+  images: TierImageRef[];
+  locked: { publicId: string; lockRank: number }[];
+  endedAt: IsoMs | null; revealStartsAt: IsoMs | null; revealEndsAt: IsoMs | null;
+  reveal: { movie: RevealMovie; finders: RoundFinder[] } | null; // non nul seulement si serverNow ≥ revealStartsAt
+}
+interface SelfState {
+  publicId: string; seatActive: boolean; isHost: boolean; member: boolean; participates: boolean;
+  input: SeatInputView | null; ownScore: number;
+}
+```
+
+**Écart (a) du § 22 bis** : `channels` est nul **en solo**, pas « sans partie » comme l'écrit le contrat C7 § 3 — 50 § 8.1 construit la page de lobby par `GameStateBuilder::build(null, …)` et a besoin de ses deux canaux, le salon se lisant alors par `$seat->room` (contrat C7 § 2.5).
+
+**Écart (r) du § 22 bis** : `maxAnswerLength` n'est pas dans la lettre du contrat C7 § 3. Il est la **seule source** de la prop `maxLength` d'`answer-input.tsx`, en salon comme en solo, après un rechargement comme au montage (70 § 16, 90 § 7.2) : sans lui, le client écrirait une valeur en dur (règle 2) ou omettrait une prop que le contrat C10 rend obligatoire. La borne reste serveur (422 de 70) ; l'attribut n'est qu'un confort.
+
+### 12.2 Provenance des champs
+
+| Champ | Provenance |
+|---|---|
+| `$game` | la partie en cours du siège ; à défaut, la dernière partie du salon (`game_room_started_idx`) tant que `room.status = playing`, podium compris ; en solo, la partie solo en cours du siège ou sa dernière partie close ; sinon NULL (lobby, solo pas encore lancé) |
+| `seats` | au lobby, la liste et l'ordre de 50 ; en partie, toutes les lignes `game_player` (parties et expulsés compris), par `game_player.id` croissant |
+| `status`, `roundsCount`, `roundsCompleted`, `framesPerRound`, `inputDifficulty` | colonnes de `game` ; NULL sans partie |
+| `maxAnswerLength` | `game.settings_snapshot->maxAnswerLength` (contrat C0 ; défaut et bornes de `RoomSettingsBounds`) ; NULL sans partie (lobby, solo pas encore lancé) |
+| `pause` | `paused_at` et `paused_at + pauseTimeoutMs` si `status = paused` |
+| `round.locked` | `guess` de la manche : `publicId` et `lockRank` seulement |
+| `round.reveal` | comme `round.revealed`, si `serverNow ≥ revealStartsAt` |
+| `self.seatActive` | jeton de siège présenté = `player.active_seat_token` ; à une requête JSON, le jeton présenté est l'en-tête `X-Seat-Token` ; au rendu d'une page, c'est le jeton **rendu par `ClaimSeatTab`**, appelée avant `GameStateBuilder::build()` (§ 12.7) |
+| `self.member` | ligne `game_player` non expulsée, éligible pour la manche courante (`first_round_number` NULL ou `≤ round_number`) |
+| `self.participates` | une ligne `round_player` existe pour la manche courante |
+| `self.input` | `SeatInputView::forSeat($roundPlayer)->toArray()` (contrat C10) si `participates`, sinon NULL ; `choices` rejoué si `choices_composed_at` est non nul |
+| `self.ownScore` | `Scoreboard::seatScore($game, $seat)['ownScore']` (portée Own, contrat C13) ; 0 sans partie (`$game` nul : lobby, solo pas encore lancé), sans appel à `Scoreboard::seatScore()`, dont la signature exige une partie (80 § 4.1) |
+| `leaderboard` | `Scoreboard::leaderboard($game, $revealing)` si une manche `$revealing` de la partie est en révélation, sinon `Scoreboard::leaderboard($game)` — portée Publishable dans les deux cas ; sans partie, `{ scoreless: false, roundNumber: null, rows: [] }` |
+| `podium` | `Scoreboard::podium($game)` si `ended_at` est non nul |
+
+### 12.3 Quelle manche porte `round`
+
+1. une manche `running` ;
+2. sinon une manche `revealing` — **sauf** si la garde du palier 1 de la manche suivante est franchie (`now ≥ T₁(k+1) − preload_lead_ms`) : `round` porte alors la manche suivante, en phase `scheduled`, avec sa seule URL de palier 1. Sans cette règle, un client qui se resynchronise dans les `preload_lead_ms` finales d'une révélation — et le solo, qui ne vit que de resynchronisations — n'obtiendrait le palier 1 qu'après `T₁`. Le client garde la révélation déjà reçue jusqu'au `revealEndsAt` qu'il détient. **Écart (c) du § 22 bis**, signalé au porteur : le contrat C7 § 3 (champ `round` : « en cours (running|revealing), sinon programmée ») et E10-65 (« pendant la révélation, les URL des paliers ouverts, jusqu'à `reveal_ends_at` ») ne prévoient pas cette bascule ; son prix est un résidu nommé au § 18 ;
+3. sinon une manche `pending` programmée ;
+4. sinon NULL (pause, partie close, lobby).
+
+### 12.4 Images : la borne
+
+**Pendant la manche** — phases `scheduled`, `running` et `closed` —, le paquet porte **au plus deux URL** (D14 du 23/09, 10 § 12 et § 15, E10-65 lu en ce sens) :
+
+- celle du **palier courant** : `RoundClock::currentTierIndex()` en phase `running`, le palier 1 en phase `scheduled`, le dernier palier ouvert en phase `closed` ;
+- celle du **palier suivant**, si et seulement si sa garde `Tᵢ₊₁ − preload_lead_ms` est franchie.
+
+Les paliers antérieurs n'y figurent **jamais**, même si `ServeGuard::timeAllows()` les autorise encore (§ 7.2) : un palier passé n'est jamais re-signé pendant la manche. `ServeGuard::allows()`, évalué pour le demandeur, est une **condition nécessaire** de chaque URL retenue, jamais le critère de sélection — l'évaluer palier par palier signerait les `i` paliers déjà franchis. Hors de la fenêtre de préchargement, une URL ; dedans, deux.
+
+**Pendant la révélation**, les URL des seuls paliers ouverts, jusqu'à la garde du palier 1 suivant (`T₁(k+1) − preload_lead_ms`, § 12.3) s'il reste une manche, sinon jusqu'à `reveal_ends_at` ; puis aucune (D14 du 23/09 ; écart (c) du § 22 bis). Lire les `N` lignes `round_tier` n'autorise jamais à en signer `N` (10 § 12). Un retardataire en attente, un siège expulsé ou une frame devenue non servable n'obtiennent aucune URL ; un film suspendu pendant la révélation voit ses URL omises (§ 15.4).
+
+### 12.5 `nextTransitionAt`
+
+Le plus petit instant futur parmi : la prochaine étape programmée de la manche courante (`Tᵢ`, clôture à `D`, début et fin de révélation) ; la prochaine **garde de palier** (`Tᵢ − preload_lead_ms`) non franchie, palier 1 de la manche suivante compris ; `interruptsAt` d'une pause. NULL pour une partie close. C'est la **cadence de sondage du solo** et le **filet du multijoueur** (§ 12.6).
+
+### 12.6 Quand le client se resynchronise
+
+Au montage (le paquet est déjà la prop `state`), à la reconnexion d'Echo, au retour de visibilité de l'onglet, au retour en ligne, à `seat.superseded`, à toute réponse 409 `seat_superseded`, à un 403 ou 404 persistant de `frame-loader` (§ 7.6), à l'apprentissage d'un `sequenceIndex` inconnu ou d'un saut d'étape (§ 4.4) ; **en multijoueur comme en solo, à toute garde de palier** (`Tᵢ − preload_lead_ms`, palier 1 de la manche suivante compris) **dont le client ne détient pas l'URL** — c'est le cas d'un paquet construit avant cette garde : `round.scheduled` est déjà passé et `tier.opened` ne porte que l'URL du palier suivant (`next`), si bien qu'aucun événement ne la lui apporterait, et le filet ne se déclencherait pas, puisque des événements continuent d'arriver ; le magasin programme cette resynchronisation depuis `nextTransitionAt` ; **en multijoueur, pour un siège `open` ou `text_exhausted`, si `seat.choices` n'est pas reçu dans les `heartbeatIntervalMs` qui suivent `tier.opened` de `tierIndex = round.choicesAtTierIndex` pour ce `sequenceIndex`** — cas terminal du contrat C11, où aucun `seat.choices` ne part (§ 8.3) : sans ce déclencheur, un siège `text_exhausted` passé `attempts_exhausted` garderait « les propositions arrivent avec la dernière image », et le filet ne partirait pas, des événements continuant d'arriver (exigence de 70 § 10.7 ; le délai absorbe seulement l'ordre `tier.opened` puis `seat.choices` du § 6.3, étape 7, et ne décide rien, règle 8) ; et — **filet** — si aucun événement n'est arrivé à `nextTransitionAt + heartbeatIntervalMs`. Le solo se resynchronise en plus à chaque `nextTransitionAt`, à chaque `fetchNotBefore` et après chaque geste (§ 16.4), ce qui couvre aussi son cas terminal du QCM. Une resynchronisation en cours de manche ne modifie aucun score d'autrui (§ 8.4).
+
+**Annonce de reconnexion** (exigence de 90 § 7.4) : à la transition de l'état de connexion vers `connected`, `hooks/game/use-game-state.ts`, qui fournit cet état à `ConnectionBanner`, appelle `announce(t('common.connection.restored'))` (annonceur de 90, contrat C16 § 2.12). `ConnectionBanner` ne lit ni Echo ni horloge et ne rend rien à `connected` : sans cet appel, la reconnexion n'aurait aucun émetteur.
+
+### 12.7 Second onglet
+
+**Un `player_token` = un siège ; le second onglet prend la main, le premier passe en lecture seule** (00 § Déroulé d'une partie, « Un `player_token` = un siège » ; 10 § 7.1). `App\Actions\Game\ClaimSeatTab::handle(Player $seat, ?string $presentedSeatToken): string` [nom figé] est appelée au rendu de toute page de salon (50, 90) et de `game/solo` :
+
+- si la requête **ne présente pas** le jeton actif dans `X-Seat-Token`, elle frappe un nouveau `active_seat_token` — un **ULID applicatif, jamais l'identifiant de session** (10 § 7.1) —, émet `seat.superseded` sur le canal privé du siège si un jeton précédent existait, **en multijoueur seulement** (§ 11.2 ; en solo, l'onglet supplanté l'apprend par `seatActive: false` à son sondage suivant, ou par le 409 de sa prochaine écriture), et rend le nouveau jeton ; sinon elle ne frappe rien et rend le jeton présenté, inchangé (signature `: string`, contrat C7 § 2.5 ; 50 § 8.1 type la prop `seatToken: string`). Dans les deux cas, la prop **`seatToken`** vaut le jeton rendu — que l'onglet détient déjà quand rien n'a été frappé — et ne figure **jamais** dans `state` ;
+- le contrôleur de page appelle `ClaimSeatTab` **avant** `GameStateBuilder::build()` et passe le jeton rendu comme `$presentedSeatToken` : l'onglet qui vient de prendre la main reçoit ainsi `self.seatActive = true` dans le paquet de la même réponse, alors qu'un chargement complet n'envoie jamais `X-Seat-Token` ;
+- l'onglet garde le jeton **en mémoire**, jamais dans `localStorage` ; il l'attache à **toute** requête — visites Inertia comprises, par un écouteur `router.on('before', …)` posé par `use-game-state.ts` — pour qu'un rechargement partiel, comme celui du changement de langue, ne le supplante pas lui-même ;
+- l'onglet supplanté reçoit `seatActive: false` à sa resynchronisation, affiche `ReadOnlyNotice` (`game.seat.superseded`) et n'écrit plus ; toute écriture qu'il tenterait répond 409 (§ 10.2). Reprendre la main, c'est recharger la page.
+
+---
+
+## 13. Présence, départ, retour, expulsion et hôte
+
+### 13.1 Battement
+
+Le client envoie `room.heartbeat` (ou `solo.heartbeat`) toutes les `heartbeatIntervalMs` (`EngineConstants`, 10 000 ms par défaut), plus immédiatement au retour de visibilité et en ligne (`hooks/game/use-heartbeat.ts`). Le contrôleur résout le siège par le jeton (403 sans siège ou expulsé) et, **dans une transaction qui respecte l'ordre du § 4.5** — `room FOR UPDATE` d'abord, seulement s'il écrit `room.last_activity_at` ou ramène un siège à `connected`, puis `player FOR UPDATE`, puis `game` par `ResumeGame` — :
+
+- écrit `player.last_seen_at` **par Eloquent**, jamais `DB::table()` (la milliseconde serait perdue, 10 § 1.2), et `room.last_activity_at` au plus une fois par `heartbeatIntervalMs` et par salon (10 § 7.1) ;
+- ramène un siège `disconnected` ou `left` (non expulsé) à `connected` : efface `disconnected_at` et `left_at`, repasse `game_player.status` de `left` à `playing` pour la partie en cours, émet `seat.updated` **en multijoueur seulement** (§ 11.2) ;
+- si la partie du siège est en pause, appelle `ResumeGame` (§ 14.2) ;
+- répond 204. Il n'appelle pas `CatchUpGame` : le battement reste léger.
+
+Sans cet ordre, un battement qui écrirait `player` puis `room` s'interbloquerait avec `SweepSeatPresence`, qui prend `room` puis `player` (§ 13.2). Un battement ordinaire ne prend que la ligne `player`.
+
+Seuls les battements HTTP écrivent `last_seen_at` ; la présence Reverb ne fait jamais foi.
+
+### 13.2 Balayage `SweepSeatPresence`
+
+Le job [nouveau] `App\Jobs\Game\SweepSeatPresence` (`onQueue('game')`, `ShouldBeUniqueUntilProcessing`, `uniqueId()` = identifiant du salon, ou du siège solo) est construit par salon (`forRoom`) ou, en solo, par siège (`forSoloSeat`). Un battement le dispatche s'il n'y en a aucun en attente ; à chaque exécution, il verrouille le salon puis ses sièges (room → player), applique les transitions échues, puis se **réarme à la prochaine échéance, plafonnée à `now + disconnectAfterMs`**, et s'arrête quand plus aucun siège n'est ni connecté ni déconnecté, ou que le salon est archivé. Le plafond est ce qui rend l'unicité sûre : un balayage armé à `t₀` s'exécute au plus tard à `t₀ + disconnectAfterMs`, donc avant l'échéance de tout siège revenu à `connected` après `t₀` — un balayage en attente d'une échéance `left` lointaine (jusqu'à `disconnectGraceSeconds`) ne masque jamais la déconnexion suivante d'un siège revenu entre-temps. **En solo**, le balayage s'arrête dès que le siège est `disconnected` (aucune échéance ultérieure, § 13.3) ; le battement suivant le réarme. Le balayage est idempotent ; ses transitions :
+
+- `connected` → `disconnected` si `now ≥ last_seen_at + disconnectAfterMs` (`EngineConstants`, 25 000 ms par défaut, garde « au moins deux battements ») ; `disconnected_at = now` ;
+- `disconnected` → `left` si `now ≥ disconnected_at + disconnectGraceSeconds × 1000`, lu dans `room.settings` au lobby et dans `game.settings_snapshot` en partie (15 à 180 s, 60 par défaut) ; `left_at = now` ; `game_player.status = left` pour la partie en cours ; si le siège était l'hôte, **`App\Actions\Room\TransferHost::automatic()` (50) dans la même transaction**, salon déjà verrouillé ;
+- après chaque transition : `seat.updated`, **en multijoueur seulement** (§ 11.2) ; si une partie tourne et que le siège a une ligne `round_player` dans la manche `running`, `SeatInputClosed` après commit (§ 9.2), avec pour `$now` l'instant de transition écrit (§ 9.1).
+
+Un onglet mobile en arrière-plan voit ses minuteries bridées : ses battements manquent, le siège sort des participants — il ne bloque donc plus la fin anticipée —, et revient à `connected` au premier battement suivant, sans rien perdre de sa ligne de manche.
+
+### 13.3 En solo
+
+`disconnectGraceSeconds` est **sans effet en solo** (le sort de ce champ en solo appartient à 60, contrat C0 § 3.1) : le siège solo passe `disconnected`, **jamais `left`**. Raison : un siège solo se reprend par `player_token_idx` sur `left_at IS NULL` (10 § 7.1), et « parti » n'a aucun sens sans capacité ni hôte. Une partie solo quittée passe par la pause, puis s'interrompt (§ 14).
+
+### 13.4 Départ volontaire et expulsion, vus du moteur
+
+Le départ (`room.leave`, `LeaveRoom`) et l'expulsion (`KickSeat`) appartiennent à 50 (contrat C4 I4.9, D15 du 23/09). Le moteur en tire trois conséquences :
+
+- le siège sort des participants. Après le commit de son geste, `KickSeat` ou `LeaveRoom` (50 § 8.2) ouvre une **seconde** transaction, reprend `round FOR UPDATE` et appelle `SeatInputClosed::handle($round, $roundPlayer, null, $now)` pour la ligne `round_player` du siège dans la manche `running`, s'il en a une (§ 9.2), `$now` étant le `left_at` écrit (§ 9.1). Avec `$guess` nul, aucun `player.locked` n'est émis. **Aucun événement de domaine n'est ajouté** : c'est l'appel direct de la signature figée (contrat C7 § 2.5) par lequel un geste de 50 atteint le moteur sans que 50 tienne jamais le verrou de manche dans sa propre transaction ;
+- l'expulsé est refusé sur les deux canaux, par `/f/`, par `seat.active` et par `room.state`, jusqu'à l'archivage ; ses points restent au classement (`game_player.status = kicked`, 00 § Déroulé d'une partie, « Pouvoirs de l'hôte en partie ») ;
+- il reçoit `seat.kicked` (ciblé) ; tous reçoivent `seat.updated`. **Résidu** : un client non coopératif resté abonné continue de recevoir les diffusions — le protocole Pusher n'a pas de désinscription côté serveur —, dont aucune n'apprend la réponse avant la révélation (§ 18).
+
+### 13.5 Hôte
+
+Le transfert (automatique au départ de l'hôte, ou par geste) appartient à 50 (00 § Déroulé d'une partie, « Départ de l'hôte »). **Le moteur ne dépend jamais de la présence de l'hôte** : aucune transition ne l'attend, et son seul pouvoir en partie est « manche suivante », pendant la révélation (§ 5.4).
+
+### 13.6 Retour d'un siège parti
+
+C'est une **reconnexion**, pas une arrivée tardive : elle n'est pas soumise à `allowLateJoin` et ne consomme aucune place (10 § 6.2). Le siège retrouve la manche courante s'il y a une ligne `round_player` — il était non parti à `T₁` — et répond pour le temps restant au palier affiché (00 § Déroulé d'une partie, « Reconnexion ») ; sinon il entre à la manche suivante, à son `T₁`. Ses points restent acquis.
+
+### 13.7 Retardataire
+
+Admis par 50 si `allowLateJoin` est vrai, avec `game_player.first_round_number` = numéro de la prochaine manche numérotée non démarrée, relu sous verrou pour ne jamais tomber sur une manche que `OpenTier(1)` vient d'ouvrir. `first_round_number` suit **la règle d'admission de 50** (50 § 15.2 : première manche numérotée `pending` et non démarrée, triée par `round_number` puis `sequence_index` croissants, remplaçante comprise tant qu'elle n'a pas démarré, réserves sans numéro jamais — c'est-à-dire l'ordre de jeu du § 1.2) ; le moteur n'en tire que la partie (3) du prédicat de service (§ 7.2) et l'éligibilité à la naissance des `round_player` (E10-49). En attente, il voit le chrono, le fil « a trouvé » et la révélation, mais **aucune image** (partie 3 du prédicat) et n'a aucune saisie (pas de ligne `round_player`) ; l'écran l'annonce par `game.round.waiting_next`.
+
+**Retardataires livrés au J1 — amendé le 23/09.** Le J1 est complet, sans aucune coupe (D35 du 23/09) : `allowLateJoin` est livré et réglable au J1 comme tout réglage de l'onglet Simple, défaut `false` (contrat C0). D17 du 23/09, qui en faisait la troisième variable d'ajustement du J1 (réglage masqué), est **sans effet depuis D35 du 23/09**. Ce chemin est donc **actif** dès le J1 : partie (3) du prédicat de service (§ 7.2), naissance des `round_player` à la manche `first_round_number` (E10-49), état « en attente de la manche suivante », et siège connecté qui empêche la pause en fin de révélation (§ 9.6, écart (b) du § 22 bis).
+
+---
+
+## 14. Pause, reprise, clôture et fin de partie
+
+### 14.1 Pause
+
+`App\Actions\Game\PauseGame`, appelée par `EndReveal(k)` quand une manche reste à jouer et qu'**aucun siège n'est présent** : `game.status = paused`, `paused_at = reveal_ends_at(k)` (instant théorique) ; la manche `k+1` déjà programmée est **déprogrammée** (`started_at` remis à NULL, E10-46), donc son palier 1 n'est plus servi ; job `InterruptPausedGame` à `paused_at + pauseTimeoutMs` ; `game.paused` en multijoueur. **L'horloge d'une manche ne se met jamais en pause** : si le dernier joueur part pendant une manche, elle va au bout de `D`, et la partie passe en pause ensuite (10 § 7.4).
+
+### 14.2 Reprise
+
+`App\Actions\Game\ResumeGame`, appelée par le battement qui ramène un siège de la partie à `connected`. **Sous le verrou `game`, elle vérifie d'abord `now < paused_at + pauseTimeoutMs`** ; sinon elle appelle `FinalizeGame::handle($game, GameStatus::Interrupted, paused_at + pauseTimeoutMs)` et ne reprend rien — l'issue d'une partie ne dépend jamais du retard d'`InterruptPausedGame` en tête de file (§ 4.2, règle 1). Dans le délai : `game.status = running`, `total_paused_ms += now − paused_at`, `paused_at = NULL`, `ScheduleRound(k+1, now + launchCountdownMs)` ; en multijoueur, `game.resumed`, puis `round.scheduled`. Le jeton du palier 1 déjà frappé est réutilisé. **Le drapeau de drainage ne bloque jamais une reprise** (contrat C17 § 4.4).
+
+### 14.3 Clôture à 15 minutes
+
+Le job [nouveau] `App\Jobs\Game\InterruptPausedGame` (`onQueue('game')`), construit sur la partie et l'instant `paused_at` qui l'a armé, ne fait rien si la partie n'est plus en pause ou si `paused_at` a changé ; sinon il appelle `FinalizeGame::handle($game, GameStatus::Interrupted, paused_at + pauseTimeoutMs)` (contrat C13 § 4.5) — l'instant prévu, jamais l'heure d'exécution. `pauseTimeoutMs` (`EngineConstants`, 900 000 ms par défaut) est l'échéance « 15 min sans joueur connecté » de 00 § Déroulé d'une partie, « Salon vide ». Un battement tardif qui trouve l'échéance dépassée gèle la partie au même instant (§ 14.2) : les deux chemins écrivent `paused_at + pauseTimeoutMs`, et `FinalizeGame` est idempotent. **Clôture de partie et archivage du salon (24 h, 50) sont deux événements distincts** et ne partagent jamais un nom.
+
+### 14.4 Partie bloquée
+
+Une partie en cours dont `now > started_at + maxNaturalDurationMs() + total_paused_ms + pauseTimeoutMs` ne peut plus légitimement tourner. `game:reschedule` (§ 17.5) la clôt par `FinalizeGame::handle($game, GameStatus::Interrupted, FinalizeGame::lastKnownActivity($game, now))` (contrat C13 § 4.5, E10-62). La clôture forcée à 13 mois (`stale_game`) et la sonde n° 1 de 10 § 11.3 restent les filets de 100.
+
+### 14.5 Fin normale
+
+`EndReveal` de la dernière manche appelle `FinalizeGame::handle($game, GameStatus::Completed, reveal_ends_at(k))` ; une annulation sans manche restante, décidée hors révélation en cours, appelle `FinalizeGame::handle($game, GameStatus::Completed, round.cancelled_at)`, l'instant de l'annulation (§ 15.2, étape 3) — décidée pendant une révélation, elle laisse le gel à `EndReveal` de la manche révélée ; « Passer la manche » sur la dernière manche solo appelle `FinalizeGame::handle($game, GameStatus::Completed, $round->reveal_ends_at)`, soit `min(now, started_at + D)` (§ 16.5). Le contrat C13 § 4.5 laisse `$endedAt` à l'appelant sans couvrir ces deux derniers cas, que 60 fixe ici ; le tableau de 80 § 10.5 ne les liste pas encore (signalé à 80, § 22 bis). Tous deux prennent `game` avant `round` (§ 4.5, 80 § 1.4). L'écouteur de 60 de `GameFinalized` (après commit, idempotent, tolérant une partie déjà purgée) émet `game.ended` `{ podium }`, **en multijoueur seulement** (§ 11.2). **Le salon reste `playing`, podium compris, jusqu'au « Rejouer » de l'hôte** (50) ; le podium est rejoué à l'identique dans toute resynchronisation jusqu'à l'archivage.
+
+---
+
+## 15. Échec technique, substitution et annulation
+
+### 15.1 Où un échec se décide
+
+| Point | Constat | Effet |
+|---|---|---|
+| Frappe du palier `i` (§ 6.2) | frame non servable ou fichier absent | substitution même niveau, `frame_unavailable` ; sans candidat, annulation `no_variant_available` |
+| Ouverture du palier `i` (§ 6.3) | la frame frappée n'est plus servable | annulation `frame_unavailable`, jamais de seconde substitution |
+| Ouverture du palier du QCM en Facile | aucun QCM composable (contrat C11) | annulation `choices_unavailable` |
+| Service `/f/` | prédicat refusé, fichier disparu après la frappe | 404 uniforme ; le cadre affiche `game.frame.unavailable` ; la route ne substitue jamais |
+| Diffusion | Reverb indisponible | journalisée et avalée (§ 4.6) ; les clients se resynchronisent |
+| Job | perdu ou échoué | `CatchUpGame` au prochain déclencheur ; `game:reschedule` |
+
+### 15.2 `CancelRound`
+
+`App\Actions\Game\CancelRound::handle(Round $round, RoundIncidentReason $reason, CarbonImmutable $now): void`, sous les verrous `game` → manches :
+
+1. `round.status = cancelled`, `cancel_reason`, `cancelled_at = now`. **Aucun point** : toute agrégation exclut la manche (L1) ; les verrouillages déjà acquis ne comptent pas ;
+2. **remplacement** : `ReplacementRoundChooser::next($game)` (contrat C3) ; le remplaçant reçoit le `round_number` de la manche annulée — `round_number` est non unique, volontairement (10 § 7.4) — et est programmé à `max(now + launchCountdownMs, T₁ prévu de la manche annulée)`, pour ne jamais empiéter sur une révélation en cours ;
+3. réserve épuisée : la partie continue avec une manche de moins — manche suivante à jouer programmée à `max(now + launchCountdownMs, T₁ prévu de la manche annulée)`, comme un remplaçant, ou gel si aucune ne reste **et si aucune manche de la partie n'est en `revealing`** : `FinalizeGame::handle($game, GameStatus::Completed, $now)`, `$now` étant l'instant de l'annulation (`round.cancelled_at`), appelé dans la même transaction, sous `game` pris d'abord (ordre room → player → game → round du § 4.5). Si une manche est en `revealing` — la frappe du palier 1 de `k+1` annule `k+1` dans `ScheduleRound`, appelé par `RevealRound(k)` (§ 5.2, § 9.4) —, rien : `EndReveal(k)`, ne trouvant aucune manche à jouer, gèle à `reveal_ends_at(k)` (§ 9.6). Geler à l'instant de l'annulation couperait la révélation de `k`, que `FinalizeGame` passerait d'office en `completed` (80 § 10.3), refuserait ses URL et ferait partir `game.ended` aussitôt, contre la protection de l'étape 2. **Vivier égal à `M`** : l'échec se résout en annulation sans remplacement (00 § Réglages du salon, borne croisée 3) ;
+4. après commit : `round.cancelled` (ni motif, ni titre), **en multijoueur seulement** (§ 11.2) ; l'écran affiche `game.round.cancelled` pendant le décompte.
+
+L'incident s'agrège par film dans la file de curation de 20, **sans jamais joindre `round_player`, `guess` ni `player`** (10 § 7.4).
+
+### 15.3 Dépublication de curation (J1)
+
+La dépublication d'un film ou le re-recadrage d'une frame publiée (contrat C9) restent **paresseux** : aucun dispatch. La partie (1) du prédicat refuse l'image à chaque service, la frappe suivante substitue, et l'ouverture suivante annule si besoin.
+
+### 15.4 Annulation active sur suspension ou retrait (J2)
+
+Arrive au **J2**, avec les seuls gestes qui la déclenchent (suspension et retrait de 20). Le job `App\Jobs\Game\WithdrawContentFromLiveRounds` (`__construct(public readonly ?int $movieId, public readonly ?int $frameId, public readonly RoundIncidentReason $reason)`, `onQueue('game')`), dispatché **après commit** du geste :
+
+- film suspendu ou retiré : toute manche `running`, ou `pending` programmée, de ce film est annulée — `movie_suspended` (cas [nouveau] de `RoundIncidentReason`, E10-08, sans migration) ou `movie_withdrawn` — puis remplacée (§ 15.2) ;
+- frame seule : annulation `frame_unavailable` si elle est la `served_frame` d'un palier déjà frappé ; sinon la frappe suivante substitue ;
+- pendant une révélation : la partie (1) du prédicat refuse ses URL ; le paquet déjà émis n'est pas rappelé, une resynchronisation les omet.
+
+C'est ce qui rend vraie la promesse « sortie de toute partie en cours à la seconde » (questions-ouvertes « Retrait sur demande »). Au J1, l'image déjà affichée reste visible au plus jusqu'à la frontière suivante.
+
+---
+
+## 16. Mode solo
+
+### 16.1 Principe
+
+**Même moteur, mêmes jobs, mêmes écritures, zéro diffusion** (contrat C7 § 4.12) : `game.mode = solo`, ni salon, ni canal, ni second joueur, ni `seen_frame` (10 § 7.10). Le client tire l'état par `solo.state`. « Mode solo / entraînement : même boucle, sans salon, sans diffusion ni attente » (A-17).
+
+### 16.2 Démarrage — `solo.store` et `StartSoloGame`
+
+`SoloStartRequest` valide `preset` ∈ `SettingPresetKey` **et**, pour un jeton qui ne tient encore aucun siège solo, `nickname` et `avatar` par `PlayerIdentityValidationRules` (contrat C5) — extension de 60, écart (g) du § 22 bis, parce qu'un siège n'existe jamais sans pseudo au J1 (contrat C5). Le libellé du champ `preset` est `validation.attributes.preset`, en FR et en EN (préfixe hors du tableau de C15 § 2.4, écart (o) du § 22 bis) : un refus n'affiche jamais le nom brut du champ (règle 4). `App\Actions\Game\StartSoloGame`, **dans une seule transaction** :
+
+1. **drainage d'abord** : si `DeployDrain::isDraining()`, refus `common.maintenance.launch_blocked`, **aucune partie créée ni interrompue** (contrat C17 § 4.4) ;
+2. jeton : `PlayerTokenManager::ensure()` (contrat C4 I4.1) ;
+3. siège : reprise du siège solo tenu par le jeton (`heldByToken`, `room_id IS NULL`, `left_at IS NULL`), sinon création (`locale` de la requête) ; **deux lancements successifs sous le même jeton produisent exactement une ligne `player`** (10 § 7.1). Quand le siège existe, il est pris `FOR UPDATE` : un double clic ne crée qu'une partie. Quand il n'existe pas encore, aucune ligne n'est verrouillable et l'unicité inopérante de 10 § 7.1 laisserait deux premiers lancements concurrents créer deux sièges, rendant `heldByToken` ambigu : l'unicité d'un siège solo par jeton est donc demandée à 10 (E10-N3, exigence nouvelle, non consolidée, § 21). `StartSoloGame` insère le siège ; sur violation de cette unicité, il relit le siège existant et le prend `FOR UPDATE` ;
+4. réglages : `SettingPresetCatalog::settingsFor($preset)` puis l'ajustement de D19 du 23/09 (§ 16.3), avec refus `game.errors.pool_too_small` **avant toute écriture de partie** ;
+5. partie solo en cours du siège : interrompue (§ 16.6) ;
+6. `OpenGame::handle(GameMode::Solo, null, $settings, $seat->newCollection([$seat]), $now)` (contrat C6 : `$seats` est une `Illuminate\Database\Eloquent\Collection`, jamais le `collect()` de `Illuminate\Support`), qui matérialise et programme la manche 1 à `now + launchCountdownMs` ;
+7. redirection vers `solo.show`, `settingsNotice` en flash.
+
+**Tout refus annule la transaction entière, interruption comprise** — qu'il vienne de `StartSoloGame` (drainage, vivier) ou du `LaunchOutcome::refused` rendu par `OpenGame`, qui ne lève pas d'exception : `StartSoloGame` lève alors lui-même pour annuler. Un relancement refusé ne tue jamais la partie solo en cours.
+
+**Échec technique.** Toute exception levée dans la transaction de `StartSoloGame` (`PoolTooSmallException` de 30, échec de `MaterializeDraw` ou de `ScheduleRound`, `QueryException`, délai d'attente de verrou dépassé) annule tout, et la partie solo en cours n'est donc pas interrompue. Elle est journalisée sur le canal `game` de 100 (§ 4.7), sans donnée personnelle. La réponse est `back()->withErrors(['preset' => __('room.errors.launch_failed')])` : clé de 50 (50 § 12.5), réutilisée et jamais redéclarée, dont le domaine `room` est chargé par `room/solo` comme par `game/solo` (§ 10.1) — un texte traduit, jamais une erreur 500 brute en anglais (règle 4). L'exception n'est **jamais** traduite en `game.errors.pool_too_small`, dont le rapport affirmerait le contraire (30 § 4.6).
+
+### 16.3 Réglages du solo (D19 du 23/09)
+
+Le joueur choisit **un des quatre presets du site**, sans formulaire. Si le vivier catalogue ne tient pas `M` œuvres (unité du vivier, contrat C2 ; un film et son remake ne comptent qu'une fois) au `N` du preset (`PoolReporter::report(PoolScope::catalogue($themeIds, N), M)->blocked()`, contrat C2), le **`N` jouable le plus proche** (`nearestPlayableFramesPerRound`) s'applique **d'office** : les champs dérivés sont redérivés par la règle Simple (`RoomSettingsEditor::simple()`, contrat C0 § 3.3, D34 du 23/09) et la page reçoit `settingsNotice: { preset, requestedFramesPerRound, appliedFramesPerRound }`, annoncée par `game.solo.frames_adjusted`. Au J1, avec un catalogue en passe 1, **Hardcore se joue en Expert à N = 3**. Sans aucun `N` jouable, refus `game.errors.pool_too_small`, rapport de vivier en données. Dans un preset solo, `capacity`, `allowLateJoin`, `noRepeatMovies` et `disconnectGraceSeconds` sont sans effet (contrat C0 § 3.1, § 13.3).
+
+### 16.4 Page `game/solo` et sondage
+
+**Premier passage.** Sans siège solo tenu par le jeton (jeton absent, ou aucun `player` avec `room_id IS NULL AND left_at IS NULL`), `solo.show` ne frappe rien (contrat C4 I4.1 : un GET ne frappe jamais de jeton) et répond 303 vers `solo.create`, qui rend la page d'entrée **`room/solo`** [nom fixé par 60, 90 § 2.1 et § 10 : `PublicLayout`, apparence du visiteur] avec les props `presets` (les quatre presets et leur `N` jouable le plus proche), `avatars: { options, taken: [], suggested }` et `nickname: { min, max }` (contrat C5, même forme que `room/create` de 50) — sans `state` ni `seatToken`. Ses textes propres sont `room.solo.{choose_preset, start}` (préfixe demandé à 05 pour 60, écart (l) du § 22 bis), parce qu'une page `room/*` ne charge que `room` et `legal` (contrat C15 § 2.3) ; les libellés de presets sont `room.presets.*` [existant]. `solo.state` et `solo.heartbeat` répondent alors 403, comme les gestes (`seat.active`). **Sous le bouton d'envoi**, la mention d'acceptation des CGU `legal.terms_notice` et un lien Wayfinder `legal.terms` en nouvel onglet (`target="_blank" rel="noopener"`, `legal.new_tab` en `sr-only` : quitter la page perdrait la saisie), **sans rien stocker**, le jeton ne portant aucun consentement (exigence de 90 § 10, d'origine 40 § 2.1 ; clé et cible livrées par L90-4).
+
+**Avec un siège solo**, `solo.show` rend `game/solo` avec `state` (`GameStatePacket` : partie solo en cours, sinon dernière partie close du siège pour son podium, sinon paquet sans partie — la page montre alors le choix du preset pour relancer), `seatToken` (`ClaimSeatTab`, § 12.7), `settingsNotice`, `limits` = `PlatformLimits::toArray()` — prop de page, comme au lobby (50 § 8.1) : sans elle, l'aide `GameHelp` du solo n'a pas de `speedBonusMaxPercent` à afficher (exigence de 90 § 7.7) — et `presets`, de même forme que sur `room/solo` (les quatre presets et leur `N` jouable le plus proche), pour le choix du preset de la relance. Le client tire `solo.state` au montage, à chaque `nextTransitionAt`, à chaque `fetchNotBefore`, après chaque geste et au retour de visibilité, et bat `solo.heartbeat`. Le paquet porte l'état échu, `CatchUpGame` compris (§ 12.1), et la règle du § 12.3 lui livre le palier 1 suivant avant `T₁`. Le débit `game-read` est dimensionné pour ce sondage (§ 19.1).
+
+### 16.5 Gestes d'entraînement assisté (D18 du 23/09)
+
+| Geste | Route | Précondition | Écritures | Suite |
+|---|---|---|---|---|
+| **Voir la réponse** | `solo.reveal` → `RevealSoloAnswer` | manche `running`, `ended_at` nul, saisie du siège `open` ou `text_exhausted` | le geste vaut battement : `last_seen_at = now`, et le siège est ramené à `connected` s'il était `disconnected` (`disconnected_at = NULL`) ; puis `input_state = revealed`, `input_closed_at = now` | `SeatInputClosed` → fin anticipée → **révélation normale de durée `R`**, à 0 point |
+| **Passer la manche** | `solo.skip` → `SkipSoloRound` | idem | battement, comme ci-dessus ; `input_state = skipped` ; `ended_at = reveal_ends_at = min(now, started_at + D)` ; `round.status = completed` ; `rounds_completed` recalculé | manche suivante programmée à `now + preload_lead_ms + nextRoundMarginMs` ; s'il ne reste aucune manche à jouer, `FinalizeGame::handle($game, GameStatus::Completed, $round->reveal_ends_at)` (= `min(now, started_at + D)`), `game` pris avant `round` (§ 4.5, § 14.5) ; **aucune révélation**, le titre reste visible au récapitulatif du podium |
+| **Manche suivante** | `solo.next` → `AdvanceToNextRound` | phase `revealing` | § 5.4 | § 5.4 |
+
+Aucun des gestes ne crée jamais de `guess` (10 § 7.10) : une manche révélée n'est jamais une bonne réponse, et `correct_answers` compte des lignes `guess`. Les deux premiers **sont refusés hors solo** : les routes ne résolvent que la partie solo du siège, et `RevealSoloAnswer` / `SkipSoloRound` lèvent une `LogicException` si `game.mode ≠ solo` (barrière 1 de 10 § 7.10 ; 10 § 14, arbitrage A16). Chaque geste appelle `CatchUpGame` avant de lire la phase (§ 4.4). **Chaque geste solo vaut battement** : sans cela, un siège passé `disconnected` (onglet mobile en arrière-plan) qui touche « Voir la réponse » avant son battement de retour ne serait pas participant, la fin anticipée exigeant `COUNT(participants) ≥ 1` (§ 9.2), et la manche courrait jusqu'à `D` contre D18 du 23/09. Hors précondition, 409 `{ "code": "round_not_running" }` pour « Voir la réponse » et « Passer la manche », rendu par `game.errors.round_not_running` ; 409 `not_revealing` pour « Manche suivante » (§ 5.4). Chaque geste répond par le `GameStatePacket` à jour.
+
+### 16.6 Départ et relance
+
+- **Quitter la page** : le siège passe `disconnected` ; la manche en cours va au bout de `D`, la révélation se déroule, puis `EndReveal` constate l'absence de siège présent et **met la partie en pause** ; elle est interrompue à `paused_at + pauseTimeoutMs` (§ 14). Revenir avant reprend la partie. Sans cette règle, une partie solo resterait `running` jusqu'à la purge `stale_game`.
+- **Relancer un solo pendant une partie solo en cours** : **au plus une partie solo en cours par siège**. `StartSoloGame` appelle d'abord `CatchUpGame($game, now)` sur la partie solo en cours (§ 4.4), puis l'interrompt : une manche `running` à `ended_at` nul est close comme par « Passer la manche » (`skipped` n'est écrit que sur une saisie `open` ou `text_exhausted` ; une saisie déjà close garde son état) ; une manche `running` à `ended_at` non nul — phase `closed`, après une bonne réponse ou « Voir la réponse », job `Reveal` en attente — passe `completed` avec `reveal_ends_at = ended_at`, **sans toucher `input_state`** : un siège `locked` le reste, et l'invariant `locked` ⟺ `guess` de 70 § 3.4 tient ; puis `FinalizeGame(Interrupted, now)`, avant d'ouvrir la nouvelle, dans la même transaction. Sans ce traitement de la phase `closed`, `FinalizeGame` lèverait sa `LogicException` sur une manche `running` dont `started_at + D` n'est pas atteint (80 § 10.3), et la relance échouerait. L'interruption n'intervient qu'une fois le drainage **et le vivier** vérifiés (§ 16.2, étapes 1 et 4), et tout refus ultérieur l'annule avec la transaction.
+
+### 16.7 Ce que le solo ne fait pas
+
+Aucune mémoire de variantes, aucune non-répétition (périmètre catalogue, contrat C3) : un joueur qui s'entraîne sur le catalogue du J1 revoit vite les mêmes films, et l'écran le dit (`game.solo.no_room_memory`) pour que ce ne soit pas perçu comme un défaut. Aucun rang (`final_rank` NULL), exclusion des quatre compteurs et rang « — » dans l'historique (contrat C13, 40 au J2).
+
+### 16.8 Barrières
+
+Les quatre barrières de 10 § 7.10 tiennent, la quatrième **reformulée** : « le mode solo ne délivre jamais un identifiant **d'adressage** réutilisable dans une autre partie » (D16 du 23/09, E10-58). Le jeton par manche l'assure pour l'URL ; le contenu des octets reste identifiable (§ 18).
+
+---
+
+## 17. Prédicat « partie en cours » et drainage
+
+### 17.1 Définition
+
+Une partie est **en cours** (prédicat propriété de 60, D32 du 23/09) si et seulement si `game.ended_at IS NULL AND game.status IN ('running', 'paused')` — **solo compris**, parce que le déploiement n'est pas atomique (D31 du 23/09) : Composer, les migrations, `optimize` et `queue:restart` cassent aussi les requêtes et les jobs d'une partie solo. **Un salon au lobby ne compte pas** : Echo se reconnecte seul, puis le client se resynchronise. Forme SQL servie par `game_ended_idx (ended_at)` [existant], aucun index nouveau.
+
+### 17.2 Noms
+
+- Scope [nouveau] sur `App\Models\Game` : `#[Scope] protected function inProgress(Builder $query): void` = `whereNull('ended_at')->whereIn('status', [GameStatus::Running, GameStatus::Paused])`.
+- `App\Support\Game\GamesInProgress` [nouveau, `final`] : `count(): int` ; `summary(): list<array{mode: string, status: string, startedAt: string, roundsCompleted: int, roundsCount: int}>`, triée par `startedAt` croissant, **sans aucune donnée de joueur** ; `maxNaturalDurationMs(): int`.
+- Commande [nouvelle] `App\Console\Commands\GameRescheduleCommand`, signature `game:reschedule`.
+- Lecteur du drapeau : `App\Support\Deploy\DeployDrain::isDraining()` (contrat C18-bis, propriété de 100).
+
+### 17.3 Invariants
+
+1. `ended_at` est non nul **si et seulement si** `status ∈ {completed, interrupted}` ; `FinalizeGame` en est le seul écrivain, clôture `stale_game` comprise (E10-36).
+2. **Terminaison bornée** : toute partie en cours a au moins un job programmé sur la file `game` — une frontière, une clôture, une fin de révélation, ou `InterruptPausedGame` — **sauf** après deux échecs consécutifs d'une même transition (§ 4.6) ou une perte de Redis. Ces deux cas sont rattrapés par tout `CatchUpGame` déclenché par une requête et par `game:reschedule`, que `deploy:drain` appelle avant d'attendre (§ 17.5). Écart (k) du § 22 bis : le contrat C17 § 4.2 n'écrit pas cette exception, que § 4.6 rend inévitable.
+3. **Durée naturelle maximale sans pause** : `(MAX_ROUNDS_COUNT + drawSubstituteMargin) × (MAX_ROUND_DURATION + MAX_REVEAL_DURATION) × 1000 + (MAX_ROUNDS_COUNT + drawSubstituteMargin) × tier_grace_ms + (1 + drawSubstituteMargin) × launchCountdownMs`, soit environ 77,5 min aux bornes actuelles (`RoomSettingsBounds`, `PlatformLimits::tierGraceMs()` et `drawSubstituteMargin()`, `EngineConstants::launchCountdownMs()`) — calculée par `maxNaturalDurationMs()` sans aucun littéral. **Chaque pause ajoute au plus `pauseTimeoutMs + launchCountdownMs`** : l'attente, puis le décompte de reprise (§ 14.2), que `total_paused_ms` ne compte pas. Écart (j) du § 22 bis : le contrat C17 § 4.3 écrit « au plus `pauseTimeoutMs` ». La partie bloquée du § 14.4 reste juste : une pause n'intervient qu'entre deux manches, et la marge finale `pauseTimeoutMs` de sa formule couvre les décomptes de reprise tant que leur somme lui reste inférieure, ce que `EngineConstantsTest` vérifie aux bornes. La formule suppose l'enchaînement sans intervalle du § 5.3.
+4. **Le drapeau de drainage** bloque exactement le lancement multijoueur et « Rejouer » (50, contrat C6) et le démarrage solo (§ 16.2), avec `common.maintenance.launch_blocked`, sans créer de partie. Il ne bloque **jamais** une reprise après pause, une reconnexion, un retardataire admis ni une manche déjà programmée : **aucune partie en cours n'est coupée ni retardée**.
+5. **Plafond global de parties simultanées** (Q60-6, défaut retenu) : aucun au J1. S'il est introduit au J2 — champ de `PlatformLimits` chiffré par 100 après le test D33 du 23/09 —, son **seul point de refus** est `OpenGame` (lancement multijoueur, démarrage solo). « Rejouer » (`ReplayRoom`, 50 § 13) ne crée aucune partie et n'appelle pas `OpenGame` : c'est le lancement qui suit un « Rejouer » qui passe par `OpenGame` et y est refusé. Jamais une partie en cours ni une reprise après pause, pour la même raison que le drapeau de drainage : un refus au lancement se lit, une coupure en partie se subit.
+
+### 17.4 Ce qui n'est pas ici
+
+La borne d'attente du drainage (100 la dérive de `maxNaturalDurationMs()` plus une marge qui doit couvrir `pauseTimeoutMs + launchCountdownMs`, coût d'une pause au § 17.3 point 3, écart (j) ; contrat C18-bis ; 100 § 11.3 ne teste aujourd'hui que `pauseTimeoutMs`, exigence signalée à 100, § 19.6), le stockage et le nom du drapeau, les commandes `deploy:*`, le hook de déploiement et le bandeau de maintenance (90).
+
+### 17.5 `game:reschedule`
+
+Idempotente. Pour chaque partie en cours : clôture si elle est bloquée (§ 14.4) ; sinon `CatchUpGame($game, now)`, puis dispatch du job de la prochaine étape non échue — ou d'`InterruptPausedGame` si la partie est en pause. Les doublons sont inoffensifs (§ 4.2). **`deploy:drain` l'appelle avant d'attendre** (contrat C18-bis), pour qu'aucune partie aux jobs perdus ne bloque le drainage jusqu'à l'échéance ; elle est **obligatoire après toute restauration de Redis** (A-31, A-56 ; procédure écrite par 100).
+
+### 17.6 Avant la livraison du moteur (D37 du 23/09) — amendé le 23/09
+
+Tant que 60 n'est pas livré, **aucune partie ne peut exister** en production : les deux seules actions qui créent une ligne `game` sont le lancement multijoueur (`OpenGame`, L50-7a) et le démarrage solo (`StartSoloGame`, L60-15), qui dépendent toutes deux du moteur (L60-5, L60-7) et du drainage (`DeployDrain`, L100-5). Le prédicat du § 17.1 vaut alors zéro partout : la condition « aucune partie en cours » de `deploy:guard` est **trivialement vraie**, et le hook du socle de production minimal de 100 fonctionne **sans étape de drainage** tant qu'aucun moteur n'existe (D37 du 23/09), pour que la curation démarre en production sans attendre le moteur. Aucune règle de ce § 17 ne change : le prédicat, ses invariants et `game:reschedule` s'appliquent dès qu'une partie peut naître. Le drainage (D32 du 23/09) et le test de charge complet (D33 du 23/09, § 19.7) restent obligatoires **avant la première partie sur le VPS**, jamais avant la curation ; le graphe des lots garantit que le code du drainage existe avant toute route qui crée une partie. La forme du hook, avec ou sans étape de drainage, appartient à 100 (contrat C18-bis).
+
+---
+
+## 18. Anti-triche : récapitulatif et résidus assumés
+
+**Ce que le moteur garantit.** La bonne réponse ne quitte jamais le serveur avant `revealStartsAt` (§ 11.7). Une image n'est servie qu'à un siège membre, dans sa fenêtre temporelle, à chaque service (§ 7.2). L'anti-corrélation porte sur **quatre surfaces** : l'URL (jeton par manche), la taille (quantification à 8 Ko), les en-têtes et les dimensions naturelles fixes 1 280 × 720 (contrats C8 et C9). Le palier retenu ne dépend d'aucune valeur client (L3). Le badge « a trouvé » n'apprend rien (§ 8.2). Le principe 3 reste la limite : ce n'est pas incassable, le jeu se joue entre amis.
+
+**Résidus nommés, assumés par écrit** :
+
+| Résidu | Portée | Pourquoi on l'assume |
+|---|---|---|
+| **Résidu multi-siège** | Un même humain prend deux sièges (fenêtre privée, autre `player_token`) : le QCM devient quatre essais, le budget de tentatives double. « Essai unique » est une garantie **par siège, jamais par personne** (10 § 7.1, A-05). | Rien ne lie deux sièges à une personne sans IP, interdite en table de domaine. Remèdes produit seulement : liste des sièges visible et expulsion (50) ; l'entrée soumise à l'hôte n'est pas retenue, elle ne fermerait pas le trou. |
+| **Fenêtre de préchargement** | Chaque image est lisible `preload_lead_ms` avant son palier (10 § 10). | Prix du préchargement ; valeur constante et courte, jamais la durée d'un palier. |
+| **Résidu d'empreinte d'octets** | Les octets servis sont identiques d'une manche à l'autre : un hachage du blob est un identifiant de **contenu** réutilisable, appris en solo avec « Voir la réponse » (D16 du 23/09). | Le contenu d'une image est identifiable par nature ; un bourrage variable ne défait qu'un hachage naïf. La garantie écrite devient « aucun identifiant **d'adressage** réutilisable » (E10-58). |
+| **Image connue avant une pause** | Une image préchargée avant la déprogrammation reste connue du client. | Au plus un palier 1, sans chrono ni réponse possible avant la reprise. |
+| **Expulsé resté abonné** | Il reçoit encore les diffusions de la partie en cours. | Pas de désinscription serveur dans le protocole Pusher ; aucune diffusion n'apprend la réponse avant la révélation. |
+| **Révélation perdue en fin de fenêtre** | Un client qui se resynchronise dans les `preload_lead_ms` finales d'une révélation sans avoir reçu `round.revealed` (rechargement, reconnexion) reçoit la manche suivante et ne voit pas la révélation (§ 12.3, écart (c) du § 22 bis). | Au plus `preload_lead_ms` au défaut ; le titre reste au récapitulatif du podium. Sans la bascule, le solo n'obtiendrait jamais le palier 1 avant `T₁`. |
+| **URL transmise avant sa garde** | `round.scheduled` et `tier.opened.next` portent une URL avant `fetchNotBefore`. | Le serveur la refuse jusqu'à `Tᵢ − preload_lead_ms` : la barrière est temporelle, pas le secret de l'URL (contrat C8). |
+| **Collusion hors jeu** | Discord, SMS. | Hors périmètre technique (principe 3). |
+
+---
+
+## 19. Constantes, configuration et exigences d'exécution
+
+### 19.1 `EngineConstants` — défauts à confirmer au relevé du VPS et au test D33 du 23/09
+
+`App\Settings\EngineConstants` [nouveau, `final readonly`], construit depuis `config('game.engine.*')`. `config/game.php` [nouveau] porte les sections `platform` (contrat C0, 50) et `engine` (60) ; le premier lot qui crée le fichier pose les deux. Chaque valeur de configuration vaut la constante `EngineConstants::DEFAULT_*`, **sans `env()`** : la constante reste la source unique, ajustable après le test de charge (D33 du 23/09) sans changer les noms. **Chaque accesseur applique les gardes** et lève `InvalidArgumentException` hors bornes, sur tout chemin.
+
+| Accesseur | Clé `game.engine.*` | Défaut | Garde testée |
+|---|---|---|---|
+| `launchCountdownMs()` | `launch_countdown_ms` | 5 000 | `≥ PlatformLimits::MAX_PRELOAD_LEAD_MS + nextRoundMarginMs` |
+| `nextRoundMarginMs()` | `next_round_margin_ms` | 1 000 | `> 0` |
+| `heartbeatIntervalMs()` | `heartbeat_interval_ms` | 10 000 | `> 0` |
+| `disconnectAfterMs()` | `disconnect_after_ms` | 25 000 | `≥ 2 × heartbeatIntervalMs` |
+| `pauseTimeoutMs()` | `pause_timeout_ms` | 900 000 | `> 0` et `≥ (MAX_ROUNDS_COUNT + drawSubstituteMargin) × launchCountdownMs` (marge de partie bloquée, § 17.3) ; cette garde borne de fait `drawSubstituteMargin()` à `⌊pauseTimeoutMs ÷ launchCountdownMs⌋ − MAX_ROUNDS_COUNT` (150 aux défauts), sous `MAX_DRAW_SUBSTITUTE_MARGIN` (225, 50 § 2.3) : signalé à 50, pour inscription parmi ses garde-fous croisés (50 § 2.7), faute de quoi une marge légale pour `PlatformLimits` ferait lever tous les accesseurs du moteur ; 100 doit tester que sa marge de drainage couvre `pauseTimeoutMs + launchCountdownMs` (§ 17.4) |
+| `transitionMaxWaitMs()` | `transition_max_wait_ms` | 1 000 | couvre la troncature à la seconde (`≥ 1 000`) |
+| `clockSamples()` | `clock_samples` | 3 | `≥ 1` |
+| `gameReadsPerMinute()` | `game_reads_per_minute` | 90 | couvre le sondage du solo au pire cas des bornes |
+| `gameWritesPerMinute()` | `game_writes_per_minute` | 30 | `≥ 2 × ⌈60 000 / heartbeatIntervalMs⌉` |
+| `serveUrlExpiryMarginMs()` | `serve_url_expiry_margin_ms` | 5 000 | `≥ 0` |
+| `frameServePerMinute()` | `frame_serve_per_minute` | 60 | couvre deux chargements par palier au pire cas des bornes |
+
+**Pourquoi 90 lectures par minute** (et non 30, défaut du premier jet du contrat C7 § 5, dont le § 8 laisse les défauts d'`EngineConstants` à la spec 60 ; écart (h) du § 22 bis) : le solo sonde à chaque garde de palier et à chaque étape, soit `2N + 3` lectures par cycle `D + R`. Au pire cas des bornes (`N = 2`, `D = minRoundDuration(2)`, `R = MIN_REVEAL_DURATION`), cela fait environ 32 lectures par minute, avant la poignée de main et les reprises d'onglet. 90 laisse une marge de près de trois. Le test calcule ce pire cas depuis `RoomSettingsBounds`, sans littéral.
+
+`EngineConstants` n'est **ni une limite de confort** (neutralité de plan), **ni une règle de score** : aucune de ses valeurs n'entre dans `scoring_version`. `tierGraceMs` et `preloadLeadMs` n'en font **pas** partie : ce sont des constantes d'instance de `PlatformLimits`, non surchargeables (§ 2.3).
+
+### 19.2 Provenance des valeurs (règle 2)
+
+| Valeur | Source |
+|---|---|
+| `N`, `tierDurations`, `tierPoints`, `R`, `inputDifficulty`, `speedBonus`, `disconnectGraceSeconds`, `M` | `RoomSettings` figé dans `game.settings_snapshot` (contrat C0), matérialisé dans `round_tier` |
+| `tier_grace_ms`, `preload_lead_ms` | colonnes figées de `game`, depuis `PlatformLimits` au lancement |
+| Marge de réserve | `PlatformLimits::drawSubstituteMargin()`, matérialisée en lignes `round` |
+| Anti-rebond de la diffusion de lobby | `PlatformLimits::lobbyBroadcastDebounceMs()` (contrat C0), appliqué en instant arrondi à la seconde supérieure par l'appelant (50 § 8.3, § 11.2) |
+| Décompte, marge, battement, seuil de déconnexion, clôture après pause, attente en processus, échantillons, débits, marge d'expiration | `EngineConstants` |
+| `roomKey`, `gameRef` | HMAC d'`APP_KEY` (contextes `tf:room-channel:`, `tf:game-ref:`) |
+| `v` | `GameWire::VERSION`, miroir `GAME_WIRE_VERSION` |
+| Clé publique, hôte, port, schéma Reverb côté client | prop `realtime`, lue au runtime |
+| Constantes de `frame-loader.ts` | constantes de transport, hors jeu (§ 7.6) |
+
+### 19.3 Fichiers front du moteur
+
+Tous en kebab-case, sous `lib/game/`, `hooks/game/`, `pages/game/`, `components/game/` ou nominativement dans `WATCHED` (contrat C16 § 2.11) : `types/game-wire.ts` ; `lib/game/{echo, wire, server-clock, store, frame-loader, reveal-titles}.ts` ; `hooks/game/{use-game-channel, use-game-state, use-round-clock, use-heartbeat}.ts` ; `pages/game/solo.tsx` ; les composants d'état de partie de `components/game/` (scène de manche, fil « a trouvé », révélation, pause ; noms libres, liste close de C16 respectée), montés par `game/lobby` (50) et par `game/solo`. **Aucune page `game/room`** (§ 10.1). Hors du périmètre de jeu : `pages/room/solo.tsx`, formulaire d'entrée du solo sous `PublicLayout` (§ 16.4). La chronologie et la valeur de palier ne sont calculées que par `lib/game/round-timeline.ts` (90) ; aucun `round-clock.ts` n'est créé. Un composant de `components/game/` ne lit ni Echo ni horloge : il reçoit des props (contrat C16 § 2.9).
+
+### 19.4 Clés de traduction
+
+Domaine `game`, FR et EN symétriques, préfixes attribués à 60 par le contrat C15 : `game.round.*` (sauf le texte de `game.round.tier_value`, rédigé par 80), `game.reveal.*`, `game.solo.*`, `game.seat.*`, `game.pause.*`, `game.host.*`, `game.errors.*`.
+
+- Figées par le contrat C7 : `game.round.{tier_value, time_up, cancelled, lone_player}`, `game.pause.interrupts_at` (`:time`, formaté par le client), `game.seat.{superseded, kicked}`, `game.host.next_round`, `game.solo.{reveal_answer, skip_round, next_round, no_room_memory}`, `game.solo.frames_adjusted` (`:preset`, `:requested`, `:applied`), `game.errors.{seat_superseded, not_revealing, pool_too_small}`.
+- Ajoutées par 60 dans ses préfixes : `game.round.starts_in` (`:seconds`, décompte de lancement et de reprise), `game.round.number` (`:number`, `:total`), `game.round.waiting_next` (`:number`, retardataire), `game.reveal.heading` (cible du focus, contrat C16 § 2.12), `game.reveal.original_title`, `game.errors.round_not_running` (409 des gestes solo, § 16.5).
+- Demandées hors des préfixes de 60, écarts (l) et (o) du § 22 bis : `room.solo.{choose_preset, start}` (page d'entrée `room/solo`, qui ne charge que `room` et `legal`, et relance depuis `game/solo`, qui charge aussi `room`) ; `validation.attributes.preset` (libellé du champ de `SoloStartRequest`).
+- Réutilisées, jamais redéclarées : `common.connection.*` (bandeau et annonce de reconnexion `common.connection.restored`, 90), `common.maintenance.launch_blocked` (texte : 90, L90-3 ; refus : contrat C18-bis), `legal.terms_notice` et `legal.new_tab` (mention des CGU de `room/solo`, 90, L90-4), `game.frame.{alt, loading, unavailable}` et `game.a11y.*` (90), `room.presets.*` et `room.errors.launch_failed` (échec technique du démarrage solo, § 16.2 ; 50), `validation.attributes.{nickname, avatar}` et `validation.nickname.*` (40).
+
+Un pluriel passe par `tChoice` ; aucun nombre n'est formaté côté serveur (05).
+
+### 19.5 Exigences d'exécution adressées à 100 — sous hypothèse S2 du 23/09, à confirmer au relevé du VPS
+
+- Reverb en écoute sur `127.0.0.1`, publié par nginx sur le seul chemin WebSocket `wss://<DOMAINE>/app/…` ; l'API HTTP `/apps/` n'est **jamais** publiée (100 § 10.5, N100-1) : la publication serveur (`REVERB_HOST`) vise la boucle locale en clair, et exposer `/apps/` n'offrirait qu'une surface d'attaque de plus.
+- `config/reverb.php` : `allowed_origins` lu depuis `REVERB_ALLOWED_ORIGINS` (liste séparée par des virgules, défaut `*` sur le poste), `<DOMAINE>` en production (100 § 10.5 ; variable de `.env.example` tenue par 100 § 10.10). Sans cette lecture, la production accepterait toutes les origines.
+- `config/broadcasting.php` : après `config:publish broadcasting`, les connexions `pusher` et `ably`, inutilisées, sont **retirées** (100 § 7.2) : la connexion `pusher` porte un nom de domaine littéral qui ferait échouer `NoLiteralDomainTest` dès l'arrivée de L60-1.
+- **Ports de bouclage libres et distincts** pour l'instance Redis dédiée (jamais 6379) et pour Reverb — à confirmer au relevé du VPS (`ss -ltnp`, questions-ouvertes « Temps réel »).
+- **MySQL de production en UTC** (`time_zone`, `system_time_zone`, et `date.timezone` du PHP de l'abonnement ; 10 § 13.4) — à confirmer au relevé du VPS. Sans UTC, les `timestamp(3)` du journal ne rejouent plus la chronologie.
+- File `game` sur Redis par **predis**, `block_for` nul ou ≤ 1 s, `--sleep` ≤ 1 s, `--tries=1`, servie par **un** processus `tripleframes-worker@game` au J1. Le nombre de processus est un paramètre de 100, fixé après le test D33 du 23/09 et **signalé au porteur s'il dépasse un**, car il modifie le socle de D1 du 23/09 (unités, `MemoryMax` sur un VPS partagé).
+- `composer dev` : à la lettre du contrat C7 § 5, telle que 100 § 2.4 l'implémente — `php artisan reverb:start` et `php artisan queue:listen --queue=game,default --tries=1 --sleep=1 --timeout=900`, sur la connexion par défaut `redis` ; le `--timeout=900` garde la borne dont dépend `RunCatalogImport` (état réel, ci-dessus). **L100-4 en est le seul écrivain** (contrat C7 § 5 adresse cette exigence à 100). Proposition au porteur, **non appliquée** (écart (p) du § 22 bis) : deux écouteurs, `queue:listen redis --queue=game --tries=1 --sleep=1` et `queue:listen redis --queue=default --tries=1 --timeout=900`, pour qu'un import de catalogue de quinze minutes ne fasse jamais attendre les frontières d'une partie de développement derrière lui.
+- **Dès L60-1, la file `game` passe par Redis via predis sur le poste comme en production** (questions-ouvertes « Redis » : « dès le premier commit du moteur », parité poste Windows / CI / production ; CLAUDE.md § 8) : `.env.example` pose `QUEUE_CONNECTION=redis` et `CACHE_STORE=redis`, l'hôte Redis de développement (celui de la VM Homestead, ou tout Redis local) restant dans `.env`. Seule la CI SQLite garde ses drivers en mémoire (questions-ouvertes « CI ») ; le driver `database` n'est **jamais** une file de moteur, parce qu'il sonde et verrouille des lignes et ne tient pas une frontière de palier.
+- `.env.example` : `BROADCAST_CONNECTION=reverb`, `REVERB_APP_ID`, `REVERB_APP_KEY`, `REVERB_APP_SECRET` (vide), `REVERB_HOST`, `REVERB_PORT`, `REVERB_SCHEME`, `REVERB_SERVER_HOST`, `REVERB_SERVER_PORT`, et, **à la place de `VITE_REVERB_*`**, les variables optionnelles `REVERB_CLIENT_HOST`, `REVERB_CLIENT_PORT`, `REVERB_CLIENT_SCHEME` (noms confirmés par 100) ; `REDIS_CLIENT=predis`.
+- `robots.txt` : `Disallow: /f/`.
+- La sonde « worker vivant » (battement de cœur écrit par la file `game`, questions-ouvertes « Sondes de production ») appartient à 100 ; elle passe par la même file que les frontières, sans jamais porter une décision de jeu.
+- **Aucun cache HTTP de page complète** devant l'application (CLAUDE.md §3) ; les réponses `/f/` sont `no-store`.
+
+### 19.6 Exigences adressées aux specs sœurs
+
+| Spec | Ce que le moteur attend d'elle |
+|---|---|
+| **50** | Émettre `seat.joined`, `seat.updated` (expulsion), `host.changed`, `settings.changed` (par `BroadcastLobbyState`, dispatché avec un délai en instant arrondi à la seconde supérieure, écrit par 50 § 8.3, § 11.2), `room.replayed`, `game.launched`, `room.archived` et `seat.kicked` avec les charges du § 11 ; appeler `MaterializeDraw` et `ScheduleRound` dans la transaction de lancement (contrat C6) ; appeler `ClaimSeatTab` au rendu des pages de salon, **avant** `GameStateBuilder::build()`, et lui passer le jeton rendu (§ 12.7) ; rendre `game/lobby` par `room.show` en `lobby` comme en `playing`, podium compris, avec `state` construit sur la partie en `playing` — **aucune page `game/room`** (§ 10.1, écart (m) du § 22 bis, fermé par 50 § 7.2) ; appeler `SeatInputClosed::handle($round, $roundPlayer, null, $now)` dans une seconde transaction après le commit d'un départ ou d'une expulsion (§ 13.4, 50 § 8.2) ; exposer `TransferHost::automatic()`, appelable dans la transaction de `SweepSeatPresence` ; tenir `tierGraceMs` et `preloadLeadMs` non surchargeables (§ 2.3) ; inscrire parmi ses garde-fous croisés la borne de fait que la garde de `pauseTimeoutMs` pose sur `drawSubstituteMargin()` (§ 19.1) ; livrer `types/room-settings.ts` dès L50-2 (§ 11.4). |
+| **70** | Émettre `AnswerAccepted` et `InputClosed` après commit ; appeler `CatchUpGame` avant tout jugement ; appliquer `seat.active` ; calculer `answered_at_ms` par `RoundClock::offsetMs()` sur `ReceptionInstant::of()` ; fournir `acceptsChoice()`, `ComposeChoiceSets` et `ChoicesPresenter` (contrats C10, C11) ; déclarer `types/answers.ts` dès L70-4 (§ 11.4) ; au J2, abonner `AggregateNearMisses` à `RoundAnswersClosed` (§ 9.4). |
+| **80** | `FinalizeGame` seul écrivain de `ended_at` ; `GameFinalized` après commit ; blocs `RoundFinder`, `Leaderboard`, `Podium` et `seatScore` en portée publiable ou propre (contrat C13) ; composer le paquet de titres du récapitulatif par `RevealMovieBuilder` et le rendre par `reveal-titles.ts` (§ 9.5, § 11.5) ; déclarer `Podium` dans `types/scoring.ts` dès L80-3 (§ 11.4) ; lister au tableau de 80 § 10.5 « Passer la manche » sur la dernière manche solo et l'annulation décidée pendant une révélation (§ 14.5). |
+| **90** | Pages `game/*` consommant `state`, `seatToken`, `realtime` et `settingsNotice`, et, sur `game/solo`, `limits` et `presets` (§ 16.4, 90 § 7.7) ; L90-6b dépendant de L60-4, qui déclare `RoundTimeline` (§ 11.4) ; `round-timeline.ts`, `GameFrame` (dont `src` est l'URL d'objet de `frame-loader`), `GameAnnouncer`, `ConnectionBanner` ; SSR désactivé (contrat C16) ; `room/solo` comptée parmi les pages d'entrée `room/*` (§ 16.4). |
+| **40** | `PlayerTokenManager::current($request)?->hash()`, `ensure()`, `heldByToken()` ; migration `kicked_at` (E10-01) ; `PlayerIdentityValidationRules` pour le premier siège solo (contrats C4, C5). |
+| **30** | `VariantChooser::substitute()` excluant un fichier absent ; `ReplacementRoundChooser::next()` ; `PoolReporter::nearestPlayableFramesPerRound()` (contrats C2, C3). |
+| **20** | `FrameImageResponse::make()` et ses en-têtes ; au J2, dispatch de `WithdrawContentFromLiveRounds` après commit d'une suspension ou d'un retrait (contrat C9). |
+| **100** | § 19.5 ; `deploy:drain` appelant `game:reschedule` avant d'attendre (contrat C18-bis) ; marge de drainage couvrant `pauseTimeoutMs + launchCountdownMs`, testée (§ 17.4, écart (j)) ; canal `game` (§ 4.7). |
+
+### 19.7 Profil de charge pour le test complet (D33 du 23/09)
+
+Joué **avant la première partie du J1** sur le VPS (A-55), jamais avant la curation (D37 du 23/09 — amendé le 23/09), sur 20 salons et environ 150 joueurs simulés, avec deux critères : le jeu tient, les sites voisins ne se dégradent pas. Le moteur y contribue, par manche et par salon : `N + 3` jobs de frontière sur la file `game` ; `N + 3` diffusions (`round.scheduled`, `N` fois `tier.opened`, `round.closed`, `round.revealed`), plus une par verrouillage ; un envoi ciblé par siège au palier du QCM ; une requête d'image par palier et par joueur connecté. En continu : un battement par joueur toutes les `heartbeatIntervalMs` (≈ 15 écritures par seconde au défaut) et un balayage de présence par salon. En pic : une resynchronisation de tout un salon après une reconnexion de Reverb. La grandeur dimensionnante reste le nombre de soumissions par seconde (240 au défaut, 1 200 à la borne haute de `attemptsPerSecond`, questions-ouvertes « Charge cible »), qui appartient au chemin de 70.
+
+---
+
+## 20. Tests nommés
+
+Nommés en phrase française au présent, minuscule initiale, sans point final (contrat C18). Les tests du groupe `locks-timing` vivent sous `tests/Concurrency/` ; tous les autres tournent sur SQLite `:memory:`, horloge figée par `Date::setTestNow()` et `Sleep::fake()`, diffusion sous `Event::fake()`.
+
+**`tests/Feature/Game/ChannelAuthorizationTest.php`** — « un invité porteur du player_token d'un siège du salon rejoint le canal de présence » · « le membre de présence ne porte que le public_id du siège, jamais le hash du jeton » · « un jeton sans siège dans ce salon est refusé sur le canal de présence » · « le canal privé d'un siège refuse le jeton d'un autre siège » · « un siège expulsé est refusé sur les deux canaux jusqu'à l'archivage » · « un salon archivé refuse toute souscription » · « deux salons successifs portant le même room_code ont deux clés de canal différentes »
+
+**`tests/Feature/Game/EventPayloadTest.php`** — « chaque événement porte v, serverNow au format ISO-8601 UTC à la milliseconde et gameRef » · « aucune charge d'événement ni aucun paquet ne contient de clé d'identifiant interne » · « aucune charge émise avant revealStartsAt ne contient un titre, un alias ou une forme normalisée du film de la manche hors des quatre propositions du QCM » · « la position de la cible parmi les quatre propositions suit la permutation qcmOrder du siège » · « player.locked ne porte que sequenceIndex, publicId et lockRank » · « seat.choices part sur le canal privé du siège et jamais sur le canal du salon » · « en Facile le QCM est poussé à T₁, en Normal à T_N, en Expert jamais » · « à T_N en Normal, le QCM est poussé au siège dont le texte libre est épuisé » · « la clôture est émise à ended_at et les titres à ended_at + tier_grace_ms » · « une transaction annulée n'émet aucun événement » · « round.scheduled est réémis pour une manche pending reprogrammée et jamais après T₁ » · « chaque titre de la révélation porte l'attribut lang de la locale atteinte » · « la liste des événements diffusés est exactement la liste close du J1 » · « une diffusion en échec n'annule ni la transition ni la programmation du job suivant » · « en Normal, un QCM non composable n'émet aucun seat.choices »
+
+**`tests/Feature/Game/LobbyBroadcastTest.php`** [nouveau] — « une rafale d'écritures de réglages n'émet qu'un settings.changed portant le dernier état » · « BroadcastLobbyState ne diffuse rien si le salon n'est plus au lobby » (le délai du dispatch est prouvé une seule fois, chez son appelant : `RoomSettingsWriteTest` de 50, « programme la diffusion anti-rebondie en millisecondes arrondies à la seconde supérieure, jamais en secondes », R-04)
+
+**`tests/Feature/Game/ResyncPacketTest.php`** — « une resynchronisation à t = 1 s d'une manche à N=5 ne renvoie qu'une URL » · « dans la fenêtre de préchargement, le paquet porte au plus une URL par palier dont la garde est franchie » · « pendant la révélation, le paquet porte les URL des seuls paliers ouverts, puis aucune après reveal_ends_at » (nom du contrat C7 conservé ; joué sur la dernière manche, ou à un instant antérieur à `T₁(k+1) − preload_lead_ms`, écart (c) du § 22 bis) · « au palier 3 d'une manche à N = 5, hors fenêtre de préchargement, le paquet ne porte que l'URL du palier 3 » · « dans la fenêtre de préchargement du palier 4, le paquet porte les URL des paliers 3 et 4 et aucune autre » · « un paquet construit au milieu du palier i, puis une resynchronisation à la garde de i+1, livrent l'URL de i+1 » · « nextTransitionAt annonce la prochaine garde de palier » · « une resynchronisation en cours de manche ne modifie aucun score d'autrui » · « le QCM déjà composé est rejoué à l'identique après un changement de langue » · « le paquet porte maxAnswerLength du snapshot en partie et null sans partie » · « l'onglet supplanté reçoit seatActive faux » · « dans les preload_lead_ms finales de la révélation, le paquet porte la manche suivante et la seule URL de son palier 1 » · « le paquet d'un lobby porte les canaux du salon et aucune manche » · « la resynchronisation rattrape les étapes échues avant de construire le paquet »
+
+**`tests/Feature/Game/SeatTakeoverTest.php`** — « un chargement complet frappe un nouveau jeton de siège et émet seat.superseded » · « une visite présentant le jeton actif ne re-frappe pas » · « une écriture présentant un jeton supplanté est refusée en 409 » · « le jeton de siège actif est un ULID applicatif et jamais l'identifiant de session » · « le paquet rendu avec la page qui vient de frapper le jeton porte seatActive vrai » · « une visite présentant le jeton actif reçoit ce même jeton en prop seatToken » · « seat.active résout le siège et la partie courante depuis les paramètres bruts, avant la liaison implicite »
+
+**`tests/Feature/Game/RoundLifecycleTest.php`** [nouveau] — « une manche passe de pending à running à T₁, puis ferme à D, révèle à ended_at + tier_grace_ms et se complète à reveal_ends_at » · « la manche k+1 est programmée à reveal_ends_at(k) dès le début de la révélation de k » · « la fin de révélation précède l'ouverture du palier 1 suivant à instant égal » · « un job réveillé une seconde trop tôt attend en processus et ne se relâche jamais » · « un rattrapage tardif applique toutes les étapes échues dans l'ordre et n'émet que l'état courant » · « une étape d'une partie close ou en pause n'écrit rien » · « rounds_completed compte les manches completed à chaque fin de révélation » · « la manche suivante raccourcit R sans descendre sous preload_lead_ms plus la marge et répond 409 hors révélation » · « la manche suivante est refusée à un siège qui n'est pas l'hôte » · « la manche suivante relit l'hôte sous le verrou du salon » · « journalise sur le canal game le retard réel de chaque diffusion de frontière »
+
+**`tests/Feature/Game/RoundCancellationTest.php`** [nouveau] — « le remplaçant reçoit le round_number de la manche annulée et part à max(now + launchCountdownMs, T₁ prévu) » · « réserve épuisée, la manche suivante à jouer est programmée comme un remplaçant et la partie compte une manche de moins » · « sans manche restante, l'annulation gèle la partie à l'instant de l'annulation » · « en Facile, un QCM non composable à T₁ annule la manche avec choices_unavailable » · « une frame devenue non servable entre la frappe et l'ouverture annule la manche avec frame_unavailable sans seconde substitution » · « une manche annulée ne rapporte aucun point, verrouillages acquis compris » · « une annulation sans manche restante décidée pendant une révélation laisse la révélation aller à son terme »
+
+**`tests/Feature/Game/ServeTokenMintTest.php`** — « le jeton du palier 1 est frappé à la programmation, celui du palier i à l'ouverture du palier i−1 » · « la frappe est idempotente » · « une frame non servable ou absente du disque est substituée à la frappe avec frame_unavailable » · « sans variante servable, la frappe annule la manche avec no_variant_available » · « served_at vaut l'instant théorique même quand le job est en retard » · « après N requêtes d'image anticipées et aucune frontière franchie, served_at est nul et seen_frame est vide » · « deux manches distinctes portant la même frame produisent deux serve_token différents » · « seen_frame est écrit sur served_frame_id à l'ouverture, jamais à la frappe, jamais en solo » · « un palier dont l'ouverture suit une fin anticipée ou une annulation n'écrit ni served_at ni seen_frame » · « un palier dont l'ouverture annule la manche n'est jamais marqué servi »
+
+**`tests/Feature/Game/FrameServeTest.php`** — « le palier i est refusé à Tᵢ − preload_lead_ms − 1 ms » · « le palier i est servi à Tᵢ − preload_lead_ms + 1 ms » · « la garde relit preload_lead_ms depuis game et non depuis la configuration » · « le palier 1 de la manche 1 n'a aucune fenêtre d'exception » · « un palier jamais ouvert n'est pas servi pendant la révélation d'une manche close par fin anticipée » · « un palier que la fin anticipée a empêché de s'ouvrir n'est pas servi pendant la grâce finale » · « les paliers ouverts restent servis jusqu'à reveal_ends_at puis sont refusés » · « le palier 1 d'une manche déprogrammée par une pause n'est plus servi » · « un retardataire admis à la manche suivante est refusé sur la manche en cours » · « un siège expulsé est refusé » · « une frame devenue non servable est refusée à chaque service » · « la route ne sert jamais un chemin hors du préfixe game/ » · « tous les refus du prédicat rendent la même réponse 404 vide » · « une signature invalide ou expirée est refusée » · « la réponse porte no-store, noindex, nosniff et same-origin, sans Content-Disposition, Last-Modified, ETag, Accept-Ranges ni Set-Cookie » · « répond sans session et sans aucun Set-Cookie, même quand la langue est négociée » · « Content-Length vaut game_bytes, multiple de 8 192 » · « la route n'exécute aucune écriture »
+
+**`tests/Feature/Game/EarlyEndTest.php`** [nouveau ; noms de 10 § 7.7 conservés] — « tous les participants déconnectés → la manche se clôt à D, pas avant » · « un joueur connecté sans ligne round_player ne bloque pas la fin anticipée » · « la déconnexion du dernier participant à saisie ouverte déclenche la fin anticipée » · « à un seul siège connecté en multijoueur, la fin anticipée reste active et game.mode reste multiplayer » · « le départ volontaire ou l'expulsion du dernier participant à saisie ouverte déclenche la fin anticipée » · « la fin anticipée prend pour ended_at l'instant de clôture écrit et jamais l'heure d'exécution de l'écouteur »
+
+**`tests/Concurrency/Game/EarlyEndHookTest.php`** (groupe `locks-timing` par répertoire) — « le crochet de fin de saisie émet player.locked et clôt la manche quand tous les participants ont leur saisie close » · « un siège en text_exhausted empêche la fin anticipée » · « la révélation inclut toute réponse acceptée avant ended_at + tier_grace_ms » · « deux derniers verrouillages concurrents clôturent la manche une seule fois »
+
+**`tests/Feature/Game/PresenceTest.php`** [nouveau] — « le battement écrit last_seen_at avec une partie milliseconde non nulle » (10 § 1.2) · « un siège sans battement depuis disconnectAfterMs passe disconnected, puis left après disconnectGraceSeconds » · « un battement ramène un siège disconnected ou left à connected sans réadmettre un expulsé » · « un siège déconnecté à T₁ reçoit sa ligne round_player et peut répondre à son retour » · « le départ de l'hôte déclenche le transfert d'hôte dans la même transaction » · « un siège solo ne passe jamais left » · « un siège revenu à connected pendant qu'un balayage attend une échéance lointaine passe disconnected à sa propre échéance » · « le balayage d'un siège solo s'arrête à disconnected et le battement suivant le réarme »
+
+**`tests/Feature/Game/PauseLifecycleTest.php`** — « sans participant connecté en fin de révélation, la partie passe en pause et déprogramme la manche suivante » · « la pause programme l'interruption à paused_at + pauseTimeoutMs » · « le retour d'un siège reprend la partie et reprogramme la manche après le décompte » · « l'interruption gèle la partie à l'instant prévu et non à l'heure d'exécution du job » · « un battement reçu après paused_at + pauseTimeoutMs ne reprend pas la partie et la gèle à l'instant prévu » · « une partie solo quittée passe en pause puis s'interrompt » · « un retardataire admis à la manche suivante et connecté empêche la pause en fin de révélation »
+
+**`tests/Feature/Game/SoloTest.php`** — « voir la réponse clôt en revealed et ouvre une révélation de durée R sans guess » · « passer la manche clôt en skipped et programme la suivante sans révélation » · « revealed et skipped sont refusés hors solo » · « une partie solo n'émet aucun événement de diffusion » · « un preset au N injouable est ramené au N jouable le plus proche et la page l'annonce » · « un second lancement solo sous le même jeton reprend le siège » · « refuse de démarrer une partie solo pendant un drainage, sans partie créée » · « un nouveau lancement solo interrompt la partie solo en cours du siège » · « le refus de drainage n'interrompt pas la partie solo en cours » · « un refus de vivier n'interrompt pas la partie solo en cours » · « un premier passage sans siège solo redirige vers la page d'entrée du solo sans frapper de jeton » · « la page d'entrée du solo rend room/solo dans l'apparence du visiteur » · « solo.state et solo.heartbeat répondent 403 sans siège solo » · « voir la réponse clôt la manche même si le siège solo était passé disconnected » · « hors précondition, voir la réponse et passer la manche répondent 409 round_not_running » · « passer la manche n'écrit jamais ended_at au-delà de started_at + D » · « ni l'annulation d'une manche solo, ni le battement, ni le balayage de présence, ni la prise d'onglet, ni la fin d'une partie solo n'émettent d'événement de diffusion » · « rend une erreur traduite et n'interrompt pas la partie solo en cours quand le tirage lève PoolTooSmallException » · « relancer pendant la phase closed d'une manche interrompt la partie sans exception et laisse le siège locked » · « passer la dernière manche gèle la partie en completed à reveal_ends_at de cette manche » · « passe à game/solo les limites de plateforme et les presets de relance »
+
+**`tests/Concurrency/Game/SoloStartConcurrencyTest.php`** [nouveau, groupe `locks-timing` par répertoire ; ajout à l'inventaire de C18 § 2.1, écart (q) du § 22 bis] — « deux premiers lancements solo concurrents sous le même jeton ne créent qu'un siège et qu'une partie »
+
+**`tests/Feature/Game/GamesInProgressTest.php`** — « une partie running ou paused est en cours, solo compris » · « une partie completed ou interrupted n'est pas en cours » · « ended_at est non nul si et seulement si le statut est terminal » · « un salon au lobby sans partie ne compte pas comme partie en cours » · « toute partie en cours a au moins un job programmé sur la file game » · « la reprise d'une partie en pause reste permise pendant un drainage » · « game:reschedule redonne un job à une partie en cours qui n'en a plus et reste idempotent » · « maxNaturalDurationMs se dérive des bornes sans littéral » · « game:reschedule clôt à sa dernière activité connue une partie qui dépasse sa durée maximale »
+
+**`tests/Feature/Game/EngineConstantsTest.php`** — « le décompte de lancement couvre MAX_PRELOAD_LEAD_MS plus la marge » · « le seuil de déconnexion vaut au moins deux battements » · « MIN_REVEAL_DURATION en ms dépasse MAX_PRELOAD_LEAD_MS » · « transitionMaxWaitMs couvre la troncature à la seconde » · « le débit de lecture couvre le sondage du solo au pire cas des bornes » · « le débit d'images couvre deux chargements par palier au pire cas des bornes » · « un accesseur du moteur refuse une configuration hors bornes » · « la clôture après pause couvre les décomptes de reprise de toutes les manches aux bornes » · « une marge de tirage admise par PlatformLimits ne fait jamais échouer la garde de pauseTimeoutMs aux défauts » (rouge tant que 50 n'a pas inscrit la borne de fait du § 19.1 parmi ses garde-fous croisés : c'est voulu, une configuration légale ne doit jamais faire lever le moteur)
+
+**`tests/Feature/Game/WireVersionTest.php`** — « GAME_WIRE_VERSION côté TS égale GameWire::VERSION »
+
+**`tests/Feature/Game/ClockTest.php`** [nouveau] — « clock.show répond l'instant serveur sans session ni Set-Cookie » · « l'instant de réception est capturé une fois, avant tout middleware de jeu » · « le décalage d'une manche se calcule en millisecondes entières sur les microsecondes »
+
+**`tests/Feature/Game/RoundTierMaterializationTest.php`** (jeu de données `room_settings.accepted`, contrat C18) — « matérialise des décalages de palier entiers dont la somme vaut D pour chaque combinaison acceptée »
+
+**`tests/Feature/Game/RoomPageTest.php`** [nouveau] — « rend la page du salon en état de manche, en sombre, avec state, seatToken et realtime » · « ne sérialise jamais le film de la manche dans les props de la page »
+
+**`tests/Feature/Architecture/TierServingWritersTest.php`** — « seules MintTierServeToken et OpenTier écrivent serve_token, served_frame_id, substitution_reason, served_at et seen_frame »
+
+**`tests/Feature/Game/LiveWithdrawalTest.php`** (J2) — « suspendre le film d'une manche en cours l'annule avec movie_suspended et programme un remplaçant » · « suspendre une frame déjà frappée annule la manche avec frame_unavailable »
+
+**`tests/Feature/Game/RoundAnswersClosedTest.php`** [nouveau] (J2) — « le passage d'une manche en révélation émet RoundAnswersClosed après commit, une seule fois » · « la clôture d'une manche à ended_at n'émet pas RoundAnswersClosed tant que la grâce finale court »
+
+**Vitest, `tests/Frontend/game/`** — `server-clock.test.ts` : « retient la médiane des échantillons » · « relève le décalage sur un serverNow plus récent sans jamais l'abaisser » ; `store.test.ts` : « ignore un événement déjà reçu pour le même gameRef, sequenceIndex et palier » · « garde le round.scheduled au serverNow le plus grand » · « demande une resynchronisation à l'apprentissage d'un sequenceIndex inconnu » · « demande une resynchronisation à la garde d'un palier dont il ne détient pas l'URL » · « passe à l'état de partie à game.launched sans naviguer » · « demande une resynchronisation quand seat.choices manque après tier.opened du palier du QCM » · « masque la valeur du palier hors de la phase running » · (J2) « masque la valeur du palier quand leaderboard.scoreless est vrai » ; `reveal-titles.test.ts` : « rend le titre de la locale avec son lang, le titre original seulement s'il diffère, et l'année » ; `frame-loader.test.ts` : « ne demande jamais une image avant fetchNotBefore » · « retente un 404 reçu avant l'ouverture puis abandonne après le dernier essai » · « révoque les URL d'objet au changement de manche ».
+
+Les tests de la fenêtre d'acceptation (70), du score et du rejeu (80), des gestes d'expulsion et de lancement (50) et du drapeau de drainage (100) vivent chez leurs propriétaires et ne sont pas dupliqués ici.
+
+---
+
+## 21. Exigences adressées à 10
+
+Cette spec ne modifie jamais `10`. Elle consomme les exigences consolidées suivantes, qu'y applique un travail séparé. **E10-N3 et E10-N4 ne figurent pas dans la feuille de contrats (`docs/annexes/contrats-j1.md`)** : elles sont signalées au rédacteur en chef pour consolidation avant tout travail d'application au corpus ; tant qu'elles ne sont pas numérotées, ce travail les lit ici. Leur numérotation suit celle de `30`, qui occupe E10-N1 et E10-N2 pour d'autres objets.
+
+- **E10-01** — `player.kicked_at`, nullable, sans index, `#[Hidden]` : refus du jeton expulsé par les canaux, `/f/` et `seat.active` (D15 du 23/09).
+- **E10-06** — cas `text_exhausted` de `RoundPlayerInputState`, non clos : destinataire du QCM à `T_N` (D20 du 23/09).
+- **E10-07** — cas `choices_unavailable` : annulation d'une manche en Facile sans QCM composable.
+- **E10-08** — cas `movie_suspended`, J2 : annulation active (§ 15.4).
+- **E10-13** — aucun SSR : Echo, horloge et images n'existent que côté client.
+- **E10-14** — lecture « publiable » : ce qu'un autre siège voit se calcule sur les manches `revealing` et `completed`.
+- **E10-20** — prédicat de service en trois parties, sans exception de manche 1, jamais un palier non ouvert en révélation.
+- **E10-25** — substitution choisie par 30 à la frappe du jeton, même niveau, fichier présent.
+- **E10-31** — le canal de présence d'un salon est nommé par une clé HMAC, `public_id` nomme le canal privé du siège.
+- **E10-34** — `#[Hidden]` de `Player`, `kicked_at` compris.
+- **E10-36** — `ended_at IS NULL` ⟺ statut non terminal, écrit par `FinalizeGame` seul ; `rounds_completed` maintenu par 60.
+- **E10-41** — colonnes figées de `game`, dont `tier_grace_ms` et `preload_lead_ms`.
+- **E10-42** — naissance des `game_player` au lancement, `first_round_number = 1`.
+- **E10-45** — manches de réserve matérialisées, sans numéro, numérotées au remplacement.
+- **E10-46** — une manche programmée est déprogrammée à la pause.
+- **E10-47** — écrivains du palier : frappe à l'ouverture du palier précédent, `served_at` théorique ; docblocks de `RoundTier` et `RoundTierFactory::served()`.
+- **E10-48** — la fenêtre d'acceptation est écrite dans 70.
+- **E10-49** — `round_player` naît à `T₁` pour chaque siège non parti, éligible, non expulsé.
+- **E10-51** — ordre de verrouillage room → player → game → round → round_player.
+- **E10-52** — points et palier publiables dès `revealing`.
+- **E10-53** — fin anticipée : `text_exhausted` n'est pas une saisie close, borne `COUNT ≥ 1` conservée.
+- **E10-54** — ordre du QCM par `draw:qcm:{sequenceIndex}:{playerPublicId}`, jamais par identifiant de base.
+- **E10-58** — barrière 4 : « aucun identifiant d'adressage réutilisable » ; résidu d'empreinte nommé ici (§ 18).
+- **E10-59** — en-têtes du service d'image, 404 uniforme.
+- **E10-60** — préchargement par palier sans exception, repli = cadre fixe, jamais un LQIP.
+- **E10-62** — clôture forcée et partie bloquée par `FinalizeGame`.
+- **E10-65** — URL de resynchronisation : au plus une par palier dont la garde est franchie, les paliers ouverts pendant la révélation.
+- **E10-66** — coût du service d'image : environ cinq lectures par clé, aucun index nouveau.
+- **E10-67** — § 15 : l'entraînement assisté est spécifié par 60.
+- **E10-N3 (exigence nouvelle, non consolidée)** — 10 § 7.1, portée de l'invariant « un jeton = un siège » : l'unicité d'un siège solo par jeton est portée **en base**, par exemple par une colonne générée stockée `solo_token_hash = CASE WHEN room_id IS NULL THEN player_token_hash END` avec UNIQUE `player_solo_token_uq (solo_token_hash)`, les NULL multiples étant admis par les deux moteurs (10 § 1.4). Un siège solo ne passant jamais `left` (§ 13.3), et disparaissant à l'échéance d'effacement des sièges solo (10 § 7.1, `player_solo_expiry_idx`), l'unique ne gêne aucune reprise. Motif : sans ligne à verrouiller, deux premiers lancements concurrents créent deux sièges (§ 16.2, étape 3). Migration additive ; la forme exacte appartient à 10.
+- **E10-N4 (exigence nouvelle, non consolidée)** — 10 § 1.3 l.63 : « ±300 ms » devient « 300 ms, décalage unilatéral appliqué à la réception » ; aucune colonne.
+
+---
+
+## 22. Amendements à d'autres documents
+
+Cette spec ne modifie jamais 00, 05, `questions-ouvertes.md`, `CLAUDE.md` ni `REPRISE.md`. Elle dépend des amendements consolidés suivants. **A-N6, A-N7 et A-N8 ne figurent pas dans la feuille de contrats (`docs/annexes/contrats-j1.md`)** : ils sont signalés au rédacteur en chef pour consolidation avant tout travail d'application au corpus ; tant qu'ils ne sont pas numérotés, ce travail les lit ici. Leur numérotation suit celle de `30`, qui occupe A-N1 à A-N5 pour d'autres objets.
+
+- **A-01** (00 l.7, 17, 75, 97, 118, 171, 437) — `P` devient le décompte de lancement ; tous les paliers servables dès `Tᵢ − preload_lead_ms`, manche 1 comprise ; « R < 5 s » motivé par l'accessibilité seule.
+- **A-02** (00 l.97, l.171 et principe 6 l.383) — LQIP retiré : le repli d'un client lent est un cadre fixe 16:9, un aplat au token de thème et un indicateur de chargement (D7 du 23/09).
+- **A-03** (00 l.20-21) — révélation : les `N` images servies, titre, titre original s'il diffère, année ; « affiche » et « précharge la manche suivante » retirés.
+- **A-04** (00 l.27) — fin anticipée « saisie close », `text_exhausted` non clos ; `lone_player` cosmétique.
+- **A-05** (00 l.50) — « essai unique par siège » ; QCM ouvert en Normal après épuisement du texte.
+- **A-17** (00 l.123) — solo : presets, `N` le plus proche d'office, deux gestes d'entraînement, jamais de `guess`.
+- **A-20** (00 l.169) — canal de présence par clé HMAC, canal privé par `public_id`.
+- **A-21** (00 l.172, principe 4) — poignée de main pour l'affichage ; `tier_grace_ms` unilatérale à la réception.
+- **A-27** (00 l.319) — Echo configuré à l'exécution, `VITE_REVERB_*` retirées.
+- **A-28** (00 l.325) — `serve => false`, route `/f/{serveToken}`, noms `bin2hex`, en-têtes émis par la route.
+- **A-29** (00 l.328) — écritures toujours exécutées, seule la diffusion se périme, attente en processus.
+- **A-31** (00 l.345) — déploiement manuel dans une fenêtre obtenue par drainage borné, prédicat de 60, solo compris.
+- **A-36ter** (00 l.473) — relevé du VPS avant tout déploiement ; 60 et 100 [J1] sous hypothèse root.
+- **A-44** (05 l.179) — charge ciblée du QCM : quatre chaînes, un drapeau, un `lang`.
+- **A-45** (05 l.180) — paquet de révélation : URL des paliers ouverts, `lang` de chaque titre.
+- **A-52** (questions-ouvertes l.121, 293, 315, 382) — route dédiée et noms `bin2hex`.
+- **A-53** (questions-ouvertes l.290) — Echo à l'exécution.
+- **A-54** (questions-ouvertes l.292) — écritures toujours exécutées, attente < 1 s.
+- **A-55** (questions-ouvertes l.294) — test de charge complet avant la première partie du J1.
+- **A-55bis** (questions-ouvertes l.268) — relevé avant tout déploiement et avant tout achat d'infrastructure.
+- **A-56** (questions-ouvertes l.296) — procédure de drainage borné.
+- **A-64** (questions-ouvertes l.340-356) — ordre d'écriture ; ligne de 100 sous hypothèse root.
+- **A-70** (CLAUDE.md §2) — fin anticipée « saisie close », `lone_player`, `text_exhausted`, réglages figés jusqu'au « Rejouer ».
+- **A-71** (CLAUDE.md §3) — Echo à l'exécution, déploiement manuel non atomique.
+- **A-72** (CLAUDE.md §4) — commandes du quotidien : `game:reschedule` (60) ajoutée, avec `deploy:*` et les commandes de 100 et 70.
+- **A-75** (CLAUDE.md §7) — QCM poussé au siège au texte épuisé ; « aucun minuteur client ne décide ».
+- **A-76** (CLAUDE.md §8) — frappe au palier précédent, `/f/{serveToken}`, URL servables jusqu'à la fin de la révélation.
+- **A-81** (REPRISE l.71) — relevé du VPS avant tout déploiement.
+- **A-N6 (amendement nouveau, non consolidé)** — `questions-ouvertes.md` l.371, risque bloquant « accès SSH root » : « Vérification cette semaine, avant l'écriture de `60` et avant tout achat de brique d'infrastructure » devient « vérification avant tout déploiement et avant tout achat de brique d'infrastructure ; `60` et `100` [J1] s'écrivent sous hypothèse root (S2 du 23/09) » ; « Le résultat conditionne `60` » devient « conditionne le déploiement du moteur de `60` et `100` ».
+- **A-N7 (amendement nouveau, non consolidé)** — `00-overview.md` l.94, borne croisée 1 : « fenêtre de grâce de ±300 ms (600 ms par bascule), les quatre bascules couvrent 2,4 s » devient « décalage unilatéral de `tier_grace_ms` (300 ms) à la réception : les quatre bascules couvrent 1,2 s, soit 12 % d'une manche de 10 s » ; la conclusion (palier ≥ 5 s) est inchangée.
+- **A-N8 (amendement nouveau, non consolidé)** — `questions-ouvertes.md` l.291, « Redis — révisé le 22/09 » : « (queue, cache, verrous de manche) » devient « (file et cache ; les verrous de manche sont des lignes MySQL prises `FOR UPDATE`, contrat C7 § 4.3) » ; l.390, risque « Redis partagé » : « efface les verrous de manche et les jobs de frontière » devient « efface les jobs de frontière ; `game:reschedule` les redonne à toute partie en cours (60 § 17.5) ». Motif : le contrat C7 § 4.3 interdit tout verrou de cohérence dans Redis, et § 1.1 règle 4 le cite.
+
+---
+
+## 22 bis. Écarts à la feuille de contrats, signalés au porteur
+
+La feuille de contrats veut qu'« un désaccord se signale au porteur ; il ne se corrige jamais en silence dans une spec ». Chaque écart ci-dessous est appliqué par cette spec **et** signalé ; aucun ne touche la règle 3 ni un score.
+
+| # | Contrat, lettre d'origine | Lettre retenue par 60 | Motif | Tests |
+|---|---|---|---|---|
+| (a) | C7 § 3 : `channels` « null en solo et sans partie » | nul en solo seulement ; présent au lobby (§ 12.1) | 50 § 8.1 construit la page de lobby par `GameStateBuilder::build(null, …)` et s'abonne à ses deux canaux ; le salon se lit alors par `$seat->room` (C7 § 2.5) | `ResyncPacketTest` « le paquet d'un lobby porte les canaux du salon et aucune manche » |
+| (b) | C7 § 2.3, § 4.11, § 4.14 : pause si « aucun participant connecté » | pause si « aucun siège présent » (§ 1.2, § 9.6) | entre deux manches il n'existe aucun participant au sens de 10 § 7.7 ; un retardataire admis à `k+1` et connecté doit empêcher la pause | `PauseLifecycleTest` « un retardataire admis à la manche suivante et connecté empêche la pause en fin de révélation » (nom du contrat conservé pour le cas sans siège) |
+| (c) | C7 § 3 (champ `round`) et E10-65 (URL des paliers ouverts jusqu'à `reveal_ends_at`) | dans les `preload_lead_ms` finales d'une révélation, `round` porte la manche suivante et la seule URL de son palier 1 (§ 12.3, § 12.4) | sans elle, le solo, qui ne vit que de resynchronisations, n'obtient jamais le palier 1 avant `T₁` ; résidu nommé au § 18 | `ResyncPacketTest` (bascule ; test de révélation du contrat joué avant la garde ou sur la dernière manche) |
+| (d) | C7 § 2.3 : bases d'événements `ShouldBroadcastNow`, `ShouldDispatchAfterCommit` | plus `ShouldRescue` (§ 11.2) | une diffusion en échec n'annule ni la transition ni le job suivant (§ 4.6) | `EventPayloadTest` « une diffusion en échec… » |
+| (e) | C7 § 4.5 : péremption d'`OpenTier` sur l'état de la manche | toute étape de manche d'une partie close ou en pause est périmée (§ 4.3) | un gel laisse des manches `pending` intactes (C13 § 4.5) : elles ne doivent jamais s'ouvrir | `RoundLifecycleTest` « une étape d'une partie close ou en pause n'écrit rien » |
+| (f) | C8 § 2 : partie (2) du prédicat | plus `Tᵢ < ended_at` quand `ended_at` est non nul (§ 7.2) | un palier que la fin anticipée a empêché de s'ouvrir n'est pas servi pendant la grâce finale | `FrameServeTest` « un palier que la fin anticipée a empêché de s'ouvrir… » |
+| (g) | C7 § 2.4 : `SoloStartRequest` : `preset` seul | plus `nickname` et `avatar` pour un jeton sans siège solo (§ 16.2) | un siège n'existe jamais sans pseudo au J1 (C5) | `SoloTest` |
+| (h) | C7 § 5 : `gameReadsPerMinute` défaut 30 | 90 (§ 19.1) | le sondage du solo au pire cas des bornes dépasse 30 lectures par minute | `EngineConstantsTest` « le débit de lecture couvre le sondage du solo… » |
+| (i) | C7 § 2.6 : types de `game-wire.ts` | plus l'union `GameEventName` (§ 11.3) | typer la liste close côté client | `EventPayloadTest` « la liste des événements diffusés est exactement la liste close du J1 » |
+| (j) | C17 § 4.3 : « chaque pause ajoute au plus `pauseTimeoutMs` » | `pauseTimeoutMs + launchCountdownMs` (§ 17.3) | la reprise reprogramme à `now + launchCountdownMs`, que `total_paused_ms` ne compte pas ; 100 doit en tenir compte dans la marge de drainage, qu'il ne teste aujourd'hui que contre `pauseTimeoutMs` (100 § 11.3, signalé, § 17.4) | `EngineConstantsTest` « la clôture après pause couvre les décomptes de reprise… » |
+| (k) | C17 § 4.2 : toute partie en cours a un job programmé | sauf après deux échecs d'une même transition ou une perte de Redis (§ 17.3) | § 4.6 ne redispatche qu'une fois ; `CatchUpGame` et `game:reschedule` rattrapent | `GamesInProgressTest` « game:reschedule redonne un job… » |
+| (l) | C7 § 2.4 (liste des routes) ; C15 § 2.4 (préfixes) | route `solo.create` et page `room/solo` ; préfixe `room.solo.*` rédigé par 60 (§ 10.1, § 16.4, § 19.4) | 90 § 2.1 et § 10 veulent l'entrée du solo en `room/*`, sous `PublicLayout` et dans l'apparence du visiteur : `solo.show` porte `game.appearance` et ne peut pas la rendre ; une page `room/*` ne charge que `room` et `legal` | `SoloTest` (premier passage, page d'entrée) |
+| (m) | C16 § 2.1 (appliqué par 60) contre 50 § 7.2 et § 8.2 | aucune page `game/room` : la partie est un état de `game/lobby` (§ 10.1, § 11.8) | 90 § 2.1 et C16 § 2.1 ; une navigation démonterait Echo, l'horloge et l'annonceur et re-frapperait le jeton d'onglet | `RoomPageTest` ; **fermé par 50 § 7.2** (points restés ouverts de 50, n° 0) |
+| (n) | C7 § 2.5 : `delay(PlatformLimits::lobbyBroadcastDebounceMs())` | délai en instant arrondi à la seconde supérieure, écrit par 50 § 8.3 : `$now->addMilliseconds(…)->ceilSecond()` (§ 11.2) | `delay(int)` se lit en secondes (vérifié) : 300 ms deviendraient 300 s ; l'arrondi rend la fenêtre jamais plus courte que `lobbyBroadcastDebounceMs()` | `RoomSettingsWriteTest` de 50 « programme la diffusion anti-rebondie en millisecondes arrondies à la seconde supérieure, jamais en secondes » (R-04 : une seule preuve, chez l'appelant) |
+| (o) | C15 § 2.4 : `validation.attributes.<champ de réglage>` à 50 | `validation.attributes.preset`, rédigé par 60 (§ 16.2) | `preset` n'est pas un champ de réglage ; un refus ne doit jamais afficher le nom brut du champ (règle 4) | couverture des clés (`TranslationCoverageTest`) |
+| (p) | C7 § 5 : `composer dev` avec `queue:listen --queue=game,default` | **lettre du contrat conservée** (§ 19.5), écrite par L100-4 seul ; variante à deux écouteurs Redis, `game` (`--sleep=1`) et `default` (`--timeout=900`), **proposée au porteur, non appliquée** | avec un seul écouteur, un import de catalogue de quinze minutes fait attendre les frontières d'une partie de développement ; la variante l'éviterait | — (script) |
+| (q) | C18 § 2.1 : inventaire `locks-timing` du J1 (quatre fichiers) | plus `tests/Concurrency/Game/SoloStartConcurrencyTest.php` (§ 20) | la garantie d'E10-N3 ne se prouve qu'avec deux connexions MySQL | `SoloStartConcurrencyTest` |
+| (r) | C7 § 3 : `GameStatePacket` sans `maxAnswerLength` | `maxAnswerLength: number \| null` ajouté, nul sans partie (§ 12.1, § 12.2) | seule source de la prop `maxLength` d'`answer-input.tsx`, en salon comme en solo, sans littéral client (règle 2) ; demandé par 70 § 16 et 90 § 7.2 | `ResyncPacketTest` « le paquet porte maxAnswerLength du snapshot en partie et null sans partie » |
+
+Signalés en outre aux specs sœurs, sans écart au contrat :
+
+- à **50** : que `state` de `game/lobby` se construit sur la partie en `playing` (50 § 8.1 écrit encore `GameStateBuilder::build(null, …)`) ; que la « prochaine manche » d'un retardataire est sa règle (§ 13.7) ; que L50-2 dépend de L60-4 pour `seat.active` sur ses routes et pour le dispatch de `BroadcastLobbyState`, L60-4 ne dépendant que du `RoomSettingsPresenter` de L50-2 — ordre retenu avec 50 : L50-2 livre d'abord l'éditeur, le présentateur et les actions, puis, après L60-4, ses routes sous `seat.active` et le dispatch (50, points restés ouverts, n° 13) ; que `types/room-settings.ts` doit être livré par L50-2, et non L50-4, faute de quoi L60-9 entrerait dans un cycle avec L50-4 (§ 11.4) ; que la garde de `pauseTimeoutMs` borne de fait `drawSubstituteMargin()` à 150 aux défauts, sous les 225 de 50 § 2.3 (§ 19.1) ;
+- à **70** : que L70-6 ne dépend que de la signature figée de `SeatInputClosed` (contrat C7 § 2.5), livrée par L60-7, et non de ses écouteurs (L60-11) ; que `types/answers.ts` doit être déclaré dès L70-4, L60-4 l'important (§ 11.4) ; que `SeatInputView`, dont `choices` vient de `ChoicesPresenter` (L70-8), ne peut être livrée complète avant L70-9, d'où la dépendance de L60-12 envers L70-8 et L70-9 ; qu'au J2 le crochet de fin de saisie est l'événement de domaine `RoundAnswersClosed` (§ 9.4), auquel L70-12 abonne `AggregateNearMisses` ;
+- à **80** : que L80-5 dépend de L60-2 (types) et de L60-6 (`RevealMovieBuilder`, § 11.5), et L80-7 de L60-9 (`reveal-titles.ts`, § 9.5), `game.ended` étant émis par L60-11, qui dépend de L80-5 ; que le type `Podium` doit être déclaré dans `types/scoring.ts` dès L80-3, L60-4 l'important (§ 11.4) ; que le tableau de 80 § 10.5 gagne « Passer la manche » sur la dernière manche solo (`Completed`, `reveal_ends_at` de cette manche, § 16.5) et la précision qu'une annulation sans manche restante décidée pendant une révélation laisse le gel à `EndReveal` (§ 15.2) ;
+- à **90** : que L90-6b dépend de L60-4, qui déclare `RoundTimeline`, et non de L60-2 (§ 11.4) ;
+- à **100** : que sa marge de drainage doit couvrir `pauseTimeoutMs + launchCountdownMs` (§ 17.4, écart (j)) ; que L100-4 est le seul écrivain du script `composer dev` (§ 19.5, écart (p)) ; que L60-7 dépend de L100-7 pour le canal `game` (§ 4.7).
+
+---
+
+## 23. Lots d'implémentation
+
+Heures « terminé » comprises — tests verts, FR et EN complets, états de chargement, d'erreur et de déconnexion, parcours clavier —, facteur 1,5 à 2 intégré (S3 du 23/09). **Ces heures sont des mesures de taille, jamais un calendrier ni un budget à tenir** (D36 du 23/09 — amendé le 23/09) : le développement est confié à l'IA, et l'enveloppe d'environ 10 h par semaine du porteur ne borne plus le développement — elle couvre la curation, les décisions produit, les relectures et les gestes humains. Le chemin critique du J1 est donc **humain** : domaine acheté avant la semaine 4, relevé puis montage root du VPS, liste d'amorçage, lot pilote puis 60 films en passe 1, vérification de la licence du pack d'avatars, déploiements manuels (D31 du 23/09). **Chaque lot pose, en FR et en EN, les clés qu'il emploie ou dont il renvoie le code, dans le même commit** : `t()` est typé par `translations.d.ts`, que la CI vérifie (`lang:types --check`, contrat C15 § 4), si bien qu'un lot qui emploierait une clé posée plus tard ne passerait pas la CI (règle 4). Un lot est livrable et testable seul, dans l'ordre du tableau : il ne dépend que de lots **antérieurs** de 60 et de lots d'autres specs qui ne dépendent pas, eux, d'un lot postérieur de 60. Les dépendances que d'autres specs déclarent envers 60 et qui doivent se lire autrement pour que le graphe n'ait aucun cycle sont signalées au § 22 bis.
+
+**Ordre « curation d'abord » (D37 du 23/09) — amendé le 23/09.** L'ordre du tableau est l'ordre interne de 60 ; entre specs, les lots s'exécutent dans un ordre topologique qui livre d'abord ce qui débloque le travail humain, pour que le lot pilote démarre dès que les lots J1 de 20 et le socle de production minimal de 100, sans moteur, sont livrés. Dans 60, **seul L60-1 précède le pilote** : le socle de production minimal en dépend (installation de Reverb et de `predis`, lignes Redis et Reverb de `.env.example`, que lisent L100-4 et L100-9). L60-2 à L60-16 se construisent pendant la curation, et le moteur ne retarde jamais le pilote : tant qu'aucune partie ne peut exister, le hook de déploiement fonctionne sans drainage (§ 17.6). En revanche, le prédicat (L60-10) précède le drainage (L100-5), obligatoire avant la **première partie** sur le VPS (D32 et D37 du 23/09).
+
+| Lot | Jalon | Objet | Dépend de | Heures |
+|---|---|---|---|---|
+| L60-1 | J1 | Socle d'exécution et `EngineConstants` | L50-1 (`config/game.php › platform`), ou le pose | 3-5 |
+| L60-2 | J1 | Horloge, instant de réception, enveloppe, types du fil, limiteurs | L60-1 ; L100-3 (Vitest) | 4-6 |
+| L60-3 | J1 | Canaux, garde `player`, dix-neuf événements | L60-2 ; 40 (C4, C5, E10-01) | 6-8 |
+| L60-4 | J1 | Siège actif, second onglet, paquet de lobby, diffusion de lobby | L60-3 ; 40 (C4, C5 ; L40-6) ; L50-2 (`RoomSettingsPresenter`) ; L70-4 (`types/answers.ts`) ; L80-3 (`types/scoring.ts`) | 5-7 |
+| L60-5 | J1 | Matérialisation, programmation, frappe, annulation | L60-3 ; 30 (C3) ; 20 (C9) ; L80-4 ; C18 (L100-3) | 6-8 |
+| L60-6 | J1 | Transitions de manche et pause | L60-5 ; L70-7 ; L80-3, L80-4 | 5-7 |
+| L60-7 | J1 | Rattrapage, job de frontière, « manche suivante », fin anticipée, journal `game` | L60-6 ; L70-4 ; L100-7 (canal `game`) | 6-8 |
+| L60-8 | J1 | Service d'image `/f/{serveToken}` | L60-5 ; 20 (C9) ; 40 (C4) | 4-6 |
+| L60-9 | J1 | Client temps réel | L60-2, L60-3, L60-4 ; L50-2 (`types/room-settings.ts`) ; 90 (C16) ; L100-3 | 6-8 |
+| L60-10 | J1 | Prédicat « partie en cours » et `game:reschedule` | L60-7 ; L80-4 | 2-4 |
+| L60-11 | J1 | Crochets de saisie, QCM ciblé, fin de partie | L60-7 ; L70-5, L70-6, L70-8, L70-9 ; L80-4, L80-5 ; L100-1 | 5-7 |
+| L60-12 | J1 | Resynchronisation de partie | L60-4, L60-7, L60-8 ; L70-7, L70-8, L70-9 ; L80-3, L80-5 | 5-7 |
+| L60-13 | J1 | Présence, reprise, pouvoir d'hôte en partie | L60-4, L60-7 ; L50-6 ; L80-4 ; L100-5 | 6-8 |
+| L60-14 | J1 | États de manche, de révélation et de pause multijoueur | L60-9, L60-12, L60-13 ; L50-4 ; 90 (C16) ; L70-10 ; L80-7 | 6-8 |
+| L60-15 | J1 | Démarrage solo et page d'entrée | L60-7 ; 30 (C2) ; L50-2, L50-7a ; 40 (C4, C5) ; 90 (C16 ; L90-3, L90-4) ; L100-1, L100-5 ; E10-N3 | 6-8 |
+| L60-16 | J1 | Partie solo : page, sondage, gestes | L60-8, L60-12, L60-13, L60-14, L60-15 | 6-8 |
+| L60-17 | J2 | Annulation active, ajouts de transport du J2, crochet de fin de saisie | L60-16 ; 20 (gestes J2) ; 40 (J2) ; L50-10 | 4-6 |
+
+**L60-1 — Socle d'exécution et `EngineConstants`** · J1 · dépend du lot de 50 qui pose `config/game.php › platform` (L50-1), ou pose lui-même les deux sections · **ne pas lancer `php artisan install:broadcasting`** : vérifié dans `vendor/` (`BroadcastingInstallCommand`), il crée `routes/channels.php`, ajoute `channels:` à `withRouting()` — donc un second `/broadcasting/auth`, sans le middleware du § 10.4 —, écrit `BROADCAST_CONNECTION` dans `.env` et injecte `configureEcho` dans `resources/js/app.tsx`, contre A-27 et le § 10.5. À la place : `php artisan config:publish broadcasting` ; `composer require laravel/reverb predis/predis`, puis publication de la seule configuration de Reverb (`config/reverb.php`) ; `npm i laravel-echo pusher-js` ; aucune variable `VITE_REVERB_*`, aucun `configureEcho` dans `app.tsx`. `routes/channels.php` et `withBroadcasting()` ne sont posés qu'en L60-3. Le script `composer dev` n'est **pas** touché ici : L100-4 en est le seul écrivain (contrat C7 § 5, § 19.5) · **fichiers** : `composer.json` (`laravel/reverb`, `predis/predis`), `package.json` (`laravel-echo`, `pusher-js`), `config/broadcasting.php` (connexions `pusher` et `ably` retirées dans le même commit, sans quoi `NoLiteralDomainTest` de 100 échoue, 100 § 7.2), `config/reverb.php` (`allowed_origins` lu depuis `REVERB_ALLOWED_ORIGINS`, défaut `*`, 100 § 10.5), `config/game.php` (sections `engine` et `platform`), `config/queue.php` (`block_for` de la connexion `redis`), `app/Settings/EngineConstants.php`, `.env.example` (§ 19.5) · **tests** : `tests/Feature/Game/EngineConstantsTest.php` (les neuf tests, dont celui de la marge de tirage, qui attend le garde-fou croisé de 50 § 2.7) ; `NoLiteralDomainTest` (100) reste vert · **clés** : aucune · **3 à 5 h**.
+
+**L60-2 — Horloge, instant de réception, enveloppe, types du fil, limiteurs** · J1 · dépend de L60-1 et de Vitest configuré (L100-3) · **fichiers** : `app/Support/Game/{RoundClock, ReceptionInstant}.php`, `app/Http/Middleware/CaptureReceptionInstant.php`, `bootstrap/app.php` (préfixe du groupe `web`), `app/Support/Realtime/{WireTime, GameWire, GameRef, ChannelNames}.php`, `app/Http/Controllers/Game/ClockController.php`, `routes/game.php` (création, `clock.show`), `routes/web.php` (`require`), `app/Providers/FortifyServiceProvider.php` (limiteurs `game-read`, `game-write` et `frame-serve`, posés ici parce que `clock.show` porte déjà `throttle:game-read` : un limiteur nommé absent se lit comme un maximum de zéro et refuse tout en 429), `resources/js/types/game-wire.ts` (types sans import d'une autre spec seulement : `IsoMs`, `WireEnvelope`, `LocaleCode`, `RevealTitle`, `RevealMovie`, `TierImageRef`, § 11.4), `resources/js/lib/game/{wire, server-clock}.ts` · **tests** : `WireVersionTest` ; `ClockTest` (trois tests) ; Vitest `server-clock.test.ts` (deux tests) · **clés** : aucune · **4 à 6 h**.
+
+**L60-3 — Canaux, garde `player`, dix-neuf événements** · J1 · dépend de L60-2, de `PlayerTokenManager` et `PlayerIdentity` (40, C4 et C5) et de la migration `kicked_at` (E10-01, lot de 40) ; consommé par L50-2 (`SettingsChanged`), L50-3, L50-4 (canaux), L50-6, L50-7a, L50-7b et L50-8 · **fichiers** : `config/auth.php` (garde), `app/Providers/AppServiceProvider.php` (`Auth::viaRequest`), `app/Support/Realtime/SeatPrincipal.php`, `app/Broadcasting/{RoomPresenceChannel, SeatPrivateChannel}.php`, `routes/channels.php`, `bootstrap/app.php` (`withBroadcasting`), `app/Events/Game/{RoomBroadcast, SeatBroadcast}.php` (garde de mode du § 11.2) et les dix-neuf classes du § 11.3 · **tests** : `ChannelAuthorizationTest` (sept tests) ; `EventPayloadTest` (enveloppe, identifiants internes, liste close, transaction annulée, diffusion en échec) · **clés** : aucune · **6 à 8 h**.
+
+**L60-4 — Siège actif, second onglet, paquet de lobby, diffusion de lobby** · J1 · dépend de L60-3, de 40 (C4, C5 ; `types/player.ts` de L40-6), du `RoomSettingsPresenter` de L50-2, de `types/answers.ts` (70, déclaré dès L70-4) et de `types/scoring.ts` (80, `Podium` compris, déclaré dès L80-3) (§ 11.4). L50-2 dépend de ce lot pour `seat.active` sur ses routes et pour le dispatch de `BroadcastLobbyState` ; ce lot ne dépend que du `RoomSettingsPresenter` de L50-2. Ordre retenu avec 50 : L50-2 livre d'abord l'éditeur, le présentateur et les actions, puis, après L60-4, ses routes sous `seat.active` et son dispatch (50, points restés ouverts, n° 13) ; consommé par L50-2, L50-4, L70-5 et L70-14 · **fichiers** : `app/Http/Middleware/EnsureActiveSeat.php` (siège et partie courante en mémoire, paramètres bruts, § 10.2), `bootstrap/app.php` (alias `seat.active` ; `$middleware->prependToPriorityList(ThrottleRequests::class, EnsureActiveSeat::class)`, posé après l'inscription de `SetLocale` de 05 — à défaut, ce lot pose les deux lignes dans cet ordre, 70 § 8), `app/Models/Game.php` (scope `inProgress`, § 17.2, réutilisé par L60-10), `app/Actions/Game/ClaimSeatTab.php`, `app/Support/Game/GameStateBuilder.php` (forme complète du paquet ; branche sans partie : canaux, sièges, `self` avec `ownScore` à 0, `maxAnswerLength` nul, classement vide), `app/Http/Controllers/Game/RoomStateController.php`, route `room.state`, `app/Jobs/Game/BroadcastLobbyState.php`, `app/Http/Middleware/HandleInertiaRequests.php` (prop `realtime`), `resources/js/types/global.d.ts`, `resources/js/types/game-wire.ts` (`SeatView`, `RoundTimeline`, `RoundState`, `SelfState`, `GameStatePacket`) · **tests** : `SeatTakeoverTest` (sept tests, dont la résolution depuis les paramètres bruts) ; `ResyncPacketTest` (« le paquet d'un lobby porte les canaux du salon et aucune manche », « l'onglet supplanté reçoit seatActive faux ») ; `LobbyBroadcastTest` (deux tests) · **clés** : `game.errors.seat_superseded` · **5 à 7 h**.
+
+**L60-5 — Matérialisation, programmation, frappe, annulation** · J1 · dépend de L60-3 (`RoundScheduled`, `RoundCancelled`), de `VariantChooser::substitute()` et `ReplacementRoundChooser` (30, C3), de `Frame::isServable()` et de `Frame::factory()->published()` écrivant un vrai fichier (20, C9 ; 10 § 13.3), de `FinalizeGame` (L80-4, gel d'une annulation sans manche restante) et du jeu de données `room_settings.accepted` (C18, L100-3). **Aucune dépendance à 50** : `MaterializeDraw` et `ScheduleRound` se testent sur `Game::factory()` et un `DrawResult` construit à la main ; c'est L50-7a qui dépend de ce lot · **fichiers** : `app/Actions/Game/{MaterializeDraw, ScheduleRound, MintTierServeToken, CancelRound}.php`, `app/Support/Game/RoundStep.php`, `app/Jobs/Game/AdvanceRound.php` (classe, constructeur, file, délai en instant ; `handle()` complété en L60-7), docblocks de `app/Models/RoundTier.php` et `database/factories/RoundTierFactory.php` (E10-47) · **tests** : `RoundTierMaterializationTest` ; `ServeTokenMintTest` (frappe, idempotence, substitution, annulation, deux jetons pour une frame) ; `TierServingWritersTest` ; `RoundCancellationTest` (remplaçant, réserve épuisée, gel sans manche restante) · **clés** : aucune · **6 à 8 h**.
+
+**L60-6 — Transitions de manche et pause** · J1 · dépend de L60-5, de `DisplayTitleResolver` (L70-7, C11), de `Scoreboard` (L80-3) et de `FinalizeGame` (L80-4) ; consommé par L80-5 (`RevealMovieBuilder`) · **fichiers** : `app/Actions/Game/{OpenTier, CloseRound, RevealRound, EndReveal, PauseGame}.php` (`OpenTier` sans son étape QCM, posée en L60-11), `app/Support/Game/RevealMovieBuilder.php` (seul constructeur de `RevealMovie`, § 11.5), `app/Jobs/Game/InterruptPausedGame.php` ; `CancelRound` (L60-5) complété de la garde « aucune manche en `revealing` » avant le gel (§ 15.2, étape 3), qui ne se teste qu'avec `RevealRound` · **tests** : `RoundLifecycleTest` (cycle de `T₁` à la fin de révélation, programmation de `k+1`, ordre à instant égal, `rounds_completed`) ; `ServeTokenMintTest` (`served_at` théorique, requêtes anticipées, `seen_frame`, palier suivant une fin anticipée ou une annulation, annulation avant `served_at`) ; `RoundCancellationTest` (frame devenue non servable à l'ouverture ; annulation sans manche restante décidée pendant une révélation) ; `PauseLifecycleTest` (pause et déprogrammation, interruption programmée, gel à l'instant prévu, retardataire connecté qui empêche la pause, sur un chemin actif au J1 puisque les retardataires y sont livrés — D35 du 23/09, amendé le 23/09) ; `EventPayloadTest` (instants de clôture et de titres, `lang` des titres) · **clés** : aucune · **5 à 7 h**.
+
+**L60-7 — Rattrapage, job de frontière, « manche suivante », fin anticipée, journal `game`** · J1 · dépend de L60-6, des états de saisie amendés par D20 du 23/09 (`text_exhausted`, `isClosed()`, `acceptsChoice()` : L70-4, E10-06) et du canal `game` de `config/logging.php` (L100-7, 100 § 10.9 — canal seul : le rapport de force brute de L100-7, qui suit L70-11 depuis D37 du 23/09, n'en est pas un prérequis ; amendé le 23/09) ; consommé par L50-6 (`SeatInputClosed`), L70-5 (`CatchUpGame`) et L70-6 (signature de `SeatInputClosed`) · **fichiers** : `app/Actions/Game/{CatchUpGame, AdvanceToNextRound, SeatInputClosed}.php`, `app/Jobs/Game/AdvanceRound.php` (`handle()` : attente en processus, filet de dérive, `failed()`), `app/Support/Game/GameJournal.php` (§ 4.7), branché sur les transitions déjà livrées (L60-5, L60-6) et sur `broadcastWith()` des bases d'événements (L60-3) ; les lots suivants l'appellent directement · **tests** : `RoundLifecycleTest` (job réveillé tôt, rattrapage tardif, étape d'une partie close ou en pause, retard réel journalisé de chaque diffusion de frontière) ; `EventPayloadTest` (`round.scheduled` réémis) ; `EarlyEndTest` (tous déconnectés, siège connecté sans ligne, un seul siège connecté, `ended_at` pris à l'instant écrit) · **clés** : aucune (le code `not_revealing` part de la route, L60-13) · **6 à 8 h**.
+
+**L60-8 — Service d'image `/f/{serveToken}`** · J1 · dépend de L60-5, de `FrameImageResponse` et `FrameGeometry` (20, C9) et de `PlayerTokenManager` (40, C4) ; limiteur `frame-serve` déjà posé en L60-2 · **fichiers** : `app/Support/Game/{ServeGuard, ServeUrl}.php`, `app/Http/Controllers/Game/FrameServeController.php`, route `frame.serve` · **tests** : `FrameServeTest` (dix-huit tests) · **clés** : aucune · **4 à 6 h** · **retardataires** : livrés au J1 (D35 du 23/09 ; D17 du 23/09 sans effet) — le test « un retardataire admis à la manche suivante est refusé sur la manche en cours » porte sur un chemin actif, et ses ≈ 0,5 h restent dans le lot — amendé le 23/09.
+
+**L60-9 — Client temps réel** · J1 · dépend de L60-2, L60-3, L60-4, de `types/room-settings.ts` (L50-2, § 11.4), de `round-timeline.ts`, `GameFrame`, `ConnectionBanner` et `announce()` (90, C16) et de Vitest (L100-3) ; consommé par L50-4, L70-10 et L80-7 (`reveal-titles.ts`) · **fichiers** : `resources/js/lib/game/{echo, store, frame-loader, reveal-titles}.ts`, `resources/js/hooks/game/{use-game-channel, use-game-state, use-round-clock}.ts`, `resources/js/types/game-wire.ts` (charges typées en `RoomSettingsState`, union `GameEventName`) ; le magasin reçoit de la page sa fonction de resynchronisation (`room.state` ici, `solo.state` en L60-16) ; déclencheur de resynchronisation du cas terminal du QCM (§ 12.6) · **tests** : Vitest `store.test.ts` (six tests, dont `seat.choices` manquant après `tier.opened` du palier du QCM), `frame-loader.test.ts` (trois tests) et `reveal-titles.test.ts` (un test) · **états traités** : reconnexion et son annonce `common.connection.restored` (§ 12.6), hors ligne, onglet supplanté, expulsion, image indisponible · **clés** : `game.seat.{superseded, kicked}` · **6 à 8 h**.
+
+**L60-10 — Prédicat « partie en cours » et `game:reschedule`** · J1 · dépend de L60-7 (`CatchUpGame`), de L60-6 (`InterruptPausedGame`) et de `FinalizeGame::lastKnownActivity()` (L80-4) ; consommé par `deploy:drain` (L100-5) · **fichiers** : `app/Support/Game/GamesInProgress.php`, `app/Console/Commands/GameRescheduleCommand.php` (le scope `Game::inProgress()` est posé par L60-4, dont `seat.active` a besoin) · **tests** : `GamesInProgressTest` (huit tests ; « la reprise d'une partie en pause reste permise pendant un drainage » se joue en L60-13, qui dispose de `ResumeGame` et de `DeployDrain`) · **clés** : aucune · **2 à 4 h**.
+
+**L60-11 — Crochets de saisie, QCM ciblé, fin de partie** · J1 · dépend de L60-7 (`SeatInputClosed`), de `InputClosed` (L70-5), d'`AnswerAccepted` (L70-6), de `ComposeChoiceSets` et `ChoicesPresenter` (L70-8, C11), du clic QCM (L70-9), de `GameFinalized` (L80-4), de `Scoreboard::podium()` (L80-5) et de la suite `Concurrency` avec son job `mysql-redis` (L100-1) · **fichiers** : écouteurs de `app/Listeners/Game/` (noms libres) pour `AnswerAccepted`, `InputClosed` et `GameFinalized`, enregistrés dans `AppServiceProvider::boot()` ; étape QCM d'`OpenTier` et émission de `seat.choices` · **tests** : `tests/Concurrency/Game/EarlyEndHookTest.php` (quatre tests, MySQL + Redis) ; `EventPayloadTest` (aucun titre avant `revealStartsAt` hors des quatre propositions, QCM par difficulté de saisie, siège au texte épuisé, permutation, `player.locked`, canal privé de `seat.choices`, QCM non composable en Normal) ; `RoundCancellationTest` (Facile sans QCM composable, manche annulée sans points) · **clés** : aucune · **5 à 7 h**.
+
+**L60-12 — Resynchronisation de partie** · J1 · dépend de L60-4, L60-7, L60-8 (`ServeGuard`, `ServeUrl`), de `SeatInputView` (L70-9), de `ComposeChoiceSets` et `ChoicesPresenter` (L70-8), de `DisplayTitleResolver` (L70-7), de `Scoreboard` (L80-3) et du podium (L80-5) ; `RevealMovieBuilder` vient de L60-6 · **fichiers** : `app/Support/Game/GameStateBuilder.php` (branche de partie : manche portée, § 12.3 ; borne des URL, § 12.4 ; `nextTransitionAt` ; `maxAnswerLength` ; `self.input` ; classement ; podium), `app/Http/Controllers/Game/RoomStateController.php` (rattrapage avant construction) · **tests** : `ResyncPacketTest` (les douze tests de partie, dont `maxAnswerLength` en partie et sans partie) · **clés** : aucune · **5 à 7 h**.
+
+**L60-13 — Présence, reprise, pouvoir d'hôte en partie** · J1 · dépend de L60-4, L60-7, de `TransferHost::automatic()`, `RoomPolicy::advanceRound`, `KickSeat` et `LeaveRoom` (L50-6), de `FinalizeGame` (L80-4) et de `DeployDrain` (L100-5) ; consommé par L50-8 (battement) · **fichiers** : `app/Http/Controllers/Game/RoomHeartbeatController.php` et route `room.heartbeat` (transaction du § 13.1), `app/Jobs/Game/SweepSeatPresence.php`, `app/Actions/Game/ResumeGame.php` (échéance vérifiée d'abord, § 14.2), `app/Http/Controllers/Game/NextRoundController.php` et route `room.round.next`, `resources/js/hooks/game/use-heartbeat.ts` · **tests** : `PresenceTest` (huit tests) ; `PauseLifecycleTest` (reprise, battement tardif) ; `EarlyEndTest` (déconnexion du dernier participant, départ ou expulsion) ; `RoundLifecycleTest` (manche suivante : raccourcit `R` et 409 hors révélation, refusée à un non-hôte, hôte relu sous verrou) ; `GamesInProgressTest` (reprise permise pendant un drainage) · **clés** : `game.errors.not_revealing` · **6 à 8 h**.
+
+**L60-14 — États de manche, de révélation et de pause multijoueur** · J1 · dépend de L60-9, L60-12, L60-13, de la page `game/lobby` (L50-4), de `GameLayout`, `GameAnnouncer` et `TmdbAttribution` (90, C16), de `answer-input.tsx` et `choice-grid.tsx` (L70-10) et des composants de classement et de podium (L80-7) · **fichiers** : composants d'état de `components/game/` montés par `game/lobby` et `game/solo` — scène de manche, fil « a trouvé », révélation, pause, bouton « manche suivante » de l'hôte (noms libres, liste close de C16 respectée) — ; sélecteur `visibleTierValue()` de `lib/game/store.ts` (masquage J1 de la valeur du palier, § 2.5) ; `lang/{fr,en}/game.php` · **aucune page `game/room`** (§ 10.1) · **tests** : `RoomPageTest` (deux tests) ; Vitest `store.test.ts` (« masque la valeur du palier hors de la phase running ») ; couverture des clés par `tests/Feature/I18n/TranslationCoverageTest.php` [existant] · **clés** : `game.round.*` (hors texte de `tier_value`, 80), `game.reveal.*`, `game.pause.*`, `game.host.next_round` · **6 à 8 h** · **retardataires** : l'état « en attente de la manche suivante » (`game.round.waiting_next`, § 13.7) est livré au J1 (D35 du 23/09 ; D17 du 23/09 sans effet) — amendé le 23/09.
+
+**L60-15 — Démarrage solo et page d'entrée** · J1 · dépend de L60-7, de `PoolReporter` et `PoolTooSmallException` (30, C2), de `SettingPresetCatalog` et `RoomSettingsEditor` (L50-2, C0), d'`OpenGame` et de la clé `room.errors.launch_failed` (L50-7a, C6), de `PlayerTokenManager::ensure()`, `PlayerIdentityValidationRules` et `AvatarPresetCatalog` (40, C4 et C5), de `PublicLayout` et de la clé `common.maintenance.launch_blocked` (L90-3, C16), de la clé `legal.terms_notice` et de la cible `legal.terms` (L90-4), de `DeployDrain` (L100-5), de la suite `Concurrency` (L100-1) et d'E10-N3 consolidée dans 10 · **fichiers** : migration additive d'E10-N3, `app/Http/Requests/Game/SoloStartRequest.php`, `app/Http/Controllers/Game/SoloGameController.php` (`create`, `store` ; échec technique rendu par `room.errors.launch_failed`, § 16.2), `app/Actions/Game/StartSoloGame.php` (dont `CatchUpGame` puis la clôture d'une partie en cours — manche `running` close « comme par Passer la manche », manche en phase `closed` passée `completed` sans toucher `input_state`, § 16.6 —, réutilisée en L60-16), routes `solo.create` et `solo.store`, `resources/js/pages/room/solo.tsx` (mention des CGU sous le bouton d'envoi, § 16.4) · **tests** : `SoloTest` (second lancement, drainage, relance, refus de drainage ou de vivier sans interruption, échec technique traduit sans interruption, relance pendant la phase `closed`, premier passage, page d'entrée) ; `tests/Concurrency/Game/SoloStartConcurrencyTest.php` · **terminé** comprend la mention des CGU rendue, lien au clavier, `legal.new_tab` en `sr-only` · **clés** : `room.solo.{choose_preset, start}`, `validation.attributes.preset`, `game.errors.pool_too_small` · **6 à 8 h**.
+
+**L60-16 — Partie solo : page, sondage, gestes** · J1 · dépend de L60-8, L60-12, L60-13 (battement et reprise partagés), L60-14 (composants d'état) et L60-15 · **fichiers** : `app/Http/Controllers/Game/{SoloGameController (show), SoloStateController, SoloHeartbeatController, SoloRoundController}.php`, `app/Actions/Game/{RevealSoloAnswer, SkipSoloRound}.php`, routes `solo.show` (props `limits` et `presets`, § 16.4), `solo.state`, `solo.heartbeat`, `solo.reveal`, `solo.skip`, `solo.next`, `resources/js/pages/game/solo.tsx` · **tests** : `SoloTest` (gestes, refus hors solo, aucune diffusion, preset annoncé, 403 sans siège, 409 hors précondition, borne de `ended_at`, dernière manche passée gelée à `reveal_ends_at`, limites et presets de relance passés à `game/solo`) ; `PauseLifecycleTest` (partie solo quittée) · **clés** : `game.solo.*`, `game.errors.round_not_running` · **6 à 8 h**.
+
+**L60-17 — Annulation active, ajouts de transport du J2, crochet de fin de saisie** · J2 · dépend de L60-16, des gestes de suspension et de retrait de 20, du masquage de 40 et de l'onglet Avancé de 50 (L50-10) ; consommé par L70-12, qui abonne `AggregateNearMisses` au crochet (l'inverse ferait un cycle, § 9.4) · **fichiers** : `app/Jobs/Game/WithdrawContentFromLiveRounds.php`, `app/Enums/RoundIncidentReason.php` (`MovieSuspended`), `SeatView` avec `nickname: null`, charge Avancée de `settings.changed` ; `app/Events/Game/RoundAnswersClosed.php` (crochet de fin de saisie, émis après commit de `RevealRound`, `SkipSoloRound`, `CancelRound` d'une manche `running` et de la clôture d'une relance solo, jamais de `CloseRound`, § 9.4) ; masquage J2 de la valeur du palier quand `leaderboard.scoreless` est vrai, dans `visibleTierValue()` (§ 2.5, exigence de 80 § 1.4) · **tests** : `LiveWithdrawalTest` (deux tests) ; `EventPayloadTest` (pseudo masqué) ; `RoundAnswersClosedTest` (deux tests) ; Vitest `store.test.ts` (« masque la valeur du palier quand leaderboard.scoreless est vrai ») · **4 à 6 h**.
+
+**Total J1 : 81 à 113 h. Total J2 : 4 à 6 h.** La hausse sur le premier chiffrage (65 à 90 h) vient du découpage qui rend le graphe acyclique et chaque lot livrable seul (transitions, rattrapage et resynchronisation scindés), de la page d'entrée du solo, de l'unicité du siège solo (E10-N3) et des tests nommés ajoutés (annulation, bornes d'URL, reprise tardive), puis des mises en cohérence avec les specs sœurs (+5 h au J1 : journal `game` et retard réel des diffusions, L60-7 ; siège actif avec partie courante et rang avant le limiteur, types du fil répartis, L60-4 ; déclencheur du cas terminal du QCM, annonce de reconnexion et assistant de titres, L60-9 ; échec technique du solo, relance en phase `closed` et mention des CGU, L60-15 ; props `limits` et `presets` et gel à la dernière manche passée, L60-16 ; +1 h au J2 : crochet de fin de saisie et masquage sans score, L60-17). Ces chiffres dépassent le poste « moteur temps réel, paliers, verrouillage, révélation, podium, solo — 30 à 40 h » de 00 § Jalons, qui comptait aussi le verrouillage (70) et le podium (80) : l'arithmétique du J1 est recalculée par 00 à partir des sections « Lots » de toutes les specs, pas ici ; ce sont des mesures de taille, jamais un calendrier ni un budget à tenir (D36 du 23/09). **Aucune coupe** (D35 du 23/09 — amendé le 23/09) : tous les lots J1 de 60 sont livrés au J1, solo (L60-15, L60-16) et retardataires (L60-8, L60-14) compris, et le moteur n'a plus **aucune variable d'ajustement** — D17 du 23/09 est sans effet. Jamais la barre « terminé ».
+
+---
+
+## 24. Ce que cette spec ne décide pas
+
+| Sujet | Spec propriétaire |
+|---|---|
+| Tables, colonnes, index, rétention et purge, dont `stale_game` | `10-catalogue-et-modele-de-donnees.md` |
+| `RoomSettings`, bornes, `PlatformLimits`, transaction de lancement, lobby, prise de siège, admission des retardataires, expulsion, départ, transfert d'hôte, « Rejouer », archivage, contenu des messages de lobby, remèdes produit au résidu multi-siège (liste des sièges visible, expulsion ; entrée soumise à l'hôte non retenue) ; **règle de la « prochaine manche » d'un retardataire, remplaçantes comprises** (50 § 15.2, § 13.7) ; contenu propre de la page `game/lobby` hors des états de partie ; délai du dispatch de `BroadcastLobbyState` (50 § 8.3) ; texte de `room.errors.launch_failed` ; garde-fou croisé bornant `drawSubstituteMargin()` sous la garde de `pauseTimeoutMs` (§ 19.1) | `50-salon-reglages-presets-et-lobby.md` |
+| Vivier, tirage, préférence de variante, choix de la variante de substitution, remplaçant, résidu de repli de niveau | `30-themes-vivier-et-tirage-des-variantes.md` |
+| `player_token`, pseudo, avatars, `PlayerIdentity` ; au J2, masquage du pseudo et rattachement d'un siège à un compte | `40-comptes-auth-sociale-et-avatars.md` |
+| Saisie, fenêtre d'acceptation, verrouillage, tentatives, normalisation, composition et jugement du QCM, leurres ; au J2, qualification et agrégation des quasi-justes (`AggregateNearMisses`, abonné au crochet `RoundAnswersClosed` de 60, § 9.4) | `70-validation-des-reponses.md` |
+| Palier retenu et points, classement, départage, gel, podium, faits marquants, texte de `game.round.tier_value`, rejeu des points | `80-scoring-podium-et-fin-de-partie.md` |
+| Coquilles, conteneur d'image, annonceur `aria-live`, chronologie cliente et seuils d'annonce, focus, bandeaux, mise en page des écrans ; textes `common.maintenance.*`, `common.connection.*` et mention des CGU (`legal.terms_notice`) | `90-ecrans-etats-et-structure.md` |
+| Frame servable, `FrameImageResponse`, aperçu admin, gestes de suspension et de retrait, file des films jamais trouvés et des incidents, écran « inspecter une partie » (J2) | `20-back-office-curation.md` |
+| Montage de production (Redis, workers, Reverb, nginx), nombre de processus `game`, canal de journal `game` (`config/logging.php`), script `composer dev` (proposition à deux écouteurs, écart (p), soumise au porteur), valeur de production de `REVERB_ALLOWED_ORIGINS`, test de charge D33 du 23/09, sondes, drapeau et commandes de drainage et leur borne, hook de déploiement, `robots.txt`, groupes Pest et jobs CI, noms définitifs des variables `REVERB_CLIENT_*`, ports de bouclage et fuseau UTC de MySQL (à confirmer au relevé du VPS) ; **plafond global de parties simultanées**, décidé et chiffré après le test de charge (J2) — son seul point de refus possible, `OpenGame`, est fixé ici (§ 17.3, point 5) | `100-qualite-tests-et-ci.md` |
+| Domaines et propriété des clés de traduction, dont l'enregistrement du préfixe `room.solo.*` et de `validation.attributes.preset` demandés par 60 (§ 22 bis, (l) et (o)) | `05-i18n-et-langues.md` (contrat C15) |
+| Consolidation d'E10-N3, E10-N4, A-N6, A-N7 et A-N8, et suite donnée aux écarts du § 22 bis | rédacteur en chef, puis porteur |
+| **Questions ouvertes, hors spec** : accès root, RAM, vCPU et région du VPS ; repli sans root (second VPS, contraire à la décision 16) ; nom de domaine (décision 5) | porteur, avant tout déploiement |
