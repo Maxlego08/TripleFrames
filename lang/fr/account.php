@@ -20,6 +20,8 @@ return [
         'new_password' => 'Nouveau mot de passe',
         'password' => 'Mot de passe',
         'password_confirmation' => 'Confirmer le mot de passe',
+        'password_hide' => 'Masquer le mot de passe',
+        'password_show' => 'Afficher le mot de passe',
     ],
 
     'settings' => [
@@ -107,6 +109,11 @@ return [
             'title' => 'Authentification à deux facteurs',
             'toggle_prefix' => 'ou vous pouvez',
         ],
+        'errors' => [
+            'qr_code' => 'Le QR code n’a pas pu être chargé.',
+            'recovery_codes' => 'Les codes de récupération n’ont pas pu être chargés.',
+            'setup_key' => 'La clé de configuration n’a pas pu être chargée.',
+        ],
         'manage' => [
             'description' => 'Gérez l’authentification à deux facteurs de votre compte',
             'disable' => 'Désactiver la 2FA',
@@ -124,6 +131,7 @@ return [
                 'heading' => 'Authentification à deux facteurs activée',
                 'submit' => 'Fermer',
             ],
+            'manual_entry' => 'ou saisissez la clé de configuration à la main',
             'scan' => [
                 'description' => 'Pour terminer l’activation, scannez le QR code ou saisissez la clé de configuration dans votre application d’authentification',
                 'heading' => 'Activer l’authentification à deux facteurs',
@@ -155,6 +163,8 @@ return [
         'heading' => 'Passkeys',
         'last_used' => 'Dernière utilisation :date',
         'name' => 'Nom de la passkey',
+        'name_default' => ':browser sur :os',
+        'name_hint' => 'Un nom vous aidera à reconnaître cette passkey plus tard.',
         'name_placeholder' => 'ex. MacBook Pro, iPhone',
         'register' => 'Ajouter une passkey',
         'registering' => 'Enregistrement…',

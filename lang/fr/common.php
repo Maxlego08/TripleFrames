@@ -35,6 +35,8 @@ return [
         'home' => 'Accueil',
         'log_in' => 'Se connecter',
         'log_out' => 'Se déconnecter',
+        'menu' => 'Menu de navigation',
+        'platform' => 'Plateforme',
         'register' => 'Créer un compte',
         'repository' => 'Dépôt',
         'settings' => 'Réglages',

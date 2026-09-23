@@ -66,6 +66,13 @@ export default defineConfig({
         ignorePatterns: [
             '.github/**',
             'composer.json',
+            // Les specs sont la loi du projet et leur mise en forme est
+            // rédigée, pas générée : oxfmt fusionne les listes ordonnées
+            // qui suivent un paragraphe (l'ordre des migrations du § 12 de
+            // `10-catalogue-et-modele-de-donnees.md` devient un pavé) et
+            // rembourre chaque cellule de tableau. `CLAUDE.md`, ignoré par
+            // `.gitignore`, échappe déjà au formateur pour la même raison.
+            'docs/**',
             'resources/js/components/ui/*',
             'resources/views/mail/*',
         ],

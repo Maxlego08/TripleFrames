@@ -38,6 +38,8 @@ return [
         'home' => 'Home',
         'log_in' => 'Log in',
         'log_out' => 'Log out',
+        'menu' => 'Navigation menu',
+        'platform' => 'Platform',
         'register' => 'Register',
         'repository' => 'Repository',
         'settings' => 'Settings',

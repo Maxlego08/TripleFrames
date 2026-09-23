@@ -21,14 +21,26 @@
     "popularity": 12.345,
     "poster_path": "/2b1c3d4e5f6a7b8c9d0e1f2a3b4c5d6e.jpg",
     "production_companies": [
-        { "id": 7711, "logo_path": null, "name": "Atelier Kaze", "origin_country": "JP" },
-        { "id": 7712, "logo_path": null, "name": "Studio Quintane", "origin_country": "FR" }
+        {
+            "id": 7711,
+            "logo_path": null,
+            "name": "Atelier Kaze",
+            "origin_country": "JP"
+        },
+        {
+            "id": 7712,
+            "logo_path": null,
+            "name": "Studio Quintane",
+            "origin_country": "FR"
+        }
     ],
     "production_countries": [{ "iso_3166_1": "JP", "name": "Japan" }],
     "release_date": "1998-07-18",
     "revenue": 0,
     "runtime": 104,
-    "spoken_languages": [{ "english_name": "Japanese", "iso_639_1": "ja", "name": "日本語" }],
+    "spoken_languages": [
+        { "english_name": "Japanese", "iso_639_1": "ja", "name": "日本語" }
+    ],
     "status": "Released",
     "tagline": "",
     "title": "The Glass Orchard",
@@ -131,7 +143,11 @@
     },
     "alternative_titles": {
         "titles": [
-            { "iso_3166_1": "JP", "title": "Garasu no Kajuen", "type": "Romaji" },
+            {
+                "iso_3166_1": "JP",
+                "title": "Garasu no Kajuen",
+                "type": "Romaji"
+            },
             { "iso_3166_1": "FR", "title": "Le Verger", "type": "short title" },
             { "iso_3166_1": "US", "title": "", "type": "working title" }
         ]

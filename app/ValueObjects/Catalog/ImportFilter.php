@@ -2,6 +2,8 @@
 
 namespace App\ValueObjects\Catalog;
 
+use App\Support\Catalog\DiscoverCursor;
+use App\Support\Catalog\RestrictiveCertifications;
 use App\Support\Tmdb\TmdbDiscoverQuery;
 use Illuminate\Support\Facades\Config;
 use InvalidArgumentException;
@@ -14,7 +16,7 @@ use InvalidArgumentException;
  * l'ignore entièrement (§ 9.2), et c'est l'asymétrie la plus structurante de
  * tout l'import : les filtres de goût sont contournables et **tracés** ; les
  * filtres de contenu ne le sont **jamais, par aucune voie**, et ils ne vivent
- * donc pas ici mais dans {@see \App\Support\Catalog\RestrictiveCertifications}.
+ * donc pas ici mais dans {@see RestrictiveCertifications}.
  *
  * **Aucune persistance propre** : les colonnes typées `import_run.filter_*`
  * portent la copie figée qui permet de rejouer un balayage, et
@@ -203,7 +205,7 @@ final readonly class ImportFilter
      * `with_original_language` n'accepte **qu'une** langue : un filtre à trois
      * langues est trois séries d'appels paginées indépendamment, et c'est
      * précisément ce qui oblige `import_run.tmdb_page_cursor` à porter une
-     * position composite ({@see \App\Support\Catalog\DiscoverCursor}).
+     * position composite ({@see DiscoverCursor}).
      */
     public function discoverQueryFor(string $language): TmdbDiscoverQuery
     {

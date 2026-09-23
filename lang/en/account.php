@@ -27,6 +27,8 @@ return [
         'new_password' => 'New password',
         'password' => 'Password',
         'password_confirmation' => 'Confirm password',
+        'password_hide' => 'Hide password',
+        'password_show' => 'Show password',
     ],
 
     'settings' => [
@@ -114,6 +116,11 @@ return [
             'title' => 'Two-factor authentication',
             'toggle_prefix' => 'or you can',
         ],
+        'errors' => [
+            'qr_code' => 'The QR code could not be loaded.',
+            'recovery_codes' => 'The recovery codes could not be loaded.',
+            'setup_key' => 'The setup key could not be loaded.',
+        ],
         'manage' => [
             'description' => 'Manage your two-factor authentication settings',
             'disable' => 'Disable 2FA',
@@ -131,6 +138,7 @@ return [
                 'heading' => 'Two-factor authentication enabled',
                 'submit' => 'Close',
             ],
+            'manual_entry' => 'or enter the setup key manually',
             'scan' => [
                 'description' => 'To finish enabling two-factor authentication, scan the QR code or enter the setup key in your authenticator app',
                 'heading' => 'Enable two-factor authentication',
@@ -162,6 +170,8 @@ return [
         'heading' => 'Passkeys',
         'last_used' => 'Last used :date',
         'name' => 'Passkey name',
+        'name_default' => ':browser on :os',
+        'name_hint' => 'A name helps you identify this passkey later.',
         'name_placeholder' => 'e.g., MacBook Pro, iPhone',
         'register' => 'Add passkey',
         'registering' => 'Registering…',

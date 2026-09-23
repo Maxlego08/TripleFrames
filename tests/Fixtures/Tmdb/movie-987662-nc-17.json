@@ -1,0 +1,48 @@
+{
+    "adult": false,
+    "backdrop_path": null,
+    "belongs_to_collection": null,
+    "budget": 0,
+    "genres": [{ "id": 53, "name": "Thriller" }],
+    "homepage": "",
+    "id": 987662,
+    "imdb_id": null,
+    "original_language": "en",
+    "original_title": "Lantern Street Requiem",
+    "overview": "Oeuvre fictive de fixture, classee NC-17 aux Etats-Unis.",
+    "popularity": 7.7,
+    "poster_path": null,
+    "production_companies": [],
+    "production_countries": [{ "iso_3166_1": "US", "name": "United States" }],
+    "release_date": "1999-06-04",
+    "revenue": 0,
+    "runtime": 112,
+    "spoken_languages": [
+        { "english_name": "English", "iso_639_1": "en", "name": "English" }
+    ],
+    "status": "Released",
+    "tagline": "",
+    "title": "Lantern Street Requiem",
+    "video": false,
+    "vote_average": 6.9,
+    "vote_count": 3000,
+    "release_dates": {
+        "results": [
+            {
+                "iso_3166_1": "US",
+                "release_dates": [
+                    {
+                        "certification": "NC-17",
+                        "descriptors": [],
+                        "iso_639_1": "",
+                        "note": "",
+                        "release_date": "1999-06-04T00:00:00.000Z",
+                        "type": 3
+                    }
+                ]
+            }
+        ]
+    },
+    "translations": { "translations": [] },
+    "alternative_titles": { "titles": [] }
+}

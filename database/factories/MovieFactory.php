@@ -2,26 +2,23 @@
 
 namespace Database\Factories;
 
-use App\Enums\AnswerKeyKind;
 use App\Enums\ContentAvailability;
 use App\Enums\ContentFlag;
 use App\Enums\ContentOrigin;
 use App\Enums\FrameLevel;
-use App\Enums\FrameProcessingState;
 use App\Enums\ImportSource;
 use App\Enums\Locale;
 use App\Enums\MovieDifficulty;
 use App\Models\Alias;
-use App\Models\AnswerKey;
 use App\Models\Collection;
-use App\Models\Frame;
 use App\Models\Movie;
 use App\Models\MovieGroup;
 use App\Models\MovieProjection;
 use App\Models\MovieTitle;
 use App\Models\MovieTmdbTag;
 use App\Models\User;
-use Carbon\CarbonImmutable;
+use App\Support\Catalog\AnswerKeyProjector;
+use App\Support\Catalog\MovieProjector;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Database\Eloquent\Model;
@@ -477,80 +474,18 @@ class MovieFactory extends Factory
     }
 
     /**
-     * Le projecteur synchrone du § 3.2, en version fixture : il recalcule
-     * `levels_*`, `variants_total` et `title_locale_mask` **sur l'état réel de
-     * la base**, pose `title_mask_version = Locale::MASK_VERSION` et
+     * Le projecteur synchrone du § 3.2 — **simple renvoi** vers
+     * {@see MovieProjector}, implémentation unique du projet. Il recalcule
+     * `levels_*`, `variants_total` et `title_locale_mask` sur l'état réel de la
+     * base, pose `title_mask_version = Locale::MASK_VERSION` et
      * `recomputed_at`, et crée la ligne si elle manque.
      *
      * À rappeler par tout seeder qui ajoute des `frame` ou des `movie_title`
-     * APRÈS la création du film. Sera remplacé par le projecteur applicatif et
-     * par `catalog:reproject`.
+     * APRÈS la création du film.
      */
     public static function recomputeProjection(Movie $movie): MovieProjection
     {
-        $levelsMask = 0;
-        $variantsTotal = 0;
-        $levelsCount = 0;
-
-        /** @var array<string, int> $variants */
-        $variants = [];
-
-        /**
-         * Prédicat UNIQUE de variante jouable (§ 3.2), les trois conditions
-         * ensemble : sans `game_path IS NOT NULL`, un job Imagick à moitié
-         * échoué produit un film qui passe la garde de vivier et casse la manche.
-         *
-         * @var EloquentCollection<int, Frame> $servable
-         */
-        $servable = Frame::query()
-            ->where('movie_id', $movie->id)
-            ->where('availability', ContentAvailability::Published->value)
-            ->where('processing_state', FrameProcessingState::Ready->value)
-            ->whereNotNull('game_path')
-            ->get();
-
-        foreach (FrameLevel::cases() as $level) {
-            $count = $servable
-                ->filter(fn (Frame $frame): bool => $frame->frame_level === $level)
-                ->count();
-
-            if ($count > 0) {
-                $levelsMask |= $level->bit();
-                $levelsCount++;
-            }
-
-            $variantsTotal += $count;
-            $variants[$level->variantsColumn()] = $count;
-        }
-
-        $titleLocaleMask = 0;
-
-        /** @var EloquentCollection<int, MovieTitle> $titles */
-        $titles = MovieTitle::query()->where('movie_id', $movie->id)->get();
-
-        foreach ($titles as $title) {
-            $titleLocaleMask |= Locale::tryFrom($title->locale)?->maskBit() ?? 0;
-        }
-
-        $recomputedAt = CarbonImmutable::now();
-
-        $projection = MovieProjection::query()->find($movie->id) ?? new MovieProjection;
-
-        $projection->forceFill(array_merge($variants, [
-            'movie_id' => $movie->id,
-            'levels_mask' => $levelsMask,
-            'levels_count' => $levelsCount,
-            'variants_total' => $variantsTotal,
-            'title_locale_mask' => $titleLocaleMask,
-            'title_mask_version' => Locale::MASK_VERSION,
-            'recomputed_at' => $recomputedAt,
-        ]));
-
-        $projection->save();
-
-        $movie->setRelation('projection', $projection);
-
-        return $projection;
+        return (new MovieProjector)->recompute($movie);
     }
 
     /**
@@ -633,132 +568,32 @@ class MovieFactory extends Factory
     }
 
     /**
-     * La projection `answer_key` du film, au périmètre exact du § 3.5 :
-     * `title_original` et `title_original_latin` inconditionnellement,
-     * `movie_title` et `alias` des seules locales **activées**, plus les
-     * préfixes dérivés **des seuls titres, jamais d'un alias** (décision 13).
+     * La projection `answer_key` du film — **simple renvoi** vers
+     * {@see AnswerKeyProjector}, implémentation unique du projet (arbitrage A5).
      *
-     * Toute nature exacte l'emporte sur `prefix` sur `(movie_id, normalized)` :
-     * les exactes sont posées d'abord, un préfixe déjà pris est abandonné. Sans
-     * ce dédoublonnage, l'UNIQUE `answer_key_norm_movie_uq` ferait échouer la
-     * fixture — et avec un normaliseur distinct de celui du jeu, aucune réponse
-     * ne validerait jamais sur le catalogue de démonstration.
+     * Elle couvre le périmètre exact du § 3.5 : `title_original` et
+     * `title_original_latin` inconditionnellement, `movie_title` et `alias` des
+     * seules locales **activées**, plus les préfixes dérivés des seuls titres,
+     * jamais d'un alias (décision 13) — et elle recompte l'ambiguïté des
+     * préfixes touchés dans la foulée.
      */
     private static function projectAnswerKeys(Movie $movie): void
     {
-        /** @var list<array{string, AnswerKeyKind, string|null}> $sources */
-        $sources = [[$movie->title_original, AnswerKeyKind::TitleOriginal, null]];
-
-        if ($movie->title_original_latin !== null) {
-            $sources[] = [$movie->title_original_latin, AnswerKeyKind::TitleLatin, null];
-        }
-
-        /** @var EloquentCollection<int, MovieTitle> $titles */
-        $titles = MovieTitle::query()->where('movie_id', $movie->id)->get();
-
-        foreach ($titles as $title) {
-            if (Locale::tryFrom($title->locale) === null) {
-                continue;
-            }
-
-            $sources[] = [$title->title, AnswerKeyKind::Title, $title->locale];
-        }
-
-        /** @var EloquentCollection<int, Alias> $aliases */
-        $aliases = Alias::query()->where('movie_id', $movie->id)->get();
-
-        foreach ($aliases as $alias) {
-            if (Locale::tryFrom($alias->locale) === null) {
-                continue;
-            }
-
-            $sources[] = [$alias->alias, AnswerKeyKind::Alias, $alias->locale];
-        }
-
-        /** @var list<string> $taken */
-        $taken = AnswerKey::query()->where('movie_id', $movie->id)->pluck('normalized')->all();
-
-        /** @var list<array{string, AnswerKeyKind, string|null}> $rows */
-        $rows = [];
-
-        foreach ($sources as [$raw, $kind, $locale]) {
-            $normalized = AnswerKeyFactory::normalize($raw);
-
-            if ($normalized === '' || in_array($normalized, $taken, true)) {
-                continue;
-            }
-
-            $taken[] = $normalized;
-            $rows[] = [$normalized, $kind, $locale];
-        }
-
-        foreach ($sources as [$raw, $kind, $locale]) {
-            if ($kind === AnswerKeyKind::Alias) {
-                continue;
-            }
-
-            $prefix = AnswerKeyFactory::prefixOf($raw);
-
-            if ($prefix === null || in_array($prefix, $taken, true)) {
-                continue;
-            }
-
-            $taken[] = $prefix;
-            $rows[] = [$prefix, AnswerKeyKind::Prefix, $locale];
-        }
-
-        /** @var list<string> $prefixes */
-        $prefixes = [];
-
-        foreach ($rows as [$normalized, $kind, $locale]) {
-            AnswerKey::factory()->create([
-                'movie_id' => $movie->id,
-                'key_kind' => $kind,
-                'source_locale' => $locale,
-                'normalized' => $normalized,
-                'is_ambiguous' => false,
-            ]);
-
-            if ($kind === AnswerKeyKind::Prefix) {
-                $prefixes[] = $normalized;
-            }
-        }
-
-        self::recomputePrefixAmbiguity($prefixes);
+        (new AnswerKeyProjector)->project($movie);
     }
 
     /**
-     * Le recompte d'ambiguïté du § 3.5, **synchrone et borné** : pour chaque
-     * valeur normalisée touchée, il compte les films `published` qui la portent et
-     * pose `is_ambiguous` sur TOUTES les clés `prefix` égales — celles du film
-     * qu'on vient d'écrire comme celles des films déjà en base.
+     * Le recompte d'ambiguïté du § 3.5 — **simple renvoi** vers
+     * {@see AnswerKeyProjector::recomputeAmbiguity()}, synchrone et borné.
      *
-     * Sans lui, un catalogue de fixture porterait des préfixes partagés tous
-     * marqués non ambigus : une donnée qu'aucun chemin applicatif ne produit, et
-     * sur laquelle un test de la règle de collision prouverait le contraire de ce
-     * qu'il croit. L'ambiguïté se mesure sur le catalogue `published` **entier**,
-     * jamais sur le vivier d'un salon.
-     *
-     * **Provisoire** : le projecteur applicatif de la spec 70 le remplacera, et
-     * c'est lui qui portera l'avertissement nominatif du back-office.
+     * Reste exposé ici parce qu'un seeder peut publier un film hors du chemin
+     * de cette factory et devoir recompter les préfixes qu'il rend ambigus.
      *
      * @param  list<string>  $normalizedValues
      */
     public static function recomputePrefixAmbiguity(array $normalizedValues): void
     {
-        foreach (array_unique($normalizedValues) as $normalized) {
-            $published = AnswerKey::query()
-                ->join('movie', 'movie.id', '=', 'answer_key.movie_id')
-                ->where('answer_key.normalized', $normalized)
-                ->where('movie.availability', ContentAvailability::Published->value)
-                ->distinct()
-                ->count('answer_key.movie_id');
-
-            AnswerKey::query()
-                ->where('normalized', $normalized)
-                ->where('key_kind', AnswerKeyKind::Prefix->value)
-                ->update(['is_ambiguous' => $published > 1]);
-        }
+        (new AnswerKeyProjector)->recomputeAmbiguity($normalizedValues);
     }
 
     /**
