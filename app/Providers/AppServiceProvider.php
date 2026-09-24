@@ -6,6 +6,7 @@ use App\Listeners\DiagnoseDependencies;
 use App\Listeners\SyncCarbonLocale;
 use App\Settings\EngineConstants;
 use App\Settings\PlatformLimits;
+use App\Support\Draw\PoolQuery;
 use App\Support\I18n\LangVersion;
 use App\Support\I18n\NullPlayerTokenLocale;
 use App\Support\I18n\PlayerTokenLocale;
@@ -33,6 +34,7 @@ class AppServiceProvider extends ServiceProvider
         $this->registerLocalization();
         $this->registerPlatformLimits();
         $this->registerEngineConstants();
+        $this->registerDraw();
         $this->registerOperations();
     }
 
@@ -101,6 +103,18 @@ class AppServiceProvider extends ServiceProvider
     protected function registerEngineConstants(): void
     {
         $this->app->scoped(EngineConstants::class, static fn (): EngineConstants => EngineConstants::fromConfig());
+    }
+
+    /**
+     * Le constructeur unique du vivier est `scoped` (spec 30 § 3.1) : une instance
+     * par requête HTTP ou par job, que partagent le rapport de vivier et le tirage
+     * d'un même lancement. Elle mémorise les thèmes publiés pour sa seule durée de
+     * vie, jamais au-delà : une dépublication vaut à la requête suivante sans
+     * aucune invalidation de cache.
+     */
+    protected function registerDraw(): void
+    {
+        $this->app->scoped(PoolQuery::class);
     }
 
     /**
