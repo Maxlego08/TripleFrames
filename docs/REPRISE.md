@@ -425,7 +425,7 @@ Ensuite, à chaque session : **« Implémente l'étape suivante de l'ordre des l
 33. L20-3 — matrice des capacités, policies → 18 — ✅ livrée le 24/09
 34. L30-1 — `FrameLevelCoverage` → — — ✅ livrée le 24/09
 35. L30-2 — constructeur du vivier (`PoolScope`, `PoolQuery`, `RoomMemoryWindow`) → 6, 9, 34 — ✅ livrée le 24/09
-36. L30-3 — rapport de vivier en données → 9, 12, 35
+36. L30-3 — rapport de vivier en données → 9, 12, 35 — ✅ livrée le 24/09
 37. L70-1 — normaliseur v1, `fold()`, `AnswerRules` → —
 38. L70-2 — sous-titre dérivé et projection (D23) → 37
 39. L90-6a — `GameFrame`, `GameThemeScope`, `ConnectionBanner`, annonceur → 8, 12, 21
