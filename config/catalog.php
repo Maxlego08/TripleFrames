@@ -96,4 +96,62 @@ return [
         'language_choices' => ['fr', 'en', 'ja', 'ko', 'it', 'es', 'de', 'zh', 'ru', 'sv'],
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Curation — chaîne d'image et bornes du back-office (spec 20 § 13.7)
+    |--------------------------------------------------------------------------
+    |
+    | Aucune de ces valeurs n'est une valeur de jeu : aucune ne vient de
+    | `room_settings`, aucune n'atteint une partie. Aucune n'est lue de
+    | l'environnement, hormis `capture_enabled` : toute modification passe par
+    | un commit, et `tests/Feature/Curation/CurationConfigTest.php` est la
+    | garde de leurs bornes croisées.
+    |
+    | Les constantes de FORMAT (16:9, 1280 × 720, master de 1920, plafond de
+    | 150 Ko, quantum de 8 192 octets) ne sont PAS ici : elles vivent dans
+    | `App\Support\Frames\FrameGeometry`, jamais surchargeables. Le plancher
+    | de recadrage non plus : il vit dans `PlatformLimits` (`config/game.php`).
+    |
+    | - `capture_enabled` : voie capture fermée au jalon 1 (§ 5.4), faute
+    |   d'arbitrage de licéité ; vide ou absente = fermée.
+    | - `tmdb_original_max_kilobytes` : l'original TMDB transite par la
+    |   mémoire de la requête HTTP qui le télécharge (§ 5.3).
+    | - `crop_seconds_max` : un cadre oublié ouvert ne fausse pas la médiane
+    |   du débit ; sous 65 535, `frame.crop_seconds` étant un
+    |   `unsignedSmallInteger` (spec 10 § 4.1).
+    | - `webp.*` : qualité du master de re-recadrage (jamais servi à un
+    |   joueur), et descente de qualité du dérivé servi, de `start` à `min` par
+    |   pas de `step`, jusqu'à passer sous `FrameGeometry::gameEncodeCeilingBytes()`
+    |   (§ 5.5) ; la revue sur le rendu final juge le résultat.
+    | - `imagick.*` : `Imagick::setResourceLimit`, posé avant toute lecture.
+    |   `memory_mb + map_mb + 128 ≤ 512` : le `MemoryMax` du worker `default`
+    |   (spec 100 § 10.4), 128 Mo laissés à PHP. `time_s` sous le `--timeout`
+    |   de 120 s du même worker : Imagick échoue avant que le worker ne tue le
+    |   job. `width_px` / `height_px` refusent une source absurde avant
+    |   décodage ; `area_mpx` laisse un original 4K (8,3 Mpx) en mémoire.
+    |
+    */
+
+    'curation' => [
+        'capture_enabled' => filter_var(env('CURATION_CAPTURE_ENABLED', false), FILTER_VALIDATE_BOOLEAN),
+        'tmdb_original_max_kilobytes' => 16_384,
+        'crop_seconds_max' => 600,
+
+        'webp' => [
+            'master_quality' => 90,
+            'game_quality_start' => 85,
+            'game_quality_min' => 40,
+            'game_quality_step' => 5,
+        ],
+
+        'imagick' => [
+            'memory_mb' => 128,
+            'map_mb' => 192,
+            'area_mpx' => 16,
+            'width_px' => 8_192,
+            'height_px' => 8_192,
+            'time_s' => 60,
+        ],
+    ],
+
 ];

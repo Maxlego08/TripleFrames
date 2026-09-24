@@ -50,8 +50,11 @@ use RuntimeException;
  * Trois propriétés que ce fichier tient, et qui sont la raison d'être du contrat :
  *
  * 1. **Aucune image de jeu réelle, aucun extrait de base de production.** Les
- *    fichiers sont des WebP minuscules produits par Imagick
- *    ({@see FrameFactory}). Ce qui est réel, ce sont les
+ *    fichiers sont des aplats WebP produits par Imagick ({@see FrameFactory}),
+ *    au format exact de la chaîne réelle (contrat C9) : dérivé de 1280 × 720
+ *    paddé au multiple de 8 192 octets, master de 1920 de large, rectangle par
+ *    défaut du plancher — les sondes de frame de la spec 20 § 5.9 passent donc
+ *    sur ce catalogue. Ce qui est réel, ce sont les
  *    **octets** : `published_hash` est calculé sur eux, la `frame_review` `passed`
  *    cite cette empreinte exacte, et `frame.published_review_id` désigne cette
  *    ligne. Jamais deux empreintes tirées indépendamment.

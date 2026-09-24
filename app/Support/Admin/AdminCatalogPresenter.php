@@ -2,6 +2,7 @@
 
 namespace App\Support\Admin;
 
+use App\Enums\FrameProcessingState;
 use App\Enums\ImportRunKind;
 use App\Enums\ImportRunStatus;
 use App\Enums\Locale;
@@ -269,11 +270,16 @@ final class AdminCatalogPresenter
     }
 
     /**
-     * Une image de la banque — **quatre champs, et aucun chemin** (§ 10).
-     * `processing_error` est une clé de traduction, jamais un message brut
-     * (§ 4.1) : le back-office doit rester lisible par un non-technicien.
+     * Une image de la banque — **aucun chemin** (§ 10).
      *
-     * @return array{frame_level: int, availability: string, processing_state: string, processing_error: string|null}
+     * `processing_error` est la valeur de `FrameProcessingFailure`, donc une
+     * clé de traduction complète, jamais un message brut (spec 20 § 5.6) : le
+     * back-office doit rester lisible par un non-technicien. `is_retryable`
+     * dit si « Relancer » est offert : seulement sur un échec rejouable
+     * (`FrameProcessingFailure::isRetryable()`) ; sinon l'écran propose
+     * re-recadrer ou écarter.
+     *
+     * @return array{frame_level: int, availability: string, processing_state: string, processing_error: string|null, is_retryable: bool}
      */
     public static function movieFrame(Frame $frame): array
     {
@@ -281,7 +287,9 @@ final class AdminCatalogPresenter
             'frame_level' => $frame->frame_level->value,
             'availability' => $frame->availability->value,
             'processing_state' => $frame->processing_state->value,
-            'processing_error' => $frame->processing_error,
+            'processing_error' => $frame->processing_error?->value,
+            'is_retryable' => $frame->processing_state === FrameProcessingState::Failed
+                && $frame->processing_error?->isRetryable() === true,
         ];
     }
 

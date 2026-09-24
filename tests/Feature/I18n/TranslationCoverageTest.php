@@ -2,6 +2,7 @@
 
 use App\Enums\AdminActionSubject;
 use App\Enums\AdminActionType;
+use App\Enums\FrameProcessingFailure;
 use App\Enums\LegalPage;
 use App\Enums\Locale;
 use App\Enums\SettingPresetKey;
@@ -404,6 +405,11 @@ it('carries every key built by an enumerable key constructor', function () {
         ...array_map(
             static fn (CropViolation $violation): string => $violation->translationKey(),
             CropViolation::cases(),
+        ),
+        // Échec du traitement d'une image : la valeur EST la clé (20 § 5.6, L20-5).
+        ...array_map(
+            static fn (FrameProcessingFailure $failure): string => $failure->value,
+            FrameProcessingFailure::cases(),
         ),
     ];
 

@@ -602,6 +602,30 @@ return [
     ],
 
     /*
+    | Une image de la banque (spec 20 § 5). `processing_error.*` : une feuille
+    | par cas de `App\Enums\FrameProcessingFailure`, dont la VALEUR est la clé
+    | complète écrite dans `frame.processing_error` (§ 5.6). Le curateur lit ce
+    | qu’il peut faire — relancer, re-recadrer, écarter, choisir un autre
+    | visuel —, jamais le détail technique, qui part au journal applicatif.
+    */
+    'frame' => [
+        'processing_error' => [
+            'source_missing' => 'Le visuel d’origine est introuvable sur le serveur : ajoutez de nouveau ce visuel, puis écartez cette image.',
+            'source_unreadable' => 'Le visuel d’origine est illisible ou endommagé : choisissez un autre visuel, puis écartez cette image.',
+            'source_format' => 'Ce visuel n’est ni un JPEG, ni un PNG, ni un WebP : choisissez un autre visuel, puis écartez cette image.',
+            'source_animated' => 'Ce visuel est animé, alors qu’une image de jeu est toujours fixe : choisissez un autre visuel, puis écartez cette image.',
+            'source_too_small' => 'Ce visuel est trop petit : l’image de jeu devrait l’agrandir au-delà de sa définition. Choisissez un visuel plus grand, puis écartez cette image.',
+            'source_aspect' => 'Ce visuel est en portrait, ou trop étroit pour qu’un cadre y respecte le plancher de recadrage : choisissez un visuel en paysage, puis écartez cette image.',
+            'crop_invalid' => 'Le cadre ne tient pas sur ce visuel, ou ne respecte pas le plancher de recadrage : si l’image a déjà été traitée, re-recadrez-la ; sinon, écartez-la et ajoutez de nouveau ce visuel avec un autre cadre.',
+            'too_heavy' => 'Même à la qualité la plus basse admise, l’image dépasse le poids maximal d’une image de jeu : si elle a déjà été traitée, re-recadrez-la sur une zone moins chargée ; sinon, écartez-la et choisissez un autre visuel ou un autre cadre.',
+            'resource_limit' => 'Ce visuel a demandé plus de ressources que le serveur n’en accorde à une image : relancez le traitement ; si l’échec se répète, choisissez un visuel plus petit.',
+            'withdrawn' => 'Cette image est retirée : plus aucun traitement n’est possible.',
+            'published' => 'Cette image est en jeu : elle n’est jamais retraitée telle quelle. Re-recadrez-la ou dépubliez-la d’abord.',
+            'unexpected' => 'Le traitement de l’image a échoué pour une raison imprévue, et l’incident est consigné : relancez le traitement.',
+        ],
+    ],
+
+    /*
     | Import — les deux voies et leur ASYMÉTRIE, dite avant les formulaires.
     | Un curateur qui ne la comprend pas collera des identifiants sans savoir
     | qu’il marque une exception.

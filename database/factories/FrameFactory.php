@@ -4,13 +4,17 @@ namespace Database\Factories;
 
 use App\Enums\ContentAvailability;
 use App\Enums\FrameLevel;
+use App\Enums\FrameProcessingFailure;
 use App\Enums\FrameProcessingState;
 use App\Enums\FrameSourceKind;
 use App\Models\Frame;
 use App\Models\FrameReview;
 use App\Models\Movie;
 use App\Models\User;
+use App\Settings\PlatformLimits;
+use App\Support\Frames\FrameGeometry;
 use App\Support\Frames\FrameStoragePrefix;
+use App\Support\Frames\WebpPadding;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Facades\Storage;
 use Imagick;
@@ -37,8 +41,9 @@ use RuntimeException;
  * signe une URL vers un objet absent : `isServable()` est vrai en base, le moteur
  * n'emprunte pas le chemin de substitution, et l'image reste cassée `D` secondes.
  *
- * **Tout test qui appelle {@see self::withFiles()} ou {@see self::published()}
- * doit d'abord appeler `Storage::fake('frames')`**, sans quoi les octets partent
+ * **Tout test qui appelle {@see self::withFiles()}, {@see self::published()} ou
+ * {@see self::processingFailed()} avec un échec rejouable (le défaut) doit
+ * d'abord appeler `Storage::fake('frames')`**, sans quoi les octets partent
  * dans la racine réelle du disque — `FRAMES_DISK_ROOT`, à défaut
  * `storage/app/frames` — et y restent après le `RefreshDatabase` qui, lui, annule
  * la ligne. Un fichier ne participe à aucune transaction. Ce n'est plus une
@@ -46,43 +51,39 @@ use RuntimeException;
  * la racine du disque n'est pas celle d'un `Storage::fake()`, de sorte que le
  * premier test fautif échoue par son nom au lieu de polluer silencieusement.
  *
- * **{@see self::published()} et {@see self::processingFailed()} sont mutuellement
- * exclusives** : l'écriture des octets vit dans une fermeture de `state()`, donc
- * chaîner la seconde après la première laisse les fichiers sur le disque tout en
- * ramenant les chemins à `NULL` — des octets orphelins ET une ligne
- * `published` + `failed` que le prédicat unique de variante jouable (§ 3.2)
- * existe justement pour rendre impossible.
+ * **Les fichiers sont au format de la chaîne réelle** (contrat C9, spec 20
+ * § 5.5) : un dérivé WebP de EXACTEMENT {@see FrameGeometry::GAME_WIDTH} ×
+ * {@see FrameGeometry::GAME_HEIGHT}, paddé au multiple de
+ * {@see FrameGeometry::GAME_PAD_BYTES} par {@see WebpPadding}, un master de
+ * {@see FrameGeometry::MASTER_WIDTH} × 1080, et le rectangle par défaut de
+ * {@see FrameGeometry::defaultCrop()}. Sans cela, la sonde « aucune frame
+ * `ready` hors 1280 × 720 ou hors padding » et l'audit du plancher (§ 5.9)
+ * rejetteraient les fixtures elles-mêmes.
+ *
+ * **{@see self::processingFailed()} est exclusive de {@see self::withFiles()}
+ * et de {@see self::published()}** : l'écriture des octets vit dans une
+ * fermeture de `state()`, donc chaîner l'échec après les fichiers laisse le
+ * dérivé sur le disque tout en ramenant `game_path` à `NULL` — des octets
+ * orphelins, et après `published()` une ligne `published` + `failed` que le
+ * prédicat unique de variante jouable (§ 3.2) existe justement pour rendre
+ * impossible.
  *
  * @extends Factory<Frame>
  */
 class FrameFactory extends Factory
 {
     /**
-     * Quantum de quantification du conteneur WebP servi, en octets (§ 4.1).
-     *
-     * Le job de réencodage pousse la taille au multiple de 8 Ko supérieur par des
-     * octets inertes en queue de RIFF : sans cela, `147 231` octets identifient
-     * une image aussi sûrement qu'un chemin, et le dictionnaire (taille → titre)
-     * se reconstruit sans jamais toucher à l'URL. Les fixtures respectent la même
-     * règle, faute de quoi le test `game_bytes % 8192 = 0` tombe sur elles.
+     * Hauteur du master de fixture : celle d'une source 16:9, donc 1080 pour la
+     * largeur exacte de 1920 — calculée, jamais écrite en littéral.
      */
-    private const int GAME_BYTES_QUANTUM = 8192;
+    private const int MASTER_HEIGHT = FrameGeometry::MASTER_WIDTH * FrameGeometry::ASPECT_HEIGHT / FrameGeometry::ASPECT_WIDTH;
 
-    /** Plafond de sortie du dérivé servi, en octets — 150 Ko (§ 10). */
-    private const int GAME_BYTES_MAX = 153600;
-
-    /** Dérivé servi : minuscule, très en dessous du plafond réel de 1280 px. */
-    private const int GAME_WIDTH = 32;
-
-    private const int GAME_HEIGHT = 18;
-
-    /** Source de re-cadrage : minuscule elle aussi, plafond réel 1920 px. */
-    private const int MASTER_WIDTH = 48;
-
-    private const int MASTER_HEIGHT = 27;
+    /** Couleur de l'aplat : une image de fixture ne montre rien, et ne ressemble à aucune image réelle. */
+    private const string FLAT_COLOR = 'gray50';
 
     /**
-     * Conteneurs WebP déjà encodés, clés par couple de dimensions.
+     * Les deux conteneurs WebP de fixture, encodés une fois par processus :
+     * `game` (déjà paddé) et `master`.
      *
      * @var array<string, string>
      */
@@ -109,12 +110,27 @@ class FrameFactory extends Factory
             // recadré n'est jamais conservé, seule son empreinte l'est — elle ne
             // vaut donc jamais `published_hash`.
             'source_hash' => hash('sha256', random_bytes(32)),
-            // Rectangle conservé, exprimé dans l'espace de la source de
-            // re-cadrage 1920 px, et non dans celui du dérivé servi.
-            'crop_x' => 0,
-            'crop_y' => 0,
-            'crop_width' => 1920,
-            'crop_height' => 1080,
+            // Rectangle conservé, exprimé dans l'espace du master de 1920 px,
+            // et non dans celui du dérivé servi : le plus grand cadre admis par
+            // le plancher, centré — celui que le recadreur propose d'abord.
+            ...self::cropColumns(),
+        ];
+    }
+
+    /**
+     * Le rectangle par défaut du master de fixture, en colonnes `crop_*`.
+     *
+     * @return array{crop_x: int, crop_y: int, crop_width: int, crop_height: int}
+     */
+    private static function cropColumns(): array
+    {
+        $crop = FrameGeometry::defaultCrop(self::MASTER_HEIGHT, PlatformLimits::current());
+
+        return [
+            'crop_x' => $crop->x,
+            'crop_y' => $crop->y,
+            'crop_width' => $crop->width,
+            'crop_height' => $crop->height,
         ];
     }
 
@@ -159,6 +175,11 @@ class FrameFactory extends Factory
      * sur ceux qu'on croit avoir écrits : c'est la seule formulation qui prouve
      * à la fois l'existence du fichier et l'exactitude de l'empreinte.
      *
+     * Le dérivé est un aplat mis en cache : toutes les fixtures servent donc les
+     * MÊMES octets, et le même `published_hash`. Rien ne l'interdit — aucune
+     * colonne n'est unique sur une empreinte —, et la preuve de revue reste liée
+     * à sa frame par `published_review_id`, jamais par l'empreinte seule.
+     *
      * La frame reste `draft` : produire le dérivé n'est pas le publier.
      */
     public function withFiles(): static
@@ -166,12 +187,9 @@ class FrameFactory extends Factory
         return $this->state(function (array $attributes): array {
             $paths = FrameStoragePrefix::newPathPair();
 
-            self::write($paths['master'], self::webp(self::MASTER_WIDTH, self::MASTER_HEIGHT));
+            self::write($paths['master'], self::masterBlob());
 
-            $game = self::write(
-                $paths['game'],
-                self::quantize(self::webp(self::GAME_WIDTH, self::GAME_HEIGHT)),
-            );
+            $game = self::write($paths['game'], self::gameBlob());
 
             return [
                 'processing_state' => FrameProcessingState::Ready,
@@ -180,8 +198,8 @@ class FrameFactory extends Factory
                 'game_path' => $paths['game'],
                 'published_hash' => hash('sha256', $game),
                 'game_bytes' => strlen($game),
-                'game_width' => self::GAME_WIDTH,
-                'game_height' => self::GAME_HEIGHT,
+                'game_width' => FrameGeometry::GAME_WIDTH,
+                'game_height' => FrameGeometry::GAME_HEIGHT,
                 'crop_seconds' => fake()->numberBetween(20, 240),
             ];
         });
@@ -231,24 +249,51 @@ class FrameFactory extends Factory
     }
 
     /**
-     * Échec du job d'image différé : la ligne précède le fichier final, et une
-     * frame non traitée ne doit jamais entrer en jeu.
+     * Échec du job d'image au PREMIER traitement : la ligne précède le fichier
+     * final, et une frame non traitée ne doit jamais entrer en jeu.
      *
-     * `processing_error` est une CLÉ DE TRADUCTION, jamais un message brut : le
-     * back-office doit rester lisible par un non-technicien.
+     * `processing_error` est un cas de {@see FrameProcessingFailure}, dont la
+     * valeur est une CLÉ DE TRADUCTION, jamais un message brut : le back-office
+     * doit rester lisible par un non-technicien (spec 20 § 5.6).
+     *
+     * `master_path` reste posé, comme après un vrai échec (colonne UNIQUE,
+     * jamais réaffectée), et le disque suit la chaîne réelle (§ 5.6) :
+     *
+     * - un échec DÉFINITIF n'a aucun fichier sous ce chemin — le job supprime
+     *   les octets provisoires d'un échec définitif au premier traitement ;
+     * - un échec REJOUABLE (le défaut, `unexpected`) garde ses octets, que
+     *   « Relancer » réutilise : la fabrique y écrit le master de fixture, un
+     *   WebP de 1920 de large dont l'empreinte n'est pas `source_hash` — un
+     *   échec survenu après la normalisation. Un rejouable écrit donc des
+     *   octets, et exige `Storage::fake('frames')` comme {@see self::withFiles()}.
+     *
+     * Un `master_path` déjà fourni par un état antérieur appartient à
+     * l'appelant : ses octets ne sont jamais écrasés.
      */
-    public function processingFailed(): static
+    public function processingFailed(FrameProcessingFailure $failure = FrameProcessingFailure::Unexpected): static
     {
-        return $this->state(fn (array $attributes): array => [
-            'processing_state' => FrameProcessingState::Failed,
-            'processing_error' => 'curation.frame_processing.reencode_failed',
-            'game_path' => null,
-            'master_path' => null,
-            'published_hash' => null,
-            'game_bytes' => null,
-            'game_width' => null,
-            'game_height' => null,
-        ]);
+        return $this->state(function (array $attributes) use ($failure): array {
+            $master = $attributes['master_path'] ?? null;
+
+            if (! is_string($master)) {
+                $master = FrameStoragePrefix::Master->newPath();
+
+                if ($failure->isRetryable()) {
+                    self::write($master, self::masterBlob());
+                }
+            }
+
+            return [
+                'processing_state' => FrameProcessingState::Failed,
+                'processing_error' => $failure,
+                'game_path' => null,
+                'master_path' => $master,
+                'published_hash' => null,
+                'game_bytes' => null,
+                'game_width' => null,
+                'game_height' => null,
+            ];
+        });
     }
 
     /**
@@ -312,57 +357,41 @@ class FrameFactory extends Factory
     }
 
     /**
-     * Pousse le conteneur au multiple de 8 Ko supérieur par des octets inertes en
-     * queue de RIFF — la taille RIFF borne l'image, les décodeurs ignorent la
-     * queue. L'anti-corrélation porte sur trois surfaces, et la taille servie en
-     * est une.
+     * Le dérivé servi de fixture : un aplat WebP de EXACTEMENT
+     * {@see FrameGeometry::GAME_WIDTH} × {@see FrameGeometry::GAME_HEIGHT},
+     * paddé par {@see WebpPadding} — des NUL après le bloc RIFF, champ de taille
+     * intact — au multiple de {@see FrameGeometry::GAME_PAD_BYTES}, comme le
+     * produit la chaîne réelle.
      */
-    private static function quantize(string $bytes): string
+    private static function gameBlob(): string
     {
-        $target = (int) ceil(max(strlen($bytes), 1) / self::GAME_BYTES_QUANTUM) * self::GAME_BYTES_QUANTUM;
-
-        if ($target > self::GAME_BYTES_MAX) {
-            throw new RuntimeException(
-                'Le dérivé de fixture dépasse le plafond de sortie de '.self::GAME_BYTES_MAX.' octets.',
-            );
-        }
-
-        $padding = $target - strlen($bytes);
-
-        // La queue de rembourrage est tirée d'un CSPRNG, et c'est elle qui porte
-        // désormais l'unicité : le conteneur WebP est mémorisé par couple de
-        // dimensions ({@see self::webp()}), donc deux frames partagent les mêmes
-        // pixels — mais jamais les mêmes octets servis, donc jamais le même
-        // `published_hash`. Les décodeurs ignorent la queue, la taille RIFF bornant
-        // l'image ; un rembourrage aléatoire est aussi inerte qu'un rembourrage nul.
-        return $padding > 0 ? $bytes.random_bytes($padding) : $bytes;
+        return self::$blobs['game'] ??= WebpPadding::pad(
+            self::flat(FrameGeometry::GAME_WIDTH, FrameGeometry::GAME_HEIGHT),
+        );
     }
 
     /**
-     * Une image WebP minuscule, générée par Imagick et par rien d'autre — ni `gd`,
-     * ni `exif` ne sont installées, et une image de jeu réelle ou un extrait de
-     * base de production sont absolument interdits en fixtures.
-     *
-     * **Mémorisée par couple de dimensions**, et c'est mesuré : un catalogue de
-     * démonstration complet demande plus de deux cents encodages, rejoués à chaque
-     * `beforeEach` d'un fichier de test. L'unicité des octets servis ne vient donc
-     * plus des pixels mais de la queue de rembourrage de {@see self::quantize()},
-     * qui reste tirée d'un CSPRNG par frame : `published_hash` est toujours unique,
-     * et chaque revue reste liée à des octets qui n'appartiennent qu'à elle. Seuls
-     * les dérivés `master/`, jamais servis et jamais empreintés, deviennent
-     * identiques entre eux — aucune colonne ni aucun invariant ne l'interdit.
-     *
-     * @param  positive-int  $width
-     * @param  positive-int  $height
+     * Le master de fixture : un aplat WebP de {@see FrameGeometry::MASTER_WIDTH}
+     * × 1080, l'espace du rectangle par défaut.
      */
-    private static function webp(int $width, int $height): string
+    private static function masterBlob(): string
     {
-        $memo = $width.'x'.$height;
+        return self::$blobs['master'] ??= self::flat(FrameGeometry::MASTER_WIDTH, self::MASTER_HEIGHT);
+    }
 
-        if (array_key_exists($memo, self::$blobs)) {
-            return self::$blobs[$memo];
-        }
-
+    /**
+     * Un aplat WebP, généré par Imagick et par rien d'autre — ni `gd`, ni `exif`
+     * ne sont installées, et une image de jeu réelle ou un extrait de base de
+     * production sont absolument interdits en fixtures.
+     *
+     * **Mis en cache par {@see self::gameBlob()} et {@see self::masterBlob()}**,
+     * et c'est mesuré : un catalogue de démonstration complet demande plus de
+     * deux cents fichiers, rejoués à chaque `beforeEach` d'un fichier de test.
+     * Un aplat s'encode en quelques centaines d'octets : le dérivé paddé pèse
+     * un seul quantum.
+     */
+    private static function flat(int $width, int $height): string
+    {
         if (! extension_loaded('imagick')) {
             throw new RuntimeException(
                 "L'extension `imagick` est absente : le contrat de fixture du § 13.3 exige un fichier WebP réel. "
@@ -370,17 +399,9 @@ class FrameFactory extends Factory
             );
         }
 
-        $pixels = [];
-
-        foreach (str_split(random_bytes($width * $height * 3)) as $byte) {
-            $pixels[] = ord($byte);
-        }
-
         $image = new Imagick;
-        $image->newImage($width, $height, 'black');
-        $image->importImagePixels(0, 0, $width, $height, 'RGB', Imagick::PIXEL_CHAR, $pixels);
+        $image->newImage($width, $height, self::FLAT_COLOR);
         $image->setImageFormat('webp');
-        $image->setOption('webp:lossless', 'true');
         // Aucune métadonnée ne survit : le schéma ne porte aucune colonne EXIF, et
         // la source ne doit pas revenir par le fichier.
         $image->stripImage();
@@ -388,6 +409,6 @@ class FrameFactory extends Factory
         $bytes = $image->getImageBlob();
         $image->clear();
 
-        return self::$blobs[$memo] = $bytes;
+        return $bytes;
     }
 }

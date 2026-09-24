@@ -167,16 +167,38 @@ export type AdminMovieTheme = {
 };
 
 /**
- * Quatre champs, et **aucun chemin de fichier** : le § 10 est formel, et
- * `frame.id` lui-même est `#[Hidden]`. La fiche est en lecture seule et n'en a
- * pas besoin ; l'éditeur de la spec 20 devra régler la question autrement.
+ * Cause d'échec du traitement d'une image : les valeurs de
+ * `App\Enums\FrameProcessingFailure`, qui SONT les clés de traduction
+ * complètes (spec 20 § 5.6). Une valeur ajoutée côté PHP sans sa feuille
+ * dans `lang/fr/admin.php` casse `tsc` au lieu d'afficher une clé brute.
+ */
+export type FrameProcessingFailure =
+    | 'admin.frame.processing_error.source_missing'
+    | 'admin.frame.processing_error.source_unreadable'
+    | 'admin.frame.processing_error.source_format'
+    | 'admin.frame.processing_error.source_animated'
+    | 'admin.frame.processing_error.source_too_small'
+    | 'admin.frame.processing_error.source_aspect'
+    | 'admin.frame.processing_error.crop_invalid'
+    | 'admin.frame.processing_error.too_heavy'
+    | 'admin.frame.processing_error.resource_limit'
+    | 'admin.frame.processing_error.withdrawn'
+    | 'admin.frame.processing_error.published'
+    | 'admin.frame.processing_error.unexpected';
+
+/**
+ * **Aucun chemin de fichier** : le § 10 est formel, et `frame.id` lui-même est
+ * `#[Hidden]`. La fiche est en lecture seule et n'en a pas besoin ; l'éditeur
+ * de la spec 20 étend ce type (contrat C9-bis).
  */
 export type AdminMovieFrame = {
     frame_level: FrameLevel;
     availability: ContentAvailability;
     processing_state: FrameProcessingState;
     /** Clé de traduction, jamais un message brut. */
-    processing_error: string | null;
+    processing_error: FrameProcessingFailure | null;
+    /** « Relancer » n'est offert qu'à un échec rejouable. */
+    is_retryable: boolean;
 };
 
 export type AdminImportRunRow = {

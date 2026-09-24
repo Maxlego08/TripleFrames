@@ -349,6 +349,7 @@ test('la fiche ne laisse jamais sortir un chemin d’image, une empreinte ni un 
             'availability',
             'processing_state',
             'processing_error',
+            'is_retryable',
         ])));
 
     $frame = $movie->frames()->firstOrFail();

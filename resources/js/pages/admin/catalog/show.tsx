@@ -785,10 +785,14 @@ export default function AdminCatalogShow({
                                                             )}
                                                         </TableCell>
                                                         <TableCell className="text-muted-foreground">
-                                                            {frame.processing_error ??
-                                                                t(
-                                                                    'admin.common.none',
-                                                                )}
+                                                            {frame.processing_error ===
+                                                            null
+                                                                ? t(
+                                                                      'admin.common.none',
+                                                                  )
+                                                                : t(
+                                                                      frame.processing_error,
+                                                                  )}
                                                         </TableCell>
                                                     </TableRow>
                                                 ))}

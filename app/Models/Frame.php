@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\ContentAvailability;
 use App\Enums\FrameLevel;
+use App\Enums\FrameProcessingFailure;
 use App\Enums\FrameProcessingState;
 use App\Enums\FrameSourceKind;
 use Carbon\CarbonImmutable;
@@ -39,7 +40,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property CarbonImmutable|null $first_published_at
  * @property int|null $published_review_id
  * @property FrameProcessingState $processing_state
- * @property string|null $processing_error
+ * @property FrameProcessingFailure|null $processing_error Clé de traduction de l'échec du job d'image, jamais un message brut (spec 20 § 5.6).
  * @property FrameSourceKind $source_kind
  * @property string|null $tmdb_file_path
  * @property int|null $source_timecode_ms
@@ -251,6 +252,7 @@ class Frame extends Model
             'first_published_at' => 'datetime',
             'published_review_id' => 'integer',
             'processing_state' => FrameProcessingState::class,
+            'processing_error' => FrameProcessingFailure::class,
             'source_kind' => FrameSourceKind::class,
             'source_timecode_ms' => 'integer',
             'crop_x' => 'integer',
