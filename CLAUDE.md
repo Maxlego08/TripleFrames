@@ -42,9 +42,10 @@ PHP ^8.3 (CLI locale 8.4.16 ZTS, CI en 8.3) · Laravel 13.32 · Inertia 3.7 (`in
 ## 4. Commandes du quotidien (celles qui existent vraiment)
 
 ```
-composer dev          # concurrently: artisan serve + queue:listen --tries=1 --timeout=900 + npm run dev
-composer test         # config:clear + lint:check + types:check + php artisan test
-composer ci:check     # npm run check + npm run types:check + composer test  (= la CI)
+composer dev          # concurrently: artisan serve + queue:listen (game,default) --tries=1 --timeout=900 + reverb:start + npm run dev
+composer test         # config:clear + lint:check + types:check + php artisan test (hors groupes mysql et locks-timing)
+composer test:mysql   # groupes mysql + locks-timing (job CI mysql-redis ; MySQL et Redis de test requis)
+composer ci:check     # npm run check + npm run types:check + npm run test (vp test run) + composer test  (= la CI)
 composer lint         # pint --parallel   (lint:check = --test)
 composer types:check  # phpstan analyse --memory-limit=1G  (level 7, paths app/ bootstrap/app.php config/ database/ routes/)
 npm run dev|build     # vp dev | vp build   (jamais `npx vite`)
