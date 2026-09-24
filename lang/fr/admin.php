@@ -708,6 +708,71 @@ return [
     ],
 
     /*
+    | Recadreur (spec 20 § 6.3 et § 6.4). Le cadre se tient dans l’espace du
+    | master, et ses dimensions s’y lisent : `:width` et `:height` en pixels
+    | du master, `:percent` la part de sa surface que couvre le cadre.
+    | `instructions` décrit l’opérabilité au clavier, toujours affichée sous
+    | le cadre : l’alternative non gestuelle du principe 8 ne se cache pas ;
+    | `:steps` y est le nombre de pas d’un geste fait avec Maj.
+    | Les refus du plancher sont ceux de `validation.crop.*`, communs au
+    | recadreur et au serveur.
+    */
+    'cropper' => [
+        'region_label' => 'Cadre de l’image de jeu',
+        'image_alt' => 'Visuel du film à recadrer',
+        'instructions' => 'Au clavier, une fois le cadre sélectionné : les flèches le déplacent ; « + » ou « = » l’élargit, « - » le resserre ; avec Maj, chaque geste compte :steps pas ; Origine rétablit le cadre par défaut. À la souris, faites glisser l’intérieur du cadre, ou déplacez-le d’un pas avec les boutons fléchés.',
+        'dimensions' => 'Cadre de :width × :height pixels, soit :percent % de la surface du visuel.',
+        'at_widest' => 'C’est le cadre le plus large que le plancher de recadrage admet.',
+        'at_narrowest' => 'C’est le cadre le plus serré admis : l’image de jeu ne peut pas être davantage agrandie.',
+        'controls_label' => 'Taille et position du cadre',
+        'widen' => 'Plus large',
+        'narrow' => 'Plus serré',
+        'move_left' => 'Déplacer le cadre vers la gauche',
+        'move_up' => 'Déplacer le cadre vers le haut',
+        'move_down' => 'Déplacer le cadre vers le bas',
+        'move_right' => 'Déplacer le cadre vers la droite',
+        'center' => 'Centrer',
+        'reset' => 'Cadre par défaut',
+        'image_loading' => 'Chargement du visuel…',
+        'image_failed' => 'Le visuel n’a pas pu être affiché',
+        'image_failed_description' => 'Le serveur d’images de TMDB n’a pas répondu, ou la connexion est interrompue. Réessayez ; si l’échec persiste, choisissez un autre visuel du film.',
+        'retry' => 'Réessayer',
+    ],
+
+    /*
+    | Échelle 1-5 (spec 20 § 6.5) : guide normatif, rendu à côté du sélecteur
+    | de niveau et repris par la page « premiers pas ». Le niveau est relatif
+    | au FILM, jamais au catalogue. Aucun niveau n’est coché d’avance : un
+    | défaut serait un classement non décidé. `option` : `:level` est le
+    | chiffre du niveau, `:label` son libellé.
+    */
+    'level' => [
+        'legend' => 'Niveau de l’image',
+        'hint' => 'Choisissez le niveau avant l’envoi : aucun n’est coché d’avance. Il se juge par rapport à ce film, jamais par rapport au reste du catalogue.',
+        'option' => 'Niveau :level — :label',
+        1 => [
+            'label' => 'Très cryptique',
+            'guide' => 'Un détail, une texture, une matière, un second plan : rien qui se nomme sans avoir vu le film de près. Aucun visage du personnage principal.',
+        ],
+        2 => [
+            'label' => 'Cryptique',
+            'guide' => 'Un fragment de décor ou d’accessoire caractéristique, une silhouette, un personnage secondaire. Aucun visage du personnage principal.',
+        ],
+        3 => [
+            'label' => 'Intermédiaire',
+            'guide' => 'Un décor ou une situation que reconnaît qui a vu le film ; le personnage principal peut apparaître de dos, de loin ou en partie.',
+        ],
+        4 => [
+            'label' => 'Lisible',
+            'guide' => 'Une scène marquante ; le personnage principal est visible, mais pas dans le plan le plus célèbre du film.',
+        ],
+        5 => [
+            'label' => 'Évident',
+            'guide' => 'Le plan iconique, le personnage principal : l’image que tout le monde associe au film, sans jamais être son affiche.',
+        ],
+    ],
+
+    /*
     | Import — les deux voies et leur ASYMÉTRIE, dite avant les formulaires.
     | Un curateur qui ne la comprend pas collera des identifiants sans savoir
     | qu’il marque une exception.

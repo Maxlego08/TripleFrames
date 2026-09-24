@@ -92,12 +92,16 @@ const WATCHED = [
     'resources/js/lib/roles.ts',
     'resources/js/hooks/use-forced-appearance.ts',
     'resources/js/types/admin.ts',
+    // Répertoires du back-office créés par la spec 20, inscrits à la création
+    // de leur premier fichier par le lot L20-9a (état et clavier du
+    // recadreur) : exigence EN20-2, extension de C16 § 2.11 ratifiée par la
+    // spec 90 § 9.3.
+    'resources/js/hooks/admin',
+    'resources/js/lib/admin',
 
     // Jalon 1, côté joueur (spec 90 § 9.3, contrat C16 § 2.11) : inscrits dès
     // le gel, avant la création du premier fichier. `pages/welcome.tsx` n'y
-    // entre qu'à sa réécriture en accueil (L90-8) ; `hooks/admin` et
-    // `lib/admin`, répertoires de 20, à la création de leur premier fichier
-    // (L20-9a).
+    // entre qu'à sa réécriture en accueil (L90-8).
     'resources/js/pages/game',
     'resources/js/pages/room',
     'resources/js/pages/legal',

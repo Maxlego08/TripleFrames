@@ -80,11 +80,12 @@ function themePerimeterGenerated(): array
 }
 
 /**
- * Ajouts du jalon 1 à `WATCHED`, spec 90 § 9.3, à la lettre. Deux entrées de
- * la spec n'y sont pas encore, et c'est la spec qui le veut : `welcome.tsx`
- * entre « à sa réécriture en accueil » (L90-8), et `hooks/admin` et
- * `lib/admin` « dès leur création », par L20-9a — la seconde assertion du
- * test, sur les répertoires, les attrape le jour où ils naissent.
+ * Ajouts du jalon 1 à `WATCHED`, spec 90 § 9.3, à la lettre. Une entrée de
+ * la spec n'y est pas encore, et c'est la spec qui le veut : `welcome.tsx`
+ * entre « à sa réécriture en accueil » (L90-8). `hooks/admin` et
+ * `lib/admin`, inscrits « dès leur création » par L20-9a, sont vérifiés avec
+ * le reste du back-office ; la seconde assertion du test, sur les
+ * répertoires, attrape tout répertoire né depuis le gel.
  *
  * @return list<string>
  */
@@ -277,6 +278,9 @@ it('surveille chaque répertoire joueur créé depuis le jalon 1', function () {
         'resources/js/layouts/admin',
         'resources/js/hooks/use-forced-appearance.ts',
         'resources/js/types/admin.ts',
+        // Répertoires de la spec 20, inscrits par L20-9a (EN20-2).
+        'resources/js/hooks/admin',
+        'resources/js/lib/admin',
     ] as $path) {
         expect(themePerimeterCovers($watched, $path))->toBeTrue("{$path} n'est plus surveillé");
     }
