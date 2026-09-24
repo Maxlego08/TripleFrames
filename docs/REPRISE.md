@@ -394,7 +394,7 @@ Ensuite, à chaque session : **« Implémente l'étape suivante de l'ordre des l
 
 6. L100-1 — groupes Pest, suites, job `mysql-redis` → — — ✅ livrée le 24/09
 7. L100-2 — gardes du dépôt, licence, méta-vérification des tokens → 6 — ✅ livrée le 24/09
-8. L100-3 — Vitest, matrice des réglages, correctif `translateChoice` (I-10) → 6
+8. L100-3 — Vitest, matrice des réglages, correctif `translateChoice` (I-10) → 6 — ✅ livrée le 24/09
 9. L50-1 — `config/game.php`, `PlatformLimits` (D22) → —
 10. L60-1 — `EngineConstants`, Reverb, `predis`, `laravel-echo`, `pusher-js` → 9
 11. L100-4 — environnement, indexation, artefacts, `composer dev` → 6, 10

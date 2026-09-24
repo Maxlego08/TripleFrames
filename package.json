@@ -10,6 +10,7 @@
         "check": "vp check && node scripts/check-theme-tokens.mjs",
         "check:fix": "vp check --fix && node scripts/check-theme-tokens.mjs",
         "check:theme": "node scripts/check-theme-tokens.mjs",
+        "test": "vp test run",
         "types:check": "tsc --noEmit"
     },
     "dependencies": {

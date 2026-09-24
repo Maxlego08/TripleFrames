@@ -250,8 +250,13 @@ export function translate(
 }
 
 /**
- * Rend une clé plurielle. `:count` est injecté d'office, comme
- * `Translator::choice` le fait côté serveur.
+ * Rend une clé plurielle, à la parité de `Translator::choice`.
+ *
+ * La forme se choisit toujours sur `count`, le nombre brut. `:count`, lui, n'est
+ * injecté que s'il manque aux remplacements (`isset($replace['count'])` côté
+ * serveur) : un `count` fourni est conservé, ce qui permet d'afficher un nombre
+ * déjà formaté par `Intl.NumberFormat` (`{ count: fmt(n) }`, spec 05
+ * § Dictionnaire front).
  */
 export function translateChoice(
     snapshot: TranslationSnapshot,
@@ -268,8 +273,8 @@ export function translateChoice(
     }
 
     return makeReplacements(choose(line, count, snapshot.locale), {
-        ...replacements,
         count,
+        ...replacements,
     });
 }
 
