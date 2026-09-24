@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Avatars\AvatarRef;
+use App\Concerns\RealNameValidationRules;
 use App\Enums\AvatarKind;
 use App\Enums\Locale;
 use App\Enums\Plan;
@@ -23,6 +24,7 @@ use Illuminate\Notifications\Notifiable;
 use Laravel\Fortify\Contracts\PasskeyUser;
 use Laravel\Fortify\PasskeyAuthenticatable;
 use Laravel\Fortify\TwoFactorAuthenticatable;
+use LogicException;
 
 /**
  * Le compte — `users`, table du framework conservée sous son nom, altérée par deux
@@ -34,11 +36,21 @@ use Laravel\Fortify\TwoFactorAuthenticatable;
  * structurellement incapable de casser le podium des autres joueurs.
  *
  * `HandleInertiaRequests::share()` sérialise ce modèle ENTIER sur toutes les pages,
- * écran de jeu compris, et le SSR est actif : `#[Hidden]` est ici une règle de
- * SÉCURITÉ, et toute colonne ajoutée à `users` fuite par défaut.
+ * écran de jeu compris : `#[Hidden]` est ici une règle de SÉCURITÉ, et toute
+ * colonne ajoutée à `users` fuite par défaut.
+ *
+ * **Nom réel** (D12 du 23/09) : `real_name`, distinct du pseudo de compte
+ * `name`, est ce que figent `frame_review.reviewer_name` et
+ * `admin_action.actor_name`. Un rôle ≥ `curator` l'exige — garde `saving`
+ * ci-dessous —, il n'est jamais pré-rempli dans `name` ni dans un pseudo de
+ * siège, il est vidé à l'anonymisation (les instantanés qu'il a produits sont
+ * conservés), et il ne sort JAMAIS vers une surface joueur : `#[Hidden]`, hors
+ * `#[Fillable]`, et le back-office le compose explicitement dans un
+ * présentateur.
  *
  * @property int $id
  * @property string $name
+ * @property string|null $real_name
  * @property string|null $email
  * @property CarbonImmutable|null $email_verified_at
  * @property string|null $password
@@ -81,6 +93,9 @@ use Laravel\Fortify\TwoFactorAuthenticatable;
  */
 #[Fillable(['name', 'email', 'password', 'locale'])]
 #[Hidden([
+    // Nom réel d'un compte privilégié : il signe les preuves du back-office et
+    // ne quitte jamais le serveur vers une surface joueur (D12 du 23/09).
+    'real_name',
     'password',
     'two_factor_secret',
     'two_factor_recovery_codes',
@@ -147,6 +162,44 @@ class User extends Authenticatable implements HasLocalePreference, MustVerifyEma
             'anonymized_at' => 'datetime',
             'last_login_at' => 'datetime',
         ];
+    }
+
+    /**
+     * Garde du nom réel (D12 du 23/09, `10` § 5.1) : un rôle ≥ `curator` exige
+     * un `real_name` non vide, et aucun nom réel n'est l'un des deux acteurs
+     * réservés du journal ({@see AdminAction::isReservedActorName()}).
+     *
+     * Elle ne se déclenche que si `role` ou `real_name` change — création
+     * comprise, où tout attribut posé est modifié —, pour ne jamais bloquer un
+     * compte existant sur une écriture sans rapport (connexion, langue,
+     * avatar). L'anonymisation passe : elle ramène le rôle à `player` en même
+     * temps qu'elle vide le nom réel.
+     *
+     * Une exception de logique et non une erreur de validation : chaque chemin
+     * qui attribue un rôle valide le nom réel AVANT d'écrire
+     * ({@see RealNameValidationRules}) ; arriver ici est un bug d'appel.
+     */
+    protected static function booted(): void
+    {
+        static::saving(function (self $user): void {
+            if (! $user->isDirty(['role', 'real_name'])) {
+                return;
+            }
+
+            $realName = $user->real_name;
+
+            if ($realName !== null && AdminAction::isReservedActorName($realName)) {
+                throw new LogicException(
+                    'Le nom réel ['.$realName.'] est une valeur réservée du journal d\'administration.',
+                );
+            }
+
+            if ($user->role->atLeast(UserRole::Curator) && trim((string) $realName) === '') {
+                throw new LogicException(
+                    'Le rôle ['.$user->role->value.'] exige un nom réel non vide (D12) : il signe les preuves de revue et le journal.',
+                );
+            }
+        });
     }
 
     /**

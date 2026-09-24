@@ -1,5 +1,7 @@
 <?php
 
+use App\Enums\AdminActionSubject;
+use App\Enums\AdminActionType;
 use App\Enums\LegalPage;
 use App\Enums\Locale;
 use App\Enums\SettingPresetKey;
@@ -387,6 +389,15 @@ it('carries every key built by an enumerable key constructor', function () {
         ...array_map(
             static fn (LegalPage $page): string => $page->titleKey(),
             LegalPage::cases(),
+        ),
+        // Libellés du journal `admin_action` et de ses sujets (20 § 2.7, L20-1).
+        ...array_map(
+            static fn (AdminActionType $action): string => $action->labelKey(),
+            AdminActionType::cases(),
+        ),
+        ...array_map(
+            static fn (AdminActionSubject $subject): string => $subject->labelKey(),
+            AdminActionSubject::cases(),
         ),
     ];
 

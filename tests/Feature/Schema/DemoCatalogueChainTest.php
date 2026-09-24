@@ -452,11 +452,12 @@ it('FAIT 7 — les trois rôles, la signature du curateur, le journal de l’adm
             .'n’est opposable à personne.',
         );
 
+        // Le NOM RÉEL du curateur, jamais son pseudo de compte (D12 du 23/09).
         $this->assertSame(
-            $curator->name,
+            $curator->real_name,
             $review->reviewer_name,
-            "FAIT 7 — la revue #{$review->id} cite [{$review->reviewer_name}] : l'instantané de nom, exclu de "
-            .'l’anonymisation, ne correspond pas au curateur qui a exercé la grille.',
+            "FAIT 7 — la revue #{$review->id} cite [{$review->reviewer_name}] : l'instantané du nom réel, exclu "
+            .'de l’anonymisation, ne correspond pas au curateur qui a exercé la grille.',
         );
 
         $this->assertSame(

@@ -60,31 +60,44 @@ class DemoAccountsSeeder extends Seeder
     /** Version des CGU acceptée par les trois comptes. */
     public const string TERMS_VERSION = '1.0';
 
+    /**
+     * Noms réels FICTIFS des deux comptes privilégiés (D12 du 23/09) : sans eux,
+     * la garde `User::saving` refuse leur création, et les preuves du catalogue
+     * de démonstration figeraient un pseudo. Distincts de `users.name`, pour que
+     * l'écran qui confondrait les deux se voie.
+     */
+    public const string CURATOR_REAL_NAME = 'Camille Démo-Curation';
+
+    public const string ADMIN_REAL_NAME = 'Alex Démo-Administration';
+
     public function run(): void
     {
         DemoCatalogueSeeder::assertSeedableEnvironment();
 
         DB::transaction(function (): void {
-            $this->account(self::PLAYER_EMAIL, 'Joueur Démo', UserRole::Player, Locale::French);
-            $this->account(self::CURATOR_EMAIL, 'Curateur Démo', UserRole::Curator, Locale::French);
-            $this->account(self::ADMIN_EMAIL, 'Admin Démo', UserRole::Admin, Locale::English);
+            $this->account(self::PLAYER_EMAIL, 'Joueur Démo', null, UserRole::Player, Locale::French);
+            $this->account(self::CURATOR_EMAIL, 'Curateur Démo', self::CURATOR_REAL_NAME, UserRole::Curator, Locale::French);
+            $this->account(self::ADMIN_EMAIL, 'Admin Démo', self::ADMIN_REAL_NAME, UserRole::Admin, Locale::English);
         });
     }
 
     /**
      * Le compte demandé, réconcilié par son adresse.
      *
-     * `role` est posé en **assignation directe** : la colonne est volontairement
-     * hors du `#[Fillable]` de {@see User}, une élévation de privilège par requête
-     * étant exactement ce que la liste d'assignation en masse empêche.
+     * `role` et `real_name` sont posés en **assignation directe** : les deux
+     * colonnes sont volontairement hors du `#[Fillable]` de {@see User}, une
+     * élévation de privilège par requête étant exactement ce que la liste
+     * d'assignation en masse empêche. Le nom réel est posé AVANT le rôle, dans
+     * la même écriture : la garde `saving` lit les deux ensemble.
      */
-    private function account(string $email, string $name, UserRole $role, Locale $locale): User
+    private function account(string $email, string $name, ?string $realName, UserRole $role, Locale $locale): User
     {
         $now = CarbonImmutable::now();
 
         $user = User::query()->where('email', $email)->first() ?? new User;
 
         $user->name = $name;
+        $user->real_name = $realName;
         $user->email = $email;
         $user->email_verified_at = $now;
         $user->password = Hash::make(self::PASSWORD);

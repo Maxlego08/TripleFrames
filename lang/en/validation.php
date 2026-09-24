@@ -249,6 +249,7 @@ return [
         'noRepeatMovies' => 'no repeated movies',
         'password' => 'password',
         'password_confirmation' => 'password confirmation',
+        'real_name' => 'real name',
         'recovery_code' => 'recovery code',
         'remember' => 'remember me',
         'revealDuration' => 'reveal duration',

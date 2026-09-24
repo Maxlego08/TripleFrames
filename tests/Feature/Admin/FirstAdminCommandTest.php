@@ -41,6 +41,7 @@ test('promeut un curateur existant et inscrit la ligne role.changed', function (
 
     $this->artisan('admin:first-admin', [
         'email' => 'curation@tripleframes.test',
+        '--real-name' => 'Camille Martin',
         '--no-interaction' => true,
     ])->assertSuccessful();
 
@@ -51,7 +52,7 @@ test('promeut un curateur existant et inscrit la ligne role.changed', function (
     expect($action)->not->toBeNull()
         ->and($action->action)->toBe(AdminActionType::RoleChanged)
         ->and($action->actor_id)->toBeNull()
-        ->and($action->actor_name)->toBe(FirstAdminCommand::CONSOLE_ACTOR)
+        ->and($action->actor_name)->toBe(AdminAction::CONSOLE_ACTOR)
         ->and($action->subject_type)->toBe(AdminActionSubject::User)
         ->and($action->subject_id)->toBe($curator->id)
         ->and($action->role_before)->toBe(UserRole::Curator)
@@ -64,6 +65,7 @@ test('l’acteur de la console n’est jamais `system`, valeur réservée aux ge
 
     $this->artisan('admin:first-admin', [
         'email' => 'curation@tripleframes.test',
+        '--real-name' => 'Camille Martin',
         '--no-interaction' => true,
     ])->assertSuccessful();
 
@@ -91,6 +93,7 @@ test('elle refuse de nommer un second administrateur tant qu’un premier existe
 
     $this->artisan('admin:first-admin', [
         'email' => 'second@tripleframes.test',
+        '--real-name' => 'Camille Martin',
         '--no-interaction' => true,
     ])->assertFailed();
 
@@ -105,6 +108,7 @@ test('--force lève le refus de doublon, et le dit', function (): void {
     $this->artisan('admin:first-admin', [
         'email' => 'second@tripleframes.test',
         '--force' => true,
+        '--real-name' => 'Camille Martin',
         '--no-interaction' => true,
     ])->assertSuccessful();
 
@@ -122,6 +126,7 @@ test('un administrateur anonymisé ne compte pas comme administrateur en place',
 
     $this->artisan('admin:first-admin', [
         'email' => 'releve@tripleframes.test',
+        '--real-name' => 'Camille Martin',
         '--no-interaction' => true,
     ])->assertSuccessful();
 
@@ -136,6 +141,7 @@ test('une pierre tombale ne se promeut pas', function (): void {
 
     $this->artisan('admin:first-admin', [
         'email' => 'efface@tripleframes.test',
+        '--real-name' => 'Camille Martin',
         '--no-interaction' => true,
     ])->assertFailed();
 
@@ -174,6 +180,7 @@ test('un compte promu dont l’e-mail n’est pas vérifié ne reste pas bloqué
 
     $this->artisan('admin:first-admin', [
         'email' => 'sans-verif@tripleframes.test',
+        '--real-name' => 'Camille Martin',
         '--no-interaction' => true,
     ])->assertSuccessful();
 
@@ -190,12 +197,14 @@ test('en session interactive avec --create, elle crée le compte, le promeut, et
         ->expectsQuestion(firstAdminLine('ask_name'), 'Première Curatrice')
         ->expectsQuestion(firstAdminLine('ask_password'), 'cheval-pile-agrafe-42')
         ->expectsQuestion(firstAdminLine('ask_password_confirmation'), 'cheval-pile-agrafe-42')
+        ->expectsQuestion(firstAdminLine('real_name_prompt'), 'Camille Martin')
         ->assertSuccessful();
 
     $user = User::query()->where('email', 'premiere@tripleframes.test')->sole();
 
     expect($user->role)->toBe(UserRole::Admin)
         ->and($user->name)->toBe('Première Curatrice')
+        ->and($user->real_name)->toBe('Camille Martin')
         ->and($user->email_verified_at)->not->toBeNull()
         ->and(Hash::check('cheval-pile-agrafe-42', (string) $user->password))->toBeTrue();
 
@@ -235,4 +244,111 @@ test('aucune option ni aucun argument ne transporte un mot de passe en ligne de 
 
     expect($definition->hasOption('password'))->toBeFalse()
         ->and($definition->hasArgument('password'))->toBeFalse();
+});
+
+test('la commande exige un nom réel et le pose sur le compte', function (): void {
+    $curator = User::factory()->curator()->create([
+        'email' => 'curation@tripleframes.test',
+        'real_name' => 'Nom Précédent',
+    ]);
+
+    // Session non interactive sans l'option : refus, et RIEN n'est écrit —
+    // ni rôle, ni nom réel, ni ligne de journal.
+    $this->artisan('admin:first-admin', [
+        'email' => 'curation@tripleframes.test',
+        '--no-interaction' => true,
+    ])
+        ->expectsOutputToContain(firstAdminLine('real_name_required'))
+        ->assertFailed();
+
+    expect($curator->refresh()->role)->toBe(UserRole::Curator)
+        ->and($curator->real_name)->toBe('Nom Précédent')
+        ->and(AdminAction::query()->count())->toBe(0);
+
+    // Un nom réservé au journal n'est jamais un nom réel.
+    $this->artisan('admin:first-admin', [
+        'email' => 'curation@tripleframes.test',
+        '--real-name' => 'Console',
+        '--no-interaction' => true,
+    ])->assertFailed();
+
+    expect($curator->refresh()->role)->toBe(UserRole::Curator)
+        ->and(AdminAction::query()->count())->toBe(0);
+
+    // Session interactive sans l'option : une invite, et la réponse rognée
+    // est posée sur le compte.
+    $this->artisan('admin:first-admin', ['email' => 'curation@tripleframes.test'])
+        ->expectsQuestion(firstAdminLine('real_name_prompt'), '  Camille Martin  ')
+        ->assertSuccessful();
+
+    expect($curator->refresh()->role)->toBe(UserRole::Admin)
+        ->and($curator->real_name)->toBe('Camille Martin')
+        ->and($curator->name)->not->toBe('Camille Martin');
+});
+
+test('la ligne role.changed porte console et un actor_id nul', function (): void {
+    $player = User::factory()->create(['email' => 'joueuse@tripleframes.test']);
+
+    $this->artisan('admin:first-admin', [
+        'email' => 'joueuse@tripleframes.test',
+        '--real-name' => 'Camille Martin',
+        '--no-interaction' => true,
+    ])->assertSuccessful();
+
+    $action = AdminAction::query()->sole();
+
+    expect($action->action)->toBe(AdminActionType::RoleChanged)
+        ->and($action->actor_name)->toBe(AdminAction::CONSOLE_ACTOR)
+        ->and($action->actor_id)->toBeNull()
+        ->and($action->subject_type)->toBe(AdminActionSubject::User)
+        ->and($action->subject_id)->toBe($player->id)
+        ->and($action->role_before)->toBe(UserRole::Player)
+        ->and($action->role_after)->toBe(UserRole::Admin)
+        // Le nom réel signe les gestes SUIVANTS de l'administrateur ; la ligne
+        // de sa propre nomination, elle, est celle de la console.
+        ->and($action->actor_name)->not->toBe('Camille Martin');
+});
+
+test('relancer la commande sur l\'administrateur en place avec un autre nom réel le corrige sans écrire role.changed', function (): void {
+    $admin = User::factory()->admin()->create([
+        'email' => 'patron@tripleframes.test',
+        'real_name' => 'Camile Martin',
+    ]);
+
+    $this->artisan('admin:first-admin', [
+        'email' => 'patron@tripleframes.test',
+        '--real-name' => 'Camille Martin',
+        '--no-interaction' => true,
+    ])
+        ->expectsOutputToContain(firstAdminLine('real_name_updated', ['email' => 'patron@tripleframes.test']))
+        ->assertSuccessful();
+
+    expect($admin->refresh()->real_name)->toBe('Camille Martin')
+        ->and($admin->role)->toBe(UserRole::Admin)
+        ->and(AdminAction::query()->count())->toBe(0);
+
+    // Même nom : rien à corriger, l'idempotence est intacte.
+    $this->artisan('admin:first-admin', [
+        'email' => 'patron@tripleframes.test',
+        '--real-name' => 'Camille Martin',
+        '--no-interaction' => true,
+    ])
+        ->expectsOutputToContain(firstAdminLine('unchanged', ['email' => 'patron@tripleframes.test']))
+        ->assertSuccessful();
+
+    // Sans l'option : l'idempotence existante, inchangée.
+    $this->artisan('admin:first-admin', [
+        'email' => 'patron@tripleframes.test',
+        '--no-interaction' => true,
+    ])->assertSuccessful();
+
+    // Un nom réservé est refusé, et le nom en place reste.
+    $this->artisan('admin:first-admin', [
+        'email' => 'patron@tripleframes.test',
+        '--real-name' => 'SYSTEM',
+        '--no-interaction' => true,
+    ])->assertFailed();
+
+    expect($admin->refresh()->real_name)->toBe('Camille Martin')
+        ->and(AdminAction::query()->count())->toBe(0);
 });

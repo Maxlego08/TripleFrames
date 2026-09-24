@@ -40,6 +40,7 @@ function forbiddenSerializedKeys(): array
 {
     return [
         'users' => [User::class, [
+            'real_name',
             'password',
             'two_factor_secret',
             'two_factor_recovery_codes',

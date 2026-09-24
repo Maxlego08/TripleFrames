@@ -4,12 +4,13 @@ namespace App\Console\Commands;
 
 use App\Concerns\PasswordValidationRules;
 use App\Concerns\ProfileValidationRules;
-use App\Enums\AdminActionSubject;
+use App\Concerns\RealNameValidationRules;
 use App\Enums\AdminActionType;
 use App\Enums\Locale;
 use App\Enums\UserRole;
 use App\Models\AdminAction;
 use App\Models\User;
+use App\Support\Admin\AdminJournal;
 use Carbon\CarbonImmutable;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\App;
@@ -19,48 +20,47 @@ use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 
 /**
- * Le tout premier administrateur, et lui seul — par la console.
+ * Le tout premier administrateur, et lui seul — par la console (`20` § 2.5).
  *
  * **Pourquoi une commande et pas un écran.** L'attribution d'un rôle est un
  * geste d'administrateur (décision 9) ; le premier n'a, par définition, aucun
  * administrateur pour le nommer. Une route d'amorçage serait une porte ouverte
- * qu'il faudrait ensuite penser à refermer. L'attribution des rôles SUIVANTS
- * appartient à l'écran de gestion des accès de la spec 20, avec sa règle du
- * dernier administrateur indéboulonnable.
+ * qu'il faudrait ensuite penser à refermer. C'est la SEULE commande que le
+ * back-office exige jamais, exécutée une fois, par le porteur, en SSH, après
+ * l'achat du domaine ; l'attribution des rôles suivants appartient à l'écran de
+ * gestion des accès (jalon 2).
  *
- * **Le cas nominal est la PROMOTION d'un compte existant, et rien d'autre.**
- * Faire naître un compte hors de Fortify, hors de `CreateNewUser`, et lui
- * décerner sa propre vérification d'adresse, ce serait trancher deux questions
- * qui appartiennent au domaine « comptes et authentification » — et les
- * trancher précisément sur le rôle le plus privilégié. La création reste donc
- * derrière `--create`, drapeau explicite et **provisoire** ; la question « le
- * premier administrateur peut-il être créé sans preuve d'adresse, ou doit-il
- * d'abord s'inscrire normalement ? » est consignée dans `docs/REPRISE.md`
- * § « À trancher par la spec 20 ».
+ * **Le nom réel est exigé** (D12 du 23/09) : c'est lui, et non le pseudo de
+ * compte, que figent `frame_review.reviewer_name` et `admin_action.actor_name`.
+ * Option `--real-name`, sinon une invite en session interactive, sinon un
+ * refus — rien n'est écrit. Il passe par
+ * {@see RealNameValidationRules::realNameRules()}.
+ *
+ * **L'accès au shell vaut preuve d'adresse**, sur les deux chemins : la
+ * commande pose `email_verified_at` en promotion comme en création, et
+ * `--create` est DÉFINITIF pour le premier administrateur. L'opérateur de la
+ * console a plus de pouvoir qu'un administrateur ; exiger en plus un courriel
+ * ajouterait une dépendance à un SMTP sans rien prouver.
  *
  * **Le mot de passe ne passe JAMAIS en argument.** Il serait écrit dans
  * l'historique du shell, dans la liste des processus et dans les journaux
  * d'exécution — d'où deux invites masquées, et aucune option `--password`.
  * Conséquence assumée : la création d'un compte exige une session interactive.
- * En `--no-interaction`, la commande promeut un compte existant et refuse
- * poliment d'en créer un.
  *
  * **Idempotente.** Relancée sur un compte déjà administrateur, elle ne réécrit
- * rien et sort en succès : un script de déploiement peut l'appeler à chaque
- * passage. Elle refuse en revanche de nommer un second administrateur tant
- * qu'un premier, non anonymisé, existe — `--force` lève ce refus et le dit.
+ * rien et sort en succès. Avec `--real-name`, elle y CORRIGE le nom réel s'il
+ * diffère — seule voie de correction au jalon 1 (D4 du 23/09) —, sans ligne
+ * `role.changed`, puisque le rôle ne change pas, et sans autre ligne : la liste
+ * fermée n'a aucun cas pour ce geste. Les instantanés déjà figés ne sont jamais
+ * réécrits : la correction ne vaut que pour les gestes suivants. Elle refuse de
+ * nommer un second administrateur tant qu'un premier, non anonymisé, existe —
+ * `--force` est une procédure de secours, jamais une voie d'attribution.
  *
- * **Une ligne de journal, une seule, et son cas existe déjà.** Ce lot n'écrit
- * aucune autre ligne `admin_action` : {@see AdminActionType} est une liste
- * FERMÉE possédée par la spec 10, et `role.changed` est le seul cas qui décrit
- * ce geste. `actor_name` vaut `console` et non `system` — cette dernière est
- * réservée par la PHPDoc de l'enum aux deux seuls gestes automatiques, et la
- * garde `creating` de {@see AdminAction} refuserait l'insertion.
- *
- * **Un compte créé ici naît `player` puis est promu**, par le même chemin qu'un
- * compte existant : le journal porte alors `role_before = player`, ce qui est
- * la vérité, plutôt qu'un `role_before` nul qui laisserait croire à un rôle
- * inconnu.
+ * **Une ligne de journal, une seule**, écrite par l'écrivain unique
+ * {@see AdminJournal::recordFromConsole()} dans la transaction du rôle :
+ * `role.changed`, acteur réservé {@see AdminAction::CONSOLE_ACTOR}, `actor_id`
+ * NULL. Un compte créé ici naît `player` puis est promu, dans la même
+ * transaction : le journal porte `role_before = player`, ce qui est la vérité.
  *
  * Tous les messages passent par des clés — domaine `admin`, français par
  * construction (décision 9). La locale est posée explicitement : une console ne
@@ -68,7 +68,7 @@ use Symfony\Component\Console\Output\OutputInterface;
  */
 class FirstAdminCommand extends Command
 {
-    use PasswordValidationRules, ProfileValidationRules;
+    use PasswordValidationRules, ProfileValidationRules, RealNameValidationRules;
 
     /**
      * The name and signature of the console command.
@@ -78,6 +78,7 @@ class FirstAdminCommand extends Command
     protected $signature = 'admin:first-admin
         {email? : Adresse du compte à promouvoir, ou à créer s’il n’existe pas}
         {--name= : Nom du compte à créer, pour éviter une invite}
+        {--real-name= : Nom réel, figé dans les preuves de revue et le journal}
         {--create : Crée le compte quand l’adresse est inconnue, au lieu de refuser}
         {--force : Nomme un administrateur de plus alors qu’il en existe déjà un}';
 
@@ -91,18 +92,7 @@ class FirstAdminCommand extends Command
     /** Préfixe des clés de traduction de cette commande. */
     public const string LANG_PREFIX = 'admin.console.first_admin.';
 
-    /**
-     * Valeur d'`admin_action.actor_name` pour un geste pris depuis la console.
-     *
-     * **Jamais `system`** : {@see AdminAction::SYSTEM_ACTOR} est réservée aux
-     * deux gestes automatiques (`avatar.hidden`, `nickname.masked`) et la garde
-     * `creating` du modèle lèverait. Une console n'est pas un seuil de
-     * signalement : c'est une personne devant un terminal, et le journal doit
-     * pouvoir les distinguer dix-huit mois plus tard.
-     */
-    public const string CONSOLE_ACTOR = 'console';
-
-    public function handle(): int
+    public function handle(AdminJournal $journal): int
     {
         $email = $this->resolveEmail();
 
@@ -123,9 +113,7 @@ class FirstAdminCommand extends Command
         // Idempotence, et elle passe AVANT le refus de doublon : relancer la
         // commande sur l'administrateur en place ne doit jamais échouer.
         if ($target !== null && $target->role === UserRole::Admin) {
-            $this->components->info($this->message('unchanged', ['email' => $email]));
-
-            return self::SUCCESS;
+            return $this->reconcileIncumbent($target, $email);
         }
 
         $incumbent = User::query()
@@ -143,19 +131,32 @@ class FirstAdminCommand extends Command
             $this->components->warn($this->message('forced', ['name' => $incumbent->name]));
         }
 
-        if ($target === null) {
-            $target = $this->createAccount($email);
+        // Rien n'est écrit avant que TOUT soit réuni : un compte créé puis
+        // abandonné faute de nom réel serait un compte sans rôle que
+        // personne n'a demandé.
+        $user = $target ?? $this->draftAccount($email);
 
-            if ($target === null) {
-                return self::FAILURE;
-            }
+        if ($user === null) {
+            return self::FAILURE;
         }
 
-        $this->promote($target);
+        $realName = $this->resolveRealName($user);
+
+        if ($realName === null) {
+            return self::FAILURE;
+        }
+
+        $created = ! $user->exists;
+
+        $this->promote($user, $realName, $journal);
+
+        if ($created) {
+            $this->components->info($this->message('created', ['email' => $email]));
+        }
 
         $this->components->info($this->message('promoted', [
             'email' => $email,
-            'name' => $target->name,
+            'name' => $user->name,
         ]));
 
         return self::SUCCESS;
@@ -172,6 +173,33 @@ class FirstAdminCommand extends Command
         parent::initialize($input, $output);
 
         App::setLocale(Locale::French->value);
+    }
+
+    /**
+     * L'administrateur en place : rien à faire, sauf une correction du nom réel
+     * demandée par `--real-name` (D4 du 23/09). Aucune ligne de journal — le
+     * rôle ne change pas, et la liste fermée n'a aucun cas pour ce geste.
+     */
+    private function reconcileIncumbent(User $admin, string $email): int
+    {
+        $requested = $this->realNameOption();
+
+        if ($requested === null || $requested === $admin->real_name) {
+            $this->components->info($this->message('unchanged', ['email' => $email]));
+
+            return self::SUCCESS;
+        }
+
+        if (! $this->validRealName($requested)) {
+            return self::FAILURE;
+        }
+
+        $admin->real_name = $requested;
+        $admin->save();
+
+        $this->components->info($this->message('real_name_updated', ['email' => $email]));
+
+        return self::SUCCESS;
     }
 
     /**
@@ -203,13 +231,14 @@ class FirstAdminCommand extends Command
     }
 
     /**
-     * La création d'un compte : réservée à une session interactive, puisque le
-     * mot de passe ne peut venir que d'une invite masquée.
+     * Le compte à créer, composé mais PAS enregistré : il ne l'est que dans la
+     * transaction de sa promotion. Réservé à une session interactive, puisque
+     * le mot de passe ne peut venir que d'une invite masquée.
      */
-    private function createAccount(string $email): ?User
+    private function draftAccount(string $email): ?User
     {
-        // Le contrat de ce lot dit « promouvoir » : un compte absent est un
-        // REFUS, sauf demande explicite. Voir la note de classe.
+        // Promouvoir est le cas nominal : un compte absent est un REFUS, sauf
+        // demande explicite. Voir la note de classe.
         if (! $this->creates()) {
             $this->components->error($this->message('create_disabled', ['email' => $email]));
 
@@ -246,13 +275,6 @@ class FirstAdminCommand extends Command
         // Le cast `hashed` de `User::casts()` hache à l'affectation : la valeur
         // en clair ne quitte jamais cette méthode.
         $user->password = $password;
-        // Sans cette date, le compte fraîchement nommé atterrit sur
-        // `/email/verify` — le groupe de routes d'administration porte
-        // `verified` — et y attend un message que personne n'a envoyé.
-        $user->email_verified_at = CarbonImmutable::now();
-        $user->save();
-
-        $this->components->info($this->message('created', ['email' => $email]));
 
         return $user;
     }
@@ -272,6 +294,30 @@ class FirstAdminCommand extends Command
         }
 
         return $name;
+    }
+
+    /**
+     * Le nom réel du futur administrateur : l'option, sinon une invite en
+     * session interactive — proposant le nom réel déjà porté, s'il y en a
+     * un —, sinon un refus. Jamais déduit de `users.name` : un pseudo n'est pas
+     * un nom réel.
+     */
+    private function resolveRealName(User $user): ?string
+    {
+        $realName = $this->realNameOption();
+
+        if ($realName === null) {
+            if (! $this->interactive()) {
+                $this->components->error($this->message('real_name_required'));
+
+                return null;
+            }
+
+            $answer = $this->ask($this->message('real_name_prompt'), $user->real_name);
+            $realName = is_string($answer) ? trim($answer) : '';
+        }
+
+        return $this->validRealName($realName) ? $realName : null;
     }
 
     /**
@@ -298,41 +344,56 @@ class FirstAdminCommand extends Command
     }
 
     /**
-     * Le rôle et sa trace, dans la MÊME transaction : un compte promu sans
-     * ligne de journal est exactement l'élévation de privilège qu'aucun audit
-     * ne retrouve.
+     * Le compte, son nom réel, son rôle et sa trace, dans la MÊME transaction :
+     * un compte promu sans ligne de journal est exactement l'élévation de
+     * privilège qu'aucun audit ne retrouve.
      */
-    private function promote(User $user): void
+    private function promote(User $user, string $realName, AdminJournal $journal): void
     {
-        DB::transaction(function () use ($user): void {
+        DB::transaction(function () use ($user, $realName, $journal): void {
+            // Un compte créé ici naît `player` : c'est ce que dira `role_before`.
+            if (! $user->exists) {
+                $user->save();
+            }
+
             $before = $user->role;
 
+            $user->real_name = $realName;
             $user->role = UserRole::Admin;
 
-            // Même geste et même justification que `createAccount()` : le
+            // L'accès au shell vaut preuve d'adresse (`20` § 2.5, n° 15) : le
             // groupe `/admin` porte `verified`, et sans cette date le compte
-            // fraîchement nommé atterrit sur `/email/verify` pour y attendre
-            // un message que personne n'a envoyé — `MAIL_MAILER=log` en
-            // développement. La commande dirait « promu » quand le middleware
-            // dit autre chose.
+            // fraîchement nommé atterrirait sur `/email/verify` pour y attendre
+            // un message que personne n'a envoyé.
             if ($user->email_verified_at === null) {
                 $user->email_verified_at = CarbonImmutable::now();
             }
 
             $user->save();
 
-            $action = new AdminAction;
-            $action->actor_id = null;
-            $action->actor_name = self::CONSOLE_ACTOR;
-            $action->action = AdminActionType::RoleChanged;
-            $action->subject_type = AdminActionSubject::User;
-            $action->subject_id = $user->id;
-            $action->role_before = $before;
-            $action->role_after = UserRole::Admin;
-            // `retention_class` n'est jamais fournie : la garde `creating` du
-            // modèle la dérive de l'action, et `role.changed` est permanente.
-            $action->save();
+            // `subject_type` et `retention_class` ne sont jamais fournis : la
+            // garde `creating` du modèle les dérive de l'action, et
+            // `role.changed` est permanente.
+            $journal->recordFromConsole(AdminActionType::RoleChanged, $user->id, null, $before, UserRole::Admin);
         });
+    }
+
+    /** La valeur de `--real-name`, rognée ; NULL si l'option est absente ou vide. */
+    private function realNameOption(): ?string
+    {
+        $realName = $this->option('real-name');
+        $realName = is_string($realName) ? trim($realName) : '';
+
+        return $realName === '' ? null : $realName;
+    }
+
+    private function validRealName(string $realName): bool
+    {
+        return $this->passesOrExplains(
+            ['real_name' => $realName],
+            ['real_name' => $this->realNameRules()],
+            'invalid_real_name',
+        );
     }
 
     /**

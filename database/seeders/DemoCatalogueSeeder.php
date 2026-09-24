@@ -10,7 +10,6 @@ use App\Enums\MovieDifficulty;
 use App\Enums\ThemeKind;
 use App\Enums\TmdbTagKind;
 use App\Enums\UserRole;
-use App\Models\AdminAction;
 use App\Models\Collection;
 use App\Models\Frame;
 use App\Models\FrameReview;
@@ -20,6 +19,7 @@ use App\Models\MovieTmdbTag;
 use App\Models\Theme;
 use App\Models\User;
 use App\Settings\RoomSettingsBounds;
+use App\Support\Admin\AdminJournal;
 use Database\Factories\FrameFactory;
 use Database\Factories\MovieFactory;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
@@ -469,7 +469,13 @@ class DemoCatalogueSeeder extends Seeder
     }
 
     /**
-     * Les lignes `admin_action` **permanentes** portées par l'administrateur.
+     * Les lignes `admin_action` **permanentes** du catalogue de démonstration,
+     * écrites par l'écrivain unique du journal, dans une transaction.
+     *
+     * L'élévation INITIALE de l'administrateur passe par la console, comme en
+     * production (`admin:first-admin`) : acteur réservé `console`, `actor_id`
+     * nul. Les suivantes sont signées de l'administrateur, dont le NOM RÉEL est
+     * figé dans `actor_name` (D12 du 23/09, contrat C14 inv. 13).
      *
      * Une trace ne peut jamais être plus courte que l'état qu'elle justifie :
      * `retention_class` est dérivée de l'action par la garde `creating` du modèle,
@@ -480,23 +486,33 @@ class DemoCatalogueSeeder extends Seeder
      */
     private function seedAdminJournal(User $admin, User $curator, Movie $movie): void
     {
-        AdminAction::factory()
-            ->byActor($admin)
-            ->of(AdminActionType::RoleChanged, $curator->id)
-            ->because('Ouverture des droits de curation sur le catalogue de démonstration.')
-            ->create(['role_before' => UserRole::Player, 'role_after' => UserRole::Curator]);
+        $journal = app(AdminJournal::class);
 
-        AdminAction::factory()
-            ->byActor($admin)
-            ->of(AdminActionType::RoleChanged, $admin->id)
-            ->because('Compte d’administration initial de l’instance.')
-            ->create(['role_before' => UserRole::Player, 'role_after' => UserRole::Admin]);
+        DB::transaction(function () use ($journal, $admin, $curator, $movie): void {
+            $journal->recordFromConsole(
+                AdminActionType::RoleChanged,
+                $admin->id,
+                'Compte d’administration initial de l’instance.',
+                UserRole::Player,
+                UserRole::Admin,
+            );
 
-        AdminAction::factory()
-            ->byActor($admin)
-            ->of(AdminActionType::MovieContentVerified, $movie->id)
-            ->because('Contenu vérifié : aucune classification restrictive sur le catalogue de démonstration.')
-            ->create();
+            $journal->record(
+                $admin,
+                AdminActionType::RoleChanged,
+                $curator->id,
+                'Ouverture des droits de curation sur le catalogue de démonstration.',
+                roleBefore: UserRole::Player,
+                roleAfter: UserRole::Curator,
+            );
+
+            $journal->record(
+                $admin,
+                AdminActionType::MovieContentVerified,
+                $movie->id,
+                'Contenu vérifié : aucune classification restrictive sur le catalogue de démonstration.',
+            );
+        });
     }
 
     /**

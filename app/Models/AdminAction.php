@@ -6,6 +6,7 @@ use App\Enums\AdminActionRetention;
 use App\Enums\AdminActionSubject;
 use App\Enums\AdminActionType;
 use App\Enums\UserRole;
+use App\Support\Admin\AdminJournal;
 use App\Support\Eloquent\AppendOnlyBuilder;
 use Carbon\CarbonImmutable;
 use Database\Factories\AdminActionFactory;
@@ -23,29 +24,39 @@ use LogicException;
  * pourquoi, quand (§ 8.3).
  *
  * L'ordre des identifiants est l'ordre du journal. `actor_name` est
- * l'instantané de `users.name` à l'instant du geste — sans lui, l'auteur d'un
- * retrait juridique devient « n° 42 » dès qu'il supprime son compte —, et il est
- * exclu de l'anonymisation.
+ * l'instantané ROGNÉ de `users.real_name` — le nom réel (D12 du 23/09),
+ * jamais `users.name`, pseudo de compte — à l'instant du geste : sans lui,
+ * l'auteur d'un retrait juridique devient « n° 42 » dès qu'il supprime son
+ * compte. Il est exclu de l'anonymisation, qui vide `users.real_name` mais
+ * jamais cet instantané.
  *
- * **La valeur réservée `system`.** Pour les deux gestes AUTOMATIQUES —
- * `avatar.hidden` et `nickname.masked`, déclenchés par le seuil de deux
- * signaleurs distincts et non par une personne —, `actor_id` est NULL et
- * `actor_name` porte {@see self::SYSTEM_ACTOR} : sans elle, l'insertion serait
- * structurellement impossible sur une colonne NOT NULL, et une colonne nullable
- * rendrait indistinguables « geste automatique » et « oubli d'écriture ».
- * Aucune autre action n'écrit cette valeur, et la garde de `creating` ci-dessous
- * en fait une propriété du modèle et non une consigne.
+ * **Deux valeurs réservées, jamais un nom réel** (comparaison sans tenir
+ * compte de la casse), et `actor_id` NULL pour elles seules :
+ *
+ * - {@see self::SYSTEM_ACTOR} pour les deux gestes AUTOMATIQUES —
+ *   `avatar.hidden` et `nickname.masked`, déclenchés par le seuil de deux
+ *   signaleurs distincts et non par une personne ;
+ * - {@see self::CONSOLE_ACTOR} pour les gestes passés par la ligne de
+ *   commande, admis pour `role.changed` (premier administrateur),
+ *   `site.closed` et `site.reopened` seulement.
+ *
+ * Sans valeur réservée, l'insertion serait structurellement impossible sur une
+ * colonne NOT NULL, et une colonne nullable rendrait indistinguables « geste
+ * automatique » et « oubli d'écriture ». La garde `creating` ci-dessous fait de
+ * ces règles une propriété du modèle et non une consigne.
  *
  * `subject_type` porte un ALIAS COURT (`movie` / `frame` / `user` / `player` /
- * `takedown_request`) et non un nom de classe : ce n'est PAS un `morphTo`, et
- * `subject_id` n'a aucune clé étrangère, la cible étant polymorphe — elle n'est
- * jamais détruite, donc la ligne ne pend jamais. C'est cette colonne typée qui
- * rend l'exemption de purge vérifiable par requête.
+ * `takedown_request` / `site`) et non un nom de classe : ce n'est PAS un
+ * `morphTo`, et `subject_id` n'a aucune clé étrangère, la cible étant
+ * polymorphe — elle n'est jamais détruite, donc la ligne ne pend jamais. C'est
+ * cette colonne typée qui rend l'exemption de purge vérifiable par requête.
+ * `subject_id` est NULL si et seulement si le sujet est le site.
  *
  * `role_before` et `role_after` sont typées et non JSON, parce que « quel rôle
  * portait cette personne à cet instant » est la seule requête d'audit qui doit
  * s'écrire en SQL : il n'existe AUCUNE table `role_history`, elle dupliquerait
- * ce journal.
+ * ce journal. Non nulles et différentes pour `role.changed`, nulles partout
+ * ailleurs.
  *
  * **L'exemption de purge est une propriété du schéma, pas une clause `WHERE`.**
  * L'index de purge étant `(retention_class, created_at)`, le balayage ne
@@ -60,6 +71,10 @@ use LogicException;
  * MySQL, « no such column » en SQLite). Une garde sur `updating` refuse toute
  * réécriture ; la SUPPRESSION reste permise, c'est elle que la purge exerce sur
  * les seules lignes `rolling_12m`.
+ *
+ * **Écrivain unique** : {@see AdminJournal}, qui exige en plus une transaction
+ * ouverte. La garde de ce modèle vaut pour TOUT chemin d'écriture d'une
+ * instance, fabriques comprises.
  *
  * `#[Hidden]` : `actor_id` est le compte de l'auteur, et aucun identifiant
  * interne ne quitte le serveur — `actor_name` est précisément la colonne qui
@@ -105,6 +120,19 @@ class AdminAction extends Model
     public const string SYSTEM_ACTOR = 'system';
 
     /**
+     * Valeur réservée d'`actor_name` pour un geste pris depuis la ligne de
+     * commande — déplacée depuis `FirstAdminCommand` (contrat C14).
+     *
+     * **Jamais `system`** : une console n'est pas un seuil de signalement,
+     * c'est une personne devant un terminal, et le journal doit pouvoir les
+     * distinguer dix-huit mois plus tard.
+     */
+    public const string CONSOLE_ACTOR = 'console';
+
+    /** Longueur déclarée de `admin_action.reason` (`string(500)`, § 8.3). */
+    public const int REASON_MAX_LENGTH = 500;
+
+    /**
      * Get the attributes that should be cast.
      *
      * @return array<string, string>
@@ -121,14 +149,27 @@ class AdminAction extends Model
     }
 
     /**
+     * Vrai si la valeur désigne un des deux acteurs réservés, sans tenir
+     * compte de la casse ni des blancs de bord : `System` ou ` CONSOLE ` ne
+     * sont jamais des noms réels, ni sur un compte, ni au journal.
+     */
+    public static function isReservedActorName(string $name): bool
+    {
+        $folded = mb_strtolower(trim($name));
+
+        return $folded === self::SYSTEM_ACTOR || $folded === self::CONSOLE_ACTOR;
+    }
+
+    /**
      * Deux gardes, et aucun déclencheur SQL.
      *
-     * À l'insertion, `retention_class` est dérivée de l'action : une trace ne
-     * peut jamais être plus courte que l'état qu'elle justifie, et une classe
-     * fournie à la main finirait par diverger de la liste du § 8.3. Une ligne
-     * sans action est un bug d'appel — elle échoue ici, bruyamment, plutôt que
-     * d'entrer en base avec une classe de conservation fausse. La même garde
-     * refuse la valeur réservée `system` à toute action non automatique.
+     * À l'insertion, les sept invariants du contrat C14 (§ 2.7 de `20`) :
+     * `subject_type` et `retention_class` DÉRIVÉS de l'action, jamais fournis ;
+     * `subject_id` NULL si et seulement si le sujet est le site ; les deux
+     * acteurs réservés et leurs seuls gestes ; un auteur identifié et nommé
+     * partout ailleurs ; le motif obligatoire ; les rôles de `role.changed`.
+     * Une ligne sans action est un bug d'appel — elle échoue ici, bruyamment,
+     * plutôt que d'entrer en base avec une classe de conservation fausse.
      *
      * Ensuite, le journal est en ajout seul : `updating` refuse. `deleting` ne
      * l'est pas — la purge supprime les lignes `rolling_12m` à 12 mois, et c'est
@@ -144,13 +185,19 @@ class AdminAction extends Model
     protected static function booted(): void
     {
         static::creating(function (self $action): void {
-            $action->retention_class = $action->action->retentionClass();
+            $type = $action->getAttribute('action');
 
-            if ($action->actor_name === self::SYSTEM_ACTOR && ! $action->action->isAutomatic()) {
-                throw new LogicException(
-                    'La valeur réservée ['.self::SYSTEM_ACTOR.'] est refusée à l\'action ['.$action->action->value.'] : seuls les gestes automatiques s\'écrivent sans acteur.',
-                );
+            if (! $type instanceof AdminActionType) {
+                throw new LogicException('Une ligne du journal d\'administration exige une action de la liste fermée.');
             }
+
+            $action->subject_type = $type->subject();
+            $action->retention_class = $type->retentionClass();
+
+            self::guardSubject($action, $type);
+            self::guardActor($action, $type);
+            self::guardReason($action, $type);
+            self::guardRoles($action, $type);
         });
 
         static::updating(function (self $action): void {
@@ -162,8 +209,9 @@ class AdminAction extends Model
 
     /**
      * L'auteur du geste. `nullOnDelete`, et en pratique toujours renseigné :
-     * l'anonymisation garde la ligne `User`. NULL signifie « geste automatique »,
-     * et `actor_name` vaut alors {@see self::SYSTEM_ACTOR}.
+     * l'anonymisation garde la ligne `User`. NULL signifie « acteur réservé »,
+     * et `actor_name` vaut alors {@see self::SYSTEM_ACTOR} ou
+     * {@see self::CONSOLE_ACTOR}.
      *
      * @return BelongsTo<User, $this>
      */
@@ -182,5 +230,131 @@ class AdminAction extends Model
     public function takedownRequest(): BelongsTo
     {
         return $this->belongsTo(TakedownRequest::class, 'takedown_request_id');
+    }
+
+    /** Invariant 2 : `subject_id` NULL si et seulement si le sujet est le site. */
+    private static function guardSubject(self $action, AdminActionType $type): void
+    {
+        $identified = $type->subject()->hasIdentifier();
+
+        if ($identified === ($action->subject_id === null)) {
+            throw new LogicException(
+                'L\'action ['.$type->value.'] '.($identified
+                    ? 'exige un subject_id : seul le site est un sujet sans identifiant.'
+                    : 'vise le site entier : son subject_id doit rester nul.'),
+            );
+        }
+    }
+
+    /**
+     * Invariants 3, 4 et 5 : les acteurs réservés, leurs seuls gestes, et un
+     * auteur identifié et nommé partout ailleurs. L'instantané est rogné ici,
+     * pour que « Camille » et « Camille  » ne fassent jamais deux auteurs.
+     */
+    private static function guardActor(self $action, AdminActionType $type): void
+    {
+        $raw = $action->getAttribute('actor_name');
+        $name = is_string($raw) ? trim($raw) : '';
+
+        if ($type->isAutomatic()) {
+            if ($action->actor_id !== null || $name !== self::SYSTEM_ACTOR) {
+                throw new LogicException(
+                    'L\'action automatique ['.$type->value.'] s\'écrit sans acteur : actor_id nul et actor_name ['.self::SYSTEM_ACTOR.'].',
+                );
+            }
+
+            $action->actor_name = self::SYSTEM_ACTOR;
+
+            return;
+        }
+
+        $folded = mb_strtolower($name);
+
+        if ($folded === self::SYSTEM_ACTOR) {
+            throw new LogicException(
+                'La valeur réservée ['.self::SYSTEM_ACTOR.'] est refusée à l\'action ['.$type->value.'] : seuls les gestes automatiques s\'écrivent sans acteur.',
+            );
+        }
+
+        if ($folded === self::CONSOLE_ACTOR) {
+            if (! $type->allowsConsoleActor() || $action->actor_id !== null || $name !== self::CONSOLE_ACTOR) {
+                throw new LogicException(
+                    'La valeur réservée ['.self::CONSOLE_ACTOR.'] n\'est admise, avec un actor_id nul, que pour role.changed, site.closed et site.reopened ; refusée à l\'action ['.$type->value.'].',
+                );
+            }
+
+            $action->actor_name = self::CONSOLE_ACTOR;
+
+            return;
+        }
+
+        if ($action->actor_id === null) {
+            throw new LogicException(
+                'L\'action ['.$type->value.'] est le geste d\'une personne : elle exige un actor_id.',
+            );
+        }
+
+        if ($name === '') {
+            throw new LogicException(
+                'L\'action ['.$type->value.'] exige le nom réel de son auteur : actor_name est vide.',
+            );
+        }
+
+        $action->actor_name = $name;
+    }
+
+    /**
+     * Invariant 6 : un motif rogné non vide quand l'action l'exige, et jamais
+     * au-delà de la colonne. Un motif fait de blancs sur un geste facultatif
+     * est ramené à NULL : il ne dit rien, et le journal ne doit pas le montrer
+     * comme s'il disait quelque chose.
+     */
+    private static function guardReason(self $action, AdminActionType $type): void
+    {
+        $raw = $action->getAttribute('reason');
+        $reason = is_string($raw) ? trim($raw) : null;
+
+        if ($reason === '') {
+            $reason = null;
+        }
+
+        if ($reason === null && $type->requiresReason()) {
+            throw new LogicException('L\'action ['.$type->value.'] exige un motif non vide.');
+        }
+
+        if ($reason !== null && mb_strlen($reason) > self::REASON_MAX_LENGTH) {
+            throw new LogicException(
+                'Un motif du journal fait au plus '.self::REASON_MAX_LENGTH.' caractères ; celui de l\'action ['.$type->value.'] en compte '.mb_strlen($reason).'.',
+            );
+        }
+
+        $action->reason = $reason;
+    }
+
+    /**
+     * Invariant 7 : `role.changed` porte deux rôles non nuls et différents,
+     * toute autre action n'en porte aucun — un retrait de film qui porterait
+     * un rôle ferait croire à un changement de rôle qui n'a pas eu lieu.
+     */
+    private static function guardRoles(self $action, AdminActionType $type): void
+    {
+        $before = $action->role_before;
+        $after = $action->role_after;
+
+        if ($type === AdminActionType::RoleChanged) {
+            if ($before === null || $after === null || $before === $after) {
+                throw new LogicException(
+                    'L\'action ['.$type->value.'] exige un role_before et un role_after non nuls et différents.',
+                );
+            }
+
+            return;
+        }
+
+        if ($before !== null || $after !== null) {
+            throw new LogicException(
+                'L\'action ['.$type->value.'] ne change aucun rôle : role_before et role_after restent nuls.',
+            );
+        }
     }
 }

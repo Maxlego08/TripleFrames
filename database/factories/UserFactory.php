@@ -68,10 +68,26 @@ class UserFactory extends Factory
      * requête est précisément ce que la liste d'assignation en masse empêche. Le
      * pipeline de `Factory` écrit sous `Model::unguarded()`, ce qui est le seul endroit
      * où poser la colonne sans jamais l'exposer à un formulaire.
+     *
+     * Un rôle ≥ `curator` reçoit un **nom réel factice** (D12 du 23/09) : la garde
+     * `User::saving` refuse un compte privilégié sans nom réel, et c'est lui — jamais
+     * `name` — que figent `reviewer_name` et `actor_name`. Un nom réel déjà posé par
+     * un état antérieur est conservé ; un attribut passé à `create()` l'emporte.
      */
     public function role(UserRole $role): static
     {
-        return $this->state(['role' => $role]);
+        return $this->state(function (array $attributes) use ($role): array {
+            if (! $role->atLeast(UserRole::Curator)) {
+                return ['role' => $role];
+            }
+
+            $realName = $attributes['real_name'] ?? null;
+
+            return [
+                'role' => $role,
+                'real_name' => is_string($realName) && trim($realName) !== '' ? $realName : fake()->name(),
+            ];
+        });
     }
 
     /**
@@ -224,7 +240,8 @@ class UserFactory extends Factory
      *
      * Conserver l'`id` rend les clés d'auteur structurellement inorphelinables sans
      * jamais dépendre d'un `nullOnDelete` ; `plan` et les consentements sont conservés ;
-     * `role` retombe à `player` et `locale` au repli d'instance.
+     * `role` retombe à `player`, `real_name` est vidé et `locale` revient au repli
+     * d'instance.
      *
      * Cette fabrique ne pose que l'ÉTAT FINAL de `users` : la suppression en lignes
      * (`linked_account`, `saved_config`, `data_export`, `passkeys`, `sessions`) et
@@ -243,6 +260,9 @@ class UserFactory extends Factory
             'two_factor_confirmed_at' => null,
             'remember_token' => null,
             'role' => UserRole::Player,
+            // Vidé : le nom réel ne survit pas au compte. Les instantanés qu'il a
+            // produits (`reviewer_name`, `actor_name`) ne sont jamais touchés.
+            'real_name' => null,
             'locale' => Locale::English,
             'avatar_kind' => null,
             'avatar_preset' => null,

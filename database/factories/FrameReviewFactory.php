@@ -11,6 +11,7 @@ use App\Models\User;
 use App\Support\Curation\ExclusionGrid;
 use App\Support\Eloquent\AppendOnlyBuilder;
 use Illuminate\Database\Eloquent\Factories\Factory;
+use InvalidArgumentException;
 
 /**
  * Fabrique de {@see FrameReview} — la preuve opposable d'un passage de revue.
@@ -28,9 +29,10 @@ use Illuminate\Database\Eloquent\Factories\Factory;
  * démonstration complet dont aucun film n'est publiable, et un lobby qui affiche
  * « 0 film » sans qu'aucune ligne ne paraisse manquer.
  *
- * `reviewer_name` et `reviewer_role` sont des INSTANTANÉS pris à l'instant de la
- * revue, et non des lectures de la relation : la preuve doit rester nominative
- * quand le compte du curateur est anonymisé, faute de quoi elle se réduit à
+ * `reviewer_name` (le nom réel du curateur, D12 du 23/09) et `reviewer_role` sont
+ * des INSTANTANÉS pris à l'instant de la revue, et non des lectures de la
+ * relation : la preuve doit rester nominative quand le compte du curateur est
+ * anonymisé, faute de quoi elle se réduit à
  * « relecteur n° 42 ». `reviewer_id` est donc nullable — et nul par défaut ici,
  * parce qu'une revue sans compte survivant est un état légitime. Le seeder de
  * démonstration, lui, passe le curateur par {@see self::by()} : c'est l'exigence 5
@@ -94,14 +96,28 @@ class FrameReviewFactory extends Factory
     /**
      * Le curateur qui a réellement exercé la grille, figé sur la ligne.
      *
-     * Le rôle est celui porté À L'INSTANT de la revue : la preuve devient
-     * autoportante, sans interroger l'historique des rôles.
+     * `reviewer_name` reçoit l'instantané rogné de son NOM RÉEL
+     * (`users.real_name`, D12 du 23/09), jamais `users.name`, pseudo de compte ;
+     * le rôle est celui porté À L'INSTANT de la revue : la preuve devient
+     * autoportante, sans interroger l'historique des rôles. Un compte sans nom
+     * réel n'a jamais exercé la grille : la fabrique le refuse plutôt que de
+     * figer un nom vide.
+     *
+     * @throws InvalidArgumentException Si le compte n'a pas de nom réel.
      */
     public function by(User $reviewer): static
     {
+        $realName = trim((string) $reviewer->real_name);
+
+        if ($realName === '') {
+            throw new InvalidArgumentException(
+                'Le compte #'.$reviewer->id.' n\'a pas de nom réel : il ne peut pas signer une revue (D12).',
+            );
+        }
+
         return $this->state(fn (array $attributes): array => [
             'reviewer_id' => $reviewer->id,
-            'reviewer_name' => $reviewer->name,
+            'reviewer_name' => $realName,
             'reviewer_role' => $reviewer->role,
         ]);
     }

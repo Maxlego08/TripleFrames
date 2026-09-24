@@ -166,6 +166,42 @@ return [
             'fr' => 'Français',
             'en' => 'Anglais',
         ],
+        /*
+        | Journal `admin_action` : une feuille par cas de la liste fermée
+        | (`AdminActionType::labelKey()`, points remplacés par `_`) et par
+        | sujet (`AdminActionSubject::labelKey()`).
+        */
+        'admin_action' => [
+            'role_changed' => 'Changement de rôle',
+            'movie_published' => 'Film publié',
+            'movie_unpublished' => 'Film dépublié',
+            'movie_republished' => 'Film republié',
+            'movie_content_verified' => 'Contenu du film vérifié',
+            'movie_suspended' => 'Film suspendu',
+            'movie_unsuspended' => 'Suspension du film levée',
+            'movie_withdrawn' => 'Film retiré (retrait juridique)',
+            'frame_unpublished' => 'Image dépubliée',
+            'frame_grid_unpublished' => 'Image dépubliée après révision de la grille',
+            'frame_suspended' => 'Image suspendue',
+            'frame_unsuspended' => 'Suspension de l’image levée',
+            'frame_withdrawn' => 'Image retirée (retrait juridique)',
+            'avatar_hidden' => 'Photo de profil masquée',
+            'avatar_unhidden' => 'Photo de profil rétablie',
+            'nickname_masked' => 'Pseudo masqué',
+            'nickname_unmasked' => 'Pseudo rétabli',
+            'nickname_banned' => 'Pseudo banni',
+            'takedown_decided' => 'Demande de retrait décidée',
+            'site_closed' => 'Site fermé',
+            'site_reopened' => 'Site rouvert',
+        ],
+        'admin_action_subject' => [
+            'movie' => 'Film',
+            'frame' => 'Image',
+            'user' => 'Compte',
+            'player' => 'Joueur',
+            'takedown_request' => 'Demande de retrait',
+            'site' => 'Site',
+        ],
     ],
 
     /*
@@ -646,7 +682,8 @@ return [
     /*
     | Noms d’attribut des FormRequests d’administration. Ce sont des NOMS, pas
     | des phrases : Laravel compose le message depuis `lang/fr/validation.php`.
-    | Les trois clés `ids.*`, elles, sont des messages complets.
+    | Les trois clés `ids.*` et `real_name`, elles, sont des messages complets
+    | — `real_name` refuse un nom réservé au journal (`RealNameValidationRules`).
     */
     'validation' => [
         'search' => 'recherche',
@@ -666,6 +703,7 @@ return [
             'max' => 'Un envoi accepte au plus :max identifiants. La console, elle, avale une liste entière.',
             'invalid' => 'Aucun identifiant lisible dans ce collage : attendez un nombre nu ou une URL TMDB par ligne.',
         ],
+        'real_name' => 'Ce nom est réservé au journal d’administration : saisissez le nom réel de la personne.',
     ],
 
     'error' => [
@@ -676,8 +714,9 @@ return [
 
     /*
     | `php artisan admin:first-admin` — la seule porte d’entrée du panneau tant
-    | que l’écran de gestion des accès de la spec 20 n’existe pas. Locale forcée
-    | en français par la commande elle-même.
+    | que l’écran de gestion des accès de la spec 20 n’existe pas, et la seule
+    | voie de correction du nom réel au jalon 1. Locale forcée en français par
+    | la commande elle-même.
     */
     'console' => [
         'first_admin' => [
@@ -698,6 +737,10 @@ return [
             'invalid_password' => 'Mot de passe invalide.',
             'created' => 'Compte :email créé.',
             'promoted' => ':name (:email) est désormais administrateur.',
+            'real_name_prompt' => 'Nom réel (il signe les revues et le journal d’administration)',
+            'real_name_required' => 'Nom réel requis : relancez avec --real-name="Prénom Nom". Rien n’a été modifié.',
+            'invalid_real_name' => 'Nom réel invalide.',
+            'real_name_updated' => 'Nom réel de :email corrigé. Les revues et les lignes de journal déjà signées gardent l’ancien nom.',
         ],
     ],
 
