@@ -835,6 +835,28 @@ return [
             'invalid_real_name' => 'Nom réel invalide.',
             'real_name_updated' => 'Nom réel de :email corrigé. Les revues et les lignes de journal déjà signées gardent l’ancien nom.',
         ],
+
+        /*
+        | Instantané de la règle 12 et son élagage (spec 100 § 13.1). Lus par
+        | le porteur dans la sortie du hook de déploiement ou d'un geste de
+        | console : un échec dit toujours ce qui n'a PAS été fait ensuite.
+        */
+        'backup' => [
+            'snapshot_skipped' => 'Aucune migration en attente : aucun instantané n’est nécessaire.',
+            'snapshot_written' => 'Instantané écrit et vérifié : :file',
+            'snapshot_failed' => 'Instantané impossible ou invérifiable : aucun fichier n’a été conservé. Ne lancez ni la migration ni le geste prévu tant que cette commande n’a pas réussi.',
+            'snapshot_unsafe_dir' => 'Répertoire d’instantanés refusé : BACKUP_SNAPSHOT_DIR doit être un chemin absolu situé hors du répertoire de déploiement. Aucun instantané n’a été pris.',
+            'snapshot_driver' => 'Instantané impossible : la connexion par défaut emploie le pilote :driver, et seul un vidage MySQL est pris en charge. Aucun instantané n’a été pris.',
+            'pruned' => 'Élagage des instantanés terminé. Instantanés supprimés : :count.',
+        ],
+
+        /*
+        | Reprojection du catalogue (spec 10 § 3.2, règle 3), jouée à chaque
+        | déploiement et après toute restauration.
+        */
+        'reproject' => [
+            'done' => 'Reprojection terminée. Films reprojetés par différence : :movies.',
+        ],
     ],
 
     /*

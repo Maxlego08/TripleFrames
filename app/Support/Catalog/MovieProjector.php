@@ -28,13 +28,12 @@ use Illuminate\Database\Eloquent\Collection as EloquentCollection;
  * 2. **Écriture synchrone, jamais un job de fond.** Un job de fond laisserait
  *    un film retiré encore comptant dans le vivier, et un retrait qui ne sort
  *    pas du vivier est un retrait qui ment.
- * 3. Une commande de reprojection — `catalog:reproject`, **à écrire** —
- *    reconstruira tout et créera les lignes manquantes avant toute mise à jour.
- *    Elle n'existe pas encore : tant qu'elle manque, une incrémentation de
- *    `Locale::MASK_VERSION` n'a d'autre issue qu'un script manuel, et la
- *    dégradation voulue temporaire — les quatre propositions du QCM basculant
- *    ensemble sur `title_original` pour tout le salon — devient permanente.
- *    Cette ligne décrit un manque connu, pas un acquis.
+ * 3. La commande de reprojection, `catalog:reproject`, reconstruit tout et
+ *    crée les lignes manquantes avant toute mise à jour. Jouée à chaque
+ *    déploiement (étape 7 du hook) et après toute restauration, elle borne à
+ *    un déploiement la dégradation voulue temporaire qui suit une
+ *    incrémentation de `Locale::MASK_VERSION` : les quatre propositions du
+ *    QCM basculant ensemble sur `title_original` pour tout le salon.
  *
  * **Prédicat unique de variante jouable**, cité partout ailleurs et jamais
  * réécrit : `availability = 'published'` **ET** `processing_state = 'ready'`

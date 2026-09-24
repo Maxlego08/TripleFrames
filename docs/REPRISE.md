@@ -406,7 +406,7 @@ Ensuite, à chaque session : **« Implémente l'étape suivante de l'ordre des l
 17. L20-1 — `admin_action`, nom réel (D12), `admin:first-admin` → — — ✅ livrée le 24/09
 18. L20-2 — porte `/admin`, `admin.2fa`, coquille mobile → 12, 16, 17 — ✅ livrée le 24/09
 19. L30-7 — scission de `PlatformDataSeeder` → — — ✅ livrée le 24/09
-20. L100-6 — hook **sans ses étapes 3 et 12** (D37), `backup:snapshot`, élagage, `catalog:reproject` → 11
+20. L100-6 — hook **sans ses étapes 3 et 12** (D37), `backup:snapshot`, élagage, `catalog:reproject` → 11 — ✅ livrée le 24/09
 21. L20-4 — géométrie 16:9, plancher de recadrage à double borne → 8, 9, 12
 22. L20-5 — chaîne Imagick, `ProcessFrameImage` (file `default`) → 21
 23. L100-7 (1er temps) — planificateur, battements, sondes, journaux → 11, 22

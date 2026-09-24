@@ -139,10 +139,16 @@ final class AnswerKeyProjector
                 ->distinct()
                 ->count('answer_key.movie_id');
 
+            $ambiguous = $published > 1;
+
+            // Seules les lignes dont le drapeau CHANGE sont écrites : un recompte
+            // sans effet ne réécrit rien, `updated_at` compris, et c'est ce qui
+            // rend `catalog:reproject` idempotente jusqu'à l'horodatage.
             AnswerKey::query()
                 ->where('normalized', $normalized)
                 ->where('key_kind', AnswerKeyKind::Prefix->value)
-                ->update(['is_ambiguous' => $published > 1]);
+                ->where('is_ambiguous', '!=', $ambiguous)
+                ->update(['is_ambiguous' => $ambiguous]);
         }
     }
 
