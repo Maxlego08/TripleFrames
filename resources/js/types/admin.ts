@@ -13,6 +13,8 @@
  * Ce fichier n'est PAS généré : il se modifie à la main, en face du présentateur.
  */
 
+import type { TranslationKey } from '@/types/translations';
+
 /** `{ data, meta }`, jamais le tableau `links` d'un paginateur Laravel. */
 export type Paginated<T> = {
     data: T[];
@@ -371,6 +373,76 @@ export type AdminBankMovie = {
 export type AdminBankAbilities = {
     createFrame: boolean;
 };
+
+/**
+ * Clé d'un libellé ou d'une aide de la grille d'exclusion
+ * (`admin.exclusion_grid.v{n}.{slug}.label` et `.help`, spec 20 § 7.1).
+ * Le serveur les envoie ; un item sans ses deux feuilles fait échouer
+ * `ExclusionGridTest`.
+ */
+export type ExclusionGridKey = Extract<
+    TranslationKey,
+    `admin.exclusion_grid.${string}`
+>;
+
+/** Un item de la grille applicable à l'image revue, et ses deux clés. */
+export type AdminReviewItem = {
+    slug: string;
+    label_key: ExclusionGridKey;
+    help_key: ExclusionGridKey;
+};
+
+/**
+ * La source déclarée (spec 20 § 7.6) : le chemin du visuel TMDB, ou le
+ * timecode d'une capture. Affichée en lecture seule, et confirmée par
+ * l'envoi de la revue — jamais un support ni un outil (A7).
+ */
+export type AdminDeclaredSource = {
+    kind: FrameSourceKind;
+    reference: string;
+};
+
+/**
+ * Une image de la file de revue — props de revue du contrat C14-bis § 3,
+ * miroir de `AdminCatalogPresenter::reviewFrame()`.
+ *
+ * `published_hash` est l'empreinte des octets affichés, que l'envoi rend en
+ * `reviewed_hash` (back-office seulement) ; `game_url` est l'aperçu du rendu
+ * FINAL, jamais celui du recadrage, versionné par cette empreinte : son
+ * adresse change avec les octets, et l'`<img>` avec elle.
+ */
+export type AdminReviewFrame = {
+    id: number;
+    movie_id: number;
+    frame_level: FrameLevel;
+    availability: ContentAvailability;
+    published_hash: string;
+    game_url: string;
+    grid_version: number;
+    items: AdminReviewItem[];
+    declared_source: AdminDeclaredSource;
+    /** Slugs en défaut de la revue rejetée qui la juge encore ; vide sinon. */
+    failed_items: string[];
+};
+
+/** Le film d'un groupe de la file : titre original, année. */
+export type AdminReviewMovie = {
+    id: number;
+    title_original: string;
+    title_original_latin: string | null;
+    release_year: number | null;
+};
+
+/** Les images d'un même film, dans l'ordre de la file (spec 20 § 7.3). */
+export type AdminReviewGroup = {
+    movie: AdminReviewMovie;
+    frames: AdminReviewFrame[];
+};
+
+/** Les trois listes de la file — miroir de `App\Support\Curation\ReviewList`. */
+export type AdminReviewList = 'to_review' | 'to_rereview' | 'rejected';
+
+export type AdminReviewQueue = Record<AdminReviewList, AdminReviewGroup[]>;
 
 /** Les gestes de la fiche film, pour l'affichage seulement. */
 export type AdminMovieAbilities = {

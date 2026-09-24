@@ -1,5 +1,10 @@
 import { Link, router, usePage } from '@inertiajs/react';
-import { Clapperboard, DownloadCloud, LayoutDashboard } from 'lucide-react';
+import {
+    Clapperboard,
+    DownloadCloud,
+    LayoutDashboard,
+    ListChecks,
+} from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { AdminBrand } from '@/components/admin/admin-brand';
 import { AdminNav } from '@/components/admin/admin-nav';
@@ -28,6 +33,7 @@ import { useTranslations } from '@/hooks/use-translations';
 import { dashboard as adminDashboard } from '@/routes/admin';
 import { index as catalogIndex } from '@/routes/admin/catalog';
 import { index as importIndex } from '@/routes/admin/import';
+import { index as reviewIndex } from '@/routes/admin/review';
 import type { AdminNavItem } from '@/types/navigation';
 
 /**
@@ -102,6 +108,11 @@ export function AdminSidebar() {
             title: t('admin.nav.catalog'),
             href: catalogIndex(),
             icon: Clapperboard,
+        },
+        {
+            title: t('admin.nav.review'),
+            href: reviewIndex(),
+            icon: ListChecks,
         },
         {
             title: t('admin.nav.import'),

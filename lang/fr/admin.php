@@ -42,6 +42,7 @@ return [
         'dashboard' => 'Tableau de bord',
         'catalog' => 'Catalogue',
         'import' => 'Import',
+        'review' => 'Revue',
         'back_to_site' => 'Retour au site',
         'role' => [
             'curator' => 'Curateur',
@@ -943,6 +944,155 @@ return [
     ],
 
     /*
+    | Grille d'exclusion (spec 20 § 7.1, contrat C14-bis) : une feuille
+    | `label` et une feuille `help` par item, sous sa VERSION — forme R-47,
+    | une clé de langue ne pouvant être à la fois feuille et nœud. Une revue
+    | passée reste ainsi relisible dans les mots de la grille qu'elle a
+    | appliquée. Textes normatifs, figés avec leur version : clarifier un
+    | libellé impose une nouvelle version (§ 7.2), jamais une réécriture ici.
+    */
+    'exclusion_grid' => [
+        'v1' => [
+            'no_poster_or_cover' => [
+                'label' => 'Ni affiche ni jaquette',
+                'help' => 'L’image est un photogramme du film : ni affiche, ni jaquette, ni visuel de dossier de presse, ni montage promotionnel. Un visuel composé (plusieurs plans, titre stylisé, fond uni) est refusé.',
+            ],
+            'no_title_card' => [
+                'label' => 'Pas de carton-titre',
+                'help' => 'Aucun plan où s’affiche le titre du film, qu’il soit incrusté, peint dans le décor au moment du titre ou porté par un carton.',
+            ],
+            'no_studio_logo' => [
+                'label' => 'Pas de logo de studio',
+                'help' => 'Aucun logo ni ouverture de studio, de distributeur ou de producteur, même partiel ou en arrière-plan.',
+            ],
+            'no_credits' => [
+                'label' => 'Pas de générique',
+                'help' => 'Aucun plan de générique de début ou de fin, aucun nom d’acteur, de réalisateur ou de membre de l’équipe incrusté.',
+            ],
+            'no_identifying_text' => [
+                'label' => 'Aucun texte qui identifie le film',
+                'help' => 'Aucun texte, dans aucune écriture, qui nomme ou identifie le film : titre, sous-titre, nom de saga, accroche, crédits. Un texte de décor sans rapport avec le titre (enseigne, panneau, journal) reste autorisé, sans quoi le corpus japonais et le corpus d’exception deviendraient impubliables. En cas de doute, refuser.',
+            ],
+            'no_watermark_or_copyright' => [
+                'label' => 'Aucun filigrane ni copyright incrusté',
+                'help' => 'Aucun filigrane, aucune mention « © », aucune signature ni marque de site incrustée, même discrète dans un coin.',
+            ],
+            'no_broadcaster_or_trailer_overlay' => [
+                'label' => 'Aucune incrustation de bande-annonce ou de diffuseur',
+                'help' => 'Aucun logo de chaîne ou de plateforme, bandeau, date de sortie, mention « bande-annonce » ou « prochainement », ni élément d’interface de lecteur vidéo.',
+            ],
+            'no_promotional_still_or_portrait' => [
+                'label' => 'Aucune photo de plateau ni portrait promotionnel',
+                'help' => 'Pas de photo de tournage (équipe, matériel, coulisses) ni de portrait posé d’acteur hors du film : le droit à l’image de l’acteur est distinct du droit d’auteur sur l’œuvre. Seul un photogramme du film est admis.',
+            ],
+            'no_lead_face' => [
+                'label' => 'Pas de visage du personnage principal',
+                'help' => 'Aux niveaux 1 et 2 seulement, le visage du personnage principal n’apparaît pas de manière reconnaissable. Règle de cryptage de la manche, pas de conformité : un plan iconique de niveau 5 le montre forcément.',
+            ],
+        ],
+    ],
+
+    /*
+    | Passe de revue (spec 20 § 7.3 à § 7.6). Trois listes : « À revoir »,
+    | « À re-revoir », « Rejetées » ; `tabs.*` : `:count` est le nombre
+    | d'images de la liste. Une image se juge sur son rendu FINAL, dans le
+    | cadre sombre du jeu ; la source déclarée s'affiche en lecture seule et
+    | l'envoi la confirme. Les refus (`stale`, `grid_version_outdated`,
+    | `source_mismatch`, `locked`, `level_changed`, `already_reviewed`,
+    | `answers_invalid`) n'écrivent aucune preuve ; tous sauf le dernier sont
+    | relus sous le verrou de l'image. `panel.heading` : `:level` et
+    | `:title` ; `list.failed`, `panel.previously_rejected` et
+    | `unpublish.default_reason` : `:items`, les libellés des points en défaut.
+    */
+    'review' => [
+        'title' => 'Passe de revue',
+        'heading' => 'Passe de revue',
+        'description' => 'Chaque image se juge sur son rendu final, tel qu’un joueur le verra, dans le cadre sombre du jeu et aux deux largeurs. Une revue conforme publie l’image ; une revue non conforme nomme les points en défaut. Les images sont regroupées par film : son contexte aide à juger le texte et les visages.',
+        'desktop_required' => 'La revue demande un écran large, celui d’un ordinateur : l’image se juge sur son rendu final aux deux largeurs. Les listes, et les gestes sur une image rejetée, restent utilisables ici.',
+
+        'tabs' => [
+            'label' => 'Listes de la file de revue',
+            'to_review' => 'À revoir (:count)',
+            'to_rereview' => 'À re-revoir (:count)',
+            'rejected' => 'Rejetées (:count)',
+        ],
+
+        'lists' => [
+            'to_review' => [
+                'description' => 'Les images prêtes qui n’ont pas été jugées depuis leur dernier changement : nouvelles, re-recadrées, changées de niveau ou dépubliées. Seule une revue conforme les met en jeu.',
+                'empty' => 'Aucune image à revoir : chaque image prête a été jugée.',
+            ],
+            'to_rereview' => [
+                'description' => 'Les images en jeu revues sous une version antérieure de la grille. Elles restent en jeu pendant leur nouvelle revue.',
+                'empty' => 'Aucune image à re-revoir : chaque image en jeu a été revue sous la grille courante.',
+            ],
+            'rejected' => [
+                'description' => 'Les images dont la dernière revue est non conforme. Revoyez-en une si ce rejet était une erreur, re-recadrez-la dans la banque du film, ou écartez-la.',
+                'empty' => 'Aucune image rejetée.',
+            ],
+        ],
+
+        'list' => [
+            'label' => 'Images du film :title',
+            'frame' => 'Niveau :level — :label',
+            'current' => 'En cours de revue',
+            'in_play' => 'En jeu',
+            'failed' => 'En défaut : :items',
+            'actions' => 'Gestes sur l’image de niveau :level du film :title',
+            'recrop' => 'Re-recadrer dans la banque',
+            'unpublish' => 'Dépublier',
+            'set_aside' => 'Écarter',
+        ],
+
+        'panel' => [
+            'heading' => 'Image de niveau :level — :title',
+            'movie' => 'Film',
+            'title_latin' => 'Titre transcrit',
+            'release_year' => 'Année de sortie',
+            'level' => 'Niveau',
+            'in_play' => 'Cette image est en jeu : une revue conforme l’y garde, une revue non conforme propose de la dépublier.',
+            'previously_rejected' => 'Rejetée à la dernière revue, en défaut : :items. Seule une revue conforme peut encore partir.',
+            'source' => [
+                'heading' => 'Source déclarée',
+                'tmdb' => 'Visuel TMDB',
+                'capture' => 'Capture personnelle, à cet instant du film',
+                'notice' => 'Lecture seule : votre revue confirme cette source, inscrite telle quelle dans sa preuve.',
+            ],
+            'items' => [
+                'heading' => 'Grille d’exclusion, version :version',
+                'description' => 'Les points qui s’appliquent au niveau :level. « Conforme, publier » répond oui à chacun d’eux.',
+                'failed' => 'En défaut : :label',
+            ],
+            'pass' => 'Conforme, publier',
+            'fail' => 'Non conforme',
+            'fail_hint' => 'Cochez chaque point en défaut, puis rejetez l’image.',
+            'reject' => 'Rejeter',
+            'reject_blocked' => 'Cochez au moins un point en défaut pour rejeter l’image.',
+            'cancel' => 'Annuler',
+            'sending' => 'Envoi en cours…',
+        ],
+
+        'unpublish' => [
+            'default_reason' => 'Rejetée en revue, en défaut : :items.',
+            'rejected_notice' => 'La revue non conforme est enregistrée. L’image reste en jeu tant que vous ne la dépubliez pas, et figure dans « Rejetées » jusqu’à décision.',
+        ],
+
+        'flash' => [
+            'published' => 'Revue conforme : l’image est publiée.',
+            'rereviewed' => 'Revue conforme : l’image reste en jeu, revue sous la grille courante.',
+            'rejected' => 'Revue non conforme enregistrée : l’image rejoint les rejetées.',
+        ],
+
+        'stale' => 'L’image a changé depuis son affichage, un nouveau rendu l’a remplacée : aucune revue n’a été enregistrée. Revoyez-la sur son rendu actuel.',
+        'grid_version_outdated' => 'La grille d’exclusion a changé depuis l’affichage de cette image : aucune revue n’a été enregistrée. Revoyez-la sous la grille courante.',
+        'source_mismatch' => 'La source confirmée n’est pas celle de l’image : aucune revue n’a été enregistrée. Revoyez-la depuis la file à jour.',
+        'locked' => 'Cette image ne peut pas être revue : elle est en traitement ou en échec, ou bien elle ou son film est suspendu ou retiré par un administrateur.',
+        'level_changed' => 'Le niveau de l’image a changé depuis son affichage, et les points de la grille avec lui : aucune revue n’a été enregistrée. Revoyez-la à son nouveau niveau.',
+        'already_reviewed' => 'Cette image a déjà été jugée, ou n’attend plus de revue : aucune nouvelle revue n’a été enregistrée.',
+        'answers_invalid' => 'Les réponses envoyées ne correspondent pas à la grille d’exclusion : aucune revue n’a été enregistrée. Revoyez l’image depuis la file à jour.',
+    ],
+
+    /*
     | Import — les deux voies et leur ASYMÉTRIE, dite avant les formulaires.
     | Un curateur qui ne la comprend pas collera des identifiants sans savoir
     | qu’il marque une exception.
@@ -1115,6 +1265,10 @@ return [
         'crop_rect' => 'cadre',
         'crop_seconds' => 'temps de recadrage',
         'reason' => 'motif',
+        'grid_version' => 'version de la grille',
+        'reviewed_hash' => 'empreinte de l’image revue',
+        'answers' => 'réponses de la grille',
+        'declared_source_reference' => 'source déclarée',
         'frame_source' => [
             'dimensions' => 'Ce visuel est en portrait, fait moins de :width pixels de large, ou ne laisse place à aucun cadre admis : il ne peut pas donner une image de jeu. Choisissez un autre visuel du film.',
         ],

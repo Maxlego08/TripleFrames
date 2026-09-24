@@ -7,8 +7,10 @@ use App\Enums\FrameProcessingState;
 use App\Enums\ImportRunKind;
 use App\Enums\ImportRunStatus;
 use App\Enums\Locale;
+use App\Enums\ReviewDecision;
 use App\Models\Alias;
 use App\Models\Frame;
+use App\Models\FrameReview;
 use App\Models\ImportRun;
 use App\Models\Movie;
 use App\Models\MovieCertification;
@@ -19,6 +21,7 @@ use App\Models\MovieTmdbTag;
 use App\Models\ThemeLabel;
 use App\Support\Curation\ExclusionGrid;
 use App\Support\Curation\FrameCurationState;
+use App\Support\Curation\ReviewQueue;
 use App\Support\Frames\CropRect;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
@@ -359,6 +362,94 @@ final class AdminCatalogPresenter
                 && ExclusionGrid::isOutdated($frame->review_grid_version),
             'curation_state' => $state->value,
             'review_rejected' => $reviewRejected,
+        ];
+    }
+
+    /**
+     * Le film d'un groupe de la file de revue (spec 20 § 7.3, § 7.4) : ce que
+     * l'écran affiche à côté de l'image — titre original, année.
+     *
+     * @return array{id: int, title_original: string, title_original_latin: string|null, release_year: int|null}
+     */
+    public static function reviewMovie(Movie $movie): array
+    {
+        return [
+            'id' => $movie->id,
+            'title_original' => $movie->title_original,
+            'title_original_latin' => $movie->title_original_latin,
+            'release_year' => $movie->release_year,
+        ];
+    }
+
+    /**
+     * Une image de la file de revue — les props de revue du contrat C14-bis
+     * § 3, plus ce que les listes de l'écran exigent.
+     *
+     * - `published_hash` : **admin seulement** — l'empreinte des octets
+     *   affichés, que l'envoi rend en `reviewed_hash` ; comparée sous verrou,
+     *   elle refuse une revue d'octets remplacés entre-temps ;
+     * - `game_url` : l'aperçu admin du rendu FINAL (C9-bis), jamais l'aperçu
+     *   de recadrage (§ 7.4), **versionné par `published_hash`** (paramètre
+     *   `v`, ignoré par `FrameImageController`) : l'adresse change avec les
+     *   octets. Sans cela, un re-recadrage terminé entre l'affichage et
+     *   l'envoi laisserait l'ancien rendu à l'écran — même `src`, donc aucun
+     *   rechargement de l'`<img>`, et la liste des images disponibles du
+     *   document réutilise l'image déjà chargée malgré `no-store` — pendant
+     *   que le champ caché `reviewed_hash` porterait la nouvelle empreinte :
+     *   le curateur publierait des octets qu'il n'a jamais vus ;
+     * - `grid_version` : {@see ExclusionGrid::CURRENT_VERSION} ;
+     * - `items` : les items applicables à ce niveau, et leurs deux clés ;
+     * - `declared_source` : le chemin du visuel TMDB ou le timecode `h:mm:ss`
+     *   d'une capture, affiché en lecture seule et confirmé par l'envoi
+     *   (§ 7.6) — jamais un support ni un outil (A7) ;
+     * - `failed_items` : les items en défaut de la revue rejetée qui la juge
+     *   encore — vide hors de la liste « Rejetées » ;
+     * - `id`, `movie_id` : adresse des gestes, back-office seulement (E10-11).
+     *
+     * @return array{
+     *     id: int,
+     *     movie_id: int,
+     *     frame_level: int,
+     *     availability: string,
+     *     published_hash: string,
+     *     game_url: string,
+     *     grid_version: int,
+     *     items: list<array{slug: string, label_key: string, help_key: string}>,
+     *     declared_source: array{kind: string, reference: string},
+     *     failed_items: list<string>,
+     * }
+     */
+    public static function reviewFrame(Frame $frame, ?FrameReview $judging): array
+    {
+        $items = [];
+
+        foreach (ExclusionGrid::slugsFor($frame->frame_level) as $slug) {
+            $items[] = [
+                'slug' => $slug,
+                'label_key' => ExclusionGrid::labelKey($slug),
+                'help_key' => ExclusionGrid::helpKey($slug),
+            ];
+        }
+
+        $publishedHash = (string) $frame->published_hash;
+
+        return [
+            'id' => $frame->id,
+            'movie_id' => $frame->movie_id,
+            'frame_level' => $frame->frame_level->value,
+            'availability' => $frame->availability->value,
+            'published_hash' => $publishedHash,
+            'game_url' => route('admin.catalog.frames.game', [
+                'movie' => $frame->movie_id,
+                'frame' => $frame->id,
+                'v' => $publishedHash,
+            ]),
+            'grid_version' => ExclusionGrid::CURRENT_VERSION,
+            'items' => $items,
+            'declared_source' => ReviewQueue::declaredSource($frame),
+            'failed_items' => $judging?->decision === ReviewDecision::Rejected
+                ? ReviewQueue::failedItems($judging)
+                : [],
         ];
     }
 

@@ -2,10 +2,13 @@
 
 use App\Enums\FrameLevel;
 use App\Models\Frame;
+use App\Models\FrameReview;
 use App\Models\ImportRun;
 use App\Models\Movie;
 use App\Models\User;
 use App\Settings\PlatformLimits;
+use App\Support\Curation\ExclusionGrid;
+use App\Support\Curation\ReviewQueue;
 use App\Support\Frames\FrameGeometry;
 use Illuminate\Support\Facades\Http;
 use Tests\Fixtures\TmdbFixture;
@@ -233,6 +236,30 @@ function adminRoutesMatrix(): array
             redirect: fn (array $parameters): string => route('admin.catalog.show', ['movie' => $parameters['movie']]),
         ),
 
+        // Ligne 6 — la file de revue : `can:create` sur la CLASSE
+        // `FrameReview`, curateur et au-delà.
+        'admin.review.index' => adminRoutesRow(
+            row: 6,
+            method: 'GET',
+            guards: ['can:create,'.FrameReview::class],
+            curator: 200,
+            admin: 200,
+        ),
+
+        // Ligne 17 — passer une revue : une image prête, jamais revue, et la
+        // revue conforme que l'écran enverrait. Le 302 est la publication
+        // elle-même, retour à la file d'où la revue est postée.
+        'admin.catalog.frames.review.store' => adminRoutesRow(
+            row: 17,
+            method: 'POST',
+            guards: ['can:create,'.FrameReview::class],
+            curator: 302,
+            admin: 302,
+            parameters: fn (): array => adminRoutesReviewParameters(),
+            payload: fn (): array => adminRoutesReviewPayload(),
+            redirect: fn (array $parameters): string => route('admin.review.index'),
+        ),
+
         // Ligne 7 — l'écran d'import et le détail d'un balayage.
         'admin.import.index' => adminRoutesRow(
             row: 7,
@@ -325,6 +352,39 @@ function adminRoutesFrameGestureParameters(bool $published, bool $failed = false
     test()->from(route('admin.catalog.show', ['movie' => $movie->id]));
 
     return ['movie' => $movie->id, 'frame' => $frame->id];
+}
+
+/**
+ * Un film et une image prête à revoir — brouillon traité, jamais revu —, la
+ * revue postée depuis la file de revue, où le retour arrière mène.
+ *
+ * @return array{movie: int, frame: int}
+ */
+function adminRoutesReviewParameters(): array
+{
+    $movie = Movie::factory()->create();
+    $frame = Frame::factory()->for($movie)->level(FrameLevel::Level3)->withFiles()->create();
+
+    test()->from(route('admin.review.index'));
+
+    return ['movie' => $movie->id, 'frame' => $frame->id];
+}
+
+/**
+ * La revue conforme de la dernière image créée, telle que l'écran l'enverrait.
+ *
+ * @return array<string, mixed>
+ */
+function adminRoutesReviewPayload(): array
+{
+    $frame = Frame::query()->latest('id')->firstOrFail();
+
+    return [
+        'grid_version' => ExclusionGrid::CURRENT_VERSION,
+        'reviewed_hash' => $frame->published_hash,
+        'answers' => array_fill_keys(ExclusionGrid::slugsFor($frame->frame_level), true),
+        'declared_source_reference' => ReviewQueue::declaredSource($frame)['reference'],
+    ];
 }
 
 /**

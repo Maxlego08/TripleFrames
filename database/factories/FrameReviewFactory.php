@@ -9,6 +9,7 @@ use App\Models\Frame;
 use App\Models\FrameReview;
 use App\Models\User;
 use App\Support\Curation\ExclusionGrid;
+use App\Support\Curation\ReviewQueue;
 use App\Support\Eloquent\AppendOnlyBuilder;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use InvalidArgumentException;
@@ -201,20 +202,12 @@ class FrameReviewFactory extends Factory
     }
 
     /**
-     * Timecode textuel d'une capture — un instant DANS L'ŒUVRE, et rien d'autre.
+     * Timecode textuel d'une capture — un instant DANS L'ŒUVRE, et rien
+     * d'autre —, dans la forme `h:mm:ss` que l'écran de revue affiche et que
+     * son envoi confirme ({@see ReviewQueue::timecode()}, spec 20 § 7.6).
      */
     private static function timecode(?int $milliseconds): ?string
     {
-        if ($milliseconds === null) {
-            return null;
-        }
-
-        return sprintf(
-            '%02d:%02d:%02d.%03d',
-            intdiv($milliseconds, 3_600_000),
-            intdiv($milliseconds, 60_000) % 60,
-            intdiv($milliseconds, 1_000) % 60,
-            $milliseconds % 1_000,
-        );
+        return $milliseconds === null ? null : ReviewQueue::timecode($milliseconds);
     }
 }

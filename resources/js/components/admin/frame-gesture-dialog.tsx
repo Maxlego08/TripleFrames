@@ -178,9 +178,10 @@ function GestureBody(props: BodyProps) {
 
 /**
  * L'avertissement de couverture, et son chargement : seulement pour une
- * image en jeu, la seule que ces gestes font sortir du jeu.
+ * image en jeu, la seule que ces gestes font sortir du jeu. Partagé avec la
+ * confirmation de dépublication de la passe de revue (§ 7.5, § 8.4).
  */
-function CoverageNotice({
+export function CoverageNotice({
     inPlay,
     warning,
     onRetry,
@@ -236,7 +237,10 @@ function CoverageNotice({
 }
 
 /** Vrai tant que l'avertissement dû n'est pas sous les yeux du curateur. */
-function isWarningPending(inPlay: boolean, warning: CoverageWarning): boolean {
+export function isWarningPending(
+    inPlay: boolean,
+    warning: CoverageWarning,
+): boolean {
     return inPlay && warning.status !== 'ready';
 }
 

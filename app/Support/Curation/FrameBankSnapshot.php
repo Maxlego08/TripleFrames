@@ -351,13 +351,12 @@ final class FrameBankSnapshot
     /**
      * Les frames du film et l'état affiché de chacune, en deux requêtes.
      *
-     * La dernière décision de revue d'une frame est celle de la plus récente
-     * ligne `frame_review` à la version courante, portant sur ses octets
-     * courants (`reviewed_hash = published_hash`) et postérieure ou égale à
-     * son dernier changement d'état (`COALESCE(availability_changed_at,
-     * created_at)`) — le prédicat des listes « à revoir » et « rejetées »
-     * (§ 7.3). Une revue antérieure à un recadrage ou à une dépublication ne
-     * juge plus rien.
+     * La dernière décision de revue d'une frame est celle de la revue qui la
+     * juge encore — la plus récente à la version courante, portant sur ses
+     * octets courants et postérieure ou égale à son dernier changement
+     * d'état —, lue par {@see ReviewQueue::judgingReviews()}, seul porteur
+     * du prédicat des listes « à revoir » et « rejetées » (§ 7.3). Une revue
+     * antérieure à un recadrage ou à une dépublication ne juge plus rien.
      */
     private function load(): void
     {
@@ -372,36 +371,10 @@ final class FrameBankSnapshot
             $frame->setRelation('movie', $this->movie);
         }
 
-        $reviews = $frames->isEmpty()
-            ? new Collection
-            : FrameReview::query()
-                ->whereIn('frame_id', $frames->modelKeys())
-                ->where('grid_version', ExclusionGrid::CURRENT_VERSION)
-                ->orderBy('reviewed_at')
-                ->orderBy('id')
-                ->get(['id', 'frame_id', 'decision', 'reviewed_hash', 'reviewed_at']);
-
-        /** @var array<int, ReviewDecision> $lastDecisions */
-        $lastDecisions = [];
-        $byId = $frames->keyBy('id');
-
-        foreach ($reviews as $review) {
-            $frame = $byId->get($review->frame_id);
-
-            if (! $frame instanceof Frame
-                || $frame->published_hash === null
-                || $review->reviewed_hash !== $frame->published_hash) {
-                continue;
-            }
-
-            $since = $frame->availability_changed_at ?? $frame->created_at;
-
-            if ($since !== null && $review->reviewed_at->lt($since)) {
-                continue;
-            }
-
-            $lastDecisions[$frame->id] = $review->decision;
-        }
+        $lastDecisions = array_map(
+            static fn (FrameReview $review): ReviewDecision => $review->decision,
+            ReviewQueue::judgingReviews($frames),
+        );
 
         foreach ($frames as $frame) {
             $this->states[$frame->id] = FrameCurationState::of($frame, $lastDecisions[$frame->id] ?? null);

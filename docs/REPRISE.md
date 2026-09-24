@@ -435,7 +435,7 @@ Ensuite, à chaque session : **« Implémente l'étape suivante de l'ordre des l
 43. L20-9a — recadreur : cadre, boutons, clavier → 8, 12, 21 — ✅ livrée le 24/09
 44. L20-9b — recadreur : poignées, molette, pincement (D35) → 43 — ✅ livrée le 24/09
 45. L20-10 — éditeur de la banque d'images → 34, 39, 41, 42, 43 — ✅ livrée le 24/09
-46. L20-12 — grille v1, passe de revue → 17, 39, 40, 42, 45
+46. L20-12 — grille v1, passe de revue → 17, 39, 40, 42, 45 — ✅ livrée le 24/09
 47. L20-11 — raccourcis de débit, bande balayable (D35) → 8, 45, 46
 48. L20-13 — publication d'un film, contenu vérifié, ambiguïté → 17, 38, 46
 49. L20-14 — titres, alias, `movie_group` manuel → 48

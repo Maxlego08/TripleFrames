@@ -8,6 +8,8 @@ use App\Http\Controllers\Admin\FrameCropController;
 use App\Http\Controllers\Admin\FrameImageController;
 use App\Http\Controllers\Admin\FrameLevelController;
 use App\Http\Controllers\Admin\FrameRetryController;
+use App\Http\Controllers\Admin\FrameReviewController;
+use App\Http\Controllers\Admin\FrameReviewQueueController;
 use App\Http\Controllers\Admin\FrameTmdbController;
 use App\Http\Controllers\Admin\FrameUnpublishController;
 use App\Http\Controllers\Admin\ImportController;
@@ -16,6 +18,7 @@ use App\Http\Controllers\Admin\ImportIdsController;
 use App\Http\Controllers\Admin\ImportResumeController;
 use App\Http\Controllers\Admin\TwoFactorRequiredController;
 use App\Models\Frame;
+use App\Models\FrameReview;
 use App\Models\ImportRun;
 use App\Models\Movie;
 use Illuminate\Support\Facades\Route;
@@ -73,8 +76,8 @@ use Illuminate\Support\Facades\Route;
 | `throttle:admin-import` ; les écritures d'image qui téléchargent un original
 | ou distribuent un job Imagick — ajout, re-recadrage, relance —
 | `throttle:admin-frame` (C9 § 2) ; les gestes de curation qui n'écrivent
-| qu'en base — changer un niveau, dépublier ou écarter une image —
-| `throttle:admin-curation` (§ 13.7). Limiteurs nommés déclarés dans
+| qu'en base — changer un niveau, passer une revue, dépublier ou écarter
+| une image — `throttle:admin-curation` (§ 13.7). Limiteurs nommés déclarés dans
 | `FortifyServiceProvider::configureRateLimiting()`, là où vivent déjà
 | `login`, `two-factor` et `passkeys`.
 |
@@ -174,7 +177,23 @@ Route::middleware(['auth', 'verified', 'role:curator', 'admin.2fa', 'admin.local
             Route::post('catalog/{movie}/frames/{frame}/unpublish', [FrameUnpublishController::class, 'store'])
                 ->middleware(['can:unpublish,frame', 'throttle:admin-curation'])
                 ->name('catalog.frames.unpublish');
+
+            // Passer une revue (§ 7.5, ligne 17) : une revue passante PUBLIE
+            // l'image. La garde nomme la CLASSE `FrameReview` — la revue
+            // n'existe pas encore. Les refus d'état (image verrouillée,
+            // octets ou niveau changés, image déjà jugée) sont des erreurs
+            // traduites relues sous le verrou, jamais des 403. Aucune route
+            // ne modifie ni ne supprime une revue (§ 7.8, ligne 38).
+            Route::post('catalog/{movie}/frames/{frame}/review', [FrameReviewController::class, 'store'])
+                ->middleware(['can:create,'.FrameReview::class, 'throttle:admin-curation'])
+                ->name('catalog.frames.review.store');
         });
+
+        // La file de revue (§ 7.3, ligne 6) : même garde que la revue — lire
+        // la file, c'est déjà s'apprêter à revoir.
+        Route::get('review', [FrameReviewQueueController::class, 'index'])
+            ->middleware('can:create,'.FrameReview::class)
+            ->name('review.index');
 
         Route::get('import', [ImportController::class, 'index'])
             ->middleware('can:viewAny,'.ImportRun::class)
