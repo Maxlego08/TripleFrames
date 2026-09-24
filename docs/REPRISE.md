@@ -422,7 +422,7 @@ Ensuite, à chaque session : **« Implémente l'étape suivante de l'ordre des l
 30. IA + P, L100-10 (1er temps) — sauvegardes chaude et froide actives avant la première image curée → 4, 20, 24, 29
 31. P — contrôle de lisibilité, le lendemain de la première sauvegarde → 30
 32. IA + P, L100-11 — supervision externe, une alerte volontaire par sonde → 4, 23, 29
-33. L20-3 — matrice des capacités, policies → 18
+33. L20-3 — matrice des capacités, policies → 18 — ✅ livrée le 24/09
 34. L30-1 — `FrameLevelCoverage` → —
 35. L30-2 — constructeur du vivier (`PoolScope`, `PoolQuery`, `RoomMemoryWindow`) → 6, 9, 34
 36. L30-3 — rapport de vivier en données → 9, 12, 35

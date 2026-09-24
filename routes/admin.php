@@ -55,6 +55,11 @@ use Illuminate\Support\Facades\Route;
 | aucun enregistrement de provider, et surtout aucun `Gate::before` — il
 | contournerait la propriété d'une `saved_config`, déclarée strictement privée.
 |
+| **Toute route ajoutée ici prend sa ligne dans `tests/Datasets/AdminRoutes.php`**,
+| la matrice des capacités de la spec 20 § 2.2 : `AuthorizationMatrixTest`
+| refuse une route `admin.*` sans ligne, une ligne sans route, et une garde
+| `can:` autre que celle que la ligne écrit.
+|
 | Les trois routes d'écriture portent en plus `throttle:admin-import`, limiteur
 | nommé déclaré dans `FortifyServiceProvider::configureRateLimiting()`, là où
 | vivent déjà `login`, `two-factor` et `passkeys`.
