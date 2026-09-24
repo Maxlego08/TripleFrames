@@ -145,12 +145,14 @@ it('preloads the dictionary of a target locale without switching the request', f
 
 /*
 |--------------------------------------------------------------------------
-| `Vary: Accept-Language`, sur l'accueil et nulle part ailleurs
+| `Vary: Accept-Language`, là où le contenu varie avec la locale
 |--------------------------------------------------------------------------
 |
-| Le site est public et indexé : l'accueil est négocié depuis `Accept-Language`
-| et doit le DIRE aux caches. Les pages légales, mono-langue FR, doivent rester
-| cachables telles quelles — d'où les deux assertions, de sens opposé.
+| L'accueil est négocié depuis `Accept-Language` et doit le DIRE aux caches ;
+| les trois pages légales et « signaler un contenu » le porteront aussi (n° 69,
+| spec 90 § 4.2, L90-4), leur habillage suivant la langue du visiteur. Hors de
+| ces pages, la route ne pose pas `VaryOnLanguage::ROUTE_FLAG` et l'en-tête
+| n'est jamais émis (`login` ici) — d'où les deux assertions, de sens opposé.
 |
 */
 

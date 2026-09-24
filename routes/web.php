@@ -1,17 +1,28 @@
 <?php
 
 use App\Http\Controllers\Locale\LocaleController;
+use App\Http\Middleware\RobotsDirectives;
 use App\Http\Middleware\VaryOnLanguage;
 use Illuminate\Support\Facades\Route;
 
-// L'accueil est la seule page publique dont le contenu varie avec la locale :
-// il embarque `common` (joint d'office) et `legal`, pour l'habillage du pied de
-// page et l'attribution TMDB. C'est aussi la seule à porter
-// `Vary: Accept-Language` — les pages légales sont mono-langue FR et doivent
-// rester cachables (spec 05 § Pas de préfixe de locale dans les URL).
+// L'accueil embarque `common` (joint d'office) et `legal`, pour l'habillage du
+// pied de page et l'attribution TMDB. Son contenu varie avec la locale
+// négociée, d'où `Vary: Accept-Language` — que les pages légales et
+// « signaler un contenu » porteront aussi (spec 90 § 4.2) : leur corps reste
+// en français, mais leur habillage suit la langue du visiteur. Aucune de ces
+// pages n'est « cachable » telle quelle : la règle est l'absence de tout cache
+// HTTP de page complète devant l'application (spec 05 § Pas de préfixe de
+// locale dans les URL).
+//
+// Indexation (spec 90 § 5) : l'accueil est l'une des QUATRE routes qui
+// portent `RobotsDirectives::ROUTE_FLAG`, avec les trois pages légales. Le
+// drapeau reste sans effet tant que `SITE_INDEXABLE` est fausse, c'est-à-dire
+// pendant tout le jalon 1 : toute réponse sort alors en `noindex, nofollow`.
+// Ne jamais le poser ailleurs, `IndexingTest` refuse tout autre porteur.
 Route::inertia('/', 'welcome')
     ->name('home')
     ->defaults(VaryOnLanguage::ROUTE_FLAG, true)
+    ->defaults(RobotsDirectives::ROUTE_FLAG, true)
     ->middleware('translations:legal');
 
 // Changement de langue : un seul geste, ouvert aux invités, sans préfixe de

@@ -399,7 +399,7 @@ Ensuite, à chaque session : **« Implémente l'étape suivante de l'ordre des l
 10. L60-1 — `EngineConstants`, Reverb, `predis`, `laravel-echo`, `pusher-js` → 9 — ✅ livrée le 24/09
 11. L100-4 — environnement, indexation, artefacts, `composer dev` → 6, 10 — ✅ livrée le 24/09
 12. L90-1 — anti-couleur, tokens, composants J1, retrait du forçage clair (D8) → 7 — ✅ livrée le 24/09
-13. L90-2 — `noindex` intégral, `Referrer-Policy` → —
+13. L90-2 — `noindex` intégral, `Referrer-Policy` → — — ✅ livrée le 24/09
 14. L40-7 — `AccountSwitches` : inscription et passkeys fermées hors `local`/`testing` → —
 15. L90-3 — coquille publique, pied de page, attribution TMDB, domaine `legal` → 12, 14
 16. L90-4 — pages légales et « signaler un contenu » en squelette → 13, 15

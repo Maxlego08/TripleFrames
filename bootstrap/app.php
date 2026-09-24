@@ -4,6 +4,7 @@ use App\Http\Middleware\EnsureUserHasRole;
 use App\Http\Middleware\ForceAdminLocale;
 use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
+use App\Http\Middleware\RobotsDirectives;
 use App\Http\Middleware\SelectTranslationDomains;
 use App\Http\Middleware\SetLocale;
 use App\Http\Middleware\VaryOnLanguage;
@@ -21,6 +22,15 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        // `X-Robots-Tag` et `Referrer-Policy` sur TOUTE réponse (spec 90 § 5.2).
+        // Global et non du groupe `web` : une URL inconnue lève avant tout
+        // middleware de route, et une 404 doit porter `noindex` comme le reste.
+        // En TÊTE de la pile globale, donc le dernier à toucher la réponse :
+        // placé en queue, il ne verrait ni la 503 du mode maintenance, ni la 400
+        // d'un chemin mal encodé, ni la 413 d'un corps trop lourd, que les
+        // middlewares globaux du framework rendent avant lui.
+        $middleware->prepend(RobotsDirectives::class);
+
         // `locale` rejoint `appearance` et `sidebar_state` pour la même raison :
         // c'est une préférence publique, non sensible, que le front lit et écrit
         // directement pour appliquer la langue sans attendre un aller-retour. Un
