@@ -2,7 +2,6 @@ import { usePage } from '@inertiajs/react';
 import { AdminHeader } from '@/components/admin/admin-header';
 import { AdminSidebar } from '@/components/admin/admin-sidebar';
 import { SidebarProvider } from '@/components/ui/sidebar';
-import { useForcedAppearance } from '@/hooks/use-forced-appearance';
 import { useTranslations } from '@/hooks/use-translations';
 import type { AdminLayoutProps } from '@/types/ui';
 
@@ -15,15 +14,16 @@ const MAIN_ID = 'admin-main';
  * re-skin du site joueur ne doit pas toucher l'outil de catalogue, et
  * l'inverse non plus. Seules les primitives `ui/sidebar` sont partagées.
  *
- * **Thème clair forcé**, demande explicite du porteur du projet, et forçage
- * symétrique de celui que l'écran de jeu recevra en sombre. Il passe par les
- * tokens et par eux seuls : `useForcedAppearance('light')` retire la classe
- * `dark` de `<html>`, tout le reste du back-office peint en
+ * **Aucun thème forcé** : le back-office suit l'apparence choisie par le
+ * visiteur, clair, sombre ou système (D8 du 23/09, spec 90 § 2.2). La revue
+ * d'une image exige de la voir telle qu'elle sera servie en jeu, ce que seul un
+ * cadre sombre LOCAL donne — les cadres de revue et de prévisualisation passent
+ * sous les tokens sombres du jeu (spec 20 § 6.7), jamais le document entier.
+ * Tout passe par les tokens et par eux seuls : le back-office peint en
  * `bg-background`, `text-foreground`, `border-border`… Aucun composant
  * d'administration ne contient une couleur littérale ni une taille en `px`,
  * et `scripts/check-theme-tokens.mjs` fait échouer `npm run check` si l'un y
- * revient. Le sélecteur d'apparence du site public n'est pas touché : la
- * préférence stockée est restaurée au démontage.
+ * revient.
  *
  * Largeur : la barre latérale se replie en icônes et le contenu occupe tout le
  * reste — un tableau de catalogue à onze colonnes réclame chaque pixel.
@@ -47,8 +47,6 @@ export default function AdminLayout({
 }: AdminLayoutProps) {
     const { t } = useTranslations();
     const sidebarOpen = usePage().props.sidebarOpen;
-
-    useForcedAppearance('light');
 
     return (
         <SidebarProvider defaultOpen={sidebarOpen}>

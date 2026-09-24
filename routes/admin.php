@@ -15,7 +15,7 @@ use Illuminate\Support\Facades\Route;
 | Back-office — début de panel, pas encore le back-office de curation
 |--------------------------------------------------------------------------
 |
-| Cinq middlewares sur le groupe, et pas un de plus :
+| Quatre middlewares sur le groupe, et pas un de plus :
 |
 | - `auth` et `verified` : le panneau est derrière un compte vérifié ;
 | - `role:curator` (`EnsureUserHasRole`) garde la PORTE, là où les `can:` posés
@@ -28,8 +28,12 @@ use Illuminate\Support\Facades\Route;
 |   ici** : ce serait un doublon. À noter pour les écrans — `TranslationDomains::selected()`
 |   rend `['admin']` SEUL dès que le domaine `admin` est demandé, `common` n'est
 |   donc PAS joint : toute clé appelée par une page d'administration vit dans
-|   `lang/fr/admin.php` ;
-| - `admin.appearance` (`ForceAdminAppearance`) force le thème clair côté serveur.
+|   `lang/fr/admin.php`.
+|
+| **Aucun forçage d'apparence** : le back-office suit l'apparence choisie par
+| le visiteur (D8 du 23/09, spec 90 § 2.2). Seuls les cadres de revue et de
+| prévisualisation d'image passent en sombre, localement, sous les tokens du
+| jeu (spec 20 § 6.7) — jamais le document entier.
 |
 | **L'autorisation est posée route par route par `can:`, jamais par un test de
 | rôle dans un contrôleur.** Les policies vivent dans `app/Policies/` et sont
@@ -49,7 +53,7 @@ use Illuminate\Support\Facades\Route;
 |
 */
 
-Route::middleware(['auth', 'verified', 'role:curator', 'admin.locale', 'admin.appearance'])
+Route::middleware(['auth', 'verified', 'role:curator', 'admin.locale'])
     ->prefix('admin')
     ->name('admin.')
     ->group(function (): void {

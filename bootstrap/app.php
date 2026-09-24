@@ -1,7 +1,6 @@
 <?php
 
 use App\Http\Middleware\EnsureUserHasRole;
-use App\Http\Middleware\ForceAdminAppearance;
 use App\Http\Middleware\ForceAdminLocale;
 use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
@@ -30,8 +29,10 @@ return Application::configure(basePath: dirname(__DIR__))
         // `users.locale` le supplante toujours.
         $middleware->encryptCookies(except: ['appearance', 'sidebar_state', 'locale']);
 
+        // Aucun alias de forçage d'apparence pour le back-office : il suit la
+        // préférence du visiteur (D8 du 23/09, spec 90 § 2.2). Le seul forçage
+        // prévu est celui des pages `game/*`, en sombre.
         $middleware->alias([
-            'admin.appearance' => ForceAdminAppearance::class,
             'admin.locale' => ForceAdminLocale::class,
             'role' => EnsureUserHasRole::class,
             'translations' => SelectTranslationDomains::class,

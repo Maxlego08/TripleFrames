@@ -42,11 +42,14 @@ const isDarkMode = (appearance: Appearance): boolean => {
 };
 
 /**
- * Attribut posé sur `<html>` par `ForceAdminAppearance` (moitié serveur) puis
- * par `use-forced-appearance.ts` (moitié cliente). Tant qu'il est présent, un
- * sous-arbre force son apparence et la préférence stockée ne doit PAS être
- * réappliquée par-dessus — sinon le document naît clair, passe en sombre au
- * chargement de ce module, puis repasse en clair au montage du layout.
+ * Attribut posé sur `<html>` par la moitié serveur d'un forçage (Blade, depuis
+ * la valeur partagée `appearanceForced`) puis par `use-forced-appearance.ts`
+ * (moitié cliente). Depuis D8 du 23/09, un seul forçage est prévu : l'écran de
+ * jeu, en sombre (spec 90 § 2.2) ; le back-office n'en a plus. Tant que
+ * l'attribut est présent, la page force son apparence et la préférence
+ * stockée ne doit PAS être réappliquée par-dessus — sinon le document naît
+ * sombre, passe en clair au chargement de ce module, puis repasse en sombre au
+ * montage de la coquille.
  */
 export const FORCED_APPEARANCE_ATTRIBUTE = 'appearanceForced';
 
@@ -104,8 +107,8 @@ const mediaQuery = (): MediaQueryList | null => {
 
 /**
  * Le thème du système a basculé. Un forçage en vigueur gagne : sans ce test,
- * un curateur en préférence « système » verrait le back-office passer en
- * sombre sous ses yeux.
+ * un joueur en préférence « système » verrait l'écran de jeu passer en clair
+ * sous ses yeux.
  */
 const handleSystemThemeChange = (): void => {
     const forced = forcedAppearance();
@@ -132,10 +135,10 @@ export function initializeTheme(): void {
     currentAppearance = getStoredAppearance();
 
     // Le forçage serveur gagne au BOOT, sinon il ne gagne jamais : Blade a déjà
-    // rendu un document clair, et réappliquer la préférence stockée ici le
-    // peindrait en sombre le temps que le layout se monte. Rien n'est écrit
-    // dans `localStorage` ni dans le cookie : la préférence du site public
-    // reste exactement celle que le visiteur a choisie.
+    // rendu un document dans l'apparence forcée, et réappliquer la préférence
+    // stockée ici le repeindrait le temps que la coquille se monte. Rien n'est
+    // écrit dans `localStorage` ni dans le cookie : la préférence du visiteur
+    // reste exactement celle qu'il a choisie.
     applyResolvedAppearance(forcedAppearance() ?? resolveStoredAppearance());
 
     // Set up system theme change listener

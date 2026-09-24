@@ -12,9 +12,11 @@
  *   - un appel `rgb(`, `rgba(`, `hsl(`, `hsla(`, `oklch(`, `lab(`… ;
  *   - une valeur en `px` — les largeurs se bornent en unités relatives ou par
  *     les utilitaires de grille (`min-w-[24rem]` passe, `min-w-[380px]` non) ;
- *   - une variante `dark:` — les deux forçages (back-office en clair, écran de
- *     jeu en sombre) passent par la classe `dark` posée à la racine, jamais
- *     par une variante écrite dans un composant ;
+ *   - une variante `dark:` — le forçage sombre de l'écran de jeu, comme la
+ *     portée sombre locale des cadres de revue du back-office, passe par la
+ *     classe `dark` posée à la racine ou sur le sous-arbre, jamais par une
+ *     variante écrite dans un composant (le back-office, lui, suit
+ *     l'apparence du visiteur : D8 du 23/09, spec 90 § 2.2) ;
  *   - un utilitaire de couleur littérale : `bg-white`, `text-black`,
  *     `bg-neutral-*`, `text-gray-*`, `border-zinc-*`, `bg-slate-*`…
  *
@@ -24,8 +26,16 @@
  *
  * `resources/js/components/ui/**` est HORS périmètre, et c'est volontaire :
  * ces fichiers sont générés par shadcn et le dépôt s'interdit de les éditer.
- * Le même script accueillera `resources/js/pages/game/**` quand l'écran de jeu
- * arrivera — c'est le forçage symétrique annoncé.
+ *
+ * Périmètre `WATCHED` : propriété de la spec 90 (§ 9.3, contrat C16 § 2.11).
+ * Il couvre le back-office et, depuis le lot L90-1, chaque répertoire et
+ * fichier joueur du jalon 1, **dès sa création** : un chemin absent n'est pas
+ * une erreur, l'écran n'existe simplement pas encore.
+ *
+ * Échappatoire : `// theme-tokens-ignore <motif>` (ou `{/* … *\/}` en JSX) sur
+ * la ligne PRÉCÉDENTE, pour les rares cas physiques. Le motif est obligatoire :
+ * un marqueur sans motif ne neutralise rien et fait lui-même échouer le script
+ * (règle `[ignore-without-reason]`). Chaque usage se relit en revue.
  *
  * Méta-vérification, règle `[unclassified]` (spec 100 § 7.4, 90 § 9.3) :
  * `WATCHED` est une liste blanche, donc un répertoire nouveau y échapperait
@@ -44,6 +54,12 @@
  *                        vérifier. Sert à régénérer `EXEMPT` au commit de gel
  *                        (L90-1), qui relit la liste avant de la coller.
  *
+ *   --perimeter          imprime `{ "watched": [...], "exempt": [...] }` en
+ *                        JSON — les deux listes telles qu'écrites ici —, sans
+ *                        rien vérifier. Lu par `ThemeTokensPerimeterTest`
+ *                        (spec 90 § 9.3), qui prouve la couverture des
+ *                        répertoires joueurs sans réimplémenter le script.
+ *
  * Branché sur `npm run check` et `npm run check:fix`.
  */
 
@@ -58,12 +74,15 @@ const ROOT = fileURLToPath(new URL('..', import.meta.url));
  * l'écran n'existe pas encore.
  *
  * Le back-office ne tient pas tout entier dans ses trois répertoires : ses
- * utilitaires vivent dans `resources/js/lib/admin-*.ts`, son forçage de thème
- * dans un hook, son contrat de props dans un type. Les laisser hors périmètre
- * ferait passer dans `resources/js/lib/` un `bg-neutral-200` que le même
- * script refuse deux répertoires plus loin.
+ * utilitaires vivent dans `resources/js/lib/admin-*.ts`, son contrat de props
+ * dans un type. Les laisser hors périmètre ferait passer dans
+ * `resources/js/lib/` un `bg-neutral-200` que le même script refuse deux
+ * répertoires plus loin. `hooks/use-forced-appearance.ts`, né pour le
+ * forçage clair du back-office, retiré par D8 du 23/09, ne sert plus que le
+ * forçage sombre de l'écran de jeu ; il reste surveillé.
  */
 const WATCHED = [
+    // Back-office.
     'resources/js/pages/admin',
     'resources/js/components/admin',
     'resources/js/layouts/admin',
@@ -73,25 +92,65 @@ const WATCHED = [
     'resources/js/lib/roles.ts',
     'resources/js/hooks/use-forced-appearance.ts',
     'resources/js/types/admin.ts',
+
+    // Jalon 1, côté joueur (spec 90 § 9.3, contrat C16 § 2.11) : inscrits dès
+    // le gel, avant la création du premier fichier. `pages/welcome.tsx` n'y
+    // entre qu'à sa réécriture en accueil (L90-8) ; `hooks/admin` et
+    // `lib/admin`, répertoires de 20, à la création de leur premier fichier
+    // (L20-9a).
+    'resources/js/pages/game',
+    'resources/js/pages/room',
+    'resources/js/pages/legal',
+    'resources/js/pages/error.tsx',
+    'resources/js/layouts/game',
+    'resources/js/layouts/public',
+    'resources/js/components/game',
+    'resources/js/components/room',
+    'resources/js/components/public',
+    'resources/js/components/state',
+    'resources/js/hooks/game',
+    'resources/js/lib/game',
+    'resources/js/components/language-switcher.tsx',
+    'resources/js/app.tsx',
+
+    // Fichiers nominatifs des contrats, hors de ces répertoires (R-36), et
+    // `types/legal.ts` de la spec 90.
+    'resources/js/types/game-wire.ts',
+    'resources/js/types/answers.ts',
+    'resources/js/types/scoring.ts',
+    'resources/js/types/pool.ts',
+    'resources/js/types/player.ts',
+    'resources/js/types/room-settings.ts',
+    'resources/js/lib/room-settings.ts',
+    'resources/js/lib/frame-geometry.ts',
+    'resources/js/types/legal.ts',
+
+    // Fichiers hérités PROPRES que retouche un lot (spec 90 § 9.3, règle
+    // d'entrée n° 2) : ils entrent dans le commit qui les modifie.
+    // `use-appearance.tsx` : docblocks du forçage, L90-1.
+    'resources/js/hooks/use-appearance.tsx',
 ];
 
 /**
  * Fichiers hérités, hors de `WATCHED` au commit de gel (spec 100 § 7.4, 90
- * § 9.3) : ceux du starter, plus les trois fichiers du client d'i18n nés
- * avant la méta-vérification (`language-switcher.tsx`, `use-translations.ts`,
- * `lib/i18n.ts`). Ils ne sont pas balayés : la plupart seront réécrits, et
- * les nettoyer en bloc serait du travail perdu.
+ * § 9.3) : ceux du starter, plus deux fichiers du client d'i18n nés avant la
+ * méta-vérification (`use-translations.ts`, `lib/i18n.ts`). Ils ne sont pas
+ * balayés : la plupart seront réécrits, et les nettoyer en bloc serait du
+ * travail perdu.
  *
  * Cette liste NE FAIT QUE DÉCROÎTRE. Un fichier en sort — et entre dans
- * `WATCHED` — dans le commit qui le réécrit ou le supprime ; aucun fichier n'y
- * entre jamais. Un fichier nouveau se range sous un chemin `WATCHED`, jamais
- * ici : sinon la méta-vérification ne garantirait plus rien.
+ * `WATCHED` — dans le commit qui le réécrit, le retouche alors qu'il est
+ * propre, ou le supprime (spec 90 § 9.3, règle d'entrée des fichiers
+ * hérités) ; aucun fichier n'y entre jamais. Un fichier nouveau se range sous
+ * un chemin `WATCHED`, jamais ici : sinon la méta-vérification ne garantirait
+ * plus rien. `ThemeTokensPerimeterTest` refuse toute entrée absente de la
+ * liste gelée.
  *
- * Contenu produit par `--list-unclassified` ; L90-1 le régénère de la même
- * façon à son commit de gel, et le relit.
+ * Contenu régénéré par `--list-unclassified` au commit de gel du lot L90-1,
+ * puis relu : 63 fichiers ; `app.tsx`, `components/language-switcher.tsx` et
+ * `hooks/use-appearance.tsx` en sont sortis pour `WATCHED`.
  */
 const EXEMPT = [
-    'resources/js/app.tsx',
     'resources/js/components/alert-error.tsx',
     'resources/js/components/app-content.tsx',
     'resources/js/components/app-header.tsx',
@@ -105,7 +164,6 @@ const EXEMPT = [
     'resources/js/components/delete-user.tsx',
     'resources/js/components/heading.tsx',
     'resources/js/components/input-error.tsx',
-    'resources/js/components/language-switcher.tsx',
     'resources/js/components/manage-passkeys.tsx',
     'resources/js/components/manage-two-factor.tsx',
     'resources/js/components/nav-footer.tsx',
@@ -120,7 +178,6 @@ const EXEMPT = [
     'resources/js/components/two-factor-setup-modal.tsx',
     'resources/js/components/user-info.tsx',
     'resources/js/components/user-menu-content.tsx',
-    'resources/js/hooks/use-appearance.tsx',
     'resources/js/hooks/use-clipboard.ts',
     'resources/js/hooks/use-current-url.ts',
     'resources/js/hooks/use-flash-toast.ts',
@@ -335,8 +392,55 @@ function blankComments(source) {
  * sur la ligne précédente. Elle existe pour les rares cas physiques (une
  * bordure d'un pixel matériel), elle n'est PAS un raccourci — chaque usage se
  * relit en revue.
+ *
+ * Le motif est obligatoire (spec 90 § 9.3) : sans lui, la revue n'a rien à
+ * relire. Un marqueur sans motif — aucune lettre après lui — ne neutralise pas
+ * la ligne suivante et échoue lui-même en `[ignore-without-reason]`. Seul un
+ * marqueur écrit dans un COMMENTAIRE compte : la même chaîne dans un littéral
+ * ne neutralise rien.
  */
 const IGNORE_MARKER = 'theme-tokens-ignore';
+
+const IGNORE_WITHOUT_REASON = {
+    id: 'ignore-without-reason',
+    message:
+        'échappatoire sans motif — écris `// theme-tokens-ignore <motif>` : le motif est obligatoire et se relit en revue',
+};
+
+/**
+ * Le marqueur d'échappatoire d'une ligne, ou `null`.
+ *
+ * `raw` est la ligne source, `blanked` la même ligne commentaires blanchis :
+ * un marqueur n'est retenu que si `blankComments()` l'a effacé, donc s'il vit
+ * dans un commentaire. Le motif est ce qui suit le marqueur, fin de
+ * commentaire de bloc (`*\/`, `*\/}` en JSX) retirée.
+ *
+ * @returns {{ reason: string, valid: boolean } | null}
+ */
+function ignoreMarker(raw, blanked) {
+    const at = raw.indexOf(IGNORE_MARKER);
+
+    if (at === -1) {
+        return null;
+    }
+
+    const end = at + IGNORE_MARKER.length;
+
+    if (blanked.slice(at, end).trim() !== '') {
+        return null;
+    }
+
+    const rest = raw.slice(end);
+
+    // `theme-tokens-ignored`, `theme-tokens-ignore-x` : pas le marqueur.
+    if (rest !== '' && !/^(?:\s|\*\/)/.test(rest)) {
+        return null;
+    }
+
+    const reason = rest.replace(/\*\/\s*\}?\s*$/, '').trim();
+
+    return { reason, valid: /\p{L}/u.test(reason) };
+}
 
 async function collectFiles(target, extensions = EXTENSIONS) {
     let entries;
@@ -423,12 +527,27 @@ function inspect(source, relativePath) {
 
     lines.forEach((line, index) => {
         const raw = rawLines[index] ?? '';
-        const previousRaw = index > 0 ? (rawLines[index - 1] ?? '') : '';
+        const marker = ignoreMarker(raw, line);
+        const previousMarker =
+            index > 0
+                ? ignoreMarker(
+                      rawLines[index - 1] ?? '',
+                      lines[index - 1] ?? '',
+                  )
+                : null;
 
-        if (
-            raw.includes(IGNORE_MARKER) ||
-            previousRaw.includes(IGNORE_MARKER)
-        ) {
+        if (marker !== null && !marker.valid) {
+            findings.push({
+                file: relativePath,
+                line: index + 1,
+                rule: IGNORE_WITHOUT_REASON.id,
+                match: IGNORE_MARKER,
+                message: IGNORE_WITHOUT_REASON.message,
+            });
+        }
+
+        // Seul un marqueur MOTIVÉ, sur la ligne précédente, neutralise.
+        if (previousMarker !== null && previousMarker.valid) {
             return;
         }
 
@@ -462,11 +581,23 @@ if (process.argv.includes('--list-unclassified')) {
     process.exit(0);
 }
 
-const files = (
-    await Promise.all(
-        WATCHED.map((directory) => collectFiles(join(ROOT, directory))),
-    )
-).flat();
+if (process.argv.includes('--perimeter')) {
+    console.log(JSON.stringify({ watched: WATCHED, exempt: EXEMPT }));
+
+    process.exit(0);
+}
+
+// Dédoublonné : un fichier nommé sous un répertoire déjà surveillé ne doit
+// pas être signalé deux fois.
+const files = [
+    ...new Set(
+        (
+            await Promise.all(
+                WATCHED.map((directory) => collectFiles(join(ROOT, directory))),
+            )
+        ).flat(),
+    ),
+];
 
 const findings = (
     await Promise.all(
@@ -492,7 +623,7 @@ const stale = EXEMPT.filter((path) => !outside.includes(path));
 
 if (findings.length > 0) {
     console.error(
-        `\nTokens de thème : ${findings.length} entorse(s) dans ${WATCHED.join(', ')}\n`,
+        `\nTokens de thème : ${findings.length} entorse(s) dans le périmètre WATCHED (${WATCHED.length} chemin(s))\n`,
     );
 
     for (const finding of findings) {
