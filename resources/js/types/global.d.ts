@@ -1,3 +1,4 @@
+import type { FrameFormat } from '@/components/game/game-frame';
 import type { LocaleOption } from '@/lib/i18n';
 import type { Auth } from '@/types/auth';
 import type { TranslationMessages } from '@/types/translations';
@@ -21,6 +22,14 @@ declare module '@inertiajs/core' {
              * compte d'après podium : faux en production au jalon 1.
              */
             accountsOpen: boolean;
+            /**
+             * Format fixe de la frame servable (`FrameGeometry::GAME_WIDTH` /
+             * `GAME_HEIGHT`, contrat C9), identique pour tous et sans aucune
+             * donnée de manche. Réservé aux attributs `width` / `height` de
+             * l'image de `GameFrame` : le ratio du cadre vient du jeton
+             * `--aspect-frame` (R-37).
+             */
+            frameFormat: FrameFormat;
             /**
              * Code de la locale active, ex. `'fr'`. Résolu côté serveur par
              * `SetLocale` avant que les props partagées soient construites.

@@ -428,7 +428,7 @@ Ensuite, à chaque session : **« Implémente l'étape suivante de l'ordre des l
 36. L30-3 — rapport de vivier en données → 9, 12, 35 — ✅ livrée le 24/09
 37. L70-1 — normaliseur v1, `fold()`, `AnswerRules` → — — ✅ livrée le 24/09
 38. L70-2 — sous-titre dérivé et projection (D23) → 37 — ✅ livrée le 24/09
-39. L90-6a — `GameFrame`, `GameThemeScope`, `ConnectionBanner`, annonceur → 8, 12, 21
+39. L90-6a — `GameFrame`, `GameThemeScope`, `ConnectionBanner`, annonceur → 8, 12, 21 — ✅ livrée le 24/09
 40. L20-6 — aperçu admin des images → 22
 41. L20-7 — ajout depuis TMDB, dédoublonnage, route capture refusante → 22, 33
 42. L20-8 — re-recadrage, niveau, dépublication d'image → 17, 34, 41

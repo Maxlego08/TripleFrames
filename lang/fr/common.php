@@ -55,6 +55,12 @@ return [
         'launch_blocked' => 'Une mise à jour du site est en préparation : impossible de lancer une partie pour le moment. Réessayez un peu plus tard.',
     ],
 
+    'connection' => [
+        'offline' => 'Vous êtes hors ligne. Le jeu ne s’interrompt pas pour autant : vérifiez votre connexion.',
+        'reconnecting' => 'Connexion perdue, reconnexion en cours… Le jeu ne s’interrompt pas pendant ce temps.',
+        'restored' => 'Connexion rétablie.',
+    ],
+
     'language' => [
         'change' => 'Changer de langue',
         'current' => 'Langue actuelle : :language',

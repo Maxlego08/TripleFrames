@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Enums\Locale;
+use App\Support\Frames\FrameGeometry;
 use App\Support\I18n\LangVersion;
 use App\Support\I18n\TranslationDomains;
 use App\Support\I18n\Translations;
@@ -63,6 +64,17 @@ class HandleInertiaRequests extends Middleware
             // absents tant que l'inscription est fermée, donc en production
             // au jalon 1. Le porteur atteint `/login` par son adresse.
             'accountsOpen' => AccountSwitches::registrationOpen(),
+
+            // Format fixe de la frame servable (spec 90 § 7.1, contrat C16 ;
+            // C9) : deux entiers, globaux et identiques pour tous, sans
+            // aucune donnée de manche. Ils ne servent qu'aux attributs
+            // `width` / `height` de l'image de `GameFrame`, en jeu comme en
+            // aperçu admin ; le ratio du cadre vient du jeton
+            // `--aspect-frame`, source unique (R-37).
+            'frameFormat' => [
+                'width' => FrameGeometry::GAME_WIDTH,
+                'height' => FrameGeometry::GAME_HEIGHT,
+            ],
 
             // Les trois props d'i18n sont des closures : `share()` est appelée
             // à l'entrée du middleware Inertia, donc AVANT les middlewares de

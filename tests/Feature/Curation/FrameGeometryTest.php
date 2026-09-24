@@ -12,14 +12,16 @@ use Tests\Support\I18n\FrontSource;
 | Géométrie de la frame servable — contrat C9 (spec 20 § 5.1, D5 du 23/09)
 |--------------------------------------------------------------------------
 |
-| Une seule source de format, `FrameGeometry`, déclinée en quatre lieux : ses
+| Une seule source de format, `FrameGeometry`, déclinée en cinq lieux : ses
 | constantes, les plafonds de `FrameStoragePrefix`, le miroir client
-| `resources/js/lib/frame-geometry.ts` et le jeton `--aspect-frame`. Ce
-| fichier prouve qu'ils disent la même chose, et que la liste client des
-| causes de refus comme le jeu de cas partagé couvrent tout `CropViolation`.
+| `resources/js/lib/frame-geometry.ts`, le jeton `--aspect-frame` et la prop
+| partagée `frameFormat`. Ce fichier prouve qu'ils disent la même chose, et
+| que la liste client des causes de refus comme le jeu de cas partagé
+| couvrent tout `CropViolation`.
 |
-| L'assertion sur la prop partagée `frameFormat` est ajoutée au dernier test
-| par L90-6a, qui crée la prop (spec 90 § 9.1, dépendance inversée).
+| L'assertion sur `frameFormat` a été ajoutée au dernier test par L90-6a, qui
+| crée la prop (spec 90 § 9.1, dépendance inversée) ; sa forme — deux
+| entiers, rien d'autre — est prouvée par `SharedPropsTest` (R-04).
 |
 */
 
@@ -197,4 +199,14 @@ it('frame-geometry.ts, le jeton --aspect-frame et la prop frameFormat reflètent
     expect(preg_match('/--aspect-frame\s*:\s*(?<width>\d+)\s*\/\s*(?<height>\d+)\s*;/', $theme['body'], $token))->toBe(1);
     expect((int) $token['width'])->toBe(FrameGeometry::ASPECT_WIDTH);
     expect((int) $token['height'])->toBe(FrameGeometry::ASPECT_HEIGHT);
+
+    // Prop partagée `frameFormat` (L90-6a, spec 90 § 7.1) : les attributs
+    // `width` / `height` de l'image de `GameFrame` sont ceux du dérivé servi,
+    // jamais une copie écrite ailleurs.
+    $this->withoutVite();
+
+    expect($this->get(route('home'))->assertOk()->inertiaProps('frameFormat'))->toBe([
+        'width' => FrameGeometry::GAME_WIDTH,
+        'height' => FrameGeometry::GAME_HEIGHT,
+    ]);
 });

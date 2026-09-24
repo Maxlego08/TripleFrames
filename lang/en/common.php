@@ -58,6 +58,12 @@ return [
         'launch_blocked' => 'A site update is being prepared: a game cannot be started for now. Please try again a little later.',
     ],
 
+    'connection' => [
+        'offline' => 'You are offline. The game does not wait for you: check your connection.',
+        'reconnecting' => 'Connection lost, reconnecting… The game keeps going in the meantime.',
+        'restored' => 'Connection restored.',
+    ],
+
     'language' => [
         'change' => 'Change language',
         'current' => 'Current language: :language',
