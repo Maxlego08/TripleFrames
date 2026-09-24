@@ -25,10 +25,15 @@ return [
     'french_only' => 'These pages are only available in French.',
 
     'footer' => [
+        'label' => 'Legal information',
         'notice' => 'Legal notice',
         'privacy' => 'Privacy policy',
+        'report' => 'Report content',
+        'sheet_description' => 'Legal notice, terms of use, privacy, content reporting and TMDB attribution.',
         'terms' => 'Terms of use',
     ],
+
+    'new_tab' => '(opens in a new tab)',
 
     'notice' => [
         'title' => 'Legal notice',
@@ -44,6 +49,7 @@ return [
 
     'tmdb' => [
         'attribution' => 'This product uses the TMDB API but is not endorsed or certified by TMDB.',
+        'logo_alt' => 'TMDB logo',
     ],
 
     'updated_at' => 'Last updated on :date',

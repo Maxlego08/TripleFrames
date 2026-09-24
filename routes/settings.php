@@ -6,8 +6,10 @@ use Illuminate\Auth\Middleware\RequirePassword;
 use Illuminate\Support\Facades\Route;
 
 // Tous les écrans de réglages relèvent du domaine `account` (Fortify, profil,
-// comptes liés, avatars) ; `common` est joint d'office.
-Route::middleware(['auth', 'translations:account'])->group(function () {
+// comptes liés, avatars) ; `common` est joint d'office, et `legal` l'est sur
+// toute route joueur, pour le pied de page présent sur chaque écran (liens
+// légaux, attribution TMDB ; spec 90 § 6.3).
+Route::middleware(['auth', 'translations:account,legal'])->group(function () {
     Route::redirect('settings', '/settings/profile');
 
     Route::get('settings/profile', [ProfileController::class, 'edit'])->name('profile.edit');
@@ -19,7 +21,7 @@ Route::middleware(['auth', 'translations:account'])->group(function () {
 // = anonymisation), et le seul compte de production — l'administrateur, qui
 // signe toute la curation — tomberait en un clic. La route renaîtra au jalon 2
 // sur l'action d'anonymisation.
-Route::middleware(['auth', 'verified', 'translations:account'])->group(function () {
+Route::middleware(['auth', 'verified', 'translations:account,legal'])->group(function () {
     Route::get('settings/security', [SecurityController::class, 'edit'])
         ->middleware(RequirePassword::class)
         ->name('security.edit');

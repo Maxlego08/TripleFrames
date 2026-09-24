@@ -102,12 +102,13 @@ return [
     */
 
     /*
-     * `translations:account` est ajouté ici et pas sur un groupe de routes :
-     * Fortify enregistre ses routes lui-même (connexion, inscription, mot de
-     * passe oublié, vérification d'adresse, 2FA), elles échapperaient à tout
-     * groupe déclaré dans `routes/`. Sans ce domaine, les écrans
+     * `translations:account,legal` est ajouté ici et pas sur un groupe de
+     * routes : Fortify enregistre ses routes lui-même (connexion, inscription,
+     * mot de passe oublié, vérification d'adresse, 2FA), elles échapperaient à
+     * tout groupe déclaré dans `routes/`. Sans `account`, les écrans
      * d'authentification recevraient `common` seul et afficheraient des clés
-     * brutes.
+     * brutes ; sans `legal`, leur pied de page (liens légaux, attribution
+     * TMDB), présent sur tout écran joueur, ferait de même (spec 90 § 6.3).
      *
      * `accounts.switches` pour la même raison (spec 40 § 8.2) : il répond 404
      * à l'inscription et aux passkeys quand `App\Support\Identity\AccountSwitches`
@@ -117,7 +118,7 @@ return [
      * que les helpers Wayfinder, régénérés au build, soient les mêmes sur
      * toute machine.
      */
-    'middleware' => ['web', 'translations:account', 'accounts.switches'],
+    'middleware' => ['web', 'translations:account,legal', 'accounts.switches'],
 
     /*
     |--------------------------------------------------------------------------

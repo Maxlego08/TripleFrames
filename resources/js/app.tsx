@@ -1,20 +1,26 @@
 import { createInertiaApp } from '@inertiajs/react';
-import { Toaster } from '@/components/ui/sonner';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { initializeTheme } from '@/hooks/use-appearance';
 import AdminLayout from '@/layouts/admin/admin-layout';
 import AppLayout from '@/layouts/app-layout';
 import AuthLayout from '@/layouts/auth-layout';
+import PublicLayout from '@/layouts/public/public-layout';
 import SettingsLayout from '@/layouts/settings/layout';
 
 const appName = import.meta.env.VITE_APP_NAME || 'TripleFrames';
 
 void createInertiaApp({
     title: (title) => (title ? `${title} - ${appName}` : appName),
+    // Coquille choisie par le nom de page, dans l'ordre de la spec 90 § 2.1
+    // (contrat C16 § 2.1).
     layout: (name) => {
         switch (true) {
+            // Page du starter, sans coquille jusqu'à sa réécriture en accueil
+            // (L90-8), qui la fait entrer dans `PublicLayout`.
             case name === 'welcome':
                 return null;
+            case name.startsWith('legal/'):
+                return PublicLayout;
             // Le back-office a sa propre coquille : il n'hérite pas de la
             // barre latérale joueur. Son thème n'est pas forcé : il suit
             // l'apparence du visiteur (D8 du 23/09, spec 90 § 2.2).
@@ -24,18 +30,24 @@ void createInertiaApp({
                 return AuthLayout;
             case name.startsWith('settings/'):
                 return [AppLayout, SettingsLayout];
-            default:
+            // Page du starter conservée au jalon 1 comme cible de
+            // `fortify.home` ; son retrait relève de 40 au jalon 2.
+            case name === 'dashboard':
                 return AppLayout;
+            // Toute autre page est une page publique ordinaire, dans
+            // l'apparence du visiteur : pages d'entrée `room/*` comprises.
+            default:
+                return PublicLayout;
         }
     },
     strictMode: true,
+    // Aucun `<Toaster />` global : la section que rend sonner est une région
+    // `aria-live` toujours présente, même vide, et une page de jeu ne doit en
+    // compter qu'une, son annonceur (C16 § 4). `PublicLayout`, `AuthLayout`,
+    // `AppLayout` et `AdminLayout` montent chacun le leur ; `GameLayout`,
+    // jamais (spec 90 § 2.3).
     withApp(app) {
-        return (
-            <TooltipProvider delayDuration={0}>
-                {app}
-                <Toaster />
-            </TooltipProvider>
-        );
+        return <TooltipProvider delayDuration={0}>{app}</TooltipProvider>;
     },
     // La barre de progression se peint au TOKEN, jamais à une couleur
     // littérale : elle s'affiche par-dessus toutes les coquilles, dans le thème

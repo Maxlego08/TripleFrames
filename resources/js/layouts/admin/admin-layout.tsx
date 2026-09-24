@@ -2,6 +2,7 @@ import { usePage } from '@inertiajs/react';
 import { AdminHeader } from '@/components/admin/admin-header';
 import { AdminSidebar } from '@/components/admin/admin-sidebar';
 import { SidebarProvider } from '@/components/ui/sidebar';
+import { Toaster } from '@/components/ui/sonner';
 import { useTranslations } from '@/hooks/use-translations';
 import type { AdminLayoutProps } from '@/types/ui';
 
@@ -40,6 +41,11 @@ const MAIN_ID = 'admin-main';
  * Le lien d'évitement est la première cible de tabulation : sans lui, un
  * curateur au clavier retraverse toute la navigation à chaque changement de
  * page.
+ *
+ * `<Toaster />` est monté ICI (spec 90 § 2.3) : il ne l'est plus globalement
+ * par `app.tsx`, pour qu'aucune page de jeu ne porte une seconde région
+ * `aria-live`. Les toasts du back-office (import mis en file, erreur TMDB…)
+ * passent par lui.
  */
 export default function AdminLayout({
     breadcrumbs = [],
@@ -49,35 +55,38 @@ export default function AdminLayout({
     const sidebarOpen = usePage().props.sidebarOpen;
 
     return (
-        <SidebarProvider defaultOpen={sidebarOpen}>
-            <a
-                href={`#${MAIN_ID}`}
-                className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:rounded-md focus:bg-primary focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:text-primary-foreground focus:ring-2 focus:ring-ring focus:outline-none"
-            >
-                {t('admin.a11y.main')}
-            </a>
-
-            <AdminSidebar />
-
-            {/*
-             * Ce n'est PAS `<SidebarInset>` : le composant généré rend lui-même
-             * un `<main>`, et l'en-tête se retrouverait DANS le point de repère
-             * principal, avec un second `<main>` imbriqué pour le contenu. Deux
-             * repères `main` dans un document, c'est un défaut d'accessibilité,
-             * et `components/ui/*` ne se modifie pas. On garde donc la coquille
-             * en `<div>` et un seul `<main>`, après l'en-tête.
-             */}
-            <div className="relative flex min-h-svh max-w-full min-w-0 flex-1 flex-col overflow-x-clip bg-background">
-                <AdminHeader breadcrumbs={breadcrumbs} />
-
-                <main
-                    id={MAIN_ID}
-                    tabIndex={-1}
-                    className="flex w-full min-w-0 flex-1 flex-col outline-none"
+        <>
+            <SidebarProvider defaultOpen={sidebarOpen}>
+                <a
+                    href={`#${MAIN_ID}`}
+                    className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:rounded-md focus:bg-primary focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:text-primary-foreground focus:ring-2 focus:ring-ring focus:outline-none"
                 >
-                    {children}
-                </main>
-            </div>
-        </SidebarProvider>
+                    {t('admin.a11y.main')}
+                </a>
+
+                <AdminSidebar />
+
+                {/*
+                 * Ce n'est PAS `<SidebarInset>` : le composant généré rend lui-même
+                 * un `<main>`, et l'en-tête se retrouverait DANS le point de repère
+                 * principal, avec un second `<main>` imbriqué pour le contenu. Deux
+                 * repères `main` dans un document, c'est un défaut d'accessibilité,
+                 * et `components/ui/*` ne se modifie pas. On garde donc la coquille
+                 * en `<div>` et un seul `<main>`, après l'en-tête.
+                 */}
+                <div className="relative flex min-h-svh max-w-full min-w-0 flex-1 flex-col overflow-x-clip bg-background">
+                    <AdminHeader breadcrumbs={breadcrumbs} />
+
+                    <main
+                        id={MAIN_ID}
+                        tabIndex={-1}
+                        className="flex w-full min-w-0 flex-1 flex-col outline-none"
+                    >
+                        {children}
+                    </main>
+                </div>
+            </SidebarProvider>
+            <Toaster />
+        </>
     );
 }

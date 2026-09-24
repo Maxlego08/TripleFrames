@@ -137,6 +137,12 @@ const WATCHED = [
     'resources/js/types/auth.ts',
     'resources/js/types/global.d.ts',
     'resources/js/pages/auth/confirm-password.tsx',
+    // L90-3 (spec 90 § 2.4, § 9.3) : pied de page joueur et `<Toaster />` dans
+    // les deux coquilles du starter, liens du starter retirés de la barre
+    // latérale.
+    'resources/js/layouts/app-layout.tsx',
+    'resources/js/layouts/auth-layout.tsx',
+    'resources/js/components/app-sidebar.tsx',
 ];
 
 /**
@@ -166,7 +172,6 @@ const EXEMPT = [
     'resources/js/components/app-logo.tsx',
     'resources/js/components/app-shell.tsx',
     'resources/js/components/app-sidebar-header.tsx',
-    'resources/js/components/app-sidebar.tsx',
     'resources/js/components/appearance-tabs.tsx',
     'resources/js/components/breadcrumbs.tsx',
     'resources/js/components/heading.tsx',
@@ -193,10 +198,8 @@ const EXEMPT = [
     'resources/js/hooks/use-mobile.tsx',
     'resources/js/hooks/use-translations.ts',
     'resources/js/hooks/use-two-factor-auth.ts',
-    'resources/js/layouts/app-layout.tsx',
     'resources/js/layouts/app/app-header-layout.tsx',
     'resources/js/layouts/app/app-sidebar-layout.tsx',
-    'resources/js/layouts/auth-layout.tsx',
     'resources/js/layouts/auth/auth-card-layout.tsx',
     'resources/js/layouts/auth/auth-simple-layout.tsx',
     'resources/js/layouts/auth/auth-split-layout.tsx',

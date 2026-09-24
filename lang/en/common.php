@@ -34,16 +34,28 @@ return [
 
     'nav' => [
         'dashboard' => 'Dashboard',
-        'documentation' => 'Documentation',
         'home' => 'Home',
         'log_in' => 'Log in',
         'log_out' => 'Log out',
         'menu' => 'Navigation menu',
+        'menu_description' => 'Site navigation links.',
         'platform' => 'Platform',
         'register' => 'Register',
-        'repository' => 'Repository',
         'settings' => 'Settings',
+        'skip_to_content' => 'Skip to content',
         'toggle_sidebar' => 'Toggle sidebar',
+    ],
+
+    'appearance' => [
+        'dark' => 'Dark',
+        'label' => 'Appearance',
+        'light' => 'Light',
+        'system' => 'System',
+    ],
+
+    'maintenance' => [
+        'banner' => 'A site update is being prepared: no new game can be started for now. Games in progress carry on as usual.',
+        'launch_blocked' => 'A site update is being prepared: a game cannot be started for now. Please try again a little later.',
     ],
 
     'language' => [
