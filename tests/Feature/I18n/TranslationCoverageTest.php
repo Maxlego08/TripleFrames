@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\LegalPage;
 use App\Enums\Locale;
 use App\Enums\SettingPresetKey;
 use App\Support\I18n\TranslationDomains;
@@ -369,7 +370,7 @@ it('only calls translation keys that exist in a dictionary, from the server too'
 });
 
 it('carries every key built by an enumerable key constructor', function () {
-    // Ces quatre familles sont construites par concaténation : aucun balayage
+    // Ces familles sont construites par concaténation : aucun balayage
     // de littéraux ne les verra jamais, et ce sont elles qui manquaient.
     $expected = [
         ...array_map(
@@ -382,6 +383,11 @@ it('carries every key built by an enumerable key constructor', function () {
         )),
         ...i18nRoomSettingsKeys(),
         ...i18nImportReasonKeys(),
+        // Titre de chaque page publique (spec 90 § 6.7, L90-4).
+        ...array_map(
+            static fn (LegalPage $page): string => $page->titleKey(),
+            LegalPage::cases(),
+        ),
     ];
 
     $missing = array_values(array_filter(

@@ -27,11 +27,12 @@ use Illuminate\Testing\TestResponse;
 | L100-4), jamais ici. Les tests de l'état levé posent la clé par
 | `config(['app.indexable' => true])`.
 |
-| Les routes de salon, de jeu, du solo et de « signaler un contenu »
-| arrivent avec leurs lots (50, 60, L90-4). Les requêtes ci-dessous visent
-| leurs URL réelles dès aujourd'hui : elles répondent 404 tant que la route
-| manque, et exerceront la vraie route dès qu'elle existera, sans que ce
-| fichier change. La preuve ne dépend jamais du statut rendu.
+| Les routes de salon, de jeu et du solo arrivent avec leurs lots (50, 60) ;
+| celles des pages légales et de « signaler un contenu » existent depuis
+| L90-4. Les requêtes ci-dessous visent leurs URL réelles dès aujourd'hui :
+| elles répondent 404 tant que la route manque, et exercent la vraie route dès
+| qu'elle existe, sans que ce fichier change. La preuve ne dépend jamais du
+| statut rendu.
 |
 */
 

@@ -57,12 +57,16 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  *
  * **`#[Hidden]` est ici une règle de sécurité, pas de cosmétique.** L'`id` n'est
  * jamais exposé au demandeur (§ 8.2) et `reference` est la seule identité
- * publique ; `requester_name` et `requester_email` sont les coordonnées d'un
- * tiers qui n'a jamais eu de compte, et la page publique de suivi sérialiserait
- * la ligne entière ; `decided_by_id` est le compte de l'administrateur ayant
- * décidé, qu'aucun identifiant interne ne doit faire quitter le serveur. Le
- * back-office qui doit afficher l'identité du demandeur la rend visible
- * explicitement, geste auditable.
+ * publique, celle que cite l'accusé de réception ; `#[RouteKey('reference')]`
+ * sert au back-office. **Il n'existe aucune page publique de suivi** d'une
+ * demande (spec 90 § 4.5) : l'accusé et la notification de décision par e-mail
+ * remplissent l'engagement, sans surface d'énumération de plus.
+ * `requester_name` et `requester_email` sont les coordonnées d'un tiers qui n'a
+ * jamais eu de compte, qu'aucune sérialisation de la ligne ne doit emporter ;
+ * `decided_by_id` est le compte de l'administrateur ayant décidé, qu'aucun
+ * identifiant interne ne doit faire quitter le serveur. Le back-office qui doit
+ * afficher l'identité du demandeur la rend visible explicitement, geste
+ * auditable.
  *
  * **`#[Fillable]` s'arrête au formulaire public** : nom, adresse, qualité,
  * langue, portée déclarée et corps. Tout le reste est une colonne d'autorité —

@@ -402,7 +402,7 @@ Ensuite, à chaque session : **« Implémente l'étape suivante de l'ordre des l
 13. L90-2 — `noindex` intégral, `Referrer-Policy` → — — ✅ livrée le 24/09
 14. L40-7 — `AccountSwitches` : inscription et passkeys fermées hors `local`/`testing` → — — ✅ livrée le 24/09
 15. L90-3 — coquille publique, pied de page, attribution TMDB, domaine `legal` → 12, 14 — ✅ livrée le 24/09
-16. L90-4 — pages légales et « signaler un contenu » en squelette → 13, 15
+16. L90-4 — pages légales et « signaler un contenu » en squelette → 13, 15 — ✅ livrée le 24/09
 17. L20-1 — `admin_action`, nom réel (D12), `admin:first-admin` → —
 18. L20-2 — porte `/admin`, `admin.2fa`, coquille mobile → 12, 16, 17
 19. L30-7 — scission de `PlatformDataSeeder` → —

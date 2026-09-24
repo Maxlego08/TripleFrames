@@ -8,18 +8,23 @@ return [
     |--------------------------------------------------------------------------
     |
     | Ce domaine ne porte que l’**habillage** : libellés de pied de page,
-    | titres de navigation, date de mise à jour, bloc de contact et
-    | avertissement de disponibilité. Le **corps** des trois pages légales est
+    | titres, bandeau provisoire, date de mise à jour, bloc de contact,
+    | avertissement de disponibilité et mention d’acceptation des CGU. Le
+    | **corps** des trois pages légales et de « signaler un contenu » est
     | rédigé en français seulement (décision 4), vit en partiels de vue
     | `resources/views/legal/{page}.fr.blade.php` — hors des dictionnaires — et
     | est rendu dans un conteneur `lang="fr"` quelle que soit la locale du
-    | visiteur.
+    | visiteur (spec 90 § 4.2).
+    |
+    | Aucun texte de ce domaine ne qualifie le service de « non commercial »
+    | (principe 12), ne nomme un sous-traitant ni ne promet un délai.
     |
     */
 
     'contact' => [
         'heading' => 'Contact',
         'description' => 'For any question about these pages, write to :email.',
+        'unavailable' => 'No contact address has been published yet.',
     ],
 
     'french_only' => 'These pages are only available in French.',
@@ -43,9 +48,17 @@ return [
         'title' => 'Privacy policy',
     ],
 
+    'provisional' => 'Provisional text, with no contractual value.',
+
+    'report' => [
+        'title' => 'Report content',
+    ],
+
     'terms' => [
         'title' => 'Terms of use',
     ],
+
+    'terms_notice' => 'By continuing, you accept the terms of use.',
 
     'tmdb' => [
         'attribution' => 'This product uses the TMDB API but is not endorsed or certified by TMDB.',

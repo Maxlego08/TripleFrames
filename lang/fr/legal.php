@@ -8,12 +8,14 @@ return [
     |--------------------------------------------------------------------------
     |
     | Miroir exact de `lang/en/legal.php` — mêmes clés, mêmes `:placeholder`.
+    | Le corps des pages vit dans `resources/views/legal/` (spec 90 § 4.2).
     |
     */
 
     'contact' => [
         'heading' => 'Contact',
         'description' => 'Pour toute question sur ces pages, écrivez à :email.',
+        'unavailable' => 'Aucune adresse de contact n’est encore publiée.',
     ],
 
     'french_only' => 'Ces textes ne sont disponibles qu’en français.',
@@ -37,9 +39,17 @@ return [
         'title' => 'Politique de confidentialité',
     ],
 
+    'provisional' => 'Texte provisoire, sans valeur contractuelle.',
+
+    'report' => [
+        'title' => 'Signaler un contenu',
+    ],
+
     'terms' => [
         'title' => 'Conditions générales d’utilisation',
     ],
+
+    'terms_notice' => 'En continuant, vous acceptez les conditions générales d’utilisation.',
 
     'tmdb' => [
         'attribution' => 'Ce produit utilise l’API de TMDB mais n’est ni approuvé ni certifié par TMDB.',

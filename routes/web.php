@@ -8,11 +8,11 @@ use Illuminate\Support\Facades\Route;
 // L'accueil embarque `common` (joint d'office) et `legal`, pour l'habillage du
 // pied de page et l'attribution TMDB. Son contenu varie avec la locale
 // négociée, d'où `Vary: Accept-Language` — que les pages légales et
-// « signaler un contenu » porteront aussi (spec 90 § 4.2) : leur corps reste
-// en français, mais leur habillage suit la langue du visiteur. Aucune de ces
-// pages n'est « cachable » telle quelle : la règle est l'absence de tout cache
-// HTTP de page complète devant l'application (spec 05 § Pas de préfixe de
-// locale dans les URL).
+// « signaler un contenu » (`routes/legal.php`) portent aussi (spec 90 § 4.2) :
+// leur corps reste en français, mais leur habillage suit la langue du
+// visiteur. Aucune de ces pages n'est « cachable » telle quelle : la règle est
+// l'absence de tout cache HTTP de page complète devant l'application (spec 05
+// § Pas de préfixe de locale dans les URL).
 //
 // Indexation (spec 90 § 5) : l'accueil est l'une des QUATRE routes qui
 // portent `RobotsDirectives::ROUTE_FLAG`, avec les trois pages légales. Le
@@ -38,4 +38,5 @@ Route::middleware(['auth', 'verified', 'translations:account,legal'])->group(fun
 });
 
 require __DIR__.'/admin.php';
+require __DIR__.'/legal.php';
 require __DIR__.'/settings.php';

@@ -97,14 +97,19 @@ it('envoie les clés du pied de page à toute page joueur', function () {
     $unverified = User::factory()->unverified()->create();
 
     // Une page par lieu de déclaration de la spec 90 § 6.3 qui existe au
-    // jalon 1 : accueil (`routes/web.php`), écrans de Fortify
+    // jalon 1 : accueil (`routes/web.php`), pages légales et « signaler un
+    // contenu » (`routes/legal.php`, L90-4), écrans de Fortify
     // (`config/fortify.php`, invité et connecté), tableau de bord
     // (`routes/web.php`), et les deux groupes de `routes/settings.php`. Les
-    // pages `legal/*`, `error`, `game/*` et `room/*` arrivent avec leurs lots,
-    // et `TranslationDomainDeclarationTest` refuse toute route joueur qui
+    // pages `error`, `game/*` et `room/*` arrivent avec leurs lots, et
+    // `TranslationDomainDeclarationTest` refuse toute route joueur qui
     // oublierait `legal`.
     $pages = [
         'accueil' => fn () => $this->get(route('home')),
+        'mentions légales' => fn () => $this->get(route('legal.notice')),
+        'CGU' => fn () => $this->get(route('legal.terms')),
+        'confidentialité' => fn () => $this->get(route('legal.privacy')),
+        'signaler un contenu' => fn () => $this->get(route('takedown.create')),
         'connexion' => fn () => $this->get(route('login')),
         'inscription' => fn () => $this->get(route('register')),
         'mot de passe oublié' => fn () => $this->get(route('password.request')),

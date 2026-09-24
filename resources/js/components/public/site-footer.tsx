@@ -12,6 +12,8 @@ import {
     SheetTrigger,
 } from '@/components/ui/sheet';
 import { useTranslations } from '@/hooks/use-translations';
+import { notice, privacy, terms } from '@/routes/legal';
+import { create as reportContent } from '@/routes/takedown';
 import type { TranslationKey } from '@/types/translations';
 import type { RouteDefinition } from '@/wayfinder';
 
@@ -23,15 +25,16 @@ type LegalLink = {
 /**
  * Liens du pied de page, dans leur ordre d'affichage : mentions légales, CGU,
  * confidentialité, « signaler un contenu » (spec 90 § 3.1), libellés
- * `legal.footer.{notice,terms,privacy,report}`, URL toujours par Wayfinder.
- *
- * VIDE jusqu'au lot L90-4, qui crée `routes/legal.php` : Wayfinder ne génère
- * un helper qu'après la route, et un lien écrit en dur, ou vers une page qui
- * n'existe pas encore, serait un lien mort dans le pied de chaque écran. L90-4
- * y ajoute les quatre entrées avec leurs routes ; `SiteFooterTest` échoue dès
- * qu'une de ces routes existe sans que son libellé soit appelé ici.
+ * `legal.footer.{notice,terms,privacy,report}`, URL toujours par Wayfinder
+ * (routes de `routes/legal.php`, L90-4). `SiteFooterTest` échoue dès qu'une
+ * de ces routes existe sans que son libellé soit appelé ici.
  */
-const LEGAL_LINKS: readonly LegalLink[] = [];
+const LEGAL_LINKS: readonly LegalLink[] = [
+    { label: 'legal.footer.notice', href: notice() },
+    { label: 'legal.footer.terms', href: terms() },
+    { label: 'legal.footer.privacy', href: privacy() },
+    { label: 'legal.footer.report', href: reportContent() },
+];
 
 type SiteFooterProps = {
     variant: 'full' | 'collapsed';
@@ -66,22 +69,20 @@ function FullFooter() {
     return (
         <footer className="mt-auto border-t border-border">
             <div className="mx-auto flex w-full max-w-5xl flex-col gap-3 px-4 py-6 text-sm text-muted-foreground">
-                {LEGAL_LINKS.length > 0 && (
-                    <nav aria-label={t('legal.footer.label')}>
-                        <ul className="flex flex-wrap gap-x-4">
-                            {LEGAL_LINKS.map((link) => (
-                                <li key={link.label}>
-                                    <Link
-                                        href={link.href}
-                                        className="inline-flex min-h-11 items-center rounded-sm underline-offset-4 hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                                    >
-                                        {t(link.label)}
-                                    </Link>
-                                </li>
-                            ))}
-                        </ul>
-                    </nav>
-                )}
+                <nav aria-label={t('legal.footer.label')}>
+                    <ul className="flex flex-wrap gap-x-4">
+                        {LEGAL_LINKS.map((link) => (
+                            <li key={link.label}>
+                                <Link
+                                    href={link.href}
+                                    className="inline-flex min-h-11 items-center rounded-sm underline-offset-4 hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                                >
+                                    {t(link.label)}
+                                </Link>
+                            </li>
+                        ))}
+                    </ul>
+                </nav>
 
                 <TmdbAttribution />
             </div>
@@ -124,28 +125,26 @@ function CollapsedFooter() {
                 </SheetHeader>
 
                 <div className="flex flex-col gap-3 px-4 text-sm">
-                    {LEGAL_LINKS.length > 0 && (
-                        <nav aria-label={t('legal.footer.label')}>
-                            <ul className="flex flex-col">
-                                {LEGAL_LINKS.map((link) => (
-                                    <li key={link.label}>
-                                        <a
-                                            href={link.href.url}
-                                            target="_blank"
-                                            rel="noopener"
-                                            className="inline-flex min-h-11 items-center rounded-sm underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                                        >
-                                            {t(link.label)}
-                                            <span className="sr-only">
-                                                {' '}
-                                                {t('legal.new_tab')}
-                                            </span>
-                                        </a>
-                                    </li>
-                                ))}
-                            </ul>
-                        </nav>
-                    )}
+                    <nav aria-label={t('legal.footer.label')}>
+                        <ul className="flex flex-col">
+                            {LEGAL_LINKS.map((link) => (
+                                <li key={link.label}>
+                                    <a
+                                        href={link.href.url}
+                                        target="_blank"
+                                        rel="noopener"
+                                        className="inline-flex min-h-11 items-center rounded-sm underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                                    >
+                                        {t(link.label)}
+                                        <span className="sr-only">
+                                            {' '}
+                                            {t('legal.new_tab')}
+                                        </span>
+                                    </a>
+                                </li>
+                            ))}
+                        </ul>
+                    </nav>
 
                     <TmdbAttribution />
                 </div>

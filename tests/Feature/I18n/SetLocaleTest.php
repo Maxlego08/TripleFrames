@@ -149,8 +149,9 @@ it('preloads the dictionary of a target locale without switching the request', f
 |--------------------------------------------------------------------------
 |
 | L'accueil est négocié depuis `Accept-Language` et doit le DIRE aux caches ;
-| les trois pages légales et « signaler un contenu » le porteront aussi (n° 69,
-| spec 90 § 4.2, L90-4), leur habillage suivant la langue du visiteur. Hors de
+| les trois pages légales et « signaler un contenu » (`routes/legal.php`,
+| L90-4) le portent aussi (n° 69, spec 90 § 4.2 ; preuve : LegalPagesTest),
+| leur habillage suivant la langue du visiteur. Hors de
 | ces pages, la route ne pose pas `VaryOnLanguage::ROUTE_FLAG` et l'en-tête
 | n'est jamais émis (`login` ici) — d'où les deux assertions, de sens opposé.
 |
