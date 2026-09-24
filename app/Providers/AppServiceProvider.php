@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Listeners\DiagnoseDependencies;
 use App\Listeners\SyncCarbonLocale;
 use App\Settings\EngineConstants;
 use App\Settings\PlatformLimits;
@@ -9,7 +10,9 @@ use App\Support\I18n\LangVersion;
 use App\Support\I18n\NullPlayerTokenLocale;
 use App\Support\I18n\PlayerTokenLocale;
 use App\Support\I18n\TranslationDomains;
+use App\Support\Ops\SystemLoad;
 use Carbon\CarbonImmutable;
+use Illuminate\Foundation\Events\DiagnosingHealth;
 use Illuminate\Foundation\Events\LocaleUpdated;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
@@ -28,6 +31,7 @@ class AppServiceProvider extends ServiceProvider
         $this->registerLocalization();
         $this->registerPlatformLimits();
         $this->registerEngineConstants();
+        $this->registerOperations();
     }
 
     /**
@@ -41,8 +45,15 @@ class AppServiceProvider extends ServiceProvider
         // `CarbonImmutable` est recâblé une seule fois, par un listener et non
         // par le middleware de locale : la même bascule doit s'appliquer dans
         // un job de mail en file, où aucun middleware HTTP ne tourne. Le dépôt
-        // n'a pas d'`EventServiceProvider`, l'enregistrement vit donc ici.
+        // n'a pas d'`EventServiceProvider`, l'enregistrement vit donc ici, et
+        // la découverte automatique est coupée (`bootstrap/app.php`) pour
+        // qu'aucun écouteur ne soit enregistré deux fois.
         Event::listen(LocaleUpdated::class, SyncCarbonLocale::class);
+
+        // `/up` interroge la base, et Redis quand le cache ou la file en
+        // dépendent (spec 100 § 15) : le framework répond 500 dès qu'un
+        // écouteur de `DiagnosingHealth` lève.
+        Event::listen(DiagnosingHealth::class, DiagnoseDependencies::class);
     }
 
     /**
@@ -88,6 +99,16 @@ class AppServiceProvider extends ServiceProvider
     protected function registerEngineConstants(): void
     {
         $this->app->scoped(EngineConstants::class, static fn (): EngineConstants => EngineConstants::fromConfig());
+    }
+
+    /**
+     * Les mesures de la machine lues par la sonde `load` (spec 100 § 15) : les
+     * sources réelles, que les tests remplacent par une instance aux sources
+     * injectées. `bind` et non `singleton` : chaque sonde relit la machine.
+     */
+    protected function registerOperations(): void
+    {
+        $this->app->bind(SystemLoad::class, static fn (): SystemLoad => SystemLoad::fromHost());
     }
 
     /**

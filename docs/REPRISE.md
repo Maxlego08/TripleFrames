@@ -409,7 +409,7 @@ Ensuite, à chaque session : **« Implémente l'étape suivante de l'ordre des l
 20. L100-6 — hook **sans ses étapes 3 et 12** (D37), `backup:snapshot`, élagage, `catalog:reproject` → 11 — ✅ livrée le 24/09
 21. L20-4 — géométrie 16:9, plancher de recadrage à double borne → 8, 9, 12 — ✅ livrée le 24/09
 22. L20-5 — chaîne Imagick, `ProcessFrameImage` (file `default`) → 21 — ✅ livrée le 24/09
-23. L100-7 (1er temps) — planificateur, battements, sondes, journaux → 11, 22
+23. L100-7 (1er temps) — planificateur, battements, sondes, journaux → 11, 22 — ✅ livrée le 24/09
 24. L100-8 (1er temps) — purge des périmètres sans jeu → 23
 25. (option, I-12, accord du porteur) — `final_rank` élargi dans la migration de création → 6
 

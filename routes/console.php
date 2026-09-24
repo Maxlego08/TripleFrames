@@ -1,5 +1,7 @@
 <?php
 
+use App\Jobs\Ops\WorkerHeartbeat;
+use App\Support\Ops\Heartbeat;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Config;
@@ -20,6 +22,13 @@ Artisan::command('inspire', function () {
 | l'exploitation.
 |
 */
+
+// Battements des workers (§ 15) : chacun part SUR la file qu'il mesure et
+// n'écrit l'instant qu'une fois exécuté par le worker qui la dépile. Si le
+// planificateur s'arrête, les battements vieillissent et la sonde alerte :
+// il est surveillé par la même mesure (§ 10.7).
+Schedule::job(new WorkerHeartbeat(Heartbeat::GAME))->everyThirtySeconds();
+Schedule::job(new WorkerHeartbeat(Heartbeat::DEFAULT))->everyMinute();
 
 // Élagage des instantanés de la règle 12 (§ 13.1) : après la purge de
 // rétention, avant le tier chaud.

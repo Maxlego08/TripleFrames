@@ -128,5 +128,14 @@ class FortifyServiceProvider extends ServiceProvider
         RateLimiter::for('admin-import', function (Request $request) {
             return Limit::perMinute(12)->by((string) $request->user()?->getAuthIdentifier());
         });
+
+        // Les sondes d'exploitation (spec 100 § 15), AVANT la vérification du
+        // jeton : les essais de jeton sont bornés par adresse. La supervision
+        // interroge cinq sondes, dont la plus fréquente chaque minute ; trente
+        // requêtes par minute et par adresse lui laissent une large marge, y
+        // compris depuis plusieurs points de mesure derrière une même sortie.
+        RateLimiter::for('ops-probe', function (Request $request) {
+            return Limit::perMinute(30)->by((string) $request->ip());
+        });
     }
 }

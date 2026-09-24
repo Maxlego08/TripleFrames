@@ -42,4 +42,22 @@ enum PurgeScope: string
     case FrameworkResetTokens = 'framework_reset_tokens';
 
     case PurgeRun = 'purge_run';
+
+    /**
+     * Les périmètres exécutés par `RetentionPurger` (spec 100 § 14), dans
+     * l'ordre du tableau de 10 § 11.1 — **déclarés dans le code et jamais en
+     * configuration** : un périmètre ne se désactive pas en silence par une
+     * variable. `StaleLobby` n'y entre jamais : il est exécuté par le
+     * balayage de 50, qui écrit lui-même sa ligne `purge_run`.
+     *
+     * La sonde `purge` (spec 100 § 15) surveille chacun d'eux. **Vide au
+     * premier temps de L100-7**, qui livre la sonde avant le moteur : L100-8
+     * y inscrit chaque périmètre avec son gestionnaire.
+     *
+     * @return list<self>
+     */
+    public static function implemented(): array
+    {
+        return [];
+    }
 }

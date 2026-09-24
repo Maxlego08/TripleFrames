@@ -2,6 +2,7 @@
 
 use App\Http\Middleware\EnforceAccountSwitches;
 use App\Http\Middleware\EnsurePrivilegedTwoFactor;
+use App\Http\Middleware\EnsureProbeToken;
 use App\Http\Middleware\EnsureUserHasRole;
 use App\Http\Middleware\ForceAdminLocale;
 use App\Http\Middleware\HandleAppearance;
@@ -16,13 +17,25 @@ use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Middleware\SubstituteBindings;
+use Illuminate\Support\Facades\Route;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
         web: __DIR__.'/../routes/web.php',
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
+        // Sondes d'exploitation (spec 100 § 15), HORS du groupe `web` : sans
+        // session, sans cookie, sans jeton CSRF. Le limiteur passe AVANT le
+        // jeton, pour que les essais de jeton soient bornés par adresse.
+        then: static function (): void {
+            Route::middleware(['throttle:ops-probe', EnsureProbeToken::class])
+                ->group(__DIR__.'/../routes/ops.php');
+        },
     )
+    // Chaque écouteur est enregistré EXPLICITEMENT dans `AppServiceProvider`.
+    // La découverte de `app/Listeners`, active par défaut, les enregistrerait
+    // une seconde fois : `/up` interrogerait alors deux fois la base et Redis.
+    ->withEvents(discover: false)
     ->withMiddleware(function (Middleware $middleware): void {
         // `X-Robots-Tag` et `Referrer-Policy` sur TOUTE réponse (spec 90 § 5.2).
         // Global et non du groupe `web` : une URL inconnue lève avant tout

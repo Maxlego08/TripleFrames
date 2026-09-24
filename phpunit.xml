@@ -68,6 +68,11 @@
         <server name="REVERB_APP_SECRET" value=""/>
         <env name="OPS_PROBE_TOKEN" value="" force="true"/>
         <server name="OPS_PROBE_TOKEN" value=""/>
+        <!-- Pas un secret, un relevé de machine (`nproc`) : vidé par la même
+             paire pour que la sonde `load` compte les vCPU simulés par les
+             tests, quel que soit le `.env` du poste. -->
+        <env name="OPS_LOAD_CPU_COUNT" value="" force="true"/>
+        <server name="OPS_LOAD_CPU_COUNT" value=""/>
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
         <env name="NIGHTWATCH_ENABLED" value="false"/>
