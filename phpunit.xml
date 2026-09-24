@@ -64,6 +64,8 @@
         <server name="MAIL_PASSWORD" value=""/>
         <env name="AWS_SECRET_ACCESS_KEY" value="" force="true"/>
         <server name="AWS_SECRET_ACCESS_KEY" value=""/>
+        <env name="REVERB_APP_SECRET" value="" force="true"/>
+        <server name="REVERB_APP_SECRET" value=""/>
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
         <env name="NIGHTWATCH_ENABLED" value="false"/>

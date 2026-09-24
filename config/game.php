@@ -1,5 +1,6 @@
 <?php
 
+use App\Settings\EngineConstants;
 use App\Settings\PlatformLimits;
 use App\Support\Room\RoomRateLimits;
 
@@ -55,15 +56,37 @@ return [
     | Constantes du moteur — propriété de la spec 60 (contrat C7 § 5, C8)
     |--------------------------------------------------------------------------
     |
-    | Section lue EXCLUSIVEMENT par `App\Settings\EngineConstants`, dont chaque
-    | valeur vaudra la constante `EngineConstants::DEFAULT_*`, sans `env()`
-    | (spec 60 § 19.1). La classe naît avec le lot L60-1, qui pose ici ses
-    | clés : les écrire avant elle en ferait des littéraux sans lecteur, donc
-    | une seconde source de vérité. La spec 50 ne lit jamais cette section.
+    | Section lue EXCLUSIVEMENT par `App\Settings\EngineConstants`, qui garde
+    | chaque valeur à sa construction (spec 60 § 19.1) : une surcharge hors
+    | bornes fait échouer tout accesseur, jamais un seul en silence. Chaque
+    | valeur vaut la constante `EngineConstants::DEFAULT_*`, sans `env()` : la
+    | constante reste la source unique, ajustée après le test de charge (D33
+    | du 23/09) sans changer les noms. La spec 50 ne lit jamais cette section.
+    |
+    | Onze clés, liste close. Ni limites de confort ni règles de score : aucune
+    | n'entre dans `scoring_version`. N'y figurent JAMAIS `tier_grace_ms` ni
+    | `preload_lead_ms`, constantes d'instance de `PlatformLimits`.
     |
     */
 
-    'engine' => [],
+    'engine' => [
+        // Horloge de la manche et enchaînement.
+        'launch_countdown_ms' => EngineConstants::DEFAULT_LAUNCH_COUNTDOWN_MS,
+        'next_round_margin_ms' => EngineConstants::DEFAULT_NEXT_ROUND_MARGIN_MS,
+        'transition_max_wait_ms' => EngineConstants::DEFAULT_TRANSITION_MAX_WAIT_MS,
+        'clock_samples' => EngineConstants::DEFAULT_CLOCK_SAMPLES,
+
+        // Présence et pause.
+        'heartbeat_interval_ms' => EngineConstants::DEFAULT_HEARTBEAT_INTERVAL_MS,
+        'disconnect_after_ms' => EngineConstants::DEFAULT_DISCONNECT_AFTER_MS,
+        'pause_timeout_ms' => EngineConstants::DEFAULT_PAUSE_TIMEOUT_MS,
+
+        // Limiteurs de jeu (spec 60 § 10.3) et service d'image (contrat C8).
+        'game_reads_per_minute' => EngineConstants::DEFAULT_GAME_READS_PER_MINUTE,
+        'game_writes_per_minute' => EngineConstants::DEFAULT_GAME_WRITES_PER_MINUTE,
+        'serve_url_expiry_margin_ms' => EngineConstants::DEFAULT_SERVE_URL_EXPIRY_MARGIN_MS,
+        'frame_serve_per_minute' => EngineConstants::DEFAULT_FRAME_SERVE_PER_MINUTE,
+    ],
 
     /*
     |--------------------------------------------------------------------------

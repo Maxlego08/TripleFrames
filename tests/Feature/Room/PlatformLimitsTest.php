@@ -305,9 +305,15 @@ it('refuse une marge, une fenêtre, un seuil ou un plafond de recadrage hors bor
     // `round.sequence_index` est un `unsignedTinyInteger` : M + marge doit y tenir.
     expect(PlatformLimits::MAX_DRAW_SUBSTITUTE_MARGIN)->toBe(255 - RoomSettingsBounds::MAX_ROUNDS_COUNT);
 
+    // Borne de fait sous la clôture après pause du moteur (spec 60 § 19.1) : la
+    // plus basse des deux gouverne. Sa preuve côté moteur vit dans
+    // `EngineConstantsTest` (« une marge de tirage admise par PlatformLimits… »).
+    $maximumMargin = min(PlatformLimits::MAX_DRAW_SUBSTITUTE_MARGIN, PlatformLimits::MAX_DRAW_SUBSTITUTE_MARGIN_UNDER_PAUSE);
+
     $refused = [
         ['drawSubstituteMargin', -1],
         ['drawSubstituteMargin', PlatformLimits::MAX_DRAW_SUBSTITUTE_MARGIN + 1],
+        ['drawSubstituteMargin', $maximumMargin + 1],
         ['roomMemoryWindowDays', 0],
         ['roomMemoryWindowRounds', 0],
         ['themeSelectorMinPool', -1],
@@ -328,7 +334,7 @@ it('refuse une marge, une fenêtre, un seuil ou un plafond de recadrage hors bor
     // Les bornes elles-mêmes sont légales.
     $accepted = [
         ['drawSubstituteMargin', 0],
-        ['drawSubstituteMargin', PlatformLimits::MAX_DRAW_SUBSTITUTE_MARGIN],
+        ['drawSubstituteMargin', $maximumMargin],
         ['roomMemoryWindowDays', 1],
         ['roomMemoryWindowRounds', 1],
         ['themeSelectorMinPool', 0],

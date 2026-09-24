@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use App\Listeners\SyncCarbonLocale;
+use App\Settings\EngineConstants;
 use App\Settings\PlatformLimits;
 use App\Support\I18n\LangVersion;
 use App\Support\I18n\NullPlayerTokenLocale;
@@ -26,6 +27,7 @@ class AppServiceProvider extends ServiceProvider
     {
         $this->registerLocalization();
         $this->registerPlatformLimits();
+        $this->registerEngineConstants();
     }
 
     /**
@@ -73,6 +75,19 @@ class AppServiceProvider extends ServiceProvider
     protected function registerPlatformLimits(): void
     {
         $this->app->scoped(PlatformLimits::class, static fn (): PlatformLimits => PlatformLimits::fromConfig());
+    }
+
+    /**
+     * Les constantes du moteur suivent le même régime que les plafonds de
+     * plateforme (spec 60 § 19.1) : `scoped`, jamais une propriété statique.
+     *
+     * Leur garde lit `PlatformLimits::drawSubstituteMargin()` (clôture après
+     * pause) : une instance mémoïsée porte donc aussi la marge de tirage du
+     * cycle de vie qui l'a construite, et se périme avec lui.
+     */
+    protected function registerEngineConstants(): void
+    {
+        $this->app->scoped(EngineConstants::class, static fn (): EngineConstants => EngineConstants::fromConfig());
     }
 
     /**

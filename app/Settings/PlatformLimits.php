@@ -133,6 +133,27 @@ final readonly class PlatformLimits
      */
     public const int MAX_DRAW_SUBSTITUTE_MARGIN = self::MAX_ROUND_SEQUENCE_INDEX - RoomSettingsBounds::MAX_ROUNDS_COUNT;
 
+    /**
+     * Borne de fait de la marge sous la garde de clôture après pause du moteur
+     * (garde-fou croisé, spec 60 § 19.1 et spec 50 § 2.7) :
+     * `⌊pauseTimeoutMs ÷ launchCountdownMs⌋ − MAX_ROUNDS_COUNT`, aux défauts de
+     * {@see EngineConstants} (150 aujourd'hui, sous les 225 de
+     * {@see self::MAX_DRAW_SUBSTITUTE_MARGIN}).
+     *
+     * Chaque reprise après pause ajoute un décompte de lancement que
+     * `total_paused_ms` ne compte pas ; la clôture après pause doit couvrir ceux de
+     * toutes les manches, réserve comprise. Sans cette borne, une marge légale pour
+     * la plateforme ferait lever tous les accesseurs du moteur. Lue aux DÉFAUTS et
+     * non à la configuration du moteur, dont la garde lit elle-même cette marge :
+     * une surcharge du moteur reste jugée par sa propre garde. Division entière
+     * écrite par le reste, `intdiv()` n'étant pas admis dans une expression
+     * constante.
+     */
+    public const int MAX_DRAW_SUBSTITUTE_MARGIN_UNDER_PAUSE = (EngineConstants::DEFAULT_PAUSE_TIMEOUT_MS
+        - EngineConstants::DEFAULT_PAUSE_TIMEOUT_MS % EngineConstants::DEFAULT_LAUNCH_COUNTDOWN_MS)
+        / EngineConstants::DEFAULT_LAUNCH_COUNTDOWN_MS
+        - RoomSettingsBounds::MAX_ROUNDS_COUNT;
+
     /** Fenêtre de la mémoire du salon, en jours (spec 30, `RoomMemoryWindow`). */
     public const int DEFAULT_ROOM_MEMORY_WINDOW_DAYS = 90;
 
@@ -227,7 +248,14 @@ final readonly class PlatformLimits
         self::assertBetween('frameUploadMaxKilobytes', $frameUploadMaxKilobytes, self::MIN_POSITIVE, self::DEFAULT_FRAME_UPLOAD_MAX_KILOBYTES);
         self::assertTierGrace($tierGraceMs);
         self::assertBetween('preloadLeadMs', $preloadLeadMs, self::MIN_PRELOAD_LEAD_MS, self::MAX_PRELOAD_LEAD_MS);
-        self::assertBetween('drawSubstituteMargin', $drawSubstituteMargin, self::MIN_NON_NEGATIVE, self::MAX_DRAW_SUBSTITUTE_MARGIN);
+        // Une seule garde, sous la plus basse des deux bornes : le message d'une
+        // marge fautive annonce la borne qui gouverne réellement.
+        self::assertBetween(
+            'drawSubstituteMargin',
+            $drawSubstituteMargin,
+            self::MIN_NON_NEGATIVE,
+            min(self::MAX_DRAW_SUBSTITUTE_MARGIN, self::MAX_DRAW_SUBSTITUTE_MARGIN_UNDER_PAUSE),
+        );
         self::assertAtLeast('roomMemoryWindowDays', $roomMemoryWindowDays, self::MIN_POSITIVE);
         self::assertAtLeast('roomMemoryWindowRounds', $roomMemoryWindowRounds, self::MIN_POSITIVE);
         self::assertAtLeast('themeSelectorMinPool', $themeSelectorMinPool, self::MIN_NON_NEGATIVE);

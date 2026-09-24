@@ -1,5 +1,6 @@
 <?php
 
+use App\Settings\EngineConstants;
 use App\Settings\PlatformLimits;
 use Illuminate\Foundation\Testing\DatabaseTruncation;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -108,6 +109,9 @@ function requireMysql(): void
  * change `game.platform.*` en cours de test passe par cette fonction, qui
  * rejoue ce que ferait le début d'une nouvelle requête ou d'un nouveau job.
  *
+ * `EngineConstants` est oubliée aussi : sa garde de clôture après pause lit
+ * la marge de tirage de la plateforme (spec 60 § 19.1).
+ *
  * @param  array<string, mixed>  $values
  */
 function platformLimitsConfigure(array $values): void
@@ -117,4 +121,22 @@ function platformLimitsConfigure(array $values): void
     }
 
     app()->forgetInstance(PlatformLimits::class);
+    app()->forgetInstance(EngineConstants::class);
+}
+
+/**
+ * Pose des valeurs sous `game.engine.*` et oublie l'instance mémoïsée.
+ *
+ * Même régime que {@see platformLimitsConfigure()} : `EngineConstants` est
+ * liée `scoped`, et un `config()->set()` nu serait ignoré en silence.
+ *
+ * @param  array<string, mixed>  $values
+ */
+function engineConstantsConfigure(array $values): void
+{
+    foreach ($values as $key => $value) {
+        config()->set('game.engine.'.$key, $value);
+    }
+
+    app()->forgetInstance(EngineConstants::class);
 }

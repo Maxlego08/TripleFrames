@@ -69,6 +69,10 @@ return [
             'connection' => env('REDIS_QUEUE_CONNECTION', 'default'),
             'queue' => env('REDIS_QUEUE', 'default'),
             'retry_after' => (int) env('REDIS_QUEUE_RETRY_AFTER', 90),
+            // Nul, jamais au-delà d'une seconde : un worker à vide sonde au
+            // rythme de son `--sleep`. Un BLPOP long retarderait d'autant la
+            // migration des jobs différés, donc la relève d'un job de frontière
+            // de palier (spec 60 § 19.5, spec 100 § 10.3).
             'block_for' => null,
             'after_commit' => false,
         ],
