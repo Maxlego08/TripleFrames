@@ -430,7 +430,7 @@ Ensuite, à chaque session : **« Implémente l'étape suivante de l'ordre des l
 38. L70-2 — sous-titre dérivé et projection (D23) → 37 — ✅ livrée le 24/09
 39. L90-6a — `GameFrame`, `GameThemeScope`, `ConnectionBanner`, annonceur → 8, 12, 21 — ✅ livrée le 24/09
 40. L20-6 — aperçu admin des images → 22 — ✅ livrée le 24/09
-41. L20-7 — ajout depuis TMDB, dédoublonnage, route capture refusante → 22, 33
+41. L20-7 — ajout depuis TMDB, dédoublonnage, route capture refusante → 22, 33 — ✅ livrée le 24/09
 42. L20-8 — re-recadrage, niveau, dépublication d'image → 17, 34, 41
 43. L20-9a — recadreur : cadre, boutons, clavier → 8, 12, 21
 44. L20-9b — recadreur : poignées, molette, pincement (D35) → 43

@@ -104,6 +104,18 @@ final class TmdbException extends RuntimeException
     }
 
     /**
+     * Visuel plus lourd que le plafond configuré, en kilooctets : le corps n'est
+     * pas lu au-delà, et rien n'en est conservé.
+     */
+    public static function tooLarge(int $maxKilobytes): self
+    {
+        return new self(
+            TmdbErrorKind::TooLarge,
+            'Visuel TMDB plus lourd que le plafond de '.$maxKilobytes.' Ko : téléchargement interrompu.',
+        );
+    }
+
+    /**
      * Forme de réponse hors contrat. `$context` nomme le champ fautif, jamais
      * son contenu : une charge utile entière dans un journal est une fuite.
      */

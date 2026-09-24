@@ -7,6 +7,7 @@ use App\Actions\Fortify\ResetUserPassword;
 use App\Support\Identity\AccountSwitches;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
@@ -127,6 +128,17 @@ class FortifyServiceProvider extends ServiceProvider
         // jamais l'un l'autre.
         RateLimiter::for('admin-import', function (Request $request) {
             return Limit::perMinute(12)->by((string) $request->user()?->getAuthIdentifier());
+        });
+
+        // Les gestes d'image du back-office (spec 20 § 5.3 et § 13.7, C9 § 2) :
+        // ajout d'une variante, puis re-recadrage et relance au lot L20-8.
+        // Chacun télécharge un original TMDB ou distribue un job Imagick ; le
+        // limiteur borne le double clic et la rafale, jamais le débit d'un
+        // curateur. Par UTILISATEUR, comme `admin-import`, et sa valeur vit
+        // dans `catalog.curation.rate_limits.frame`, jamais en littéral.
+        RateLimiter::for('admin-frame', function (Request $request) {
+            return Limit::perMinute(Config::integer('catalog.curation.rate_limits.frame'))
+                ->by((string) $request->user()?->getAuthIdentifier());
         });
 
         // Les sondes d'exploitation (spec 100 § 15), AVANT la vérification du

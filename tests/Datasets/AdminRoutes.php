@@ -1,9 +1,15 @@
 <?php
 
+use App\Enums\FrameLevel;
 use App\Models\Frame;
 use App\Models\ImportRun;
 use App\Models\Movie;
 use App\Models\User;
+use App\Settings\PlatformLimits;
+use App\Support\Frames\FrameGeometry;
+use Illuminate\Support\Facades\Http;
+use Tests\Fixtures\TmdbFixture;
+use Tests\Support\Frames\SourceImages;
 
 /*
 |--------------------------------------------------------------------------
@@ -140,6 +146,32 @@ function adminRoutesMatrix(): array
             parameters: fn (): array => adminRoutesFrameParameters(),
         ),
 
+        // Ligne 13 — ajouter une variante depuis TMDB (C9). La garde nomme la
+        // CLASSE `Frame` : `can:create,movie` résoudrait `MoviePolicy::create()`.
+        // TMDB est simulé et le traitement ne part pas (`Bus::fake()`) : le
+        // 302 est l'ajout lui-même, retour à la page d'où il est posté.
+        'admin.catalog.frames.tmdb.store' => adminRoutesRow(
+            row: 13,
+            method: 'POST',
+            guards: ['can:create,'.Frame::class.',movie'],
+            curator: 302,
+            admin: 302,
+            parameters: fn (): array => adminRoutesTmdbFrameParameters(),
+            payload: fn (): array => adminRoutesTmdbFramePayload(),
+            redirect: fn (array $parameters): string => route('admin.catalog.show', $parameters),
+        ),
+
+        // Ligne 14 — la voie capture : 403 motivé tant qu'elle est fermée,
+        // pour tous les rôles, avant toute résolution de requête (§ 5.4).
+        'admin.catalog.frames.capture.store' => adminRoutesRow(
+            row: 14,
+            method: 'POST',
+            guards: ['can:createFromCapture,'.Frame::class.',movie'],
+            curator: 403,
+            admin: 403,
+            parameters: fn (): array => ['movie' => Movie::factory()->create()->getKey()],
+        ),
+
         // Ligne 7 — l'écran d'import et le détail d'un balayage.
         'admin.import.index' => adminRoutesRow(
             row: 7,
@@ -208,6 +240,47 @@ function adminRoutesFrameParameters(): array
     $frame = Frame::factory()->for($movie)->withFiles()->create();
 
     return ['movie' => $movie->id, 'frame' => $frame->id];
+}
+
+/**
+ * Un film dont TMDB propose le visuel de fixture, TMDB simulé — visuels du
+ * film et original téléchargé, des octets synthétiques —, et l'envoi posté
+ * depuis la fiche du film, comme depuis l'écran : le retour arrière y mène.
+ *
+ * @return array{movie: int}
+ */
+function adminRoutesTmdbFrameParameters(): array
+{
+    $movie = Movie::factory()->create(['tmdb_id' => 987654]);
+
+    Http::fake([
+        '*themoviedb.org/3/movie/987654/images*' => Http::response(TmdbFixture::json('movie-987654-images')),
+        '*image.tmdb.org/*' => Http::response(SourceImages::jpeg(1920, 1080)),
+    ]);
+
+    test()->from(route('admin.catalog.show', ['movie' => $movie->id]));
+
+    return ['movie' => $movie->id];
+}
+
+/**
+ * Un ajout conforme : un backdrop de la fixture (1920 × 1080), un niveau, et
+ * le cadre par défaut de son master.
+ *
+ * @return array<string, int|string>
+ */
+function adminRoutesTmdbFramePayload(): array
+{
+    $crop = FrameGeometry::defaultCrop(FrameGeometry::masterHeightFor(1920, 1080), PlatformLimits::current());
+
+    return [
+        'tmdb_file_path' => '/6a7b8c9d0e1f2a3b4c5d6e7f80912a3b.jpg',
+        'frame_level' => FrameLevel::Level3->value,
+        'crop_x' => $crop->x,
+        'crop_y' => $crop->y,
+        'crop_width' => $crop->width,
+        'crop_height' => $crop->height,
+    ];
 }
 
 dataset('admin.routes', function (): iterable {

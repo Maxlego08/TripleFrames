@@ -129,6 +129,11 @@ return [
     |   de 120 s du même worker : Imagick échoue avant que le worker ne tue le
     |   job. `width_px` / `height_px` refusent une source absurde avant
     |   décodage ; `area_mpx` laisse un original 4K (8,3 Mpx) en mémoire.
+    | - `rate_limits.frame` : limiteur `admin-frame`, par utilisateur et par
+    |   minute, posé sur l'ajout d'une image (puis, au lot L20-8, sur le
+    |   re-recadrage et la relance) : chaque geste télécharge un original ou
+    |   distribue un job Imagick, et un double clic ne doit pas en lancer deux
+    |   rafales (§ 13.7, C9 § 2). Au moins 1.
     |
     */
 
@@ -151,6 +156,10 @@ return [
             'width_px' => 8_192,
             'height_px' => 8_192,
             'time_s' => 60,
+        ],
+
+        'rate_limits' => [
+            'frame' => 30,
         ],
     ],
 

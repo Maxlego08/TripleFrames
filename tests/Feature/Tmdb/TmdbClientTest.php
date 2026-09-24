@@ -5,6 +5,8 @@ use App\Support\Tmdb\TmdbDiscoverQuery;
 use App\Support\Tmdb\TmdbErrorKind;
 use App\Support\Tmdb\TmdbException;
 use Carbon\CarbonInterval;
+use GuzzleHttp\Psr7\FnStream;
+use GuzzleHttp\Psr7\Utils;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Config;
@@ -326,4 +328,95 @@ it('refuse un identifiant TMDB absurde sans appeler quoi que ce soit', function 
     expect(fn () => app(TmdbClient::class)->images(-1))->toThrow(InvalidArgumentException::class);
 
     Http::assertNothingSent();
+});
+
+it('le téléchargement d\'un original refuse un fichier plus lourd que le plafond configuré', function (): void {
+    Config::set('catalog.curation.tmdb_original_max_kilobytes', 1);
+
+    $path = '/6a7b8c9d0e1f2a3b4c5d6e7f80912a3b.jpg';
+    $ceiling = str_repeat("\x01", 1_024);
+    $body = null;
+    $length = null;
+
+    Http::fake([
+        '*image.tmdb.org/*' => function () use (&$body, &$length) {
+            return Http::response((string) $body, 200, $length === null ? [] : ['Content-Length' => (string) $length]);
+        },
+    ]);
+
+    $kind = function () use ($path): ?TmdbErrorKind {
+        try {
+            app(TmdbClient::class)->downloadImage($path);
+        } catch (TmdbException $exception) {
+            return $exception->kind;
+        }
+
+        return null;
+    };
+
+    // Au plafond exactement : les octets reviennent tels quels, téléchargés à
+    // la taille `original`, sans que le jeton de l'API parte chez ce tiers.
+    $body = $ceiling;
+
+    expect(app(TmdbClient::class)->downloadImage($path))->toBe($ceiling);
+
+    Http::assertSent(fn (Request $request): bool => $request->url() === 'https://image.tmdb.org/t/p/original'.$path
+        && ! $request->hasHeader('Authorization'));
+
+    // Un octet de plus, sans `Content-Length` : la lecture s'arrête au plafond.
+    $body = $ceiling."\x01";
+
+    expect($kind())->toBe(TmdbErrorKind::TooLarge);
+
+    // Un `Content-Length` déclaré au-delà : refus sans lire le corps.
+    $body = 'x';
+    $length = 1_025;
+
+    expect($kind())->toBe(TmdbErrorKind::TooLarge);
+
+    // Le plafond suit la configuration.
+    Config::set('catalog.curation.tmdb_original_max_kilobytes', 2);
+    $body = $ceiling."\x01";
+    $length = null;
+
+    expect(app(TmdbClient::class)->downloadImage($path))->toBe($ceiling."\x01");
+
+    // Un refus de taille n'est jamais retenté, et se nomme par une clé.
+    expect(TmdbErrorKind::TooLarge->isTransient())->toBeFalse()
+        ->and(TmdbErrorKind::TooLarge->translationKey())->toBe('admin.tmdb.error.too_large');
+});
+
+it('le téléchargement d\'un original s\'interrompt à l\'échéance, même servi au goutte-à-goutte', function (): void {
+    Config::set('services.tmdb.timeout', 2);
+    $this->freezeTime();
+
+    // Un corps qui ne finit jamais : un octet par lecture, une seconde de
+    // l'horloge simulée à chaque lecture. Le plafond de taille ne sera jamais
+    // atteint — seule l'échéance peut arrêter la lecture.
+    $reads = 0;
+    $drip = FnStream::decorate(Utils::streamFor(''), [
+        'eof' => fn (): bool => false,
+        'isSeekable' => fn (): bool => false,
+        'read' => function (int $length) use (&$reads): string {
+            $reads++;
+            $this->travel(1)->seconds();
+
+            return "\x01";
+        },
+    ]);
+
+    Http::fake(['*image.tmdb.org/*' => Http::response($drip)]);
+
+    $kind = null;
+
+    try {
+        app(TmdbClient::class)->downloadImage('/6a7b8c9d0e1f2a3b4c5d6e7f80912a3b.jpg');
+    } catch (TmdbException $exception) {
+        $kind = $exception->kind;
+    }
+
+    // Coupé en panne de transport, avec au plus une lecture au-delà de
+    // l'échéance — jamais tenu indéfiniment par le serveur.
+    expect($kind)->toBe(TmdbErrorKind::Transport)
+        ->and($reads)->toBe(3);
 });

@@ -42,6 +42,13 @@ enum TmdbErrorKind: string
     /** Statut hors de tous les cas ci-dessus : 3xx non suivi, 400, 422. */
     case UnexpectedStatus = 'unexpected_status';
 
+    /**
+     * Visuel plus lourd que `catalog.curation.tmdb_original_max_kilobytes` : le
+     * téléchargement est interrompu au plafond, jamais lu au-delà — l'original
+     * transite par la mémoire de la requête qui l'ajoute (spec 20 § 5.3).
+     */
+    case TooLarge = 'too_large';
+
     /** Préfixe des clés de traduction, domaine `admin` (français seulement). */
     private const string LANG_PREFIX = 'admin.tmdb.error.';
 
@@ -65,7 +72,7 @@ enum TmdbErrorKind: string
         return match ($this) {
             self::RateLimited, self::ServerError, self::Transport => true,
             self::NotConfigured, self::Unauthorized, self::NotFound,
-            self::Malformed, self::UnexpectedStatus => false,
+            self::Malformed, self::UnexpectedStatus, self::TooLarge => false,
         };
     }
 }

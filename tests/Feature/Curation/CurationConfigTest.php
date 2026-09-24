@@ -64,6 +64,9 @@ it('les bornes croisées de la configuration de curation tiennent', function ():
     expect($int('crop_seconds_max'))->toBeLessThanOrEqual(CURATION_UNSIGNED_SMALL_INTEGER_MAX);
     expect($int('tmdb_original_max_kilobytes'))->toBeGreaterThanOrEqual(1);
 
+    // Limiteurs par utilisateur des gestes du back-office.
+    expect($int('rate_limits.frame'))->toBeGreaterThanOrEqual(1);
+
     // La voie capture est fermée par défaut, et c'est la SEULE clé du bloc
     // lue de l'environnement.
     expect(Config::boolean('catalog.curation.capture_enabled'))->toBeFalse();

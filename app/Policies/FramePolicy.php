@@ -34,6 +34,14 @@ use Illuminate\Support\Facades\Config;
 class FramePolicy
 {
     /**
+     * Motif du refus de la voie capture, tant qu'elle est fermée : une CLÉ de
+     * traduction du domaine `admin`, jamais un texte (§ 5.4). La même clé
+     * motive le refus de `FrameCaptureController`, seule réponse de la route
+     * au jalon 1.
+     */
+    public const string CAPTURE_DISABLED = 'admin.frame.capture.disabled';
+
+    /**
      * L'aperçu des octets `game` et `master` (C9-bis).
      *
      * Tout état sauf `withdrawn` : une image retirée a vu ses fichiers
@@ -82,7 +90,7 @@ class FramePolicy
     public function createFromCapture(User $user, Movie $movie): Response
     {
         if (! Config::boolean('catalog.curation.capture_enabled', false)) {
-            return Response::deny('admin.frame.capture.disabled');
+            return Response::deny(self::CAPTURE_DISABLED);
         }
 
         return $this->create($user, $movie) ? Response::allow() : Response::deny();

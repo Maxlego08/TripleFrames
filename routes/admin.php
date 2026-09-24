@@ -2,12 +2,15 @@
 
 use App\Http\Controllers\Admin\CatalogController;
 use App\Http\Controllers\Admin\DashboardController;
+use App\Http\Controllers\Admin\FrameCaptureController;
 use App\Http\Controllers\Admin\FrameImageController;
+use App\Http\Controllers\Admin\FrameTmdbController;
 use App\Http\Controllers\Admin\ImportController;
 use App\Http\Controllers\Admin\ImportDiscoverController;
 use App\Http\Controllers\Admin\ImportIdsController;
 use App\Http\Controllers\Admin\ImportResumeController;
 use App\Http\Controllers\Admin\TwoFactorRequiredController;
+use App\Models\Frame;
 use App\Models\ImportRun;
 use App\Models\Movie;
 use Illuminate\Support\Facades\Route;
@@ -61,9 +64,11 @@ use Illuminate\Support\Facades\Route;
 | refuse une route `admin.*` sans ligne, une ligne sans route, et une garde
 | `can:` autre que celle que la ligne écrit.
 |
-| Les trois routes d'écriture portent en plus `throttle:admin-import`, limiteur
-| nommé déclaré dans `FortifyServiceProvider::configureRateLimiting()`, là où
-| vivent déjà `login`, `two-factor` et `passkeys`.
+| Les trois routes d'écriture de l'import portent en plus
+| `throttle:admin-import`, et les écritures d'image `throttle:admin-frame`
+| (C9 § 2) : limiteurs nommés déclarés dans
+| `FortifyServiceProvider::configureRateLimiting()`, là où vivent déjà
+| `login`, `two-factor` et `passkeys`.
 |
 */
 
@@ -110,6 +115,22 @@ Route::middleware(['auth', 'verified', 'role:curator', 'admin.2fa', 'admin.local
             Route::get('catalog/{movie}/frames/{frame}/master', [FrameImageController::class, 'master'])
                 ->middleware('can:view,frame')
                 ->name('catalog.frames.master');
+
+            // Ajouter une variante depuis TMDB (C9, § 5.3, ligne 13). La garde
+            // nomme la CLASSE en premier argument : écrite `can:create,movie`,
+            // elle résoudrait `MoviePolicy::create()`, qui refuse toujours, et
+            // toute la voie TMDB répondrait 403 (V-17).
+            Route::post('catalog/{movie}/frames/tmdb', [FrameTmdbController::class, 'store'])
+                ->middleware(['can:create,'.Frame::class.',movie', 'throttle:admin-frame'])
+                ->name('catalog.frames.tmdb.store');
+
+            // Voie capture (§ 5.4, ligne 14) : au jalon 1, la route existe pour
+            // REFUSER — 403 motivé par `admin.frame.capture.disabled`, rendu
+            // par la garde avant toute résolution de requête. La branche qui
+            // accepte un fichier arrive avec le lot L20-33.
+            Route::post('catalog/{movie}/frames/capture', [FrameCaptureController::class, 'store'])
+                ->middleware(['can:createFromCapture,'.Frame::class.',movie', 'throttle:admin-frame'])
+                ->name('catalog.frames.capture.store');
         });
 
         Route::get('import', [ImportController::class, 'index'])

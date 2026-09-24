@@ -2,12 +2,17 @@
 
 namespace App\Support\Tmdb;
 
+use Carbon\CarbonInterface;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Factory;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\Client\Response;
+use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\Date;
 use InvalidArgumentException;
+use Psr\Http\Message\StreamInterface;
+use RuntimeException;
 use Throwable;
 
 /**
@@ -34,6 +39,25 @@ use Throwable;
  */
 final class TmdbClient
 {
+    /**
+     * Forme d'un chemin de visuel téléchargeable : un fichier à la racine du
+     * serveur d'images, JPEG ou PNG — la forme des `backdrops` de TMDB. Le
+     * modificateur `D` refuse un saut de ligne final, que `$` laisserait
+     * passer jusque dans l'URL appelée.
+     */
+    public const string IMAGE_FILE_PATH_PATTERN = '/^\/[A-Za-z0-9_-]+\.(?:jpg|png)$/D';
+
+    /** Mot-clé TMDB de la taille téléchargée à l'ajout d'une image : l'original. */
+    private const string ORIGINAL_SIZE = 'original';
+
+    /** Plafond de l'original téléchargé, en kilooctets (spec 20 § 13.7). */
+    private const string ORIGINAL_MAX_KILOBYTES_KEY = 'catalog.curation.tmdb_original_max_kilobytes';
+
+    private const int BYTES_PER_KILOBYTE = 1024;
+
+    /** Morceau de lecture du corps d'un visuel : le plafond est vérifié entre deux morceaux. */
+    private const int DOWNLOAD_CHUNK_BYTES = 65_536;
+
     private readonly TmdbConfig $config;
 
     /**
@@ -148,6 +172,75 @@ final class TmdbClient
     }
 
     /**
+     * Les octets `original` d'un visuel, pour l'ajout d'une image (spec 20
+     * § 5.3, contrat C9) : c'est le SERVEUR qui télécharge, et `source_hash`
+     * est l'empreinte de ces octets-là, jamais une déclaration du navigateur.
+     *
+     * **Plafonné** par `catalog.curation.tmdb_original_max_kilobytes` :
+     * l'original transite par la mémoire de la requête HTTP qui l'ajoute. Un
+     * `Content-Length` déclaré au-delà refuse sans lire le corps ; un corps qui
+     * dépasse en cours de lecture est abandonné au plafond. Les deux cas lèvent
+     * un {@see TmdbException} de cas `TooLarge`.
+     *
+     * **Borné dans le temps** : le corps doit arriver en entier dans les
+     * `timeout` secondes qui suivent ses en-têtes, sinon la lecture est
+     * abandonnée en cas `Transport` (voir {@see self::imageRequest()}).
+     *
+     * Le serveur d'images de TMDB est public : ni jeton ni clé ne lui sont
+     * envoyés — un en-tête `Authorization` n'a rien à faire chez un tiers qui
+     * n'en demande pas. L'appel reste refusé sans configuration, comme tout
+     * appel de ce client : une intégration désactivée ne parle pas à TMDB.
+     *
+     * Rend des OCTETS, jamais un DTO : l'action d'ajout et le job ne
+     * connaissent aucun type de `App\Support\Tmdb` (`TmdbBoundaryTest`).
+     *
+     * @throws TmdbException
+     */
+    public function downloadImage(string $filePath): string
+    {
+        if (preg_match(self::IMAGE_FILE_PATH_PATTERN, $filePath) !== 1) {
+            throw new InvalidArgumentException('Chemin de visuel TMDB hors format.');
+        }
+
+        if (! $this->config->isConfigured()) {
+            throw TmdbException::notConfigured();
+        }
+
+        $maxKilobytes = Config::integer(self::ORIGINAL_MAX_KILOBYTES_KEY);
+        $maxBytes = $maxKilobytes * self::BYTES_PER_KILOBYTE;
+
+        try {
+            $response = $this->imageRequest()->get($this->config->imageUrl($filePath, self::ORIGINAL_SIZE));
+        } catch (ConnectionException $exception) {
+            throw TmdbException::transport(self::transportReason($exception), $exception);
+        } catch (RequestException $exception) {
+            $response = $exception->response;
+        }
+
+        $this->guard($response, 'image');
+
+        $declared = trim($response->header('Content-Length'));
+
+        if (preg_match('/^\d+$/', $declared) === 1 && (int) $declared > $maxBytes) {
+            throw TmdbException::tooLarge($maxKilobytes);
+        }
+
+        // L'échéance part de la réception des en-têtes : chaque tentative,
+        // reprise comprise, est déjà bornée par ses délais de connexion et de
+        // lecture. Seul le corps, lu en flux après la tentative, ne l'est pas —
+        // et partir d'avant l'appel ferait d'une reprise réussie un refus.
+        $deadline = Date::now()->addSeconds($this->config->timeoutSeconds);
+
+        $bytes = self::readCapped($response->toPsrResponse()->getBody(), $maxBytes, $maxKilobytes, $deadline);
+
+        if ($bytes === '') {
+            throw TmdbException::malformed('image', 'corps vide');
+        }
+
+        return $bytes;
+    }
+
+    /**
      * Appel GET, statut trié, corps validé en objet.
      *
      * @param  array<string, string|int>  $query
@@ -190,9 +283,42 @@ final class TmdbClient
      */
     private function pendingRequest(): PendingRequest
     {
-        $request = $this->http
+        $request = $this->resilientRequest()
             ->acceptJson()
-            ->baseUrl($this->config->baseUrl)
+            ->baseUrl($this->config->baseUrl);
+
+        return $this->config->usesToken()
+            ? $request->withToken($this->config->token())
+            : $request;
+    }
+
+    /**
+     * Requête vers le serveur d'images : même reprise bornée que l'API, sans
+     * authentification, et **en flux**, pour que le plafond de taille
+     * s'applique pendant la lecture et non après avoir tout reçu.
+     *
+     * Les délais ne sont PAS ceux de l'API. En flux, Guzzle confie la requête
+     * à son gestionnaire de flux PHP, où `timeout` borne chaque lecture de
+     * socket et non le transfert entier comme le fait cURL : un serveur qui
+     * livre ses octets au goutte-à-goutte tiendrait la requête — et son worker
+     * PHP-FPM, voisin de palier sur le VPS — sans limite de temps.
+     * `read_timeout` rend explicite la borne par lecture ; la borne TOTALE du
+     * corps est l'échéance de {@see self::readCapped()}.
+     */
+    private function imageRequest(): PendingRequest
+    {
+        return $this->resilientRequest()->withOptions([
+            'stream' => true,
+            'read_timeout' => $this->config->timeoutSeconds,
+        ]);
+    }
+
+    /**
+     * Délais explicites et reprise bornée, communs aux deux serveurs.
+     */
+    private function resilientRequest(): PendingRequest
+    {
+        return $this->http
             ->timeout($this->config->timeoutSeconds)
             ->connectTimeout($this->config->connectTimeoutSeconds)
             ->retry(
@@ -201,10 +327,49 @@ final class TmdbClient
                 when: fn (Throwable $exception): bool => $this->isRetryable($exception),
                 throw: false,
             );
+    }
 
-        return $this->config->usesToken()
-            ? $request->withToken($this->config->token())
-            : $request;
+    /**
+     * Le corps d'un visuel, lu par morceaux, **jamais au-delà du plafond ni
+     * de l'échéance** : un serveur qui ment sur `Content-Length`, ou qui n'en
+     * envoie pas, ne fait pas grossir la mémoire de la requête au-delà d'un
+     * morceau de plus ; un serveur qui livre au goutte-à-goutte est coupé à
+     * l'échéance, en panne de transport, avec au plus une lecture de retard.
+     *
+     * L'échéance est testée AVANT chaque lecture : un corps entièrement reçu
+     * n'est jamais refusé pour sa dernière seconde.
+     *
+     * @throws TmdbException
+     */
+    private static function readCapped(StreamInterface $body, int $maxBytes, int $maxKilobytes, CarbonInterface $deadline): string
+    {
+        if ($body->isSeekable()) {
+            $body->rewind();
+        }
+
+        $bytes = '';
+
+        while (! $body->eof()) {
+            if (Date::now()->greaterThan($deadline)) {
+                $body->close();
+
+                throw TmdbException::transport('délai de téléchargement du visuel dépassé');
+            }
+
+            try {
+                $bytes .= $body->read(self::DOWNLOAD_CHUNK_BYTES);
+            } catch (RuntimeException $exception) {
+                throw TmdbException::transport('lecture du visuel interrompue', $exception);
+            }
+
+            if (strlen($bytes) > $maxBytes) {
+                $body->close();
+
+                throw TmdbException::tooLarge($maxKilobytes);
+            }
+        }
+
+        return $bytes;
     }
 
     /**

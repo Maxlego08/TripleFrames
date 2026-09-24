@@ -623,6 +623,40 @@ return [
             'published' => 'Cette image est en jeu : elle n’est jamais retraitée telle quelle. Re-recadrez-la ou dépubliez-la d’abord.',
             'unexpected' => 'Le traitement de l’image a échoué pour une raison imprévue, et l’incident est consigné : relancez le traitement.',
         ],
+
+        /*
+        | Ajout depuis un visuel TMDB (spec 20 § 5.3). Chaque refus s’affiche
+        | sous le visuel ou sous le cadre, et aucune image n’est créée.
+        | `duplicate` : même visuel ET même cadre qu’une image déjà dans la
+        | banque du film — une même source recadrée autrement reste permise.
+        */
+        'tmdb' => [
+            'not_a_backdrop' => 'Ce visuel ne fait pas partie des visuels de ce film proposés par TMDB : choisissez-en un dans la grille. Une affiche ou un logo ne devient jamais une image de jeu.',
+            'download_failed' => 'TMDB n’a pas pu fournir ce visuel (service indisponible ou connexion interrompue) : aucune image n’a été créée. Réessayez dans un instant ; si l’échec persiste, signalez-le à l’administrateur du site.',
+            'too_large' => 'Ce visuel est plus lourd que ce que le serveur accepte de télécharger : aucune image n’a été créée. Choisissez un autre visuel du film.',
+            'duplicate' => 'Cette image existe déjà dans la banque du film : même visuel, même cadre. Déplacez ou redimensionnez le cadre pour créer une autre variante.',
+        ],
+
+        /*
+        | Voie capture (spec 20 § 5.4), fermée au jalon 1 faute d’arbitrage sur
+        | sa licéité. `disabled` motive le refus du serveur ; `disabled_notice`
+        | explique l’attente à la place du bouton absent.
+        */
+        'capture' => [
+            'disabled' => 'L’ajout d’une capture personnelle est fermé : seuls les visuels TMDB du film peuvent devenir des images de jeu.',
+            'disabled_notice' => 'L’ajout d’une capture personnelle est désactivé dans l’attente d’un avis juridique sur sa licéité. En attendant, seuls les visuels TMDB du film peuvent devenir des images de jeu ; un film sans visuel exploitable s’écarte.',
+        ],
+
+        /*
+        | Toasts de succès : l’image part en traitement et le curateur continue
+        | sans l’attendre. `recrop_queued` et `retry_queued` servent le
+        | re-recadrage et la relance (lot L20-8).
+        */
+        'flash' => [
+            'queued' => 'Image ajoutée : elle est en traitement et apparaîtra dans la banque du film dès qu’elle sera prête.',
+            'recrop_queued' => 'Nouveau cadre enregistré : l’image est en traitement et reviendra en revue dès qu’elle sera prête.',
+            'retry_queued' => 'Traitement relancé : l’image apparaîtra dans la banque du film dès qu’elle sera prête.',
+        ],
     ],
 
     /*
@@ -769,7 +803,10 @@ return [
     | Les quatre clés `crop.*` aussi : une par cas de
     | `App\Support\Frames\CropViolation`, qui les nomme
     | (`CropViolation::translationKey()`), lues par le contrôleur d’ajout et par
-    | le retour immédiat du recadreur (spec 20 § 5.2 et § 6.3).
+    | le retour immédiat du recadreur (spec 20 § 5.2 et § 6.3). Et
+    | `frame_source.dimensions`, le refus d’un visuel trop étroit ou en
+    | portrait avant tout téléchargement (§ 5.3), `:width` étant la largeur
+    | d’une image de jeu.
     */
     'validation' => [
         'search' => 'recherche',
@@ -790,6 +827,13 @@ return [
             'invalid' => 'Aucun identifiant lisible dans ce collage : attendez un nombre nu ou une URL TMDB par ligne.',
         ],
         'real_name' => 'Ce nom est réservé au journal d’administration : saisissez le nom réel de la personne.',
+        'tmdb_file_path' => 'visuel TMDB',
+        'frame_level' => 'niveau',
+        'crop_rect' => 'cadre',
+        'crop_seconds' => 'temps de recadrage',
+        'frame_source' => [
+            'dimensions' => 'Ce visuel est en portrait, fait moins de :width pixels de large, ou ne laisse place à aucun cadre admis : il ne peut pas donner une image de jeu. Choisissez un autre visuel du film.',
+        ],
         'crop' => [
             'aspect' => 'Le cadre doit être exactement au format 16:9.',
             'too_wide' => 'Le cadre couvre une trop grande part du visuel : resserrez-le. Une image de jeu ne reprend jamais le visuel presque entier.',
@@ -924,6 +968,8 @@ return [
             'transport' => 'Appel TMDB interrompu (DNS, TLS, délai d’attente ou connexion coupée) : le balayage est suspendu et reprenable depuis le bouton « Reprendre » de son détail s’il s’agit d’un balayage discover ; un collage, lui, se relance en recollant sa liste.',
             'malformed' => 'Réponse TMDB hors contrat : rien n’a été écrit au catalogue, le champ fautif est nommé dans le journal applicatif.',
             'unexpected_status' => 'Statut TMDB inattendu (:status) : aucune reprise automatique, consultez le journal applicatif.',
+            'too_large' => 'Le fichier renvoyé par TMDB dépasse le poids maximal accepté : il n’a pas été téléchargé.',
+            'rate_limited_interactive' => 'Quota TMDB atteint : patientez quelques secondes, puis réessayez.',
         ],
     ],
 
