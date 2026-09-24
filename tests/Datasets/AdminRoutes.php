@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Frame;
 use App\Models\ImportRun;
 use App\Models\Movie;
 use App\Models\User;
@@ -118,6 +119,27 @@ function adminRoutesMatrix(): array
             parameters: fn (): array => ['movie' => Movie::factory()->withdrawn()->create()->getKey()],
         ),
 
+        // Ligne 5 — l'aperçu des octets `game` et `master` (C9-bis). Une
+        // image traitée, donc des octets RÉELS sur le disque `frames`, faux
+        // pour toute la matrice (`beforeEach` d'`AuthorizationMatrixTest`).
+        'admin.catalog.frames.game' => adminRoutesRow(
+            row: 5,
+            method: 'GET',
+            guards: ['can:view,frame'],
+            curator: 200,
+            admin: 200,
+            parameters: fn (): array => adminRoutesFrameParameters(),
+        ),
+
+        'admin.catalog.frames.master' => adminRoutesRow(
+            row: 5,
+            method: 'GET',
+            guards: ['can:view,frame'],
+            curator: 200,
+            admin: 200,
+            parameters: fn (): array => adminRoutesFrameParameters(),
+        ),
+
         // Ligne 7 — l'écran d'import et le détail d'un balayage.
         'admin.import.index' => adminRoutesRow(
             row: 7,
@@ -171,6 +193,21 @@ function adminRoutesMatrix(): array
             redirect: fn (array $parameters): string => route('admin.import.show', $parameters),
         ),
     ];
+}
+
+/**
+ * Un film et l'une de ses images, dérivé et master écrits sur le disque
+ * `frames` : les paramètres des deux routes d'aperçu, dans l'ordre de leur
+ * URL.
+ *
+ * @return array{movie: int, frame: int}
+ */
+function adminRoutesFrameParameters(): array
+{
+    $movie = Movie::factory()->create();
+    $frame = Frame::factory()->for($movie)->withFiles()->create();
+
+    return ['movie' => $movie->id, 'frame' => $frame->id];
 }
 
 dataset('admin.routes', function (): iterable {

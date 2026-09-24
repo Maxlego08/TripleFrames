@@ -10,6 +10,7 @@ use App\Models\FrameReview;
 use App\Models\ImportRun;
 use App\Models\Movie;
 use App\Models\User;
+use App\Support\Frames\FrameStoragePrefix;
 use Illuminate\Auth\Access\Response as AccessResponse;
 use Illuminate\Auth\Middleware\Authorize;
 use Illuminate\Contracts\Http\Kernel as HttpKernel;
@@ -18,6 +19,7 @@ use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Storage;
 
 /*
 |--------------------------------------------------------------------------
@@ -45,6 +47,11 @@ beforeEach(function (): void {
     // le mauvais refus : la clé est posée, jamais employée.
     Bus::fake();
     Config::set('services.tmdb.api_key', 'clef-de-test');
+
+    // Les lignes qui portent sur une image écrivent ses octets : sur un
+    // disque faux, jamais dans la racine réelle de `frames`, où ils
+    // resteraient après le `RefreshDatabase`, qui n'annule que la ligne.
+    Storage::fake(FrameStoragePrefix::DISK);
 });
 
 /**

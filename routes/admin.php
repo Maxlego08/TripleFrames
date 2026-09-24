@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Admin\CatalogController;
 use App\Http\Controllers\Admin\DashboardController;
+use App\Http\Controllers\Admin\FrameImageController;
 use App\Http\Controllers\Admin\ImportController;
 use App\Http\Controllers\Admin\ImportDiscoverController;
 use App\Http\Controllers\Admin\ImportIdsController;
@@ -94,6 +95,22 @@ Route::middleware(['auth', 'verified', 'role:curator', 'admin.2fa', 'admin.local
         Route::get('catalog/{movie}', [CatalogController::class, 'show'])
             ->middleware('can:view,movie')
             ->name('catalog.show');
+
+        // Aperçu des octets d'une image (C9-bis, § 5.8, ligne 5) : seul second
+        // lecteur du disque `frames` avec `/f/{serveToken}`, jamais adressé par
+        // un `serve_token`. `scopeBindings` : une frame d'un AUTRE film répond
+        // 404 avant la policy, qui n'a donc jamais à comparer `movie_id`. Une
+        // frame `withdrawn` répond 404 aussi, par `FramePolicy::view`. Le
+        // préfixe `master/` n'est lu que par `admin.catalog.frames.master`.
+        Route::scopeBindings()->group(function (): void {
+            Route::get('catalog/{movie}/frames/{frame}/game', [FrameImageController::class, 'game'])
+                ->middleware('can:view,frame')
+                ->name('catalog.frames.game');
+
+            Route::get('catalog/{movie}/frames/{frame}/master', [FrameImageController::class, 'master'])
+                ->middleware('can:view,frame')
+                ->name('catalog.frames.master');
+        });
 
         Route::get('import', [ImportController::class, 'index'])
             ->middleware('can:viewAny,'.ImportRun::class)
