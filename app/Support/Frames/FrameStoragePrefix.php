@@ -8,10 +8,14 @@ use Random\RandomException;
 /**
  * Les deux préfixes du disque privé `frames`, et l'éclatement des chemins.
  *
- * | Préfixe   | Contenu                     | Plafonds de SORTIE | Servable |
- * |-----------|-----------------------------|--------------------|----------|
- * | `game/`   | Dérivé servi, WebP          | 1280 px, 150 Ko    | oui      |
- * | `master/` | Source de re-cadrage, WebP  | 1920 px            | jamais   |
+ * | Préfixe   | Contenu                     | Plafonds de SORTIE                     | Servable |
+ * |-----------|-----------------------------|----------------------------------------|----------|
+ * | `game/`   | Dérivé servi, WebP          | `GAME_WIDTH` px, `GAME_MAX_BYTES` o    | oui      |
+ * | `master/` | Source de re-cadrage, WebP  | `MASTER_WIDTH` px                      | jamais   |
+ *
+ * Ces plafonds ne sont pas écrits ici : ils DÉLÈGUENT à {@see FrameGeometry}
+ * (contrat C9, spec 20 § 5.1), seule source des constantes de format, pour
+ * qu'un format ne puisse jamais être dit de deux façons.
  *
  * La route de service refuse STRUCTURELLEMENT tout chemin ne commençant pas par
  * `game/` : `master/` est non servable par construction et non par convention.
@@ -53,6 +57,9 @@ enum FrameStoragePrefix: string
     /** Largeur d'un segment de répertoire, en caractères hexadécimaux. */
     public const int FANOUT_WIDTH = 2;
 
+    /** Octets par kilooctet : convertit `FrameGeometry::GAME_MAX_BYTES` en Ko. */
+    private const int BYTES_PER_KILOBYTE = 1024;
+
     /**
      * Seul préfixe servable à un joueur.
      */
@@ -62,25 +69,29 @@ enum FrameStoragePrefix: string
     }
 
     /**
-     * Plafond de SORTIE, en pixels sur le plus grand côté.
+     * Plafond de SORTIE, en pixels sur le plus grand côté — délégué à
+     * {@see FrameGeometry} : le dérivé mesure exactement `GAME_WIDTH` ×
+     * `GAME_HEIGHT`, le master exactement `MASTER_WIDTH` de large et jamais plus
+     * haut que large.
      */
     public function maxPixels(): int
     {
         return match ($this) {
-            self::Game => 1280,
-            self::Master => 1920,
+            self::Game => FrameGeometry::GAME_WIDTH,
+            self::Master => FrameGeometry::MASTER_WIDTH,
         };
     }
 
     /**
-     * Plafond de SORTIE en kilooctets, quand il en existe un.
+     * Plafond de SORTIE en kilooctets, quand il en existe un — délégué à
+     * `FrameGeometry::GAME_MAX_BYTES`, padding compris.
      *
      * Le master n'en porte pas : il n'est jamais servi, il est re-cadré.
      */
     public function maxKilobytes(): ?int
     {
         return match ($this) {
-            self::Game => 150,
+            self::Game => intdiv(FrameGeometry::GAME_MAX_BYTES, self::BYTES_PER_KILOBYTE),
             self::Master => null,
         };
     }

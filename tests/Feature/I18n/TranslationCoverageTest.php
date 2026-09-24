@@ -5,6 +5,7 @@ use App\Enums\AdminActionType;
 use App\Enums\LegalPage;
 use App\Enums\Locale;
 use App\Enums\SettingPresetKey;
+use App\Support\Frames\CropViolation;
 use App\Support\I18n\TranslationDomains;
 use App\Support\Tmdb\TmdbErrorKind;
 use Illuminate\Support\Facades\App;
@@ -398,6 +399,11 @@ it('carries every key built by an enumerable key constructor', function () {
         ...array_map(
             static fn (AdminActionSubject $subject): string => $subject->labelKey(),
             AdminActionSubject::cases(),
+        ),
+        // Refus d'un cadre de recadrage (20 § 5.2, L20-4).
+        ...array_map(
+            static fn (CropViolation $violation): string => $violation->translationKey(),
+            CropViolation::cases(),
         ),
     ];
 

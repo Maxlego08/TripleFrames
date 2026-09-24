@@ -59,6 +59,15 @@
     --color-input: var(--input);
     --color-ring: var(--ring);
 
+    /*
+     * Ratio de la frame servable (D5 du 23/09, contrat C9) : produit
+     * l'utilitaire `aspect-frame`, seul ratio du cadre de jeu (`GameFrame`) et
+     * de l'aperçu admin, jamais un style en ligne. Reflet de
+     * `FrameGeometry::ASPECT_WIDTH` / `ASPECT_HEIGHT`, vérifié par
+     * `FrameGeometryTest`.
+     */
+    --aspect-frame: 16 / 9;
+
     --color-chart-1: var(--chart-1);
     --color-chart-2: var(--chart-2);
     --color-chart-3: var(--chart-3);

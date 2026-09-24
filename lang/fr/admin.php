@@ -742,6 +742,10 @@ return [
     | des phrases : Laravel compose le message depuis `lang/fr/validation.php`.
     | Les trois clés `ids.*` et `real_name`, elles, sont des messages complets
     | — `real_name` refuse un nom réservé au journal (`RealNameValidationRules`).
+    | Les quatre clés `crop.*` aussi : une par cas de
+    | `App\Support\Frames\CropViolation`, qui les nomme
+    | (`CropViolation::translationKey()`), lues par le contrôleur d’ajout et par
+    | le retour immédiat du recadreur (spec 20 § 5.2 et § 6.3).
     */
     'validation' => [
         'search' => 'recherche',
@@ -762,6 +766,12 @@ return [
             'invalid' => 'Aucun identifiant lisible dans ce collage : attendez un nombre nu ou une URL TMDB par ligne.',
         ],
         'real_name' => 'Ce nom est réservé au journal d’administration : saisissez le nom réel de la personne.',
+        'crop' => [
+            'aspect' => 'Le cadre doit être exactement au format 16:9.',
+            'too_wide' => 'Le cadre couvre une trop grande part du visuel : resserrez-le. Une image de jeu ne reprend jamais le visuel presque entier.',
+            'too_narrow' => 'Le cadre est trop serré : élargissez-le, l’image de jeu serait trop agrandie.',
+            'out_of_bounds' => 'Le cadre dépasse du visuel : ramenez-le entièrement à l’intérieur.',
+        ],
     ],
 
     'error' => [
