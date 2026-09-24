@@ -6,16 +6,17 @@ use App\Http\Controllers\Admin\ImportController;
 use App\Http\Controllers\Admin\ImportDiscoverController;
 use App\Http\Controllers\Admin\ImportIdsController;
 use App\Http\Controllers\Admin\ImportResumeController;
+use App\Http\Controllers\Admin\TwoFactorRequiredController;
 use App\Models\ImportRun;
 use App\Models\Movie;
 use Illuminate\Support\Facades\Route;
 
 /*
 |--------------------------------------------------------------------------
-| Back-office — début de panel, pas encore le back-office de curation
+| Back-office — la porte `/admin` (spec 20 § 2.3)
 |--------------------------------------------------------------------------
 |
-| Quatre middlewares sur le groupe, et pas un de plus :
+| Cinq middlewares sur le groupe, dans cet ordre, et pas un de plus :
 |
 | - `auth` et `verified` : le panneau est derrière un compte vérifié ;
 | - `role:curator` (`EnsureUserHasRole`) garde la PORTE, là où les `can:` posés
@@ -23,12 +24,22 @@ use Illuminate\Support\Facades\Route;
 |   `SubstituteBindings` : sans lui, `/admin/catalog/{movie}` répondrait 404 à un
 |   joueur sur un identifiant inconnu contre 403 sur un identifiant réel, et le
 |   simple couple de codes de statut énumérerait la table `movie` ;
+| - `admin.2fa` (`EnsurePrivilegedTwoFactor`) ferme la porte à tout compte
+|   privilégié — `curator` ET `admin` — dont le second facteur n'est pas
+|   CONFIRMÉ, et le renvoie par une redirection 303 vers l'écran d'enrôlement
+|   `admin.two_factor.required` : jamais un 403 muet, et jamais une écriture
+|   exécutée (spec 20 § 2.4, `10` A16). Il vient APRÈS `role`, pour qu'un
+|   joueur reçoive 403 avant toute redirection qui confirmerait l'existence de
+|   la porte, et il rejoint `role` en tête de la liste de priorité, avant
+|   `SubstituteBindings`, pour la même raison d'énumération
+|   (`bootstrap/app.php`). L'écran d'enrôlement en est retiré par
+|   `withoutMiddleware`, sans quoi la porte se renverrait à elle-même ;
 | - `admin.locale` (`ForceAdminLocale`) force `Locale::French` ET appelle déjà
 |   `TranslationDomains::need('admin')`. **Ne jamais ajouter `translations:admin`
 |   ici** : ce serait un doublon. À noter pour les écrans — `TranslationDomains::selected()`
 |   rend `['admin']` SEUL dès que le domaine `admin` est demandé, `common` n'est
 |   donc PAS joint : toute clé appelée par une page d'administration vit dans
-|   `lang/fr/admin.php`.
+|   `lang/fr/admin.php`, pied de page compris (`admin.footer.*`, jamais `legal`).
 |
 | **Aucun forçage d'apparence** : le back-office suit l'apparence choisie par
 | le visiteur (D8 du 23/09, spec 90 § 2.2). Seuls les cadres de revue et de
@@ -36,16 +47,13 @@ use Illuminate\Support\Facades\Route;
 | jeu (spec 20 § 6.7) — jamais le document entier.
 |
 | **L'autorisation est posée route par route par `can:`, jamais par un test de
-| rôle dans un contrôleur.** Les policies vivent dans `app/Policies/` et sont
+| rôle dans un contrôleur.** Deux routes seulement n'en portent pas, parce que
+| la porte suffit à les garder : l'écran d'enrôlement
+| (`admin.two_factor.required`) et, au lot L20-18, la page de premiers pas
+| (`admin.guide`). Les policies vivent dans `app/Policies/` et sont
 | auto-découvertes par convention `App\Models\X` → `App\Policies\XPolicy` :
 | aucun enregistrement de provider, et surtout aucun `Gate::before` — il
 | contournerait la propriété d'une `saved_config`, déclarée strictement privée.
-|
-| Le groupe est écrit pour que la contrainte « 2FA obligatoire sur les rôles
-| privilégiés » ne soit **qu'un middleware à ajouter ici**, sans toucher à un
-| seul contrôleur. Elle n'est PAS implémentée dans ce lot, et elle n'est pas
-| oubliée pour autant : elle est consignée, avec les autres points que la spec
-| 20 devra trancher, dans `docs/REPRISE.md` § « À trancher par la spec 20 ».
 |
 | Les trois routes d'écriture portent en plus `throttle:admin-import`, limiteur
 | nommé déclaré dans `FortifyServiceProvider::configureRateLimiting()`, là où
@@ -53,10 +61,17 @@ use Illuminate\Support\Facades\Route;
 |
 */
 
-Route::middleware(['auth', 'verified', 'role:curator', 'admin.locale'])
+Route::middleware(['auth', 'verified', 'role:curator', 'admin.2fa', 'admin.locale'])
     ->prefix('admin')
     ->name('admin.')
     ->group(function (): void {
+        // L'écran d'enrôlement : hors de `admin.2fa`, sans `can:` — la porte
+        // (`auth`, `verified`, `role:curator`) le garde seule, et un joueur y
+        // reçoit 403 comme partout ailleurs sous `/admin`.
+        Route::get('two-factor', [TwoFactorRequiredController::class, 'show'])
+            ->withoutMiddleware('admin.2fa')
+            ->name('two_factor.required');
+
         // DEUX gardes, parce que l'écran sert DEUX modèles : les compteurs de
         // catalogue et les cinq derniers `import_run` avec leur auteur, leur
         // filtre figé et leurs quatre compteurs — exactement la charge utile

@@ -170,3 +170,70 @@ it('lie chaque page légale dès que sa route existe', function () {
 
     expect($unlinked)->toBe([]);
 });
+
+it('envoie au back-office les clés du pied admin et aucune clé legal', function () {
+    // Écrit par L20-2, qui livre `admin.footer.*` (spec 20 § 13.2, dépendance
+    // inversée) : le back-office ne reçoit que le domaine `admin`, son pied
+    // porte donc ses propres clés, et jamais `SiteFooter`, qui appelle
+    // `legal` et afficherait des clés brutes au curateur.
+    $this->withoutVite();
+
+    $footer = resource_path('js/components/admin/admin-footer.tsx');
+    $called = FrontSource::literalKeys((string) file_get_contents($footer));
+
+    expect($called)->toContain('admin.footer.label', 'admin.footer.tmdb_attribution', 'admin.footer.tmdb_logo_alt')
+        ->and(array_filter($called, static fn (string $key): bool => ! str_starts_with($key, 'admin.')))->toBe([]);
+
+    // La coquille du back-office monte ce pied-là, et pas l'autre (son
+    // docblock peut nommer `SiteFooter`, son code non).
+    $layout = FrontSource::withoutComments((string) file_get_contents(resource_path('js/layouts/admin/admin-layout.tsx')));
+
+    expect($layout)->toContain('<AdminFooter')
+        ->and($layout)->not->toContain('SiteFooter');
+
+    // Les six clés figées par C15 § 2.5, plus celles que le pied appelle.
+    $expected = array_values(array_unique([
+        'admin.footer.label',
+        'admin.footer.notice',
+        'admin.footer.terms',
+        'admin.footer.privacy',
+        'admin.footer.tmdb_attribution',
+        'admin.footer.tmdb_logo_alt',
+        ...$called,
+    ]));
+
+    $curator = User::factory()->curator()->create();
+    $unenrolled = User::factory()->curator()->withoutTwoFactor()->create();
+
+    // Chaque écran du back-office existant au jalon 1, écran d'enrôlement du
+    // second facteur compris : il est rendu dans la même coquille.
+    $pages = [
+        'tableau de bord' => fn () => $this->actingAs($curator)->get(route('admin.dashboard')),
+        'catalogue' => fn () => $this->actingAs($curator)->get(route('admin.catalog.index')),
+        'import' => fn () => $this->actingAs($curator)->get(route('admin.import.index')),
+        'enrôlement du second facteur' => fn () => $this->actingAs($unenrolled)->get(route('admin.two_factor.required')),
+    ];
+
+    $violations = [];
+
+    foreach ($pages as $label => $visit) {
+        // Singleton : une requête neuve repart d'une sélection vide.
+        app()->forgetInstance(TranslationDomains::class);
+
+        $translations = $visit()->assertOk()->inertiaProps('translations');
+
+        expect($translations)->toBeArray();
+
+        foreach (array_diff($expected, array_keys($translations)) as $key) {
+            $violations[] = "{$label} : {$key} absente";
+        }
+
+        foreach (array_keys($translations) as $key) {
+            if (str_starts_with($key, 'legal.')) {
+                $violations[] = "{$label} : {$key} reçue";
+            }
+        }
+    }
+
+    expect($violations)->toBe([]);
+});

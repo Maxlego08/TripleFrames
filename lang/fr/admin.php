@@ -58,6 +58,64 @@ return [
         'open_run' => 'Ouvrir le balayage n° :id',
         'run_status' => 'État du balayage : :status',
         'pagination' => 'Pagination',
+        // Coquille mobile de `admin-sidebar.tsx` : titre et description
+        // accessibles de SA feuille, jamais le « Sidebar » anglais figé de
+        // `ui/sidebar` (spec 20 § 13.4, 90 § 2.5).
+        'nav_mobile' => 'Menu du back-office',
+        'nav_mobile_description' => 'Les écrans de curation et le retour au site.',
+        // Fermeture propre de toute feuille et de toute boîte de dialogue du
+        // back-office : la fermeture générée porte « Close », en anglais.
+        'close' => 'Fermer',
+    ],
+
+    /*
+    | Pied du back-office (`admin-footer.tsx`) : ses propres clés, jamais le
+    | domaine `legal`, que le back-office ne reçoit pas (C15 § 2.3). Les liens
+    | mènent aux pages légales du site ; l'attribution TMDB y est visible comme
+    | sur tout écran (principe 12).
+    */
+    'footer' => [
+        'label' => 'Informations légales',
+        'notice' => 'Mentions légales',
+        'terms' => 'Conditions générales d’utilisation',
+        'privacy' => 'Politique de confidentialité',
+        'tmdb_attribution' => 'Ce produit utilise l’API de TMDB mais n’est ni approuvé ni certifié par TMDB.',
+        'tmdb_logo_alt' => 'Logo de TMDB',
+    ],
+
+    /*
+    | Écran d'enrôlement du second facteur (`admin/two-factor-required`), où la
+    | garde `admin.2fa` renvoie tout compte curateur ou administrateur sans
+    | double authentification confirmée (spec 20 § 2.4). Jamais un 403 muet :
+    | l'écran dit pourquoi la porte est fermée et mène à la sécurité du compte.
+    | Aucune procédure technique ici : la perte du second facteur au-delà des
+    | codes de secours relève de l'exploitation, hors du chemin du curateur.
+    */
+    'two_factor' => [
+        'title' => 'Double authentification requise',
+        'heading' => 'Activez la double authentification pour entrer',
+        'description' => 'Le back-office est fermé à tout compte curateur ou administrateur dont la double authentification n’est pas confirmée.',
+        'why' => [
+            'heading' => 'Pourquoi cette porte',
+            'body' => 'Chaque revue, chaque publication et chaque ligne du journal d’administration portent votre nom réel. Un mot de passe dérobé suffirait à publier au nom du projet ; un second facteur, produit par votre téléphone, le rend inutile à lui seul.',
+        ],
+        'steps' => [
+            'heading' => 'Marche à suivre',
+            'open' => 'Ouvrez la sécurité de votre compte ; votre mot de passe vous sera redemandé.',
+            'enable' => 'Activez la double authentification, puis scannez le code affiché avec une application d’authentification.',
+            'confirm' => 'Saisissez le code que produit l’application : c’est cette confirmation, et elle seule, qui ouvre la porte.',
+            'recovery' => 'Rangez vos codes de secours en lieu sûr, ailleurs que sur votre téléphone : ils sont votre seule entrée si vous le perdez.',
+            'return' => 'Revenez ici, puis entrez dans le back-office.',
+        ],
+        'action' => [
+            'open_security' => 'Ouvrir la sécurité du compte',
+            'enter' => 'J’ai confirmé : entrer dans le back-office',
+        ],
+        'confirmed' => [
+            'heading' => 'Double authentification confirmée',
+            'description' => 'Votre compte est protégé par un second facteur : la porte du back-office est ouverte.',
+            'enter' => 'Entrer dans le back-office',
+        ],
     ],
 
     'common' => [
@@ -375,7 +433,7 @@ return [
                 'withdrawn' => 'Refusé : film retiré du catalogue par la curation. Motif : :reason',
             ],
             'skipped' => [
-                'duplicate' => 'Ignoré : ce film est déjà au catalogue. Employez --resync pour le remettre à jour.',
+                'duplicate' => 'Ignoré : ce film est déjà au catalogue.',
                 'filter' => 'Ignoré : sous le filtre de notoriété (décision 11). Employez la voie d’exception pour le forcer.',
                 'not_found' => 'Ignoré : TMDB ne connaît pas cet identifiant.',
             ],
@@ -560,8 +618,8 @@ return [
             'content_filter' => 'Les filtres de CONTENU, eux, ne sont contournables par AUCUNE des deux voies, et par aucun rôle : contenu marqué « adulte », FR -18, US NC-17 et US X sont refusés dans tous les cas (décision 12).',
         ],
 
-        'deferred_notice' => 'Les deux voies sont DIFFÉRÉES : l’envoi ouvre un balayage et le confie à un worker, puis vous redirige vers son détail. Aucun appel TMDB n’a lieu pendant la requête.',
-        'disabled' => 'Aucune clé TMDB n’est configurée : les deux formulaires sont désactivés. Renseignez TMDB_API_READ_ACCESS_TOKEN ou TMDB_API_KEY.',
+        'deferred_notice' => 'Les deux voies sont DIFFÉRÉES : l’envoi ouvre un balayage, le confie au traitement d’arrière-plan, puis vous redirige vers son détail. Aucun appel TMDB n’a lieu pendant la requête.',
+        'disabled' => 'Aucune clé TMDB n’est configurée sur le serveur : les deux formulaires sont désactivés. L’administrateur du site doit la renseigner.',
 
         'discover' => [
             'heading' => 'Balayage discover',
@@ -592,14 +650,14 @@ return [
             'list' => [
                 'label' => 'Identifiants ou URL TMDB',
                 'placeholder' => "550\nhttps://www.themoviedb.org/movie/27205\n# une ligne par film, les commentaires sont ignorés",
-                'hint' => 'Un identifiant ou une URL TMDB par ligne, :max au maximum par envoi. La console, elle, n’a pas cette borne.',
+                'hint' => 'Un identifiant ou une URL TMDB par ligne, :max au maximum par envoi.',
             ],
             'exception_notice' => 'Tout film entré par cette voie est marqué « entré par exception », même s’il satisfait tout le filtre de notoriété.',
             'submit' => 'Importer ces identifiants',
         ],
 
         'toast' => [
-            'queued' => 'Balayage ouvert : il est confié au worker. Son détail suit son avancement.',
+            'queued' => 'Balayage ouvert : il est confié au traitement d’arrière-plan. Son détail suit son avancement.',
             'resumed' => 'Balayage remis dans la file : il reprendra là où il s’était arrêté.',
             'blocked' => 'Import refusé.',
         ],
@@ -626,8 +684,8 @@ return [
             'resume' => 'Reprendre',
             'resume_unavailable_paste' => 'Un collage n’est pas reprenable : la liste collée n’est stockée nulle part. Re-collez-la.',
             'resume_unavailable_finished' => 'Ce balayage est terminé : le reprendre relancerait un curseur déjà consommé.',
-            'resume_unavailable_queued' => 'Ce balayage n’a pas encore démarré : il attend un worker, il n’y a rien à reprendre.',
-            'worker_missing' => 'Ce balayage attend depuis plus d’une minute sans qu’aucun worker ne le prenne. Lancez « php artisan queue:listen --timeout=900 », ou « composer dev » qui le fait pour vous.',
+            'resume_unavailable_queued' => 'Ce balayage n’a pas encore démarré : il attend le traitement d’arrière-plan, il n’y a rien à reprendre.',
+            'worker_missing' => 'Ce balayage attend depuis plus d’une minute : le traitement d’arrière-plan ne répond pas. L’administrateur est prévenu ; le balayage partira de lui-même dès la reprise du traitement.',
         ],
 
         'run' => [
@@ -700,16 +758,51 @@ return [
         'pages' => 'pages TMDB',
         'ids' => [
             'required' => 'Collez au moins un identifiant ou une URL TMDB.',
-            'max' => 'Un envoi accepte au plus :max identifiants. La console, elle, avale une liste entière.',
+            'max' => 'Un envoi accepte au plus :max identifiants : scindez la liste en plusieurs envois.',
             'invalid' => 'Aucun identifiant lisible dans ce collage : attendez un nombre nu ou une URL TMDB par ligne.',
         ],
         'real_name' => 'Ce nom est réservé au journal d’administration : saisissez le nom réel de la personne.',
     ],
 
     'error' => [
-        'tmdb_disabled' => 'Import TMDB désactivé : ni TMDB_API_READ_ACCESS_TOKEN ni TMDB_API_KEY n’est renseignée.',
+        'tmdb_disabled' => 'Import TMDB désactivé : aucune clé TMDB n’est configurée sur le serveur. L’administrateur du site doit la renseigner.',
         'import_already_running' => 'Un balayage de cette nature est déjà ouvert. Attendez qu’il finisse, ou reprenez-le depuis son détail.',
         'run_not_resumable' => 'Ce balayage n’est pas reprenable : seuls les balayages discover encore en cours le sont.',
+
+        /*
+        | Page `admin/error` (C15 § 2.3) : rendue à la place de la page `error`
+        | joueur quand le domaine `admin` était sélectionné avant l'exception.
+        | Une feuille par statut rendu, jamais un message d'erreur brut
+        | (décision 9).
+        */
+        'http' => [
+            403 => [
+                'title' => 'Accès refusé',
+                'description' => 'Cet écran ou ce geste est réservé à un autre rôle. Si vous pensez devoir y accéder, adressez-vous à l’administrateur.',
+            ],
+            404 => [
+                'title' => 'Page introuvable',
+                'description' => 'Cet écran, ce film ou ce balayage n’existe pas, ou plus. Revenez au tableau de bord pour reprendre.',
+            ],
+            419 => [
+                'title' => 'Page expirée',
+                'description' => 'Votre session a expiré pendant que cet écran était ouvert. Revenez à la page précédente, rechargez-la, puis refaites votre geste.',
+            ],
+            429 => [
+                'title' => 'Trop de demandes',
+                'description' => 'Ce geste a été répété trop souvent en peu de temps. Patientez une minute, puis réessayez.',
+            ],
+            500 => [
+                'title' => 'Erreur du serveur',
+                'description' => 'Le serveur n’a pas pu terminer ce geste. L’incident est consigné ; réessayez dans un instant.',
+            ],
+            503 => [
+                'title' => 'Service indisponible',
+                'description' => 'Le site est en maintenance ou momentanément indisponible. Réessayez dans quelques minutes.',
+            ],
+        ],
+        'back' => 'Page précédente',
+        'dashboard' => 'Retour au tableau de bord',
     ],
 
     /*
@@ -752,12 +845,12 @@ return [
     */
     'tmdb' => [
         'error' => [
-            'not_configured' => 'Import TMDB désactivé : ni TMDB_API_READ_ACCESS_TOKEN ni TMDB_API_KEY n’est renseignée. Le jeu, lui, n’appelle jamais TMDB.',
+            'not_configured' => 'Import TMDB désactivé : aucune clé TMDB n’est configurée sur le serveur. Le jeu, lui, n’appelle jamais TMDB.',
             'unauthorized' => 'TMDB a refusé l’authentification (statut :status) : jeton v4 ou clé v3 invalide, révoquée, ou dépourvue du droit demandé.',
             'not_found' => 'TMDB ne connaît pas la ressource demandée : vérifiez l’identifiant avant de relancer.',
-            'rate_limited' => 'Quota TMDB atteint : le balayage est suspendu et reprenable avec --resume.',
-            'server_error' => 'TMDB est en panne (statut :status), tentatives épuisées : le balayage est suspendu et reprenable avec --resume.',
-            'transport' => 'Appel TMDB interrompu (DNS, TLS, délai d’attente ou connexion coupée) : le balayage est suspendu et reprenable avec --resume.',
+            'rate_limited' => 'Quota TMDB atteint : le balayage est suspendu et reprenable depuis le bouton « Reprendre » de son détail s’il s’agit d’un balayage discover ; un collage, lui, se relance en recollant sa liste.',
+            'server_error' => 'TMDB est en panne (statut :status), tentatives épuisées : le balayage est suspendu et reprenable depuis le bouton « Reprendre » de son détail s’il s’agit d’un balayage discover ; un collage, lui, se relance en recollant sa liste.',
+            'transport' => 'Appel TMDB interrompu (DNS, TLS, délai d’attente ou connexion coupée) : le balayage est suspendu et reprenable depuis le bouton « Reprendre » de son détail s’il s’agit d’un balayage discover ; un collage, lui, se relance en recollant sa liste.',
             'malformed' => 'Réponse TMDB hors contrat : rien n’a été écrit au catalogue, le champ fautif est nommé dans le journal applicatif.',
             'unexpected_status' => 'Statut TMDB inattendu (:status) : aucune reprise automatique, consultez le journal applicatif.',
         ],

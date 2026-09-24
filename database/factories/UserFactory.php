@@ -53,14 +53,48 @@ class UserFactory extends Factory
 
     /**
      * Indicate that the model has two-factor authentication configured.
+     *
+     * Second facteur CONFIRMÉ : c'est `two_factor_confirmed_at`, et lui seul, que
+     * lit la garde `admin.2fa` (spec 20 § 2.4). Posé d'office sur tout rôle
+     * ≥ `curator` par {@see self::role()}.
      */
     public function withTwoFactor(): static
     {
-        return $this->state(fn (array $attributes) => [
-            'two_factor_secret' => encrypt('secret'),
-            'two_factor_recovery_codes' => encrypt(json_encode(['recovery-code-1'])),
-            'two_factor_confirmed_at' => now(),
+        return $this->state(fn (array $attributes): array => self::confirmedTwoFactor($attributes));
+    }
+
+    /**
+     * Aucun second facteur : ni secret, ni codes de secours, ni confirmation.
+     *
+     * C'est l'état qui ferme la porte `/admin` à un compte privilégié (spec 20
+     * § 2.4). **À enchaîner APRÈS le rôle** — `curator()->withoutTwoFactor()` :
+     * les états s'appliquent dans l'ordre, et {@see self::role()} pose le
+     * second facteur d'un rôle privilégié. Un secret posé sans confirmation
+     * s'écrit `withoutTwoFactor()->state(['two_factor_secret' => …])`.
+     */
+    public function withoutTwoFactor(): static
+    {
+        return $this->state([
+            'two_factor_secret' => null,
+            'two_factor_recovery_codes' => null,
+            'two_factor_confirmed_at' => null,
         ]);
+    }
+
+    /**
+     * Les trois colonnes Fortify d'un second facteur confirmé ; une valeur déjà
+     * posée par un état antérieur ou passée à `create()` est conservée.
+     *
+     * @param  array<string, mixed>  $attributes
+     * @return array<string, mixed>
+     */
+    private static function confirmedTwoFactor(array $attributes): array
+    {
+        return [
+            'two_factor_secret' => $attributes['two_factor_secret'] ?? encrypt('secret'),
+            'two_factor_recovery_codes' => $attributes['two_factor_recovery_codes'] ?? encrypt(json_encode(['recovery-code-1'])),
+            'two_factor_confirmed_at' => $attributes['two_factor_confirmed_at'] ?? now(),
+        ];
     }
 
     /**
@@ -73,6 +107,12 @@ class UserFactory extends Factory
      * `User::saving` refuse un compte privilégié sans nom réel, et c'est lui — jamais
      * `name` — que figent `reviewer_name` et `actor_name`. Un nom réel déjà posé par
      * un état antérieur est conservé ; un attribut passé à `create()` l'emporte.
+     *
+     * Il reçoit aussi un **second facteur confirmé** ({@see self::withTwoFactor()}) :
+     * la garde `admin.2fa` ferme la porte `/admin` à tout compte privilégié qui n'en a
+     * pas (spec 20 § 2.4), et un curateur de fabrique doit, comme en production,
+     * pouvoir entrer. Le compte sans second facteur s'écrit
+     * `curator()->withoutTwoFactor()`, dans cet ordre.
      */
     public function role(UserRole $role): static
     {
@@ -86,6 +126,7 @@ class UserFactory extends Factory
             return [
                 'role' => $role,
                 'real_name' => is_string($realName) && trim($realName) !== '' ? $realName : fake()->name(),
+                ...self::confirmedTwoFactor($attributes),
             ];
         });
     }

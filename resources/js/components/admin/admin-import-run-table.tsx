@@ -275,8 +275,9 @@ function resumeBlockedBy(
 
     // « En file » n'est pas « suspendu » : le job dort déjà dans la file, et
     // `ShouldBeUnique` avalerait un second dispatch en silence pendant que
-    // l'écran annoncerait « balayage repris ». Le seul geste utile ici est de
-    // lancer un worker — ce que dit `worker_missing` juste à côté.
+    // l'écran annoncerait « balayage repris ». Le remède est côté serveur, hors
+    // du chemin du curateur — ce que dit `worker_missing` juste à côté, sans
+    // jamais nommer de commande (spec 20 § 13.1).
     if (run.is_queued) {
         return 'admin.import.runs.resume_unavailable_queued';
     }

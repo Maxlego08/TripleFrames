@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\EnforceAccountSwitches;
+use App\Http\Middleware\EnsurePrivilegedTwoFactor;
 use App\Http\Middleware\EnsureUserHasRole;
 use App\Http\Middleware\ForceAdminLocale;
 use App\Http\Middleware\HandleAppearance;
@@ -47,8 +48,13 @@ return Application::configure(basePath: dirname(__DIR__))
         // `accounts.switches` ferme l'inscription et les passkeys hors `local`
         // et `testing` (spec 40 § 8.2) : posé sur le groupe de Fortify par
         // `config/fortify.php` et sur `well-known.passkeys`.
+        //
+        // `admin.2fa` ferme la porte `/admin` à tout compte privilégié dont le
+        // second facteur n'est pas confirmé, et le renvoie vers l'écran
+        // d'enrôlement (spec 20 § 2.4, `10` A16).
         $middleware->alias([
             'accounts.switches' => EnforceAccountSwitches::class,
+            'admin.2fa' => EnsurePrivilegedTwoFactor::class,
             'admin.locale' => ForceAdminLocale::class,
             'role' => EnsureUserHasRole::class,
             'translations' => SelectTranslationDomains::class,
@@ -62,6 +68,22 @@ return Application::configure(basePath: dirname(__DIR__))
         // rôle doit tomber AVANT que la moindre ligne ne soit cherchée, sans
         // quoi le simple couple de codes de statut énumère la table `movie`.
         $middleware->prependToPriorityList(SubstituteBindings::class, EnsureUserHasRole::class);
+
+        // `admin.2fa` rejoint `role` en tête de la liste, juste DERRIÈRE lui
+        // et AVANT `SubstituteBindings`, pour la même raison d'énumération
+        // (spec 20 § 2.3) : sans ce rang, un curateur sans second facteur
+        // recevrait 404 sur un identifiant de film inconnu et une redirection
+        // d'enrôlement sur un identifiant réel. Derrière `role` : un joueur
+        // reçoit 403 avant toute redirection, qui confirmerait l'existence de
+        // la porte.
+        //
+        // Un second `prependToPriorityList` sur `SubstituteBindings`, et non un
+        // `appendToPriorityList` sur `role` : le framework applique les ajouts
+        // « après » AVANT les ajouts « avant », si bien que `role` ne serait pas
+        // encore dans la liste et `admin.2fa` tomberait en queue, derrière la
+        // substitution. Les ajouts « avant » s'appliquent dans l'ordre de
+        // déclaration : `role`, puis `admin.2fa`, puis `SubstituteBindings`.
+        $middleware->prependToPriorityList(SubstituteBindings::class, EnsurePrivilegedTwoFactor::class);
 
         // `SetLocale` passe AVANT `HandleInertiaRequests` : les props partagées
         // doivent déjà connaître la locale quand elles sont construites.

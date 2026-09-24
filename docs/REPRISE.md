@@ -404,7 +404,7 @@ Ensuite, à chaque session : **« Implémente l'étape suivante de l'ordre des l
 15. L90-3 — coquille publique, pied de page, attribution TMDB, domaine `legal` → 12, 14 — ✅ livrée le 24/09
 16. L90-4 — pages légales et « signaler un contenu » en squelette → 13, 15 — ✅ livrée le 24/09
 17. L20-1 — `admin_action`, nom réel (D12), `admin:first-admin` → — — ✅ livrée le 24/09
-18. L20-2 — porte `/admin`, `admin.2fa`, coquille mobile → 12, 16, 17
+18. L20-2 — porte `/admin`, `admin.2fa`, coquille mobile → 12, 16, 17 — ✅ livrée le 24/09
 19. L30-7 — scission de `PlatformDataSeeder` → —
 20. L100-6 — hook **sans ses étapes 3 et 12** (D37), `backup:snapshot`, élagage, `catalog:reproject` → 11
 21. L20-4 — géométrie 16:9, plancher de recadrage à double borne → 8, 9, 12

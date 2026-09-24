@@ -1,4 +1,5 @@
 import { usePage } from '@inertiajs/react';
+import { AdminFooter } from '@/components/admin/admin-footer';
 import { AdminHeader } from '@/components/admin/admin-header';
 import { AdminSidebar } from '@/components/admin/admin-sidebar';
 import { SidebarProvider } from '@/components/ui/sidebar';
@@ -42,6 +43,10 @@ const MAIN_ID = 'admin-main';
  * curateur au clavier retraverse toute la navigation à chaque changement de
  * page.
  *
+ * Le pied `AdminFooter` clôt chaque écran (spec 20 § 13.2) : pages légales
+ * et attribution TMDB, sur les clés `admin.footer.*` — jamais `SiteFooter`, qui
+ * appelle le domaine `legal` que le back-office ne reçoit pas.
+ *
  * `<Toaster />` est monté ICI (spec 90 § 2.3) : il ne l'est plus globalement
  * par `app.tsx`, pour qu'aucune page de jeu ne porte une seconde région
  * `aria-live`. Les toasts du back-office (import mis en file, erreur TMDB…)
@@ -84,6 +89,8 @@ export default function AdminLayout({
                     >
                         {children}
                     </main>
+
+                    <AdminFooter />
                 </div>
             </SidebarProvider>
             <Toaster />
