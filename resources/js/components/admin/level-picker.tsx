@@ -12,14 +12,16 @@ import type { TranslationKey } from '@/types/translations';
  * cryptique à la plus évidente. Ce n'est pas une valeur de jeu : c'est le
  * domaine d'une colonne, que changer imposerait de reclasser la banque.
  */
-const FRAME_LEVELS = [1, 2, 3, 4, 5] as const satisfies readonly FrameLevel[];
+export const FRAME_LEVELS = [
+    1, 2, 3, 4, 5,
+] as const satisfies readonly FrameLevel[];
 
 /**
  * Libellé et guide de chaque niveau (spec 20 § 6.5). Une table de clés
  * littérales, jamais une clé composée à l'exécution : `t()` est typé, et un
  * niveau ajouté sans sa ligne casse `tsc`.
  */
-const FRAME_LEVEL_KEYS: Record<
+export const FRAME_LEVEL_KEYS: Record<
     FrameLevel,
     { label: TranslationKey; guide: TranslationKey }
 > = {

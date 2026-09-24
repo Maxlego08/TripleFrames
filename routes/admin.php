@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Admin\CatalogController;
 use App\Http\Controllers\Admin\DashboardController;
+use App\Http\Controllers\Admin\FrameBankController;
 use App\Http\Controllers\Admin\FrameCaptureController;
 use App\Http\Controllers\Admin\FrameCropController;
 use App\Http\Controllers\Admin\FrameImageController;
@@ -107,6 +108,14 @@ Route::middleware(['auth', 'verified', 'role:curator', 'admin.2fa', 'admin.local
         Route::get('catalog/{movie}', [CatalogController::class, 'show'])
             ->middleware('can:view,movie')
             ->name('catalog.show');
+
+        // L'éditeur de la banque d'images (§ 6, ligne 4) : `MoviePolicy::curate`,
+        // refusé sur un film retiré. Il n'écrit rien : chaque geste qu'il
+        // offre a sa route ci-dessous, sa garde et son limiteur. Les visuels
+        // TMDB y sont une prop différée : la page n'attend jamais TMDB.
+        Route::get('catalog/{movie}/bank', [FrameBankController::class, 'show'])
+            ->middleware('can:curate,movie')
+            ->name('catalog.bank');
 
         // Aperçu des octets d'une image (C9-bis, § 5.8, ligne 5) : seul second
         // lecteur du disque `frames` avec `/f/{serveToken}`, jamais adressé par

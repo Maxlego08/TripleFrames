@@ -133,6 +133,9 @@ return [
         'error' => 'Ces données n’ont pas pu être rechargées.',
         'read_only' => 'Lecture seule',
         'deleted_account' => 'Auteur supprimé',
+        // Déconnexion ou erreur réseau pendant une visite : rien n'est parti,
+        // et le formulaire reste tel quel (spec 20 § 6.8, § 13.5).
+        'offline' => 'Connexion perdue : rien n’a été envoyé et votre saisie est conservée. Vérifiez votre réseau, puis réessayez.',
 
         /*
         | Formats de liaison. Ce ne sont pas des phrases, mais la ponctuation
@@ -449,7 +452,8 @@ return [
         'title' => 'Fiche film',
         'heading' => 'Fiche film',
         'back' => 'Retour au catalogue',
-        'read_only_notice' => 'Fiche en lecture seule. L’éditeur de la banque d’images, le recadreur et le workflow de publication appartiennent à la spec 20.',
+        'read_only_notice' => 'Fiche en lecture seule. Les images du film se curent dans l’éditeur de la banque d’images.',
+        'curate' => 'Curer les images',
 
         'tabs' => [
             'identity' => 'Identité',
@@ -580,7 +584,8 @@ return [
                 'error' => 'Erreur',
             ],
             'empty' => 'Aucune image : la banque de ce film est vide.',
-            'editor_pending' => 'L’éditeur de banque d’images, le recadreur et le classement sur l’échelle 1-5 appartiennent à la spec 20, qui n’est pas encore écrite.',
+            'open_editor' => 'Ouvrir l’éditeur de la banque d’images',
+            'editor_hint' => 'Ajouter, recadrer, classer ou écarter une image se fait dans l’éditeur de la banque.',
         ],
 
         'import' => [
@@ -692,6 +697,20 @@ return [
         ],
 
         /*
+        | Aperçu du rendu final d'une image (spec 20 § 5.8, § 6.7), dans le
+        | cadre du jeu : `alt` est neutre et ne dit que le niveau (`:level`),
+        | jamais ce que l'image montre ; `unavailable` couvre une image pas
+        | encore traitée comme un chargement en échec.
+        */
+        'preview' => [
+            'alt' => 'Rendu final de l’image de niveau :level',
+            'loading' => 'Chargement du rendu final…',
+            'unavailable' => 'Rendu final indisponible : l’image n’est pas encore traitée, ou son chargement a échoué.',
+            'mobile' => 'Sur un téléphone',
+            'desktop' => 'Sur un ordinateur',
+        ],
+
+        /*
         | Toasts de succès. Un traitement part en file et le curateur continue
         | sans l’attendre ; un changement de niveau ou une dépublication
         | s’écrivent sur-le-champ.
@@ -769,6 +788,157 @@ return [
         5 => [
             'label' => 'Évident',
             'guide' => 'Le plan iconique, le personnage principal : l’image que tout le monde associe au film, sans jamais être son affiche.',
+        ],
+    ],
+
+    /*
+    | Éditeur de la banque d'images (spec 20 § 6) : les visuels TMDB du film,
+    | le recadreur et le niveau, la banque du film groupée par niveau avec sa
+    | couverture, et la prévisualisation en conditions de jeu. Chaque geste
+    | qui fait sortir une image du jeu est confirmé, et l'avertissement de
+    | couverture (`frame.unpublish.*`) s'affiche AVANT l'envoi.
+    |
+    | `backdrop_alt` : `:index` et `:count` situent le visuel dans la grille ;
+    | `backdrop_used` : `:levels`, les niveaux des images qui en proviennent ;
+    | `list.image` et `list.actions` : `:index` est le rang de l'image dans
+    | son niveau. `preview.*` : `:count` est un nombre d'images par manche,
+    | `:tier` un rang de palier, `:levels` une liste de niveaux.
+    */
+    'bank' => [
+        'title' => 'Banque d’images',
+        'description' => 'Ajoutez des images depuis les visuels TMDB du film, classez-les de 1 à 5, puis suivez leur traitement et la couverture du film. Une image n’entre en jeu qu’après une revue de son rendu final.',
+        'back' => 'Retour à la fiche du film',
+        'retry' => 'Réessayer',
+        'cancel' => 'Annuler',
+        'processing_notice' => 'Des images sont en traitement : cet écran se met à jour de lui-même, inutile d’attendre pour continuer.',
+        'processing_stalled' => 'Le traitement d’arrière-plan ne répond pas : une image attend son rendu depuis trop longtemps. Vous pouvez continuer à curer ; si l’attente se prolonge, prévenez l’administrateur du site.',
+        'refresh_failed' => 'La mise à jour automatique de la banque a échoué.',
+        'desktop_required' => 'Le recadreur demande un écran large, celui d’un ordinateur. Le reste de l’écran — la banque, les états, la couverture — reste utilisable ici.',
+
+        'backdrops' => [
+            'heading' => 'Visuels TMDB du film',
+            'description' => 'Les visuels sans texte viennent d’abord. Une seule tabulation entre dans la grille : les flèches passent d’un visuel à l’autre, Entrée ou Espace ouvre le visuel dans le cadre.',
+            'list_label' => 'Visuels TMDB proposés',
+            'loading' => 'Chargement des visuels TMDB…',
+        ],
+        'no_backdrops' => 'Aucun visuel TMDB à proposer pour ce film : TMDB n’en fournit aucun, ou le film n’a pas d’identifiant TMDB (catalogue de démonstration).',
+        'backdrops_failed' => 'Les visuels du film n’ont pas pu être obtenus auprès de TMDB (service indisponible ou connexion interrompue). Réessayez dans un instant.',
+        'backdrop_alt' => 'Visuel :index sur :count',
+        'backdrop_used' => 'Déjà utilisé (niveaux :levels)',
+        'backdrop_opened' => 'Ouvert dans le cadre',
+        'backdrop_with_language' => 'Peut contenir du texte',
+
+        'cropper' => [
+            'heading' => 'Recadrer et classer',
+            'description' => 'Le cadre s’ouvre sur le plus grand cadre admis, centré. Choisissez le niveau, puis ajoutez l’image : elle part en traitement et vous passez à un autre visuel sans attendre.',
+            'empty' => 'Choisissez un visuel dans la grille pour l’ouvrir dans le cadre.',
+            'close' => 'Fermer ce visuel',
+            'add' => 'Ajouter à la banque',
+            'adding' => 'Ajout en cours…',
+            'locked' => 'Ce film est suspendu par un administrateur : aucune image ne peut y être ajoutée.',
+            'level_required' => 'Choisissez un niveau avant d’ajouter l’image : aucun n’est coché d’avance.',
+        ],
+
+        'list' => [
+            'heading' => 'Banque du film',
+            'description' => 'Les images du film, groupées par niveau, avec leur état. Une image rejetée en revue peut être re-recadrée ou écartée ; une image écartée ne revient jamais en revue.',
+            'empty' => 'Aucune image : ajoutez-en une depuis les visuels TMDB du film.',
+            'level_empty' => 'Aucune image à ce niveau.',
+            'image' => 'Image :index du niveau :level',
+            'actions' => 'Gestes sur l’image :index du niveau :level',
+            'review_outdated' => 'À re-revoir : la grille a changé depuis sa revue',
+            'review_rejected' => 'Rejetée en re-revue : reste en jeu jusqu’à décision',
+            'source' => [
+                'tmdb' => 'Source : visuel TMDB',
+                'capture' => 'Source : capture personnelle',
+            ],
+            'recrop' => 'Re-recadrer',
+            'retry' => 'Relancer',
+            'change_level' => 'Changer de niveau',
+            'unpublish' => 'Dépublier',
+            'set_aside' => 'Écarter',
+        ],
+
+        'state' => [
+            'processing' => 'En traitement',
+            'failed' => 'En échec',
+            'awaiting_review' => 'En attente de revue',
+            'rejected' => 'Rejetée en revue',
+            'in_play' => 'En jeu',
+            'set_aside' => 'Écartée',
+            'locked' => 'Suspendue ou retirée',
+        ],
+
+        'coverage' => [
+            'heading' => 'Couverture par niveau',
+            'description' => 'Variantes jouables de chaque niveau, et images encore en route vers le jeu.',
+            'pass_one' => 'Passe 1 en cours : une variante jouable à chacun des niveaux 1, 3 et 5 suffit à rendre le film publiable.',
+            'pass_two' => 'Passe 2 en cours : une deuxième variante aux niveaux 1, 3 et 5, et une variante aux niveaux 2 et 4. C’est un objectif de curation, jamais une condition de publication.',
+            'pass_two_reached' => 'Passe 2 atteinte : chaque niveau a sa cible de variantes jouables.',
+            'incomplete' => 'Film publié incomplet : l’un des niveaux 1, 3 ou 5 n’a plus de variante jouable. Il reste publié, jouable jusqu’à N = :max avec repli de niveau.',
+            'incomplete_unplayable' => 'Film publié incomplet : il n’est plus jouable à aucun nombre d’images par manche. Il reste publié, mais n’entre dans aucun tirage tant que de nouvelles images ne sont pas publiées.',
+            'table_label' => 'Couverture de la banque, niveau par niveau',
+            'column' => [
+                'level' => 'Niveau',
+                'playable' => 'Jouables / cible',
+                'processing' => 'En traitement',
+                'awaiting_review' => 'En attente de revue',
+                'rejected' => 'Rejetées',
+                'failed' => 'En échec',
+            ],
+            'playable_ratio' => ':count / :target',
+            'single_variant' => 'Variante unique',
+        ],
+
+        'gesture' => [
+            'coverage_loading' => 'Vérification de la couverture du film…',
+            'coverage_failed' => 'La couverture du film n’a pas pu être vérifiée : réessayez avant de confirmer.',
+            'reason_optional' => 'Motif (facultatif)',
+            'recrop' => [
+                'title' => 'Re-recadrer l’image',
+                'description' => 'Le nouveau cadre remplace l’ancien sur la même image : elle repart en traitement, puis en revue.',
+                'published' => 'Cette image est en jeu : le nouveau cadre la fait sortir du jeu jusqu’à une revue de son nouveau rendu.',
+                'reason' => 'Motif de la sortie du jeu',
+                'master_loading' => 'Chargement de la source de recadrage…',
+                'master_failed' => 'La source de recadrage n’a pas pu être chargée : réessayez ; si l’échec persiste, écartez l’image et ajoutez de nouveau son visuel.',
+                'submit' => 'Enregistrer le nouveau cadre',
+            ],
+            'level' => [
+                'title' => 'Changer le niveau de l’image',
+                'description' => 'Le niveau se juge par rapport à ce film, jamais par rapport au reste du catalogue.',
+                'published' => 'Cette image est en jeu : changer son niveau la fait sortir du jeu jusqu’à une nouvelle revue, les points de la grille dépendant du niveau.',
+                'unchanged' => 'Choisissez un niveau différent du niveau actuel.',
+                'submit' => 'Enregistrer le niveau',
+            ],
+            'unpublish' => [
+                'title' => 'Dépublier l’image',
+                'description' => 'L’image sort du jeu ; une nouvelle revue pourra l’y remettre.',
+                'submit' => 'Dépublier l’image',
+            ],
+            'set_aside' => [
+                'title' => 'Écarter l’image',
+                'description' => 'L’image ne sera jamais proposée en revue. Pour réutiliser son visuel, ajoutez-en une nouvelle variante.',
+                'submit' => 'Écarter l’image',
+            ],
+        ],
+
+        'preview' => [
+            'heading' => 'Prévisualisation en conditions de jeu',
+            'description' => 'Ce que verrait un salon à chaque nombre d’images par manche : une variante par niveau, la plus ancienne, sur son rendu final et dans le cadre sombre du jeu, en largeur mobile puis en largeur d’ordinateur.',
+            'frames_per_round' => 'Images par manche',
+            'frames_per_round_option' => 'N = :count',
+            'mask' => 'Images comptées',
+            'mask_in_play' => 'En jeu',
+            'mask_after_review' => 'Après revue',
+            'mask_hint' => '« Après revue » ajoute aux images en jeu celles qui attendent leur revue.',
+            'unplayable' => 'Pas jouable à N = :count : il faut au moins :count niveaux couverts.',
+            'fallback' => 'Repli de niveau : ce film serait joué avec les niveaux :levels.',
+            'levels' => 'Niveaux joués : :levels.',
+            'tier' => 'Palier :tier — niveau :level',
+        ],
+
+        'footer' => [
+            'heading' => 'Publication du film',
         ],
     ],
 

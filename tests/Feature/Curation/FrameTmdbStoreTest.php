@@ -4,6 +4,7 @@ use App\Enums\ContentAvailability;
 use App\Enums\FrameLevel;
 use App\Enums\FrameProcessingState;
 use App\Enums\FrameSourceKind;
+use App\Http\Controllers\Admin\FrameBankController;
 use App\Jobs\Curation\ProcessFrameImage;
 use App\Models\Frame;
 use App\Models\Movie;
@@ -16,6 +17,7 @@ use App\Support\Frames\FrameStoragePrefix;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Request;
 use Illuminate\Queue\Events\JobProcessing;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
@@ -410,8 +412,11 @@ test('un échec de téléchargement ne crée aucune frame', function (): void {
         ->assertSessionHasErrors(['tmdb_file_path' => frameTmdbText('admin.frame.tmdb.too_large')]);
 
     // Quota atteint sur l'appel interactif : un message traduit, jamais une
-    // page d'erreur, et le formulaire se renvoie tel quel (§ 3.6).
+    // page d'erreur, et le formulaire se renvoie tel quel (§ 3.6). La liste
+    // des visuels lue par les envois précédents est en cache (§ 6.2) : le
+    // quota ne se rencontre que sur une liste froide.
     $failure = 'rate_limited';
+    Cache::forget(FrameBankController::BACKDROPS_CACHE_PREFIX.FRAME_TMDB_ID);
 
     frameTmdbPost($movie, frameTmdbPayload())
         ->assertSessionHasErrors(['tmdb_file_path' => frameTmdbText('admin.tmdb.error.rate_limited_interactive')]);

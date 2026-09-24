@@ -186,12 +186,42 @@ export type FrameProcessingFailure =
     | 'admin.frame.processing_error.published'
     | 'admin.frame.processing_error.unexpected';
 
+export type FrameSourceKind = 'tmdb' | 'capture';
+
 /**
- * **Aucun chemin de fichier** : le § 10 est formel, et `frame.id` lui-même est
- * `#[Hidden]`. La fiche est en lecture seule et n'en a pas besoin ; l'éditeur
- * de la spec 20 étend ce type (contrat C9-bis).
+ * L'état d'une image tel que l'éditeur de la banque l'affiche (spec 20
+ * § 6.1) — miroir de `App\Support\Curation\FrameCurationState`. DÉRIVÉ côté
+ * serveur (disponibilité, job, dernière revue sur les octets courants),
+ * jamais stocké.
+ */
+export type FrameCurationState =
+    | 'locked'
+    | 'set_aside'
+    | 'processing'
+    | 'failed'
+    | 'in_play'
+    | 'rejected'
+    | 'awaiting_review';
+
+/** Rectangle de recadrage, en pixels de l'espace du master (1920 de large). */
+export type AdminCropRect = {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+};
+
+/**
+ * Une image de l'éditeur de la banque — contrat C9, spec 20 § 5.8, miroir de
+ * `AdminCatalogPresenter::bankFrame()`.
+ *
+ * **Aucun chemin disque**, ni `source_hash`, ni `published_hash`, ni
+ * `tmdb_file_path` : le lien d'une image à son visuel TMDB ne sort que par
+ * les `used_levels` de ce visuel. `id` n'est adressé qu'au back-office
+ * (E10-11), jamais à une surface joueur.
  */
 export type AdminMovieFrame = {
+    id: number;
     frame_level: FrameLevel;
     availability: ContentAvailability;
     processing_state: FrameProcessingState;
@@ -199,6 +229,152 @@ export type AdminMovieFrame = {
     processing_error: FrameProcessingFailure | null;
     /** « Relancer » n'est offert qu'à un échec rejouable. */
     is_retryable: boolean;
+    source_kind: FrameSourceKind;
+    crop: AdminCropRect;
+    /** Route `admin.catalog.frames.game` ; `null` tant qu'aucun rendu n'existe. */
+    game_url: string | null;
+    /** Route `admin.catalog.frames.master` ; `null` tant qu'aucun rendu n'existe. */
+    master_url: string | null;
+    /** En jeu, mais revue sous une version antérieure de la grille. */
+    review_outdated: boolean;
+    curation_state: FrameCurationState;
+    /**
+     * Sa dernière revue sur ses octets courants, à la version courante de la
+     * grille, est rejetée — quelle que soit sa disponibilité. Seul signal
+     * d'une image EN JEU rejetée en re-revue, qui reste en jeu jusqu'à
+     * décision (§ 7.3, § 7.5) : `curation_state` la dit `in_play`.
+     */
+    review_rejected: boolean;
+};
+
+/**
+ * Une image de la FICHE film, en lecture seule : niveau, disponibilité et
+ * état du job, sans identifiant ni URL — la fiche ne s'en sert pas.
+ */
+export type AdminMovieFrameRow = Pick<
+    AdminMovieFrame,
+    | 'frame_level'
+    | 'availability'
+    | 'processing_state'
+    | 'processing_error'
+    | 'is_retryable'
+>;
+
+/**
+ * Les plafonds du recadreur (R-07), composés par le contrôleur depuis les
+ * accesseurs de `PlatformLimits`, jamais depuis `toArray()`.
+ */
+export type AdminFrameLimits = {
+    frameCropMaxWidthPercent: number;
+    frameCropMinWidthPx: number;
+    frameUploadMaxKilobytes: number;
+};
+
+/**
+ * Un visuel TMDB proposé par l'éditeur (spec 20 § 6.2) : les backdrops seuls,
+ * sans texte d'abord. `file_path` est la référence que l'ajout poste ;
+ * `thumb_url` (`w300`) et `image_url` (`w1280`) pointent le serveur d'images
+ * de TMDB, dans le navigateur du curateur seulement.
+ */
+export type AdminBackdrop = {
+    file_path: string;
+    width: number;
+    height: number;
+    language_neutral: boolean;
+    thumb_url: string;
+    image_url: string;
+    /** Motif d'un visuel proposé désactivé — le refus que l'ajout opposerait. */
+    refusal: 'admin.validation.frame_source.dimensions' | null;
+    /** Niveaux des images, ni retirées ni écartées, tirées de ce visuel. */
+    used_levels: FrameLevel[];
+};
+
+/**
+ * La prop différée `backdrops` : un état, jamais une page d'erreur. `failed`
+ * et `rate_limited` se rejouent d'un bouton ; `not_configured` non.
+ */
+export type AdminBackdropSet = {
+    status: 'ready' | 'empty' | 'failed' | 'rate_limited' | 'not_configured';
+    items: AdminBackdrop[];
+};
+
+/** Une séquence de paliers pour un `N` et un masque (spec 20 § 6.7). */
+export type AdminSequence = {
+    playable: boolean;
+    /** Niveaux de `FrameLevelCoverage::select()`, repli compris, croissants. */
+    levels: FrameLevel[];
+    usesFallback: boolean;
+    /** La variante la plus ancienne de chaque niveau, dans l'ordre des paliers. */
+    frames: { level: FrameLevel; game_url: string }[];
+};
+
+/** La prévisualisation d'un `N`, sur les masques « en jeu » et « après revue ». */
+export type AdminSequencePreview = {
+    frames_per_round: number;
+    in_play: AdminSequence;
+    after_review: AdminSequence;
+};
+
+/**
+ * L'avertissement de perte de couverture (spec 20 § 8.4), servi au
+ * rechargement partiel qui ouvre une confirmation ; `null` quand rien n'est
+ * à annoncer. `playable_up_to` nul : plus aucun `N` jouable.
+ */
+export type AdminUnpublishPreview = {
+    frame_id: number;
+    playable_up_to: number | null;
+};
+
+/** Un niveau de l'indicateur de couverture (spec 20 § 6.6). */
+export type AdminLevelCoverage = {
+    level: FrameLevel;
+    /** Variantes JOUABLES, lues sur `movie_projection`. */
+    playable: number;
+    processing: number;
+    awaiting_review: number;
+    rejected: number;
+    failed: number;
+    /** Cible de la passe 2 : objectif de curation, jamais une condition. */
+    target: number;
+    /** Niveau 1, 3 ou 5 qui ne tient qu'à une variante jouable. */
+    single_variant: boolean;
+};
+
+export type AdminBankCoverage = {
+    levels: AdminLevelCoverage[];
+    covers_publishable: boolean;
+    pass: 1 | 2;
+    target_reached: boolean;
+    /** Film publié qui a perdu sa couverture 1-3-5 : il reste publié. */
+    incomplete: boolean;
+    playable_up_to: number | null;
+};
+
+/** Le film de l'éditeur : identité, disponibilité, drapeau, couverture. */
+export type AdminBankMovie = {
+    id: number;
+    tmdb_id: number | null;
+    title_original: string;
+    title_original_latin: string | null;
+    release_year: number | null;
+    availability: ContentAvailability;
+    content_flag: ContentFlag;
+    import_source: ImportSource;
+    coverage: AdminBankCoverage;
+    /** Une image est en traitement : l'écran se recharge partiellement. */
+    has_pending: boolean;
+    /** Une image attend son rendu au-delà du délai configuré. */
+    processing_stalled: boolean;
+};
+
+/** Booléens d'affichage seulement : chaque écriture garde sa policy. */
+export type AdminBankAbilities = {
+    createFrame: boolean;
+};
+
+/** Les gestes de la fiche film, pour l'affichage seulement. */
+export type AdminMovieAbilities = {
+    curate: boolean;
 };
 
 export type AdminImportRunRow = {

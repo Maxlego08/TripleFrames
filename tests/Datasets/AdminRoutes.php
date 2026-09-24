@@ -125,6 +125,18 @@ function adminRoutesMatrix(): array
             parameters: fn (): array => ['movie' => Movie::factory()->withdrawn()->create()->getKey()],
         ),
 
+        // Ligne 4 — l'éditeur de la banque d'images : `MoviePolicy::curate`,
+        // curateur et au-delà, sur tout film non retiré. La page n'appelle
+        // pas TMDB avant l'affichage : ses visuels sont une prop différée.
+        'admin.catalog.bank' => adminRoutesRow(
+            row: 4,
+            method: 'GET',
+            guards: ['can:curate,movie'],
+            curator: 200,
+            admin: 200,
+            parameters: fn (): array => ['movie' => Movie::factory()->create()->getKey()],
+        ),
+
         // Ligne 5 — l'aperçu des octets `game` et `master` (C9-bis). Une
         // image traitée, donc des octets RÉELS sur le disque `frames`, faux
         // pour toute la matrice (`beforeEach` d'`AuthorizationMatrixTest`).

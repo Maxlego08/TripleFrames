@@ -1,5 +1,10 @@
 import { Head, Link } from '@inertiajs/react';
-import { ArrowLeftIcon, ExternalLinkIcon, ImageOffIcon } from 'lucide-react';
+import {
+    ArrowLeftIcon,
+    ExternalLinkIcon,
+    ImageOffIcon,
+    ImagesIcon,
+} from 'lucide-react';
 import {
     AvailabilityBadge,
     ContentFlagBadge,
@@ -48,14 +53,15 @@ import {
     levelsFromMask,
 } from '@/lib/admin-format';
 import { dashboard as adminDashboard } from '@/routes/admin';
-import { index as catalogIndex } from '@/routes/admin/catalog';
+import { bank, index as catalogIndex } from '@/routes/admin/catalog';
 import { show as runShow } from '@/routes/admin/import';
 import type {
     AdminImportRunRow,
     AdminMovieAlias,
     AdminMovieCertification,
+    AdminMovieAbilities,
     AdminMovieDetail,
-    AdminMovieFrame,
+    AdminMovieFrameRow,
     AdminMovieProjection,
     AdminMovieTag,
     AdminMovieTheme,
@@ -73,8 +79,9 @@ type Props = {
     certifications: AdminMovieCertification[];
     tags: AdminMovieTag[];
     themes: AdminMovieTheme[];
-    frames: AdminMovieFrame[];
+    frames: AdminMovieFrameRow[];
     import_run: AdminImportRunRow | null;
+    abilities: AdminMovieAbilities;
 };
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -99,9 +106,10 @@ const TMDB_MOVIE_URL = 'https://www.themoviedb.org/movie/';
  * manque. Un « non publiable » sec laisserait un curateur cocher le contenu
  * d'un film dont ce sont les images qui manquent.
  *
- * Aucun geste d'écriture n'est offert : l'éditeur de banque d'images, le
- * recadreur et le workflow de publication appartiennent à la spec 20, et
- * l'écran le dit au lieu de le laisser deviner.
+ * Aucun geste d'écriture n'est offert ici : les images se curent dans
+ * l'éditeur de la banque (spec 20 § 6), que le lien « Curer les images »
+ * ouvre quand `abilities.curate` le permet — jamais sur un film retiré. Le
+ * booléen ne fait que montrer le lien : la route garde sa policy.
  */
 export default function AdminCatalogShow({
     movie,
@@ -113,6 +121,7 @@ export default function AdminCatalogShow({
     themes,
     frames,
     import_run,
+    abilities,
 }: Props) {
     const { t, locale } = useTranslations();
 
@@ -138,6 +147,14 @@ export default function AdminCatalogShow({
                             <Badge variant="outline">
                                 {t('admin.common.read_only')}
                             </Badge>
+                            {abilities.curate && (
+                                <Button size="sm" asChild>
+                                    <Link href={bank(movie.id)}>
+                                        <ImagesIcon aria-hidden />
+                                        {t('admin.movie.curate')}
+                                    </Link>
+                                </Button>
+                            )}
                             <Button variant="outline" size="sm" asChild>
                                 <Link href={catalogIndex()}>
                                     <ArrowLeftIcon aria-hidden />
@@ -733,8 +750,18 @@ export default function AdminCatalogShow({
                                         icon={ImageOffIcon}
                                         title={t('admin.movie.frames.empty')}
                                         description={t(
-                                            'admin.movie.frames.editor_pending',
+                                            'admin.movie.frames.editor_hint',
                                         )}
+                                        action={
+                                            abilities.curate ? (
+                                                <EditorLink
+                                                    movieId={movie.id}
+                                                    label={t(
+                                                        'admin.movie.frames.open_editor',
+                                                    )}
+                                                />
+                                            ) : undefined
+                                        }
                                     />
                                 ) : (
                                     <>
@@ -801,9 +828,18 @@ export default function AdminCatalogShow({
 
                                         <p className="max-w-prose text-xs text-muted-foreground">
                                             {t(
-                                                'admin.movie.frames.editor_pending',
+                                                'admin.movie.frames.editor_hint',
                                             )}
                                         </p>
+
+                                        {abilities.curate && (
+                                            <EditorLink
+                                                movieId={movie.id}
+                                                label={t(
+                                                    'admin.movie.frames.open_editor',
+                                                )}
+                                            />
+                                        )}
                                     </>
                                 )}
                             </CardContent>
@@ -1107,6 +1143,18 @@ function projectionFields(
                 t('admin.common.none'),
         },
     ];
+}
+
+/** Le lien vers l'éditeur de la banque d'images (spec 20 § 4.3). */
+function EditorLink({ movieId, label }: { movieId: number; label: string }) {
+    return (
+        <Button variant="outline" size="sm" asChild>
+            <Link href={bank(movieId)}>
+                <ImagesIcon aria-hidden />
+                {label}
+            </Link>
+        </Button>
+    );
 }
 
 /** Les motifs d'entrée par exception, cumulables et donc lus indépendamment. */

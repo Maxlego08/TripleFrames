@@ -12,7 +12,6 @@ use App\Support\Frames\FrameGeometry;
 use App\Support\Tmdb\TmdbClient;
 use App\Support\Tmdb\TmdbErrorKind;
 use App\Support\Tmdb\TmdbException;
-use App\Support\Tmdb\TmdbImage;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
@@ -30,8 +29,10 @@ use Inertia\Inertia;
  * Séquence, chaque refus étant une **erreur de validation traduite**, jamais
  * une page d'erreur :
  *
- * 1. **Appartenance** : le chemin doit être l'un des backdrops du film
- *    (`TmdbClient::images()`), jamais une affiche ni un logo (§ 6.2) ;
+ * 1. **Appartenance** : le chemin doit être l'un des backdrops du film, lus
+ *    dans la liste que l'éditeur tient en cache
+ *    ({@see FrameBankController::cachedBackdrops()}, § 6.2) — jamais une
+ *    affiche ni un logo ;
  * 2. **Dimensions, avant tout téléchargement** : un visuel de moins de
  *    `FrameGeometry::GAME_WIDTH` de large, sans hauteur, en portrait, ou
  *    sur lequel aucun cadre n'est admis, échouerait au job en
@@ -64,7 +65,7 @@ class FrameTmdbController extends Controller
 
         $image = $this->backdrop($tmdb, $movie, $filePath);
 
-        if (! self::isUsableSource($image, $limits)) {
+        if (! FrameGeometry::acceptsSource($image['width'], $image['height'], $limits)) {
             throw ValidationException::withMessages([
                 'tmdb_file_path' => __('admin.validation.frame_source.dimensions', ['width' => FrameGeometry::GAME_WIDTH]),
             ]);
@@ -73,7 +74,7 @@ class FrameTmdbController extends Controller
         $crop = $request->crop();
         $violation = FrameGeometry::violation(
             $crop,
-            FrameGeometry::masterHeightFor($image->width, $image->height),
+            FrameGeometry::masterHeightFor($image['width'], $image['height']),
             $limits,
         );
 
@@ -112,11 +113,15 @@ class FrameTmdbController extends Controller
      *
      * Un film sans identifiant TMDB (catalogue de démonstration) n'a aucun
      * visuel proposé, et un identifiant que TMDB ne connaît plus non plus :
-     * dans les deux cas, le chemin n'est pas un backdrop du film.
+     * dans les deux cas, le chemin n'est pas un backdrop du film. La liste
+     * est celle que l'éditeur affiche, en cache (§ 6.2) : une liste un peu
+     * ancienne est inoffensive, un chemin de fichier TMDB restant valide.
+     *
+     * @return array{file_path: string, width: int, height: int, language_neutral: bool}
      *
      * @throws ValidationException
      */
-    private function backdrop(TmdbClient $tmdb, Movie $movie, string $filePath): TmdbImage
+    private function backdrop(TmdbClient $tmdb, Movie $movie, string $filePath): array
     {
         $notABackdrop = ValidationException::withMessages([
             'tmdb_file_path' => __('admin.frame.tmdb.not_a_backdrop'),
@@ -127,7 +132,7 @@ class FrameTmdbController extends Controller
         }
 
         try {
-            $images = $tmdb->images($movie->tmdb_id);
+            $backdrops = FrameBankController::cachedBackdrops($tmdb, $movie->tmdb_id);
         } catch (TmdbException $exception) {
             if ($exception->kind === TmdbErrorKind::NotFound) {
                 throw $notABackdrop;
@@ -136,33 +141,13 @@ class FrameTmdbController extends Controller
             throw $this->refusal($exception, $movie, 'visuels du film');
         }
 
-        foreach ($images->backdrops as $backdrop) {
-            if ($backdrop->filePath === $filePath) {
+        foreach ($backdrops as $backdrop) {
+            if ($backdrop['file_path'] === $filePath) {
                 return $backdrop;
             }
         }
 
         throw $notABackdrop;
-    }
-
-    /**
-     * Vrai si ce visuel peut donner une image de jeu : au moins
-     * `FrameGeometry::GAME_WIDTH` de large, en paysage, et au moins un cadre
-     * admis par le plancher sur son master — les trois refus que le job
-     * opposerait (`source_too_small`, `source_aspect`), lus ici sur les
-     * dimensions déclarées par TMDB, avant tout téléchargement.
-     */
-    private static function isUsableSource(TmdbImage $image, PlatformLimits $limits): bool
-    {
-        // Une hauteur absente ou nulle se lit 0 (`TmdbData::counter()`) :
-        // refusée ici, elle ne fait jamais lever `masterHeightFor()`.
-        if ($image->width < FrameGeometry::GAME_WIDTH || $image->height < 1 || $image->height > $image->width) {
-            return false;
-        }
-
-        $masterHeight = FrameGeometry::masterHeightFor($image->width, $image->height);
-
-        return FrameGeometry::maxCropWidth($masterHeight, $limits) >= $limits->frameCropMinWidthPx;
     }
 
     /**

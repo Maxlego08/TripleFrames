@@ -105,6 +105,29 @@ final class FrameGeometry
     }
 
     /**
+     * Vrai si une source de ces dimensions peut donner une image de jeu : au
+     * moins {@see self::GAME_WIDTH} de large, en paysage (carré compris), et au
+     * moins un cadre admis par le plancher sur son master.
+     *
+     * Ce sont les refus que le job opposerait (`source_too_small`,
+     * `source_aspect`), lus sur des dimensions DÉCLARÉES — celles de TMDB —
+     * avant tout téléchargement. Un seul prédicat pour deux surfaces : la
+     * grille de l'éditeur qui propose un visuel désactivé avec son motif
+     * (spec 20 § 6.2), et l'ajout qui le refuse (§ 5.3) ; l'un ne peut pas
+     * proposer ce que l'autre refuse. Ne lève jamais : une dimension absente
+     * ou nulle se lit « refusée ».
+     */
+    public static function acceptsSource(int $sourceWidth, int $sourceHeight, PlatformLimits $limits): bool
+    {
+        if ($sourceWidth < self::GAME_WIDTH || $sourceHeight < 1 || $sourceHeight > $sourceWidth) {
+            return false;
+        }
+
+        return self::maxCropWidth(self::masterHeightFor($sourceWidth, $sourceHeight), $limits)
+            >= $limits->frameCropMinWidthPx;
+    }
+
+    /**
      * Largeur du plus grand cadre admis sur ce master, multiple de
      * {@see self::ASPECT_WIDTH} : le minimum de la borne de largeur
      * (`⌊pct × MASTER_WIDTH ÷ 100 ÷ 16⌋ × 16`) et de la largeur du plus grand

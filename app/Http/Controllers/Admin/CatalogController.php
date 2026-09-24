@@ -16,6 +16,7 @@ use App\Models\MovieTitle;
 use App\Models\MovieTmdbTag;
 use App\Support\Admin\AdminCatalogPresenter;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -108,6 +109,13 @@ class CatalogController extends Controller
             'import_run' => $movie->importRun === null
                 ? null
                 : AdminCatalogPresenter::importRunRow($movie->importRun),
+            // Ne sert qu'à afficher un bouton (spec 20 § 4.3) : chaque geste
+            // garde sa policy à l'écriture. Le lien « Curer » mène à
+            // l'éditeur de la banque ; les autres gestes de la fiche arrivent
+            // avec leurs lots.
+            'abilities' => [
+                'curate' => Gate::allows('curate', $movie),
+            ],
         ]);
     }
 

@@ -2,6 +2,7 @@
 
 namespace App\Support\Admin;
 
+use App\Enums\ContentAvailability;
 use App\Enums\FrameProcessingState;
 use App\Enums\ImportRunKind;
 use App\Enums\ImportRunStatus;
@@ -16,6 +17,9 @@ use App\Models\MovieTheme;
 use App\Models\MovieTitle;
 use App\Models\MovieTmdbTag;
 use App\Models\ThemeLabel;
+use App\Support\Curation\ExclusionGrid;
+use App\Support\Curation\FrameCurationState;
+use App\Support\Frames\CropRect;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -33,9 +37,12 @@ use Illuminate\Pagination\LengthAwarePaginator;
  * prop ne sérialise jamais un modèle entier. On ne compose que ce que l'écran
  * affiche. En particulier, **aucun chemin de fichier d'image ne quitte le
  * serveur** — le § 10 est formel, et un `frame` n'expose ici que son niveau,
- * sa disponibilité et l'état de son job. `frame.id` lui-même n'est pas exposé :
- * il est `#[Hidden]` (§ 4.1), un identifiant séquentiel permettant de regrouper
- * les images d'un même film, et la fiche est en lecture seule.
+ * sa disponibilité et l'état de son job. `frame.id` lui-même n'est pas exposé
+ * par la fiche : il est `#[Hidden]` (§ 4.1), un identifiant séquentiel
+ * permettant de regrouper les images d'un même film, et la fiche est en
+ * lecture seule. Seul l'éditeur de la banque, qui adresse ses gestes par cet
+ * identifiant, le reçoit ({@see self::bankFrame()}, E10-11) — jamais une
+ * surface joueur.
  *
  * Aucun `LengthAwarePaginator` n'est expédié tel quel : son tableau `links`
  * embarque « Previous », « Next » et « &laquo; » produits par le framework en
@@ -290,6 +297,68 @@ final class AdminCatalogPresenter
             'processing_error' => $frame->processing_error?->value,
             'is_retryable' => $frame->processing_state === FrameProcessingState::Failed
                 && $frame->processing_error?->isRetryable() === true,
+        ];
+    }
+
+    /**
+     * Une image de l'éditeur de la banque — `AdminMovieFrame` étendu (contrat
+     * C9, spec 20 § 5.8) : la ligne de la fiche, plus ce que les gestes de
+     * l'éditeur exigent.
+     *
+     * - `id` : **admin seulement** (E10-11) — c'est l'adresse des gestes et de
+     *   l'aperçu (`scopeBindings`) ; il ne sort jamais vers une surface joueur ;
+     * - `crop` : le rectangle dans l'espace du master, que le re-recadrage
+     *   rouvre tel quel ;
+     * - `game_url` / `master_url` : l'aperçu admin (C9-bis), `null` tant que
+     *   le job n'a rien produit (`game_path` NULL) et pour une image retirée,
+     *   que `FramePolicy::view` refuse ;
+     * - `review_outdated` : image en jeu revue sous une version antérieure de
+     *   la grille — la file « à re-revoir » (§ 7.7) ;
+     * - `curation_state` : l'état affiché, DÉRIVÉ
+     *   ({@see FrameCurationState}), jamais stocké ;
+     * - `review_rejected` : sa dernière revue qui la juge encore est rejetée,
+     *   quelle que soit sa disponibilité — le seul signal d'une image en jeu
+     *   rejetée en re-revue, qui reste `in_play` jusqu'à décision (§ 7.5).
+     *
+     * **Aucun chemin disque, ni `source_hash`, ni `published_hash`, ni
+     * `tmdb_file_path`** (C9 § 3) : le lien d'une image à son visuel TMDB ne
+     * sort que par les niveaux `used_levels` de ce visuel, calculés côté
+     * serveur.
+     *
+     * @return array{
+     *     id: int,
+     *     frame_level: int,
+     *     availability: string,
+     *     processing_state: string,
+     *     processing_error: string|null,
+     *     is_retryable: bool,
+     *     source_kind: string,
+     *     crop: array{x: int, y: int, width: int, height: int},
+     *     game_url: string|null,
+     *     master_url: string|null,
+     *     review_outdated: bool,
+     *     curation_state: string,
+     *     review_rejected: bool,
+     * }
+     */
+    public static function bankFrame(Frame $frame, FrameCurationState $state, bool $reviewRejected): array
+    {
+        $viewable = $frame->game_path !== null
+            && $frame->availability !== ContentAvailability::Withdrawn;
+
+        $parameters = ['movie' => $frame->movie_id, 'frame' => $frame->id];
+
+        return [
+            'id' => $frame->id,
+            ...self::movieFrame($frame),
+            'source_kind' => $frame->source_kind->value,
+            'crop' => CropRect::fromFrame($frame)->toArray(),
+            'game_url' => $viewable ? route('admin.catalog.frames.game', $parameters) : null,
+            'master_url' => $viewable ? route('admin.catalog.frames.master', $parameters) : null,
+            'review_outdated' => $frame->availability === ContentAvailability::Published
+                && ExclusionGrid::isOutdated($frame->review_grid_version),
+            'curation_state' => $state->value,
+            'review_rejected' => $reviewRejected,
         ];
     }
 

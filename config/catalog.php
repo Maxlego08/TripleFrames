@@ -139,6 +139,18 @@ return [
     |   changer le niveau d'une image, la dépublier ou l'écarter, puis (lots
     |   suivants) revoir, publier, dépublier un film. Au-dessus du débit de
     |   « Entrée = conforme, publier » (§ 13.7). Au moins 1.
+    | - `images_cache_minutes` : durée de vie, par identifiant TMDB, de la
+    |   liste des visuels d'un film que propose l'éditeur de la banque
+    |   (§ 6.2). Une liste un peu ancienne est inoffensive : un chemin de
+    |   fichier TMDB reste valide. Seule une réponse de TMDB est retenue,
+    |   jamais une panne. Au moins 1.
+    | - `poll_seconds` : cadence du rechargement partiel de l'éditeur tant
+    |   qu'une image du film est en traitement (§ 6.1) : le curateur n'attend
+    |   jamais le job. Au moins 1.
+    | - `stale_pending_minutes` : au-delà, une image encore en traitement
+    |   fait afficher « le traitement d'arrière-plan ne répond pas »
+    |   (§ 13.5) — plus long qu'un import qui tient la file `default`, pour
+    |   ne jamais crier au loup. Au moins 1.
     |
     */
 
@@ -167,6 +179,10 @@ return [
             'frame' => 30,
             'curation' => 60,
         ],
+
+        'images_cache_minutes' => 1_440,
+        'poll_seconds' => 3,
+        'stale_pending_minutes' => 10,
     ],
 
 ];

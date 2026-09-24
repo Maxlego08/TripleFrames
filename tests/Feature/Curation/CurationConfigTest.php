@@ -68,6 +68,12 @@ it('les bornes croisées de la configuration de curation tiennent', function ():
     expect($int('rate_limits.frame'))->toBeGreaterThanOrEqual(1);
     expect($int('rate_limits.curation'))->toBeGreaterThanOrEqual(1);
 
+    // Éditeur de la banque : cache des visuels TMDB, rechargement partiel
+    // pendant un traitement, délai d'alerte d'un traitement en panne.
+    expect($int('images_cache_minutes'))->toBeGreaterThanOrEqual(1);
+    expect($int('poll_seconds'))->toBeGreaterThanOrEqual(1);
+    expect($int('stale_pending_minutes'))->toBeGreaterThanOrEqual(1);
+
     // La voie capture est fermée par défaut, et c'est la SEULE clé du bloc
     // lue de l'environnement.
     expect(Config::boolean('catalog.curation.capture_enabled'))->toBeFalse();
