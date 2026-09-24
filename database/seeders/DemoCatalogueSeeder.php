@@ -20,6 +20,7 @@ use App\Models\Theme;
 use App\Models\User;
 use App\Settings\RoomSettingsBounds;
 use App\Support\Admin\AdminJournal;
+use App\ValueObjects\Catalog\FrameLevelCoverage;
 use Database\Factories\FrameFactory;
 use Database\Factories\MovieFactory;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
@@ -334,7 +335,9 @@ class DemoCatalogueSeeder extends Seeder
      * Les cinq niveaux, et non les trois de `N = 3` : le prédicat de vivier du
      * § 3.2 est `levels_count >= N`, donc un catalogue à trois niveaux rend un
      * vivier vide dès `N = 4` — y compris pour le preset `hardcore` livré par le
-     * site.
+     * site. Ils sont lus dans {@see FrameLevelCoverage::nominal()} au `N`
+     * maximal, qui couvre l'échelle entière : la répartition nominale n'est
+     * écrite que là (spec 30 § 2).
      *
      * `published()` écrit RÉELLEMENT les deux dérivés sur le disque `frames`,
      * calcule `published_hash` sur les octets relus, crée la `frame_review`
@@ -347,7 +350,7 @@ class DemoCatalogueSeeder extends Seeder
      */
     private function frames(User $curator, bool $withExtraVariants): Factory
     {
-        $levels = MovieFactory::expectedFrameLevels(RoomSettingsBounds::MAX_FRAMES_PER_ROUND);
+        $levels = FrameLevelCoverage::nominal(RoomSettingsBounds::MAX_FRAMES_PER_ROUND);
 
         if ($withExtraVariants) {
             $levels = array_merge($levels, self::EXTRA_VARIANT_LEVELS);

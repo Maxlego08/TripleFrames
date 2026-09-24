@@ -28,8 +28,8 @@ use App\Models\User;
 use App\Settings\RoomSettingsBounds;
 use App\Support\Curation\ExclusionGrid;
 use App\Support\Frames\FrameStoragePrefix;
+use App\ValueObjects\Catalog\FrameLevelCoverage;
 use Database\Factories\AnswerKeyFactory;
-use Database\Factories\MovieFactory;
 use Database\Seeders\DatabaseSeeder;
 use Database\Seeders\DemoCatalogueSeeder;
 use Illuminate\Database\Eloquent\Builder;
@@ -190,7 +190,7 @@ it('FAIT 3 — chaque film tirable couvre les niveaux attendus par des frames se
     );
 
     foreach ($range as $framesPerRound) {
-        $expected = MovieFactory::expectedFrameLevels($framesPerRound);
+        $expected = FrameLevelCoverage::nominal($framesPerRound);
 
         /** @var EloquentCollection<int, Movie> $drawn */
         $drawn = demoPool($framesPerRound)->get();

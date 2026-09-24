@@ -5,7 +5,6 @@ namespace Database\Factories;
 use App\Enums\ContentAvailability;
 use App\Enums\ContentFlag;
 use App\Enums\ContentOrigin;
-use App\Enums\FrameLevel;
 use App\Enums\ImportSource;
 use App\Enums\Locale;
 use App\Enums\MovieDifficulty;
@@ -19,12 +18,12 @@ use App\Models\MovieTmdbTag;
 use App\Models\User;
 use App\Support\Catalog\AnswerKeyProjector;
 use App\Support\Catalog\MovieProjector;
+use App\ValueObjects\Catalog\FrameLevelCoverage;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
-use InvalidArgumentException;
 
 /**
  * L'identité d'une œuvre (§ 3.1), et l'exigence 2 du contrat de fixture
@@ -411,7 +410,8 @@ class MovieFactory extends Factory
      * sans frame a `levels_count = 0` et n'est donc PAS dans le vivier — c'est
      * voulu, la projection ne ment jamais. Le composeur attendu :
      * `->has(Frame::factory()->published()->count(3)->sequence(...), 'frames')`
-     * avec un niveau par entrée de {@see self::expectedFrameLevels()}.
+     * avec un niveau par entrée de {@see FrameLevelCoverage::nominal()} — la
+     * répartition nominale n'est écrite que là (spec 30 § 2).
      *
      * Les titres et alias passés ici sont créés seulement si la locale n'est pas
      * déjà pourvue : un `->has(MovieTitle::factory()…, 'titles')` posé en amont
@@ -425,7 +425,7 @@ class MovieFactory extends Factory
      * sur un état impossible. `$verifiedBy` choisit la voie : le curateur s'il est
      * passé, une certification FR non restrictive sinon.
      *
-     * @param  int  $framesPerRound  `N`, 2 à 5 — garde de borne seule ici
+     * @param  int  $framesPerRound  `N`, dans les bornes de `RoomSettingsBounds` — garde de borne seule ici
      * @param  User|null  $verifiedBy  auteur de la coche ; à défaut, voie de la certification
      * @param  array<string, string>  $titles  locale de CATALOGUE => titre affiché
      * @param  array<string, list<string>>  $aliases  locale de CATALOGUE => variantes acceptées
@@ -436,9 +436,10 @@ class MovieFactory extends Factory
         array $titles = [],
         array $aliases = [],
     ): static {
-        // Lève si `N` sort des bornes 2-5 : mieux vaut un échec de fixture qu'un
-        // film de démonstration silencieusement inéligible au `N` demandé.
-        self::expectedFrameLevels($framesPerRound);
+        // Lève si `N` sort des bornes de `RoomSettingsBounds` : mieux vaut un
+        // échec de fixture qu'un film de démonstration silencieusement
+        // inéligible au `N` demandé.
+        FrameLevelCoverage::nominal($framesPerRound);
 
         $factory = $verifiedBy instanceof User
             ? $this->contentVerifiedBy($verifiedBy)
@@ -448,29 +449,6 @@ class MovieFactory extends Factory
             ->afterCreating(function (Movie $movie) use ($titles, $aliases): void {
                 self::composeCatalogue($movie, $titles, $aliases);
             });
-    }
-
-    /**
-     * Les niveaux d'images qu'un film doit couvrir pour un `N` donné —
-     * l'échantillonnage de `CLAUDE.md` § 2, rappelé ici pour que les fixtures
-     * nomment les niveaux au lieu de les deviner.
-     *
-     * **Provisoire et non normatif** : l'algorithme de tirage, repli de niveau
-     * compris, appartient à la spec 30. Ce helper disparaît avec elle.
-     *
-     * @return list<FrameLevel>
-     */
-    public static function expectedFrameLevels(int $framesPerRound): array
-    {
-        return match ($framesPerRound) {
-            2 => [FrameLevel::Level1, FrameLevel::Level5],
-            3 => [FrameLevel::Level1, FrameLevel::Level3, FrameLevel::Level5],
-            4 => [FrameLevel::Level1, FrameLevel::Level2, FrameLevel::Level4, FrameLevel::Level5],
-            5 => FrameLevel::cases(),
-            default => throw new InvalidArgumentException(
-                "frames_per_round vaut [{$framesPerRound}] : les bornes du salon sont 2 à 5.",
-            ),
-        };
     }
 
     /**

@@ -8,7 +8,9 @@ use App\Models\Frame;
 use App\Models\Round;
 use App\Models\RoundTier;
 use App\Settings\RoomSettings;
+use App\ValueObjects\Catalog\FrameLevelCoverage;
 use Illuminate\Database\Eloquent\Factories\Factory;
+use InvalidArgumentException;
 
 /**
  * Fabrique de test de {@see RoundTier} — le palier matérialisé : une image, un
@@ -156,29 +158,23 @@ class RoundTierFactory extends Factory
     }
 
     /**
-     * Niveau NOMINAL du palier `i` pour un `N` donné.
+     * Niveau NOMINAL du palier `i` pour un `N` donné, lu dans
+     * {@see FrameLevelCoverage::nominal()} — seul endroit du dépôt où la
+     * répartition `N` → niveaux est écrite (spec 30 § 2).
      *
-     * > **Duplication nommée, et temporaire.** L'échantillonnage des niveaux —
-     * > `N=2 → 1,5` · `N=3 → 1,3,5` · `N=4 → 1,2,4,5` · `N=5 → 1..5` — n'a qu'un
-     * > seul domicile légitime, `App\ValueObjects\Catalog\FrameLevelCoverage`, que
-     * > `30-themes-vivier-et-tirage-des-variantes.md` possède et qui n'existe pas
-     * > encore. La fabrique en porte une copie **minimale** pour que son défaut ne
-     * > soit pas arbitraire ; elle appellera le value object le jour où il existe.
-     * > Le repli de niveau, lui, n'est PAS reproduit ici : il dépend du catalogue,
-     * > et il se passe explicitement par l'argument de {@see self::atTier()}.
+     * Le repli de niveau, lui, n'est PAS reproduit ici : il dépend du catalogue,
+     * et il se passe explicitement par l'argument de {@see self::atTier()}.
+     *
+     * @throws InvalidArgumentException `N` hors bornes, ou palier hors de `1..N` :
+     *                                  mieux vaut un échec de fixture qu'un niveau inventé.
      */
     private static function nominalLevel(int $tierIndex, int $framesPerRound): FrameLevel
     {
-        $levels = match ($framesPerRound) {
-            2 => [FrameLevel::Level1, FrameLevel::Level5],
-            4 => [FrameLevel::Level1, FrameLevel::Level2, FrameLevel::Level4, FrameLevel::Level5],
-            5 => [
-                FrameLevel::Level1, FrameLevel::Level2, FrameLevel::Level3,
-                FrameLevel::Level4, FrameLevel::Level5,
-            ],
-            default => [FrameLevel::Level1, FrameLevel::Level3, FrameLevel::Level5],
-        };
-
-        return $levels[$tierIndex - 1] ?? FrameLevel::Level1;
+        return FrameLevelCoverage::nominal($framesPerRound)[$tierIndex - 1]
+            ?? throw new InvalidArgumentException(sprintf(
+                'Le palier %d n’existe pas à frames_per_round = %d.',
+                $tierIndex,
+                $framesPerRound,
+            ));
     }
 }
