@@ -106,8 +106,10 @@ class GamePlayerFactory extends Factory
     /**
      * Les cinq agrégats, écrits ensemble comme à `game.ended_at`.
      *
-     * `final_rank` reste **nul en solo**, où l'historique affiche « — » : passer
-     * `null` est donc un cas normal et non un oubli.
+     * `final_rank` reste **nul en solo**, où l'historique affiche « — », ou si
+     * `$roundsPlayed` vaut 0 : passer `null` est donc un cas normal et non un
+     * oubli. Il n'est pas borné à 255 : la colonne est un `unsignedSmallInteger`
+     * (E10-04), et `game_player` n'a pas de plafond de sièges classés.
      */
     public function finished(
         int $roundsPlayed = 10,

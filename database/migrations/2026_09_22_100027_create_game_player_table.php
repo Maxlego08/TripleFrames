@@ -24,7 +24,10 @@ return new class extends Migration
             $table->unsignedTinyInteger('correct_answers')->nullable();
             $table->integer('final_score')->nullable();
             $table->unsignedInteger('total_answer_time_ms')->nullable();
-            $table->unsignedTinyInteger('final_rank')->nullable();
+            // Deux octets et non un (E10-04) : `game_player` n'est pas borné
+            // (retardataires en rotation, partis et expulsés restent classés),
+            // et un 256e rang lèverait l'erreur 1264 au gel.
+            $table->unsignedSmallInteger('final_rank')->nullable();
             $table->timestamps();
 
             $table->unique(['player_id', 'game_id'], 'game_player_player_game_uq');

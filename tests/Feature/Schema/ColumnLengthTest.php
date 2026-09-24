@@ -16,9 +16,11 @@ use Illuminate\Support\Str;
 | SQLite n'applique aucune longueur de `VARCHAR` : il accepte en silence une
 | chaîne de 300 caractères dans un `string(20)` (spec 10 § 1.4). MySQL en
 | mode strict la refuse en 1406 — en production, au moment où un joueur
-| rejoint un salon ou où une manche se clôt. Ce fichier est donc du groupe
-| `mysql` : exclu de `composer test`, joué par le job CI `mysql-redis`, et il
-| ÉCHOUE hors de MySQL au lieu de se sauter.
+| rejoint un salon ou où une manche se clôt. Il en va de même de la plage d'un
+| entier : SQLite accepte 256 dans un `unsignedTinyInteger`, MySQL le refuse
+| en 1264.
+| Ce fichier est donc du groupe `mysql` : exclu de `composer test`, joué par
+| le job CI `mysql-redis`, et il ÉCHOUE hors de MySQL au lieu de se sauter.
 |
 */
 
@@ -63,7 +65,7 @@ function columnLengthModels(): array
  * Déclaration d'une colonne telle que la base la rend (`type` = type complet,
  * `varchar(40)` sous MySQL), ou `null` si la colonne n'existe pas.
  *
- * @return array{name: string, type_name: string, type: string}|null
+ * @return array{name: string, type_name: string, type: string, nullable: bool}|null
  */
 function columnLengthDeclaration(string $table, string $column): ?array
 {
@@ -248,4 +250,23 @@ it("déclare la même longueur pour les trois colonnes de clé d'avatar prédéf
     }
 
     expect(array_unique($lengths))->toHaveCount(1, 'Longueurs divergentes : '.json_encode($lengths));
+});
+
+it('déclare game_player.final_rank en smallint non signé nullable et y fait tenir un 256e rang', function () {
+    // E10-04 : `game_player` n'est pas borné (retardataires en rotation, partis
+    // et expulsés restent classés). Dans un `unsignedTinyInteger`, le gel d'une
+    // partie à plus de 255 sièges classés lèverait 1264 sous MySQL strict.
+    $declaration = columnLengthDeclaration('game_player', 'final_rank');
+
+    expect($declaration)->not->toBeNull("La colonne game_player.final_rank n'existe pas.");
+
+    $type = strtolower((string) $declaration['type']);
+
+    expect(strtolower((string) $declaration['type_name']))->toBe('smallint', "game_player.final_rank est déclarée [{$type}].")
+        ->and($type)->toContain('unsigned')
+        ->and($declaration['nullable'])->toBeTrue('game_player.final_rank reste NULL en solo ou si rounds_played = 0.');
+
+    $participation = GamePlayer::factory()->finished(finalRank: 256)->create();
+
+    expect(GamePlayer::query()->findOrFail($participation->id)->final_rank)->toBe(256);
 });

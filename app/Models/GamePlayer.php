@@ -43,7 +43,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property int|null $correct_answers
  * @property int|null $final_score
  * @property int|null $total_answer_time_ms
- * @property int|null $final_rank NULL en solo, où l'historique affiche « — ».
+ * @property int|null $final_rank `unsignedSmallInteger` (E10-04) : la table n'est pas bornée, un rang peut dépasser 255. NULL en solo, où l'historique affiche « — », ou si `rounds_played = 0`.
  * @property CarbonImmutable|null $created_at
  * @property CarbonImmutable|null $updated_at
  * @property-read Game $game
