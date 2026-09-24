@@ -551,9 +551,10 @@ class MovieFactory extends Factory
      *
      * Elle couvre le périmètre exact du § 3.5 : `title_original` et
      * `title_original_latin` inconditionnellement, `movie_title` et `alias` des
-     * seules locales **activées**, plus les préfixes dérivés des seuls titres,
-     * jamais d'un alias (décision 13) — et elle recompte l'ambiguïté des
-     * préfixes touchés dans la foulée.
+     * seules locales **activées**, plus les clés dérivées, préfixes et
+     * sous-titres, des seuls titres, jamais d'un alias (décision 13, D23 du
+     * 23/09) — et elle recompte l'ambiguïté des clés dérivées touchées dans la
+     * foulée.
      */
     private static function projectAnswerKeys(Movie $movie): void
     {
@@ -565,11 +566,12 @@ class MovieFactory extends Factory
      * {@see AnswerKeyProjector::recomputeAmbiguity()}, synchrone et borné.
      *
      * Reste exposé ici parce qu'un seeder peut publier un film hors du chemin
-     * de cette factory et devoir recompter les préfixes qu'il rend ambigus.
+     * de cette factory et devoir recompter les clés dérivées, préfixes et
+     * sous-titres, qu'il rend ambiguës.
      *
      * @param  list<string>  $normalizedValues
      */
-    public static function recomputePrefixAmbiguity(array $normalizedValues): void
+    public static function recomputeDerivedAmbiguity(array $normalizedValues): void
     {
         (new AnswerKeyProjector)->recomputeAmbiguity($normalizedValues);
     }

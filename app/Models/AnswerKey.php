@@ -15,7 +15,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
  * La projection consultée à chaque tentative, unique propriétaire des formes
- * normalisées et des préfixes.
+ * normalisées et des clés dérivées, préfixes et sous-titres.
  *
  * `normalized` est calculée EN PHP et réduite à `[a-z0-9 ]` : sur cet alphabet,
  * `utf8mb4_unicode_ci` et BINARY rendent le même verdict. `is_ambiguous` est

@@ -161,20 +161,15 @@ class CatalogReprojectCommand extends Command
     }
 
     /**
-     * Recompte `is_ambiguous` pour chaque valeur portée par une clé dérivée
-     * (toute nature non exacte, {@see AnswerKeyKind::isExact()}), par le
-     * projecteur lui-même : aucune seconde formulation de la règle.
+     * Recompte `is_ambiguous` pour chaque valeur portée par une clé dérivée,
+     * préfixe ou sous-titre ({@see AnswerKeyKind::collisionCheckedValues()}),
+     * par le projecteur lui-même : aucune seconde formulation de la règle.
      */
     private function recomputeDerivedAmbiguity(AnswerKeyProjector $answerKeys): void
     {
-        $derived = array_values(array_map(
-            static fn (AnswerKeyKind $kind): string => $kind->value,
-            array_filter(AnswerKeyKind::cases(), static fn (AnswerKeyKind $kind): bool => ! $kind->isExact()),
-        ));
-
         /** @var list<string> $values */
         $values = AnswerKey::query()
-            ->whereIn('key_kind', $derived)
+            ->whereIn('key_kind', AnswerKeyKind::collisionCheckedValues())
             ->distinct()
             ->orderBy('normalized')
             ->pluck('normalized')

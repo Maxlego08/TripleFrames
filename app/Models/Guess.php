@@ -63,12 +63,12 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property int $tier_index Palier retenu, matérialisé. `#[Hidden]` avant la révélation.
  * @property int $lock_rank Rang d'arrivée dans la manche, visible des autres.
  * @property GuessSource $source
- * @property GuessMatchKind $match_kind Quatre cas, dont `choice`, qui n'existe pas dans `answer_key`.
+ * @property GuessMatchKind $match_kind Cinq cas, dont `subtitle` (D23 du 23/09) et `choice`, qui n'existe pas dans `answer_key`.
  * @property int|null $answer_key_id `nullOnDelete` : l'index est recalculé à chaque publication et ne doit jamais faire perdre un score. `#[Hidden]`.
  * @property string $answer_key_normalized Copie de la chaîne retenue — 200 et non 191. **La bonne réponse en clair** : `#[Hidden]`.
  * @property string $submitted_normalized Le texte brut n'est pas conservé. `#[Hidden]`.
  * @property int $edit_distance
- * @property bool $prefix_was_ambiguous Ambiguïté mesurée à l'instant du match, jamais rétroactive.
+ * @property bool $prefix_was_ambiguous Vrai si et seulement si la forme soumise était portée, à l'instant du match, par un autre film publié (clé exacte homonyme) ; toujours faux pour un `prefix` ou un `subtitle` accepté ; jamais rétroactif.
  * @property int $points_tier `#[Hidden]`.
  * @property int $points_bonus `#[Hidden]`.
  * @property int $points_total `#[Hidden]` — le podium l'agrège en SQL, jamais par `toArray()`.

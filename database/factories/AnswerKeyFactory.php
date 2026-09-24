@@ -11,16 +11,16 @@ use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
  * La projection consultée à chaque tentative (§ 3.5), unique propriétaire des
- * formes normalisées et des préfixes.
+ * formes normalisées et des clés dérivées, préfixes et sous-titres.
  *
- * **Le normaliseur ne vit plus ici.** {@see self::normalize()} et
- * {@see self::prefixOf()} sont de simples renvois vers
- * {@see AnswerKeyNormalizer}, implémentation unique du projet : la fixture doit
- * projeter ses clés avec le **même** normaliseur que celui qui appariera les
- * réponses. Deux normaliseurs distincts, et aucune réponse ne valide jamais sur
- * un catalogue de démonstration pourtant complet — le pendant exact du piège
- * des deux hashs tirés indépendamment du § 13.3. Les deux renvois restent parce
- * que seeders et tests les nomment déjà.
+ * **Le normaliseur ne vit plus ici.** {@see self::normalize()},
+ * {@see self::prefixOf()} et {@see self::subtitleOf()} sont de simples renvois
+ * vers {@see AnswerKeyNormalizer}, implémentation unique du projet : la fixture
+ * doit projeter ses clés avec le **même** normaliseur que celui qui appariera
+ * les réponses. Deux normaliseurs distincts, et aucune réponse ne valide jamais
+ * sur un catalogue de démonstration pourtant complet — le pendant exact du
+ * piège des deux hashs tirés indépendamment du § 13.3. Les renvois restent
+ * parce que seeders et tests les nomment.
  *
  * @extends Factory<AnswerKey>
  */
@@ -36,8 +36,8 @@ class AnswerKeyFactory extends Factory
     /**
      * Define the model's default state.
      *
-     * Une clé exacte de nature `title`, non ambiguë — seule la nature `prefix`
-     * est soumise à la règle de collision.
+     * Une clé exacte de nature `title`, non ambiguë — seules les natures
+     * dérivées, `prefix` et `subtitle`, sont soumises à la règle de collision.
      *
      * @return array<string, mixed>
      */
@@ -100,8 +100,8 @@ class AnswerKeyFactory extends Factory
     }
 
     /**
-     * Un alias curé ou importé. Un alias ne produit **jamais** de clé de nature
-     * `prefix` (décision 13).
+     * Un alias curé ou importé. Un alias ne produit **jamais** de clé dérivée,
+     * ni `prefix` (décision 13) ni `subtitle` (D23 du 23/09).
      */
     public function alias(string $text, string $sourceLocale = 'fr'): static
     {
@@ -109,8 +109,8 @@ class AnswerKeyFactory extends Factory
     }
 
     /**
-     * Un préfixe dérivé d'un titre — la seule nature soumise à la règle de
-     * collision.
+     * Un préfixe dérivé d'un titre — nature soumise à la règle de collision.
+     * `$text` est la partie **avant** le séparateur, pas le titre entier.
      */
     public function prefix(string $text, ?string $sourceLocale = null): static
     {
@@ -118,16 +118,39 @@ class AnswerKeyFactory extends Factory
     }
 
     /**
-     * Un préfixe qu'un autre film `published` partage. Dénormalisé à dessein :
-     * calculer l'ambiguïté par agrégation à chaque tentative mettrait un
-     * `GROUP BY` sur le chemin le plus chaud du jeu.
+     * Un sous-titre dérivé d'un titre (D23 du 23/09) — nature soumise à la
+     * règle de collision, comme le préfixe. `$text` est la partie **après** le
+     * premier séparateur, pas le titre entier.
+     */
+    public function subtitle(string $text, ?string $sourceLocale = null): static
+    {
+        return $this->forText($text, AnswerKeyKind::Subtitle, $sourceLocale);
+    }
+
+    /**
+     * Une clé dérivée qu'un autre film `published` partage. Dénormalisé à
+     * dessein : calculer l'ambiguïté par agrégation à chaque tentative
+     * mettrait un `GROUP BY` sur le chemin le plus chaud du jeu.
+     *
+     * Une nature exacte n'est jamais ambiguë : posé sur une clé `subtitle`,
+     * l'état la garde ; sur toute autre, il en fait un `prefix`.
      */
     public function ambiguous(): static
     {
-        return $this->state([
-            'key_kind' => AnswerKeyKind::Prefix,
-            'is_ambiguous' => true,
-        ]);
+        return $this->state(function (array $attributes): array {
+            $kind = $attributes['key_kind'] ?? null;
+
+            if (is_string($kind)) {
+                $kind = AnswerKeyKind::tryFrom($kind);
+            }
+
+            return [
+                'key_kind' => $kind instanceof AnswerKeyKind && $kind->isCollisionChecked()
+                    ? $kind
+                    : AnswerKeyKind::Prefix,
+                'is_ambiguous' => true,
+            ];
+        });
     }
 
     /**
@@ -147,5 +170,14 @@ class AnswerKeyFactory extends Factory
     public static function prefixOf(string $title): ?string
     {
         return AnswerKeyNormalizer::prefixOf($title);
+    }
+
+    /**
+     * Le sous-titre normalisé d'un titre — **simple renvoi**, même raison et
+     * même règle : jamais appliqué à un alias (D23 du 23/09).
+     */
+    public static function subtitleOf(string $title): ?string
+    {
+        return AnswerKeyNormalizer::subtitleOf($title);
     }
 }

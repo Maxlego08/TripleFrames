@@ -571,24 +571,77 @@ it('FAIT 8 — chaque film porte ses étiquettes TMDB, et chaque thème publié 
     }
 });
 
-it('FAIT 9 — chaque chaîne acceptée du catalogue a sa clé, préfixes et ambiguïté compris', function () {
+it('FAIT 9 — chaque chaîne acceptée du catalogue a sa clé, préfixes, sous-titres et ambiguïté compris', function () {
     /** @var EloquentCollection<int, Movie> $movies */
     $movies = Movie::query()->get();
 
+    /**
+     * Les préfixes dérivables des TITRES de chaque film — jamais de ses alias
+     * (décision 13) —, indexés par film.
+     *
+     * @var array<int, list<string>> $titlePrefixes
+     */
+    $titlePrefixes = [];
+
+    /**
+     * Les sous-titres dérivables des TITRES de chaque film — jamais de ses alias
+     * (D23 du 23/09) —, indexés par film.
+     *
+     * @var array<int, list<string>> $titleSubtitles
+     */
+    $titleSubtitles = [];
+
     foreach ($movies as $movie) {
-        /** @var list<string> $sources */
-        $sources = [$movie->title_original];
+        /** @var list<string> $titleSources */
+        $titleSources = [$movie->title_original];
 
         if ($movie->title_original_latin !== null) {
-            $sources[] = $movie->title_original_latin;
+            $titleSources[] = $movie->title_original_latin;
         }
 
         foreach (MovieTitle::query()->where('movie_id', $movie->id)->get() as $title) {
-            $sources[] = $title->title;
+            // Une locale non activée n'entre pas dans `answer_key` (§ 3.5).
+            if (Locale::tryFrom($title->locale) !== null) {
+                $titleSources[] = $title->title;
+            }
         }
+
+        $sources = $titleSources;
 
         foreach (Alias::query()->where('movie_id', $movie->id)->get() as $alias) {
             $sources[] = $alias->alias;
+        }
+
+        $titlePrefixes[$movie->id] = [];
+        $titleSubtitles[$movie->id] = [];
+
+        foreach ($titleSources as $titleSource) {
+            $titlePrefix = AnswerKeyFactory::prefixOf($titleSource);
+
+            if ($titlePrefix !== null) {
+                $titlePrefixes[$movie->id][] = $titlePrefix;
+            }
+
+            $subtitle = AnswerKeyFactory::subtitleOf($titleSource);
+
+            if ($subtitle === null) {
+                continue;
+            }
+
+            $titleSubtitles[$movie->id][] = $subtitle;
+
+            // Le sous-titre d'un titre est une chaîne acceptée (sous réserve de
+            // collision) : sa clé existe, de nature `subtitle` ou d'une nature
+            // qui la précède — exacte, puis `prefix`.
+            $this->assertTrue(
+                AnswerKey::query()
+                    ->where('movie_id', $movie->id)
+                    ->where('normalized', $subtitle)
+                    ->exists(),
+                "FAIT 9 — le titre [{$titleSource}] du film [{$movie->title_original}] (#{$movie->id}) a pour "
+                ."sous-titre [{$subtitle}], qui n'est aucune de ses `answer_key` : « {$subtitle} » serait "
+                .'refusé même quand aucun autre film publié ne le porte.',
+            );
         }
 
         foreach ($sources as $source) {
@@ -621,9 +674,10 @@ it('FAIT 9 — chaque chaîne acceptée du catalogue a sa clé, préfixes et amb
         );
     }
 
-    // La nature `prefix` est la SEULE soumise à la règle de collision du § 3.5, et
-    // la seule que `prefixOf()` peut cesser de produire sans qu'aucun autre fait ne
-    // bouge : un catalogue sans un seul titre à sous-titre ne l'exerce jamais.
+    // Les natures `prefix` et `subtitle` sont les SEULES soumises à la règle de
+    // collision du § 3.5, et les seules que `prefixOf()` et `subtitleOf()` peuvent
+    // cesser de produire sans qu'aucun autre fait ne bouge : un catalogue sans un
+    // seul titre à sous-titre ne les exerce jamais.
     $this->assertGreaterThan(
         0,
         AnswerKey::query()->where('key_kind', AnswerKeyKind::Prefix)->count(),
@@ -650,24 +704,74 @@ it('FAIT 9 — chaque chaîne acceptée du catalogue a sa clé, préfixes et amb
         'FAIT 9 — tous les préfixes sont ambigus : le recompte du § 3.5 pose peut-être le drapeau sans compter.',
     );
 
-    // Un alias ne produit JAMAIS de clé de nature `prefix` (décision 13).
+    $this->assertGreaterThan(
+        0,
+        AnswerKey::query()->where('key_kind', AnswerKeyKind::Subtitle)->count(),
+        'FAIT 9 — aucune clé de nature `subtitle` : la branche des sous-titres dérivés des titres (D23 du 23/09) '
+        .'n’est exercée par aucune ligne, et « The Two Towers » serait refusé sans qu’aucun test ne le voie.',
+    );
+
+    // Une nature exacte n'est jamais ambiguë : le drapeau ne porte que sur les
+    // deux natures dérivées (10 § 3.5).
+    $this->assertSame(
+        0,
+        AnswerKey::query()
+            ->whereNotIn('key_kind', AnswerKeyKind::collisionCheckedValues())
+            ->where('is_ambiguous', true)
+            ->count(),
+        'FAIT 9 — une clé de nature exacte porte `is_ambiguous` : un titre complet ou un alias serait traité '
+        .'comme une clé dérivée par la tolérance.',
+    );
+
+    // Un alias ne produit JAMAIS de clé dérivée : ni `prefix` (décision 13), ni
+    // `subtitle` (D23 du 23/09). Une forme que l'alias partage avec la clé
+    // dérivée de même nature d'un TITRE du même film vient du titre, et elle
+    // est légitime : seule une forme propre à l'alias trahit une dérivation
+    // interdite. Les deux vérifications appliquent la même exclusion.
+    $aliasDerivedChecked = 0;
+
     foreach (Alias::query()->get() as $alias) {
         $prefix = AnswerKeyFactory::prefixOf($alias->alias);
 
-        if ($prefix === null) {
-            continue;
+        if ($prefix !== null && ! in_array($prefix, $titlePrefixes[$alias->movie_id] ?? [], true)) {
+            $aliasDerivedChecked++;
+
+            $this->assertFalse(
+                AnswerKey::query()
+                    ->where('movie_id', $alias->movie_id)
+                    ->where('key_kind', AnswerKeyKind::Prefix)
+                    ->where('normalized', $prefix)
+                    ->exists(),
+                "FAIT 9 — l'alias [{$alias->alias}] a produit une clé `prefix` : la décision 13 réserve les "
+                .'préfixes aux seuls titres.',
+            );
         }
 
-        $this->assertFalse(
-            AnswerKey::query()
-                ->where('movie_id', $alias->movie_id)
-                ->where('key_kind', AnswerKeyKind::Prefix)
-                ->where('normalized', $prefix)
-                ->exists(),
-            "FAIT 9 — l'alias [{$alias->alias}] a produit une clé `prefix` : la décision 13 réserve les "
-            .'préfixes aux seuls titres.',
-        );
+        $subtitle = AnswerKeyFactory::subtitleOf($alias->alias);
+
+        if ($subtitle !== null && ! in_array($subtitle, $titleSubtitles[$alias->movie_id] ?? [], true)) {
+            $aliasDerivedChecked++;
+
+            $this->assertFalse(
+                AnswerKey::query()
+                    ->where('movie_id', $alias->movie_id)
+                    ->where('key_kind', AnswerKeyKind::Subtitle)
+                    ->where('normalized', $subtitle)
+                    ->exists(),
+                "FAIT 9 — l'alias [{$alias->alias}] a produit une clé `subtitle` : D23 du 23/09 réserve les "
+                .'sous-titres aux seuls titres.',
+            );
+        }
     }
+
+    // Sans alias à séparateur, les deux vérifications ci-dessus ne s'exercent
+    // sur aucune ligne : le fait passerait au vert sans rien prouver.
+    $this->assertGreaterThan(
+        0,
+        $aliasDerivedChecked,
+        'FAIT 9 — aucun alias à séparateur : « aucune clé dérivée issue d’un alias » est vacant sur le '
+        .'catalogue de démonstration.',
+    );
 });
 
 it('VARIANTES — au moins un film porte plusieurs variantes d’un même niveau', function () {

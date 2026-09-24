@@ -13,7 +13,7 @@ use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 
 /**
  * Le projecteur d'`answer_key` — unique propriétaire des formes normalisées et
- * des préfixes (§ 3.5).
+ * des clés dérivées, préfixes et sous-titres (10 § 3.5, spec 70 § 5.7).
  *
  * **Reconstruction par différence, jamais par purge et réinsertion.** Une ligne
  * qui existe encore garde son identifiant : `guess` conserve douze mois
@@ -22,40 +22,43 @@ use Illuminate\Database\Eloquent\Collection as EloquentCollection;
  *
  * **Périmètre exact des clés d'un film** : `title_original` et
  * `title_original_latin` **inconditionnellement**, sans filtre de locale ;
- * `movie_title` et `alias` des seules locales **activées** ; plus les préfixes
- * dérivés des seuls **titres — jamais d'un alias** (décision 13), découpés au
- * premier séparateur de `config('catalog.subtitle_separators')` et retenus
- * au-delà de `config('catalog.min_prefix_length')`.
+ * `movie_title` et `alias` des seules locales **activées** ; plus les clés
+ * dérivées des seuls **titres — jamais d'un alias** (décision 13, D23 du
+ * 23/09), découpées au premier séparateur de
+ * `config('catalog.subtitle_separators')` : le **préfixe** (partie avant) et
+ * le **sous-titre** (partie après), chacun retenu au-delà de
+ * `config('catalog.min_prefix_length')` s'il diffère du titre entier, le
+ * sous-titre différant aussi du préfixe ({@see AnswerKeyNormalizer::prefixOf()},
+ * {@see AnswerKeyNormalizer::subtitleOf()}).
  *
  * **Précédence sur `(movie_id, normalized)`** : toute nature exacte l'emporte
- * sur `prefix`, donc une chaîne à la fois alias et préfixe reste toujours
- * acceptée. Sans ce dédoublonnage, l'UNIQUE `answer_key_norm_movie_uq` ferait
- * échouer l'import.
+ * sur `prefix`, qui l'emporte sur `subtitle`. Une chaîne à la fois alias et
+ * clé dérivée reste donc toujours acceptée, et une chaîne à la fois préfixe
+ * d'un titre et sous-titre d'un autre relève de la règle du préfixe. Sans ce
+ * dédoublonnage, l'UNIQUE `answer_key_norm_movie_uq` ferait échouer l'import.
  *
  * **Synchrone et borné, jamais un job de fond.** Un job de fond laisserait une
- * fenêtre pendant laquelle un préfixe ambigu resterait accepté, et rendrait
- * impossible l'avertissement nominatif que le back-office doit au curateur
- * avant qu'il publie.
+ * fenêtre pendant laquelle une clé dérivée ambiguë resterait acceptée, et
+ * rendrait impossible l'avertissement nominatif que le back-office doit au
+ * curateur avant qu'il publie.
  *
- * Ce qui n'est **pas** ici et qui appartient à la spec 70 : l'invalidation du
- * cache de manche des chaînes d'un film (invariant L2). Aucun cache de
- * validation n'existe encore ; le jour où il existera, il s'invalide depuis
- * {@see self::touchedMovieIds()}, qui porte déjà l'ensemble borné.
+ * Aucun cache de validation n'existe au J1 : `AnswerMatcher` relit les clés du
+ * film et le test d'homonymie à **chaque** soumission (spec 70 § 6.1, E10-16),
+ * et l'invariant L2 est tenu par construction.
  */
 final class AnswerKeyProjector
 {
     /**
-     * Les films dont les clés ont changé au dernier passage — l'ensemble borné
-     * que l'invalidation de cache de la spec 70 consommera.
+     * Les films dont les clés ont été reprojetées par cette instance.
      *
      * @var list<int>
      */
     private array $touchedMovieIds = [];
 
     /**
-     * Reprojette les clés d'un film et recompte l'ambiguïté des préfixes
-     * touchés. À appeler dans la **même transaction** que l'écriture des titres
-     * et des alias.
+     * Reprojette les clés d'un film et recompte l'ambiguïté des clés dérivées
+     * touchées. À appeler dans la **même transaction** que l'écriture des
+     * titres et des alias.
      *
      * @return list<string> Les valeurs normalisées touchées — ajoutées, retirées ou requalifiées.
      */
@@ -85,11 +88,20 @@ final class AnswerKeyProjector
 
             // Requalification : la chaîne reste acceptée, son identifiant reste
             // stable, seule sa nature change. C'est le cas d'un titre curé qui
-            // reprend mot pour mot un préfixe déjà projeté — et la nature
+            // reprend mot pour mot une clé dérivée déjà projetée, ou d'un
+            // sous-titre qui devient le préfixe d'un autre titre — et la nature
             // décide de la soumission ou non à la règle de collision.
             $touched[] = $row->normalized;
             $row->key_kind = $target['key_kind'];
             $row->source_locale = $target['source_locale'];
+
+            // Une nature exacte n'est jamais ambiguë (10 § 3.5) : le drapeau
+            // d'une ancienne clé dérivée ne lui survit pas. Le sens inverse est
+            // tenu par le recompte ci-dessous, la valeur étant touchée.
+            if (! $target['key_kind']->isCollisionChecked()) {
+                $row->is_ambiguous = false;
+            }
+
             $row->save();
         }
 
@@ -117,43 +129,92 @@ final class AnswerKeyProjector
     }
 
     /**
-     * Recompte `is_ambiguous` pour chaque valeur normalisée touchée : le nombre
-     * de films `published` qui la portent, puis le drapeau posé sur **toutes**
-     * les clés `prefix` égales — celles du film qu'on vient d'écrire comme
-     * celles des films déjà en base.
+     * Recompte `is_ambiguous` pour chaque valeur normalisée touchée : les films
+     * `published` qui la portent, **sous quelque nature que ce soit**, puis le
+     * drapeau posé sur **toutes** les clés dérivées égales, `prefix` comme
+     * `subtitle` — celles du film qu'on vient d'écrire comme celles des films
+     * déjà en base.
+     *
+     * Le drapeau se lit **clé par clé** (10 § 3.5) : vrai si **un autre** film
+     * `published` porte la forme. Une clé d'un film publié l'est donc dès que
+     * deux films publiés la portent ; une clé d'un film non publié — brouillon,
+     * ou dépublié en pleine manche, dont les clés restent jugeables (spec 70
+     * § 6.1, lecture K) — l'est dès qu'un seul film publié la porte. Sans cette
+     * distinction, le sous-titre d'un film dépublié que porte un film publié
+     * resterait candidat à la tolérance (étape d) alors que sa forme exacte est
+     * refusée par la garde (c).
      *
      * L'ambiguïté se mesure sur le catalogue `published` **entier**, jamais sur
-     * le vivier du salon : sinon accepter un préfixe révélerait combien
+     * le vivier du salon : sinon accepter une clé dérivée révélerait combien
      * d'épisodes de la saga sont dans le tirage. Elle n'est jamais rétroactive,
-     * `guess` portant l'instantané de la règle appliquée.
+     * `guess` portant l'instantané de la règle appliquée. Le drapeau ne sert
+     * qu'à la tolérance (spec 70 § 6.2, étape d) : l'acceptation exacte d'une
+     * clé dérivée relit l'homonymie fraîche à chaque soumission.
      *
      * @param  list<string>  $normalizedValues
      */
     public function recomputeAmbiguity(array $normalizedValues): void
     {
+        $derivedKinds = AnswerKeyKind::collisionCheckedValues();
+
         foreach (array_unique($normalizedValues) as $normalized) {
-            $published = AnswerKey::query()
+            // L'UNIQUE `answer_key_norm_movie_uq (normalized, movie_id)` garantit
+            // qu'un film y figure au plus une fois : aucun `DISTINCT` n'est utile.
+            /** @var list<int> $carriers */
+            $carriers = AnswerKey::query()
                 ->join('movie', 'movie.id', '=', 'answer_key.movie_id')
                 ->where('answer_key.normalized', $normalized)
                 ->where('movie.availability', ContentAvailability::Published->value)
-                ->distinct()
-                ->count('answer_key.movie_id');
+                ->pluck('answer_key.movie_id')
+                ->map(static fn (mixed $id): int => (int) $id)
+                ->values()
+                ->all();
 
-            $ambiguous = $published > 1;
+            $published = count($carriers);
 
             // Seules les lignes dont le drapeau CHANGE sont écrites : un recompte
             // sans effet ne réécrit rien, `updated_at` compris, et c'est ce qui
             // rend `catalog:reproject` idempotente jusqu'à l'horodatage.
-            AnswerKey::query()
-                ->where('normalized', $normalized)
-                ->where('key_kind', AnswerKeyKind::Prefix->value)
-                ->where('is_ambiguous', '!=', $ambiguous)
-                ->update(['is_ambiguous' => $ambiguous]);
+            //
+            // Clés des films publiés qui la portent : ambiguës si un AUTRE film
+            // publié la porte aussi.
+            $this->flagDerivedKeys($normalized, $derivedKinds, $carriers, true, $published > 1);
+
+            // Clés des films non publiés : ambiguës dès qu'UN film publié la porte.
+            $this->flagDerivedKeys($normalized, $derivedKinds, $carriers, false, $published >= 1);
         }
     }
 
     /**
-     * Les films touchés depuis la construction du projecteur.
+     * Pose `is_ambiguous` sur les clés dérivées d'une forme, portées par les
+     * films publiés qui la portent (`$amongCarriers`) ou par tous les autres.
+     *
+     * @param  list<string>  $derivedKinds
+     * @param  list<int>  $carriers
+     */
+    private function flagDerivedKeys(
+        string $normalized,
+        array $derivedKinds,
+        array $carriers,
+        bool $amongCarriers,
+        bool $ambiguous,
+    ): void {
+        $query = AnswerKey::query()
+            ->where('normalized', $normalized)
+            ->whereIn('key_kind', $derivedKinds)
+            ->where('is_ambiguous', '!=', $ambiguous);
+
+        if ($amongCarriers) {
+            $query->whereIn('movie_id', $carriers);
+        } else {
+            $query->whereNotIn('movie_id', $carriers);
+        }
+
+        $query->update(['is_ambiguous' => $ambiguous]);
+    }
+
+    /**
+     * Les films reprojetés depuis la construction du projecteur.
      *
      * @return list<int>
      */
@@ -165,8 +226,9 @@ final class AnswerKeyProjector
     /**
      * L'ensemble complet des clés que ce film **doit** porter, indexé par forme
      * normalisée pour que la précédence se tienne par construction : les
-     * natures exactes sont posées d'abord et ne sont jamais écrasées par un
-     * préfixe.
+     * natures exactes sont posées d'abord, puis les préfixes de **tous** les
+     * titres, puis leurs sous-titres, et une forme déjà posée n'est jamais
+     * écrasée.
      *
      * @return array<string, array{key_kind: AnswerKeyKind, source_locale: string|null}>
      */
@@ -182,11 +244,13 @@ final class AnswerKeyProjector
         /** @var EloquentCollection<int, MovieTitle> $titles */
         $titles = MovieTitle::query()->where('movie_id', $movie->id)->get();
 
-        /** @var list<string> $prefixSources */
-        $prefixSources = [$movie->title_original];
+        // Les titres dont dérivent préfixes et sous-titres — jamais un alias
+        // (décision 13, D23 du 23/09).
+        /** @var list<string> $derivationSources */
+        $derivationSources = [$movie->title_original];
 
         if ($movie->title_original_latin !== null) {
-            $prefixSources[] = $movie->title_original_latin;
+            $derivationSources[] = $movie->title_original_latin;
         }
 
         foreach ($titles as $title) {
@@ -199,7 +263,7 @@ final class AnswerKeyProjector
             }
 
             $exact[] = [$title->title, AnswerKeyKind::Title, $title->locale];
-            $prefixSources[] = $title->title;
+            $derivationSources[] = $title->title;
         }
 
         /** @var EloquentCollection<int, Alias> $aliases */
@@ -226,18 +290,29 @@ final class AnswerKeyProjector
             $desired[$normalized] = ['key_kind' => $kind, 'source_locale' => $locale];
         }
 
-        foreach ($prefixSources as $source) {
-            $prefix = AnswerKeyNormalizer::prefixOf($source);
+        // Une passe par nature dérivée, et non une par titre : le préfixe d'un
+        // titre doit l'emporter sur le sous-titre d'un autre, quel que soit
+        // l'ordre des titres.
+        /** @var list<array{AnswerKeyKind, callable(string): (string|null)}> $derivations */
+        $derivations = [
+            [AnswerKeyKind::Prefix, AnswerKeyNormalizer::prefixOf(...)],
+            [AnswerKeyKind::Subtitle, AnswerKeyNormalizer::subtitleOf(...)],
+        ];
 
-            if ($prefix === null || array_key_exists($prefix, $desired)) {
-                continue;
+        foreach ($derivations as [$kind, $derive]) {
+            foreach ($derivationSources as $source) {
+                $derived = $derive($source);
+
+                if ($derived === null || array_key_exists($derived, $desired)) {
+                    continue;
+                }
+
+                // `source_locale` reste nulle sur une clé dérivée : elle est
+                // purement traçante (§ 3.5) et une même chaîne peut naître de
+                // deux titres de locales différentes. Lui inventer une locale
+                // mentirait sur la provenance sans servir aucune requête.
+                $desired[$derived] = ['key_kind' => $kind, 'source_locale' => null];
             }
-
-            // `source_locale` reste nulle sur un préfixe : elle est purement
-            // traçante (§ 3.5) et une même chaîne peut naître de deux titres de
-            // locales différentes. Lui inventer une locale mentirait sur la
-            // provenance sans servir aucune requête.
-            $desired[$prefix] = ['key_kind' => AnswerKeyKind::Prefix, 'source_locale' => null];
         }
 
         return $desired;

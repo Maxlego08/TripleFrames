@@ -263,7 +263,7 @@ class Movie extends Model
 
     /**
      * La projection consultée à chaque tentative, unique propriétaire des
-     * formes normalisées et des préfixes.
+     * formes normalisées et des clés dérivées, préfixes et sous-titres.
      *
      * @return HasMany<AnswerKey, $this>
      */

@@ -11,6 +11,7 @@ use App\Models\Player;
 use App\Models\Round;
 use App\Settings\PlatformLimits;
 use App\Settings\RoomSettings;
+use App\Support\Catalog\AnswerKeyNormalizer;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
@@ -159,14 +160,17 @@ class GuessFactory extends Factory
     }
 
     /**
-     * Acceptation par préfixe, avec l'ambiguïté **mesurée à l'instant du match** —
-     * jamais rétroactive (invariant **L2**).
+     * Acceptation par préfixe. `prefix_was_ambiguous` y vaut **toujours faux** :
+     * la décision 13 n'accepte un préfixe que non ambigu, et un préfixe porté par
+     * un autre film publié est refusé (spec 70 § 6.4, E10-50). L'état « préfixe
+     * accepté et ambigu » n'existe donc pas : un test posé dessus prouverait un
+     * comportement sur un instantané que le validateur ne peut pas émettre.
      */
-    public function viaPrefix(bool $wasAmbiguous = false): static
+    public function viaPrefix(): static
     {
         return $this->state(fn (array $attributes): array => [
             'match_kind' => GuessMatchKind::Prefix,
-            'prefix_was_ambiguous' => $wasAmbiguous,
+            'prefix_was_ambiguous' => false,
         ]);
     }
 
@@ -175,24 +179,38 @@ class GuessFactory extends Factory
      * la colonne est un instantané autosuffisant, que le `nullOnDelete` de la FK
      * existe précisément pour préserver.
      *
-     * **`match_kind` est DÉRIVÉ de la nature de la clé**, jamais codé : une ligne
+     * **`match_kind` est DÉRIVÉ de la nature de la clé** par
+     * {@see AnswerKeyKind::toMatchKind()}, jamais codé ni recopié : une ligne
      * étiquetée `alias` dont `answer_key_id` désigne une clé `prefix` est un
      * instantané que le validateur ne peut pas émettre, et un test de
      * `prefix_was_ambiguous` passerait dessus en prouvant le contraire de ce qu'il
-     * croit. `submitted_normalized` est aligné sur la clé pour la même raison : une
-     * tentative gagnante cite forcément la chaîne qu'elle a appariée.
+     * croit.
+     *
+     * `submitted_normalized` vaut la forme de la clé, sauf acceptation par
+     * tolérance (spec 70 § 6.2, étape d) : `$submittedNormalized` est alors la
+     * saisie normalisée, et `edit_distance` est **calculée** par
+     * {@see AnswerKeyNormalizer::distance()}, jamais posée à la main — une saisie
+     * différente de la clé n'existe qu'avec la distance qui l'a acceptée.
+     *
+     * `prefix_was_ambiguous` ne peut être vrai que sur un appariement exact d'une
+     * clé de nature exacte (étape a, homonyme publié) : il est forcé à faux pour
+     * une clé dérivée et pour une acceptation par tolérance (§ 6.4), et garde
+     * sinon la valeur des états précédents.
      */
-    public function forAnswerKey(AnswerKey $answerKey): static
+    public function forAnswerKey(AnswerKey $answerKey, ?string $submittedNormalized = null): static
     {
+        $submitted = $submittedNormalized ?? $answerKey->normalized;
+        $exactMatch = $submitted === $answerKey->normalized;
+
         return $this->state(fn (array $attributes): array => [
             'answer_key_id' => $answerKey->id,
             'answer_key_normalized' => $answerKey->normalized,
-            'submitted_normalized' => $answerKey->normalized,
-            'match_kind' => match ($answerKey->key_kind) {
-                AnswerKeyKind::Alias => GuessMatchKind::Alias,
-                AnswerKeyKind::Prefix => GuessMatchKind::Prefix,
-                default => GuessMatchKind::Title,
-            },
+            'submitted_normalized' => $submitted,
+            'edit_distance' => $exactMatch ? 0 : AnswerKeyNormalizer::distance($submitted, $answerKey->normalized),
+            'match_kind' => $answerKey->key_kind->toMatchKind(),
+            'prefix_was_ambiguous' => $exactMatch
+                && $answerKey->key_kind->isExact()
+                && ($attributes['prefix_was_ambiguous'] ?? false) === true,
         ]);
     }
 

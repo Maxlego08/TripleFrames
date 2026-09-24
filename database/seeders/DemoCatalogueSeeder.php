@@ -661,7 +661,11 @@ class DemoCatalogueSeeder extends Seeder
                 'Star Wars: A New Hope', 1977, MovieDifficulty::Easy,
                 genres: [12, 28, 878], companies: [1],
                 titles: ['en' => 'Star Wars: A New Hope', 'fr' => 'Star Wars : Un nouvel espoir'],
-                aliases: ['fr' => ['La Guerre des étoiles']],
+                // Le second alias porte un séparateur : son sous-titre
+                // `episode 4` ne naît d'aucun titre, et c'est la seule donnée
+                // sur laquelle « un alias ne produit jamais de clé dérivée »
+                // (décision 13, D23 du 23/09) s'exerce dans FAIT 9.
+                aliases: ['fr' => ['La Guerre des étoiles', 'La Guerre des étoiles : Épisode IV']],
                 saga: 'Star Wars',
             ),
             $this->movie(
