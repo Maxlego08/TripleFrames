@@ -50,14 +50,24 @@ enum PurgeScope: string
      * variable. `StaleLobby` n'y entre jamais : il est exécuté par le
      * balayage de 50, qui écrit lui-même sa ligne `purge_run`.
      *
-     * La sonde `purge` (spec 100 § 15) surveille chacun d'eux. **Vide au
-     * premier temps de L100-7**, qui livre la sonde avant le moteur : L100-8
-     * y inscrit chaque périmètre avec son gestionnaire.
+     * La sonde `purge` (spec 100 § 15) surveille chacun d'eux, et chacun a
+     * exactement un gestionnaire dans `App\Support\Retention\PurgeHandlers`.
+     *
+     * **Premier temps de L100-8** (D37 du 23/09) : les seuls périmètres sans
+     * jeu, qui ne dépendent d'aucun lot de 50 ni de 60. `StaleRoom` entre avec
+     * `ArchiveRoom` de 50 (L50-8), la branche sièges solo d'`OrphanPlayer`
+     * avec le démarrage solo de 60 (L60-15), chacun à sa place dans l'ordre
+     * du tableau.
      *
      * @return list<self>
      */
     public static function implemented(): array
     {
-        return [];
+        return [
+            self::FrameworkSessions,
+            self::FrameworkFailedJobs,
+            self::FrameworkResetTokens,
+            self::PurgeRun,
+        ];
     }
 }

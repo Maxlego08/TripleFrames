@@ -410,7 +410,7 @@ Ensuite, à chaque session : **« Implémente l'étape suivante de l'ordre des l
 21. L20-4 — géométrie 16:9, plancher de recadrage à double borne → 8, 9, 12 — ✅ livrée le 24/09
 22. L20-5 — chaîne Imagick, `ProcessFrameImage` (file `default`) → 21 — ✅ livrée le 24/09
 23. L100-7 (1er temps) — planificateur, battements, sondes, journaux → 11, 22 — ✅ livrée le 24/09
-24. L100-8 (1er temps) — purge des périmètres sans jeu → 23
+24. L100-8 (1er temps) — purge des périmètres sans jeu → 23 — ✅ livrée le 24/09
 25. (option, I-12, accord du porteur) — `final_rank` élargi dans la migration de création → 6
 
 **Phase B — mise en service et back-office complet (90,5 à 128,5 h)**

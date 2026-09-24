@@ -33,6 +33,10 @@
 | de la sonde `purge` : dernière exécution terminée depuis moins de
 | `stale_hours` heures, et aucun périmètre sans suppression sur la même
 | fenêtre alors que des lignes restent éligibles (10 § 11.3, sonde n° 4).
+| Aucun interrupteur de purge ici, et c'est voulu : la liste des périmètres
+| est déclarée dans le code (`PurgeScope::implemented()`), et la suspension
+| d'incident est un drapeau du cache posé par `purge:suspend`, qui met la
+| sonde `purge` en alerte tant qu'il existe (§ 14).
 |
 */
 

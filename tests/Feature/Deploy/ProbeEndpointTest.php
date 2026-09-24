@@ -16,7 +16,8 @@ use App\Support\Frames\FrameStoragePrefix;
 use App\Support\Ops\Heartbeat;
 use App\Support\Ops\ProbeResponse;
 use App\Support\Ops\SystemLoad;
-use App\Support\Retention\PurgeHandler;
+use App\Support\Retention\Handlers\FrameworkResetTokensHandler;
+use App\Support\Retention\RetentionPurger;
 use Carbon\CarbonImmutable;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Cache\RedisStore;
@@ -24,10 +25,14 @@ use Illuminate\Cache\Repository;
 use Illuminate\Contracts\Redis\Factory as RedisFactory;
 use Illuminate\Redis\Connections\PredisConnection;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Testing\TestResponse;
+use Tests\Support\Retention\FailingPurgeHandler;
+use Tests\Support\Retention\FakePurgeHandler;
+use Tests\Support\Retention\RetentionRows;
 
 /*
 |--------------------------------------------------------------------------
@@ -132,35 +137,21 @@ function probeEndpointMachine(string $directory, ?float $load, ?int $cpus, ?floa
 }
 
 /**
- * Étiquette un gestionnaire de purge de test pour `$scope` : il compte
- * `$eligible` lignes éligibles et retient l'instant auquel la sonde l'évalue.
+ * Substitue au gestionnaire réel de `$scope` un gestionnaire de test : il
+ * compte `$eligible` lignes éligibles et retient l'instant auquel la sonde
+ * l'évalue. `$alongside` l'étiquette EN PLUS du gestionnaire réel.
  */
-function probeEndpointPurgeHandler(PurgeScope $scope, int $eligible): PurgeHandler
+function probeEndpointPurgeHandler(PurgeScope $scope, int $eligible, bool $alongside = false): FakePurgeHandler
 {
-    $handler = new class($scope, $eligible) implements PurgeHandler
-    {
-        public ?CarbonImmutable $askedAsOf = null;
+    return $alongside
+        ? FakePurgeHandler::alongside($scope, $eligible)
+        : FakePurgeHandler::replace($scope, $eligible);
+}
 
-        public function __construct(private readonly PurgeScope $served, public int $eligible) {}
-
-        public function scope(): PurgeScope
-        {
-            return $this->served;
-        }
-
-        public function eligibleCount(?CarbonImmutable $asOf = null): int
-        {
-            $this->askedAsOf = $asOf;
-
-            return $this->eligible;
-        }
-    };
-
-    $abstract = 'tests.purge-handler.'.$scope->value.'.'.spl_object_id($handler);
-    app()->instance($abstract, $handler);
-    app()->tag([$abstract], PurgeHandler::class);
-
-    return $handler;
+/** La purge vient de tourner : une exécution terminée par périmètre implémenté. */
+function probeEndpointFreshPurge(): void
+{
+    app(RetentionPurger::class)->run();
 }
 
 /** Une exécution de purge terminée, commencée il y a `$hoursAgo` heures. */
@@ -234,6 +225,7 @@ function probeEndpointFreshHeartbeats(): void
 
 it('refuse toute sonde sans le jeton de supervision, avec la même réponse qu\'une sonde inconnue', function (): void {
     probeEndpointFreshHeartbeats();
+    probeEndpointFreshPurge();
 
     // Avec le bon jeton, chaque sonde existe et répond.
     foreach (OpsProbe::cases() as $probe) {
@@ -324,6 +316,7 @@ it('déclare le worker game périmé au-delà du seuil', function (): void {
 it('ne rend qu\'un statut, sans aucune donnée', function (): void {
     Storage::fake(FrameStoragePrefix::DISK);
     probeEndpointFreshHeartbeats();
+    probeEndpointFreshPurge();
 
     foreach (OpsProbe::cases() as $probe) {
         $response = probeEndpointRequest($probe->value);
@@ -333,7 +326,7 @@ it('ne rend qu\'un statut, sans aucune donnée', function (): void {
     }
 
     // Chaque sonde en alerte : battements vieillis, frame retirée dont les
-    // fichiers restent, périmètre de purge sans exécution, machine saturée.
+    // fichiers restent, périmètre de purge bloqué, machine saturée.
     $this->travel(config('ops.heartbeat.default_stale_seconds') + 1)->seconds();
     Frame::factory()->withdrawn()->create();
     probeEndpointPurgeHandler(PurgeScope::FrameworkSessions, eligible: 3);
@@ -461,7 +454,13 @@ it('signale un périmètre qui n\'a rien supprimé en 48 h alors que des lignes 
 
     $sessions = probeEndpointPurgeHandler(PurgeScope::FrameworkSessions, eligible: 0);
     $failedJobs = probeEndpointPurgeHandler(PurgeScope::FrameworkFailedJobs, eligible: 0);
-    probeEndpointPurgeRun(PurgeScope::FrameworkFailedJobs, hoursAgo: 10, rowsDeleted: 0);
+
+    // Tous les autres périmètres implémentés ont tourné la nuit dernière.
+    foreach (PurgeScope::implemented() as $scope) {
+        if ($scope !== PurgeScope::FrameworkSessions) {
+            probeEndpointPurgeRun($scope, hoursAgo: 10, rowsDeleted: 0);
+        }
+    }
 
     // La dernière nuit n'a rien supprimé, et rien n'était éligible.
     $lastNight = probeEndpointPurgeRun(PurgeScope::FrameworkSessions, hoursAgo: 10, rowsDeleted: 0);
@@ -500,16 +499,20 @@ it('signale un périmètre qui n\'a rien supprimé en 48 h alors que des lignes 
 });
 
 it('met la sonde purge en alerte quand un périmètre n\'a aucune exécution terminée dans la fenêtre', function (): void {
-    // Aucun périmètre implémenté ni gestionnaire : rien à surveiller.
-    expect(PurgeScope::implemented())->not->toContain(PurgeScope::StaleLobby);
-    probeEndpointRequest(OpsProbe::Purge->value)->assertOk();
+    expect(PurgeScope::implemented())->not->toBeEmpty()
+        ->and(PurgeScope::implemented())->not->toContain(PurgeScope::StaleLobby);
 
-    probeEndpointPurgeHandler(PurgeScope::PurgeRun, eligible: 0);
-
-    // L'absence de ligne est une panne.
+    // Aucune exécution jamais écrite : l'absence de ligne est une panne.
     probeEndpointRequest(OpsProbe::Purge->value)->assertStatus(503);
 
-    // Une ligne en cours ou plantée n'en tient pas lieu.
+    // Tous les autres périmètres viennent de tourner ; `purge_run` n'a
+    // qu'une ligne en cours et une ligne plantée, qui n'en tiennent pas lieu.
+    foreach (PurgeScope::implemented() as $scope) {
+        if ($scope !== PurgeScope::PurgeRun) {
+            probeEndpointPurgeRun($scope, hoursAgo: 1, rowsDeleted: 0);
+        }
+    }
+
     probeEndpointPurgeRun(PurgeScope::PurgeRun, hoursAgo: 1, rowsDeleted: 0, status: PurgeRunStatus::Running);
     probeEndpointPurgeRun(PurgeScope::PurgeRun, hoursAgo: 2, rowsDeleted: 0, status: PurgeRunStatus::Failed);
     probeEndpointRequest(OpsProbe::Purge->value)->assertStatus(503);
@@ -522,8 +525,57 @@ it('met la sonde purge en alerte quand un périmètre n\'a aucune exécution ter
     probeEndpointRequest(OpsProbe::Purge->value)->assertOk();
 
     // Deux gestionnaires pour un même périmètre : en alerte.
-    probeEndpointPurgeHandler(PurgeScope::PurgeRun, eligible: 0);
+    probeEndpointPurgeHandler(PurgeScope::PurgeRun, eligible: 0, alongside: true);
     probeEndpointRequest(OpsProbe::Purge->value)->assertStatus(503);
+});
+
+it('met la sonde purge en alerte pour un gestionnaire dont le périmètre n\'est jamais exécuté', function (): void {
+    probeEndpointFreshPurge();
+    probeEndpointRequest(OpsProbe::Purge->value)->assertOk();
+
+    // Un gestionnaire étiqueté hors de `PurgeScope::implemented()` : le
+    // moteur ne l'exécute jamais, donc son périmètre n'a aucune exécution.
+    probeEndpointPurgeHandler(PurgeScope::Report, eligible: 0, alongside: true);
+    probeEndpointRequest(OpsProbe::Purge->value)->assertStatus(503);
+});
+
+it('met la sonde purge en alerte quand une ligne échoue chaque nuit alors que d\'autres sont supprimées', function (): void {
+    $scope = PurgeScope::FrameworkResetTokens;
+
+    // Une ligne qui échoue à chaque nuit, et chaque nuit une voisine échue
+    // que la purge supprime : le périmètre avance, mais pas pour elle.
+    RetentionRows::resetToken('seed-stuck@example.com', RetentionRows::cutoff($scope, CarbonImmutable::now())->subDays(3));
+    FailingPurgeHandler::wrap($scope, ['seed-stuck@example.com']);
+
+    foreach (['seed-night-1@example.com', 'seed-night-2@example.com'] as $night => $neighbour) {
+        if ($night > 0) {
+            $this->travel(1)->days();
+        }
+
+        RetentionRows::resetToken($neighbour, RetentionRows::cutoff($scope, CarbonImmutable::now())->subMinutes(10));
+        probeEndpointFreshPurge();
+
+        probeEndpointRequest(OpsProbe::Purge->value)->assertStatus(503);
+    }
+
+    // Chaque exécution de la fenêtre a supprimé une ligne : la sonde n° 4
+    // seule resterait verte.
+    $runs = PurgeRun::query()->where('scope', $scope->value)->orderBy('started_at')->get();
+
+    expect($runs)->toHaveCount(2)
+        ->and($runs->every(static fn (PurgeRun $run): bool => $run->status === PurgeRunStatus::Completed
+            && $run->rows_deleted === 1
+            && $run->error !== null))->toBeTrue()
+        ->and(DB::table('password_reset_tokens')->pluck('email')->all())->toBe(['seed-stuck@example.com']);
+
+    // La cause levée, la nuit suivante emporte la ligne et `error` redevient
+    // nul : un échec passager n'alerte que jusqu'à l'exécution suivante.
+    app()->forgetInstance(FrameworkResetTokensHandler::class);
+    $this->travel(1)->days();
+    probeEndpointFreshPurge();
+
+    expect(DB::table('password_reset_tokens')->count())->toBe(0);
+    probeEndpointRequest(OpsProbe::Purge->value)->assertOk();
 });
 
 it('compare la charge moyenne au nombre de vCPU et la mémoire disponible à son plancher', function (): void {

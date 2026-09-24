@@ -11,6 +11,8 @@ use App\Support\I18n\NullPlayerTokenLocale;
 use App\Support\I18n\PlayerTokenLocale;
 use App\Support\I18n\TranslationDomains;
 use App\Support\Ops\SystemLoad;
+use App\Support\Retention\PurgeHandler;
+use App\Support\Retention\PurgeHandlers;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Events\DiagnosingHealth;
 use Illuminate\Foundation\Events\LocaleUpdated;
@@ -105,10 +107,16 @@ class AppServiceProvider extends ServiceProvider
      * Les mesures de la machine lues par la sonde `load` (spec 100 § 15) : les
      * sources réelles, que les tests remplacent par une instance aux sources
      * injectées. `bind` et non `singleton` : chaque sonde relit la machine.
+     *
+     * Les gestionnaires de purge (spec 100 § 14) sont étiquetés sous
+     * {@see PurgeHandler}, liste déclarée dans {@see PurgeHandlers::CLASSES} :
+     * le moteur et la sonde `purge` les lisent par la même étiquette.
      */
     protected function registerOperations(): void
     {
         $this->app->bind(SystemLoad::class, static fn (): SystemLoad => SystemLoad::fromHost());
+
+        $this->app->tag(PurgeHandlers::CLASSES, PurgeHandler::class);
     }
 
     /**

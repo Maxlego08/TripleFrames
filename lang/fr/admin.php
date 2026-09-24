@@ -891,6 +891,21 @@ return [
         'reproject' => [
             'done' => 'Reprojection terminée. Films reprojetés par différence : :movies.',
         ],
+
+        /*
+        | Purge de rétention (spec 100 § 14). `:scopes` de `failed` liste les
+        | identifiants des périmètres tels que `purge_run` les écrit.
+        */
+        'purge' => [
+            'done' => 'Purge de rétention exécutée. Périmètres : :scopes. Lignes traitées : :rows.',
+            'queued' => 'Purge de rétention déposée sur la file default : un worker l’exécutera.',
+            'already_queued' => 'Une purge de rétention tient déjà le verrou d’unicité du job (en file, en cours, ou sur un worker arrêté avant la fin de ce verrou) : aucune nouvelle purge déposée.',
+            'failed' => 'Périmètres en échec ou avec des lignes en échec : :scopes. Détail dans purge_run et le journal de l’application ; ne rouvrez pas le trafic après une restauration tant que cette commande n’a pas réussi.',
+            'suspended' => 'Purge de rétention suspendue : aucun périmètre ne s’exécute jusqu’à purge:resume, et la sonde purge reste en alerte.',
+            'resumed' => 'Suspension levée : la purge repart à sa prochaine exécution.',
+            'already_suspended' => 'La purge de rétention est déjà suspendue : rien n’a été modifié.',
+            'not_suspended' => 'La purge de rétention n’est pas suspendue : rien n’a été modifié.',
+        ],
     ],
 
     /*

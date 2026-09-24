@@ -6,8 +6,9 @@ use App\Enums\PurgeRunStatus;
 use App\Enums\PurgeScope;
 use App\Models\PurgeRun;
 use App\Support\Retention\PurgeHandler;
+use App\Support\Retention\PurgeHandlers;
+use App\Support\Retention\PurgeSuspension;
 use Carbon\CarbonImmutable;
-use Illuminate\Contracts\Container\Container;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Config;
 
@@ -25,21 +26,33 @@ use Illuminate\Support\Facades\Config;
  *    tourne chaque nuit sans rien supprimer — la panne typique d'un lot qui
  *    bute sur un `restrict`. L'éligibilité se lit au début de la dernière
  *    exécution terminée ({@see PurgeHandler::eligibleCount()}) : ce que cette
- *    exécution aurait dû supprimer et qui existe encore.
+ *    exécution aurait dû supprimer et qui existe encore ;
+ * 3. **périmètre bloqué en partie** : la dernière exécution terminée a des
+ *    lignes en échec (`error` non nul) et des lignes éligibles à son début
+ *    existent encore — même si d'autres ont été supprimées. Sans cette
+ *    règle, une ligne qui échoue chaque nuit pendant que ses voisines
+ *    partent survivrait à sa durée de conservation sans aucune alerte : la
+ *    sonde n° 4 ne voit que le périmètre bloqué EN ENTIER. Un échec
+ *    passager s'efface à la nuit suivante, quand `error` redevient nul.
  *
  * Périmètres surveillés : ceux de `PurgeScope::implemented()` ET ceux des
- * gestionnaires étiquetés {@see PurgeHandler} dans le conteneur. Un périmètre
- * sans gestionnaire, ou servi par deux, est en alerte.
+ * gestionnaires étiquetés {@see PurgeHandler} ({@see PurgeHandlers}). Un
+ * périmètre sans gestionnaire, ou servi par deux, est en alerte.
  *
- * **Premier temps de L100-7** (D37 du 23/09) : ni la vérification
- * `stale_lobby` (ligne écrite par le balayage de 50, branchée avec L50-8 —
- * elle serait sinon en alerte permanente), ni le drapeau de suspension de
- * `purge:suspend` (L100-8). Tant qu'aucun périmètre n'est implémenté, la
- * sonde n'a rien à surveiller.
+ * **Suspension** (`purge:suspend`, {@see PurgeSuspension}) : tant que le
+ * drapeau existe, la sonde est en alerte — l'interrupteur d'incident
+ * déclenche l'alerte au lieu de la masquer (spec 100 § 14).
+ *
+ * **Pas encore de vérification `stale_lobby`** (D37 du 23/09) : sa ligne est
+ * écrite par le balayage de 50, et la vérification est branchée avec L50-8 —
+ * elle serait sinon en alerte permanente.
  */
 final readonly class PurgeProbe
 {
-    public function __construct(private Container $container) {}
+    public function __construct(
+        private PurgeHandlers $handlers,
+        private PurgeSuspension $suspension,
+    ) {}
 
     /**
      * Motifs d'alerte, vides si la purge est saine à l'instant `$now`.
@@ -53,18 +66,16 @@ final readonly class PurgeProbe
         $failures = [];
         $handlers = [];
 
-        foreach ($this->container->tagged(PurgeHandler::class) as $handler) {
-            if (! $handler instanceof PurgeHandler) {
-                continue;
-            }
+        if ($this->suspension->isSuspended()) {
+            $failures[] = 'purge suspendue';
+        }
 
-            $scope = $handler->scope()->value;
-
-            if (array_key_exists($scope, $handlers)) {
+        foreach ($this->handlers->byScope() as $scope => $served) {
+            if (count($served) > 1) {
                 $failures[] = "{$scope} : servi par plusieurs gestionnaires";
             }
 
-            $handlers[$scope] = $handler;
+            $handlers[$scope] = $served[0];
         }
 
         $watched = array_unique([
@@ -89,12 +100,17 @@ final readonly class PurgeProbe
                 continue;
             }
 
-            if ($this->completedRuns($scope, $since)->where('rows_deleted', '>', 0)->exists()) {
+            $advanced = $this->completedRuns($scope, $since)->where('rows_deleted', '>', 0)->exists();
+
+            // Une exécution terminée n'écrit `error` que pour ses lignes en échec.
+            if ($advanced && $lastCompleted->error === null) {
                 continue;
             }
 
             if ($handler->eligibleCount($lastCompleted->started_at) > 0) {
-                $failures[] = "{$scope} : rien supprimé en {$staleHours} h alors que des lignes sont éligibles";
+                $failures[] = $advanced
+                    ? "{$scope} : lignes en échec à la dernière exécution alors que des lignes restent éligibles"
+                    : "{$scope} : rien supprimé en {$staleHours} h alors que des lignes sont éligibles";
             }
         }
 

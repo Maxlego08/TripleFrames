@@ -1,6 +1,7 @@
 <?php
 
 use App\Jobs\Ops\WorkerHeartbeat;
+use App\Jobs\Retention\RunRetentionPurge;
 use App\Support\Ops\Heartbeat;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
@@ -29,6 +30,13 @@ Artisan::command('inspire', function () {
 // il est surveillé par la même mesure (§ 10.7).
 Schedule::job(new WorkerHeartbeat(Heartbeat::GAME))->everyThirtySeconds();
 Schedule::job(new WorkerHeartbeat(Heartbeat::DEFAULT))->everyMinute();
+
+// Purge de rétention (§ 14) : chaque jour, sur la file `default`, jamais
+// `game` (la file est posée par le job). Avant l'élagage des instantanés et
+// le tier chaud, pour qu'une sauvegarde ne capture jamais ce qui aurait dû
+// être purgé la veille.
+Schedule::job(new RunRetentionPurge)
+    ->dailyAt(Config::string('ops.purge.daily_at'));
 
 // Élagage des instantanés de la règle 12 (§ 13.1) : après la purge de
 // rétention, avant le tier chaud.

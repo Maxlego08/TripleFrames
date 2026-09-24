@@ -8,6 +8,7 @@ use App\Models\Game;
 use App\Models\Room;
 use App\Settings\PlatformLimits;
 use App\Support\Frames\FrameProbes;
+use App\Support\Retention\RetentionWindows;
 use Carbon\CarbonImmutable;
 
 /**
@@ -16,7 +17,9 @@ use Carbon\CarbonImmutable;
  *
  * - Sondes SQL 1 à 3 de 10 § 11.3 : partie jamais clôturée, salon jamais
  *   archivé, frame retirée dont les fichiers n'ont pas été supprimés. Elles
- *   sont écrites ici, sur les colonnes pilotes indexées que 10 leur donne.
+ *   sont écrites ici, sur les colonnes pilotes indexées que 10 leur donne ;
+ *   la n° 2 lit la fenêtre du filet `stale_room` dans `RetentionWindows`,
+ *   source unique des durées de conservation (spec 100 § 14).
  * - Les quatre sondes de frame de 20 § 5.9 (E10-18, E10-19, A16), dont 20
  *   écrit les tests : elles sont APPELÉES dans {@see FrameProbes}, jamais
  *   recopiées, pour qu'une seule copie de chaque requête existe. La requête
@@ -32,9 +35,6 @@ final class IntegrityProbe
 {
     /** Sonde n° 1 de 10 § 11.3 : une partie sans `ended_at` depuis 24 h. */
     public const int UNFINISHED_GAME_HOURS = 24;
-
-    /** Sonde n° 2 de 10 § 11.3 : un salon sans `archived_at` inactif depuis 48 h. */
-    public const int UNARCHIVED_ROOM_HOURS = 48;
 
     /**
      * Le compte de chaque requête, par nom.
@@ -52,7 +52,7 @@ final class IntegrityProbe
                 ->count(),
             'unarchived_room' => Room::query()
                 ->whereNull('archived_at')
-                ->where('last_activity_at', '<', $now->subHours(self::UNARCHIVED_ROOM_HOURS))
+                ->where('last_activity_at', '<', $now->subHours(RetentionWindows::STALE_ROOM_HOURS))
                 ->count(),
             'withdrawn_files' => Frame::query()
                 ->where('availability', ContentAvailability::Withdrawn->value)
