@@ -130,14 +130,25 @@ class FortifyServiceProvider extends ServiceProvider
             return Limit::perMinute(12)->by((string) $request->user()?->getAuthIdentifier());
         });
 
-        // Les gestes d'image du back-office (spec 20 § 5.3 et § 13.7, C9 § 2) :
-        // ajout d'une variante, puis re-recadrage et relance au lot L20-8.
-        // Chacun télécharge un original TMDB ou distribue un job Imagick ; le
+        // Les gestes d'image du back-office (spec 20 § 5.3, § 5.7 et § 13.7,
+        // C9 § 2) : ajout d'une variante, re-recadrage et relance. Chacun
+        // télécharge un original TMDB ou distribue un job Imagick ; le
         // limiteur borne le double clic et la rafale, jamais le débit d'un
         // curateur. Par UTILISATEUR, comme `admin-import`, et sa valeur vit
         // dans `catalog.curation.rate_limits.frame`, jamais en littéral.
         RateLimiter::for('admin-frame', function (Request $request) {
             return Limit::perMinute(Config::integer('catalog.curation.rate_limits.frame'))
+                ->by((string) $request->user()?->getAuthIdentifier());
+        });
+
+        // Les gestes de curation qui n'écrivent qu'en base (spec 20 § 13.7) :
+        // changer le niveau d'une image, la dépublier ou l'écarter, et, aux
+        // lots suivants, revoir une image, publier ou dépublier un film. Plus
+        // large qu'`admin-frame` — aucun ne télécharge ni ne distribue de job
+        // Imagick —, au-dessus du débit de « Entrée = conforme, publier ». Par
+        // utilisateur ; valeur dans `catalog.curation.rate_limits.curation`.
+        RateLimiter::for('admin-curation', function (Request $request) {
+            return Limit::perMinute(Config::integer('catalog.curation.rate_limits.curation'))
                 ->by((string) $request->user()?->getAuthIdentifier());
         });
 

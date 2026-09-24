@@ -66,6 +66,7 @@ it('les bornes croisées de la configuration de curation tiennent', function ():
 
     // Limiteurs par utilisateur des gestes du back-office.
     expect($int('rate_limits.frame'))->toBeGreaterThanOrEqual(1);
+    expect($int('rate_limits.curation'))->toBeGreaterThanOrEqual(1);
 
     // La voie capture est fermée par défaut, et c'est la SEULE clé du bloc
     // lue de l'environnement.

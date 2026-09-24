@@ -172,6 +172,55 @@ function adminRoutesMatrix(): array
             parameters: fn (): array => ['movie' => Movie::factory()->create()->getKey()],
         ),
 
+        // Ligne 15 — re-recadrer et relancer (C9) : `FramePolicy::update`,
+        // sans condition d'état. Une image publiée recadrée sort du jeu ; le
+        // job ne part pas (`Bus::fake()`), le 302 est le geste lui-même.
+        'admin.catalog.frames.crop.update' => adminRoutesRow(
+            row: 15,
+            method: 'PATCH',
+            guards: ['can:update,frame'],
+            curator: 302,
+            admin: 302,
+            parameters: fn (): array => adminRoutesFrameGestureParameters(published: true),
+            payload: fn (): array => adminRoutesRecropPayload(),
+            redirect: fn (array $parameters): string => route('admin.catalog.show', ['movie' => $parameters['movie']]),
+        ),
+
+        'admin.catalog.frames.retry' => adminRoutesRow(
+            row: 15,
+            method: 'POST',
+            guards: ['can:update,frame'],
+            curator: 302,
+            admin: 302,
+            parameters: fn (): array => adminRoutesFrameGestureParameters(published: false, failed: true),
+            redirect: fn (array $parameters): string => route('admin.catalog.show', ['movie' => $parameters['movie']]),
+        ),
+
+        // Ligne 16 — changer le niveau d'une image publiée : elle repasse en
+        // revue.
+        'admin.catalog.frames.level.update' => adminRoutesRow(
+            row: 16,
+            method: 'PATCH',
+            guards: ['can:update,frame'],
+            curator: 302,
+            admin: 302,
+            parameters: fn (): array => adminRoutesFrameGestureParameters(published: true),
+            payload: fn (): array => ['frame_level' => FrameLevel::Level4->value],
+            redirect: fn (array $parameters): string => route('admin.catalog.show', ['movie' => $parameters['movie']]),
+        ),
+
+        // Ligne 18 — dépublier une image publiée (ou écarter un brouillon).
+        'admin.catalog.frames.unpublish' => adminRoutesRow(
+            row: 18,
+            method: 'POST',
+            guards: ['can:unpublish,frame'],
+            curator: 302,
+            admin: 302,
+            parameters: fn (): array => adminRoutesFrameGestureParameters(published: true),
+            payload: fn (): array => ['reason' => 'Motif de la matrice.'],
+            redirect: fn (array $parameters): string => route('admin.catalog.show', ['movie' => $parameters['movie']]),
+        ),
+
         // Ligne 7 — l'écran d'import et le détail d'un balayage.
         'admin.import.index' => adminRoutesRow(
             row: 7,
@@ -240,6 +289,49 @@ function adminRoutesFrameParameters(): array
     $frame = Frame::factory()->for($movie)->withFiles()->create();
 
     return ['movie' => $movie->id, 'frame' => $frame->id];
+}
+
+/**
+ * Un film et l'une de ses images, pour les gestes sur une image existante :
+ * publiée (dérivé, master et revue passante), ou en échec REJOUABLE (octets
+ * gardés sous `master_path`). L'envoi est posté depuis la fiche du film, où
+ * le retour arrière mène.
+ *
+ * @return array{movie: int, frame: int}
+ */
+function adminRoutesFrameGestureParameters(bool $published, bool $failed = false): array
+{
+    $movie = Movie::factory()->create();
+    $factory = Frame::factory()->for($movie)->level(FrameLevel::Level3);
+
+    $frame = match (true) {
+        $failed => $factory->processingFailed()->create(),
+        $published => $factory->published()->create(),
+        default => $factory->withFiles()->create(),
+    };
+
+    test()->from(route('admin.catalog.show', ['movie' => $movie->id]));
+
+    return ['movie' => $movie->id, 'frame' => $frame->id];
+}
+
+/**
+ * Un nouveau cadre conforme sur le master de fixture (1920 × 1080) : le cadre
+ * par défaut, décalé d'un pas vers le coin haut gauche.
+ *
+ * @return array<string, int|string>
+ */
+function adminRoutesRecropPayload(): array
+{
+    $crop = FrameGeometry::defaultCrop(FrameGeometry::masterHeightFor(1920, 1080), PlatformLimits::current());
+
+    return [
+        'crop_x' => $crop->x - FrameGeometry::ASPECT_WIDTH,
+        'crop_y' => $crop->y - FrameGeometry::ASPECT_HEIGHT,
+        'crop_width' => $crop->width,
+        'crop_height' => $crop->height,
+        'reason' => 'Motif de la matrice.',
+    ];
 }
 
 /**

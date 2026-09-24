@@ -3,8 +3,12 @@
 use App\Http\Controllers\Admin\CatalogController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\FrameCaptureController;
+use App\Http\Controllers\Admin\FrameCropController;
 use App\Http\Controllers\Admin\FrameImageController;
+use App\Http\Controllers\Admin\FrameLevelController;
+use App\Http\Controllers\Admin\FrameRetryController;
 use App\Http\Controllers\Admin\FrameTmdbController;
+use App\Http\Controllers\Admin\FrameUnpublishController;
 use App\Http\Controllers\Admin\ImportController;
 use App\Http\Controllers\Admin\ImportDiscoverController;
 use App\Http\Controllers\Admin\ImportIdsController;
@@ -65,8 +69,11 @@ use Illuminate\Support\Facades\Route;
 | `can:` autre que celle que la ligne écrit.
 |
 | Les trois routes d'écriture de l'import portent en plus
-| `throttle:admin-import`, et les écritures d'image `throttle:admin-frame`
-| (C9 § 2) : limiteurs nommés déclarés dans
+| `throttle:admin-import` ; les écritures d'image qui téléchargent un original
+| ou distribuent un job Imagick — ajout, re-recadrage, relance —
+| `throttle:admin-frame` (C9 § 2) ; les gestes de curation qui n'écrivent
+| qu'en base — changer un niveau, dépublier ou écarter une image —
+| `throttle:admin-curation` (§ 13.7). Limiteurs nommés déclarés dans
 | `FortifyServiceProvider::configureRateLimiting()`, là où vivent déjà
 | `login`, `two-factor` et `passkeys`.
 |
@@ -131,6 +138,33 @@ Route::middleware(['auth', 'verified', 'role:curator', 'admin.2fa', 'admin.local
             Route::post('catalog/{movie}/frames/capture', [FrameCaptureController::class, 'store'])
                 ->middleware(['can:createFromCapture,'.Frame::class.',movie', 'throttle:admin-frame'])
                 ->name('catalog.frames.capture.store');
+
+            // Re-recadrer, en place, et relancer un traitement (C9, § 5.6,
+            // § 5.7, ligne 15). `FramePolicy::update` n'a AUCUNE condition
+            // d'état : une image en traitement, sans rendu, suspendue ou
+            // retirée se refuse par une erreur traduite, jamais par un 403.
+            // Même limiteur que l'ajout : chacun distribue un job Imagick.
+            Route::patch('catalog/{movie}/frames/{frame}/crop', [FrameCropController::class, 'update'])
+                ->middleware(['can:update,frame', 'throttle:admin-frame'])
+                ->name('catalog.frames.crop.update');
+
+            Route::post('catalog/{movie}/frames/{frame}/retry', [FrameRetryController::class, 'store'])
+                ->middleware(['can:update,frame', 'throttle:admin-frame'])
+                ->name('catalog.frames.retry');
+
+            // Changer le niveau d'une image (§ 5.7, ligne 16) : une image
+            // publiée sort du jeu et repasse en revue.
+            Route::patch('catalog/{movie}/frames/{frame}/level', [FrameLevelController::class, 'update'])
+                ->middleware(['can:update,frame', 'throttle:admin-curation'])
+                ->name('catalog.frames.level.update');
+
+            // Dépublier une image publiée, ou écarter une image jamais publiée
+            // (§ 8.4, ligne 18). La garde, elle, porte l'état : `draft` ou
+            // `published` seulement — suspendre et retirer appartiennent à
+            // l'administrateur.
+            Route::post('catalog/{movie}/frames/{frame}/unpublish', [FrameUnpublishController::class, 'store'])
+                ->middleware(['can:unpublish,frame', 'throttle:admin-curation'])
+                ->name('catalog.frames.unpublish');
         });
 
         Route::get('import', [ImportController::class, 'index'])

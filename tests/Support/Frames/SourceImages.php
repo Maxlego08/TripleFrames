@@ -118,6 +118,20 @@ final class SourceImages
     }
 
     /**
+     * Un WebP statique en dégradé, sans métadonnée : la forme d'un master déjà
+     * normalisé quand `$width` vaut `FrameGeometry::MASTER_WIDTH`.
+     */
+    public static function webp(int $width, int $height): string
+    {
+        $image = new Imagick;
+        $image->newPseudoImage($width, $height, 'gradient:navy-orange');
+        $image->setImageFormat('webp');
+        $image->stripImage();
+
+        return self::blob($image);
+    }
+
+    /**
      * Un GIF : format hors de la liste admise.
      */
     public static function gif(int $width, int $height): string

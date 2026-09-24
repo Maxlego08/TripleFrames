@@ -648,14 +648,62 @@ return [
         ],
 
         /*
-        | Toasts de succès : l’image part en traitement et le curateur continue
-        | sans l’attendre. `recrop_queued` et `retry_queued` servent le
-        | re-recadrage et la relance (lot L20-8).
+        | Re-recadrer une image, en place (spec 20 § 5.7). Les trois refus
+        | d’état sont des erreurs traduites, jamais des pages 403 : `busy` et
+        | `locked` servent aussi « Relancer ». `default_reason` pré-remplit le
+        | motif de la sortie du jeu d’une image publiée recadrée.
+        */
+        'recrop' => [
+            'busy' => 'Cette image est en cours de traitement : attendez qu’il se termine, puis refaites votre geste.',
+            'not_ready' => 'Cette image n’a pas encore de rendu à recadrer : relancez son traitement s’il a échoué, sinon écartez-la et ajoutez de nouveau son visuel.',
+            'locked' => 'Cette image est suspendue ou retirée par un administrateur : elle ne peut plus être recadrée ni retraitée.',
+            'default_reason' => 'Image re-recadrée : elle sort du jeu jusqu’à une revue de son nouveau rendu.',
+        ],
+
+        /*
+        | Relancer un traitement (spec 20 § 5.6) : offert au seul échec
+        | rejouable.
+        */
+        'retry' => [
+            'not_retryable' => 'Ce traitement ne peut pas être relancé tel quel : recommencer donnerait le même échec. Re-recadrez l’image si elle a déjà un rendu, sinon écartez-la.',
+        ],
+
+        /*
+        | Changer le niveau d’une image (spec 20 § 5.7). `default_reason` est
+        | le motif ÉCRIT PAR LE SERVEUR quand une image publiée sort du jeu :
+        | il est stocké tel quel au journal, en texte, jamais en clé (§ 2.7).
+        */
+        'level' => [
+            'locked' => 'Cette image est suspendue ou retirée par un administrateur : son niveau ne peut plus être changé.',
+            'default_reason' => 'Niveau de l’image changé : elle sort du jeu jusqu’à une nouvelle revue, les points de la grille dépendant du niveau.',
+        ],
+
+        /*
+        | Avertissement de couverture, avant confirmation d’un geste qui fait
+        | sortir du jeu la seule variante d’un niveau 1, 3 ou 5 d’un film
+        | publié (spec 20 § 8.4) : le geste reste permis, le film reste publié.
+        | `:max` est le plus grand nombre d’images par manche encore jouable.
+        | `coverage_warning_unplayable` sert aussi un film DÉJÀ incomplet que
+        | le geste rend injouable : son texte reste vrai dans les deux cas.
+        */
+        'unpublish' => [
+            'coverage_warning' => 'Ce film deviendra incomplet : il restera jouable jusqu’à N = :max, avec repli de niveau.',
+            'coverage_warning_unplayable' => 'Ce film ne sera plus jouable à aucun nombre d’images par manche : il reste publié, mais n’entrera dans aucun tirage tant que de nouvelles images ne seront pas publiées.',
+        ],
+
+        /*
+        | Toasts de succès. Un traitement part en file et le curateur continue
+        | sans l’attendre ; un changement de niveau ou une dépublication
+        | s’écrivent sur-le-champ.
         */
         'flash' => [
             'queued' => 'Image ajoutée : elle est en traitement et apparaîtra dans la banque du film dès qu’elle sera prête.',
             'recrop_queued' => 'Nouveau cadre enregistré : l’image est en traitement et reviendra en revue dès qu’elle sera prête.',
             'retry_queued' => 'Traitement relancé : l’image apparaîtra dans la banque du film dès qu’elle sera prête.',
+            'level_changed' => 'Niveau de l’image enregistré.',
+            'level_changed_review' => 'Niveau de l’image enregistré : elle sort du jeu et repasse en revue.',
+            'unpublished' => 'Image dépubliée : elle sort du jeu, et une revue pourra l’y remettre.',
+            'set_aside' => 'Image écartée : elle ne sera pas proposée en revue. Pour réutiliser son visuel, ajoutez une nouvelle variante.',
         ],
     ],
 
@@ -831,6 +879,7 @@ return [
         'frame_level' => 'niveau',
         'crop_rect' => 'cadre',
         'crop_seconds' => 'temps de recadrage',
+        'reason' => 'motif',
         'frame_source' => [
             'dimensions' => 'Ce visuel est en portrait, fait moins de :width pixels de large, ou ne laisse place à aucun cadre admis : il ne peut pas donner une image de jeu. Choisissez un autre visuel du film.',
         ],

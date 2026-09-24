@@ -130,10 +130,15 @@ return [
     |   job. `width_px` / `height_px` refusent une source absurde avant
     |   décodage ; `area_mpx` laisse un original 4K (8,3 Mpx) en mémoire.
     | - `rate_limits.frame` : limiteur `admin-frame`, par utilisateur et par
-    |   minute, posé sur l'ajout d'une image (puis, au lot L20-8, sur le
-    |   re-recadrage et la relance) : chaque geste télécharge un original ou
-    |   distribue un job Imagick, et un double clic ne doit pas en lancer deux
-    |   rafales (§ 13.7, C9 § 2). Au moins 1.
+    |   minute, posé sur l'ajout d'une image, le re-recadrage et la relance :
+    |   chaque geste télécharge un original ou distribue un job Imagick, et un
+    |   double clic ne doit pas en lancer deux rafales (§ 13.7, C9 § 2).
+    |   Au moins 1.
+    | - `rate_limits.curation` : limiteur `admin-curation`, par utilisateur et
+    |   par minute, posé sur les gestes de curation qui n'écrivent qu'en base —
+    |   changer le niveau d'une image, la dépublier ou l'écarter, puis (lots
+    |   suivants) revoir, publier, dépublier un film. Au-dessus du débit de
+    |   « Entrée = conforme, publier » (§ 13.7). Au moins 1.
     |
     */
 
@@ -160,6 +165,7 @@ return [
 
         'rate_limits' => [
             'frame' => 30,
+            'curation' => 60,
         ],
     ],
 

@@ -6,6 +6,7 @@ use App\Enums\ContentAvailability;
 use App\Enums\FrameProcessingFailure;
 use App\Enums\FrameProcessingState;
 use App\Models\Frame;
+use App\Models\Movie;
 use App\Settings\PlatformLimits;
 use App\Support\Catalog\MovieProjector;
 use finfo;
@@ -42,8 +43,8 @@ use Throwable;
  *    descendante jusqu'à passer sous `FrameGeometry::gameEncodeCeilingBytes()`,
  *    puis {@see WebpPadding::pad()}.
  * 5. Écriture sous un **nouveau** nom, bascule dans UNE transaction sous
- *    `lockForUpdate` avec `MovieProjector::recompute`, suppression de
- *    l'ancien dérivé **après** le commit.
+ *    `lockForUpdate` (le film, puis la frame) avec `MovieProjector::recompute`,
+ *    suppression de l'ancien dérivé **après** le commit.
  *
  * Un échec connu lève {@see FrameProcessingException}, porteuse de la clé
  * {@see FrameProcessingFailure} que le job écrit ; toute autre panne remonte
@@ -435,9 +436,15 @@ final class FrameImageProcessor
 
         try {
             DB::transaction(function () use ($frame, $game, $newPath, &$refusal, &$oldPath): void {
+                // Le film d'abord, puis la frame : l'ordre d'AddFrame et des
+                // gestes sur une image (L20-8). Un geste concurrent sur une
+                // autre image du film a donc commité avant que le recalcul de
+                // la projection ne lise ses frames, et ne l'écrase jamais
+                // d'un état périmé.
+                $movie = Movie::query()->whereKey($frame->movie_id)->lockForUpdate()->first();
                 $locked = Frame::query()->lockForUpdate()->find($frame->id);
 
-                if ($locked === null) {
+                if ($movie === null || $locked === null) {
                     $refusal = FrameProcessingFailure::Unexpected;
 
                     return;
@@ -468,7 +475,7 @@ final class FrameImageProcessor
                     'processing_error' => null,
                 ])->save();
 
-                $this->projector->recompute($locked->movie);
+                $this->projector->recompute($movie);
             });
         } catch (Throwable $exception) {
             self::deleteQuietly($disk, $newPath);
