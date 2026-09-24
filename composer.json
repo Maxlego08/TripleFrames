@@ -42,8 +42,9 @@
     },
     "scripts": {
         "setup": [
-            "composer install",
             "@php -r \"file_exists('.env') || copy('.env.example', '.env');\"",
+            "@php -r \"file_put_contents('.env', preg_replace('/^REVERB_APP_SECRET=[ \\t]*(?=\\r?$)/m', 'REVERB_APP_SECRET='.bin2hex(random_bytes(16)), (string) file_get_contents('.env'), 1));\"",
+            "composer install",
             "@php artisan key:generate",
             "@php artisan tinker --execute=\"File::ensureDirectoryExists(config('filesystems.disks.frames.root')); if (! is_dir((string) config('filesystems.disks.frames.root')) || ! is_writable((string) config('filesystems.disks.frames.root'))) { throw new RuntimeException('FRAMES_DISK_ROOT introuvable ou non inscriptible : ['.config('filesystems.disks.frames.root').'].'); }\"",
             "@php artisan migrate --force",
@@ -52,7 +53,7 @@
         ],
         "dev": [
             "Composer\\Config::disableProcessTimeout",
-            "npx concurrently -c \"#93c5fd,#c4b5fd,#fdba74\" \"php artisan serve\" \"php artisan queue:listen --tries=1 --timeout=900\" \"npm run dev\" --names='server,queue,vite'"
+            "npx concurrently -c \"#93c5fd,#c4b5fd,#86efac,#fdba74\" \"php artisan serve\" \"php artisan queue:listen --queue=game,default --tries=1 --sleep=1 --timeout=900\" \"php artisan reverb:start\" \"npm run dev\" --names='server,queue,reverb,vite'"
         ],
         "lint": [
             "pint --parallel"
@@ -100,6 +101,8 @@
         ]
     },
     "scripts-descriptions": {
+        "setup": "Poste neuf : .env copié de .env.example AVANT les dépendances (package:discover démarre l'application, qui sans APP_ENV se croit en production), REVERB_APP_SECRET né sur la machine, clé d'application, racine frames, migrations, build.",
+        "dev": "Serveur, écouteur des files game puis default sur la connexion par défaut (Redis joignable requis), Reverb et Vite (spec 100 § 2.4).",
         "test": "Suite par défaut (SQLite) : Pint, PHPStan, puis Pest sans les groupes mysql et locks-timing.",
         "test:mysql": "Groupes mysql et locks-timing contre une base MySQL de TEST : exporter DB_CONNECTION=mysql et DB_DATABASE=<base de test> (jamais la base de développement, que RefreshDatabase viderait)."
     },

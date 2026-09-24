@@ -56,6 +56,26 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Indexation par les moteurs de recherche
+    |--------------------------------------------------------------------------
+    |
+    | Spec 100 § 12. Seule lecture de `SITE_INDEXABLE` du dépôt : tout autre
+    | code lit `config('app.indexable')`. Absente ou fausse, toute réponse
+    | porte `X-Robots-Tag: noindex, nofollow` (middleware de la spec 90) ;
+    | vraie, seules les routes marquées indexables en sont dispensées. Au
+    | jalon 1, elle est fausse en production. Sa levée est une variable
+    | d'environnement de production, jamais une valeur du dépôt.
+    |
+    | La conversion échoue fermée : « false », « 0 », « off », « no », le vide
+    | et toute valeur inconnue donnent `false`. Un simple transtypage `(bool)`
+    | lirait « off » ou « no » comme vrai et lèverait le noindex par accident.
+    |
+    */
+
+    'indexable' => filter_var(env('SITE_INDEXABLE', false), FILTER_VALIDATE_BOOLEAN),
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Timezone
     |--------------------------------------------------------------------------
     |

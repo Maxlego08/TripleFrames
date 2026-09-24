@@ -66,6 +66,8 @@
         <server name="AWS_SECRET_ACCESS_KEY" value=""/>
         <env name="REVERB_APP_SECRET" value="" force="true"/>
         <server name="REVERB_APP_SECRET" value=""/>
+        <env name="OPS_PROBE_TOKEN" value="" force="true"/>
+        <server name="OPS_PROBE_TOKEN" value=""/>
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
         <env name="NIGHTWATCH_ENABLED" value="false"/>

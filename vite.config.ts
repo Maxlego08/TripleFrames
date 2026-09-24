@@ -71,6 +71,10 @@ export default defineConfig({
             'resources/js/components/ui/*',
             'resources/js/routes/**',
             'resources/js/wayfinder/**',
+            // Scénarios k6 du test de charge (spec 100 § 16.1) : joués depuis
+            // le poste, jamais en CI, et leurs modules `k6/*` ne se résolvent
+            // pas sous le lint à types.
+            'tests/Load/**',
         ],
         options: {
             denyWarnings: true,
