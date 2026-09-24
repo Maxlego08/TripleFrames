@@ -720,7 +720,7 @@ return [
     'cropper' => [
         'region_label' => 'Cadre de l’image de jeu',
         'image_alt' => 'Visuel du film à recadrer',
-        'instructions' => 'Au clavier, une fois le cadre sélectionné : les flèches le déplacent ; « + » ou « = » l’élargit, « - » le resserre ; avec Maj, chaque geste compte :steps pas ; Origine rétablit le cadre par défaut. À la souris, faites glisser l’intérieur du cadre, ou déplacez-le d’un pas avec les boutons fléchés.',
+        'instructions' => 'Au clavier, une fois le cadre sélectionné : les flèches le déplacent ; « + » ou « = » l’élargit, « - » le resserre ; avec Maj, chaque geste compte :steps pas ; Origine rétablit le cadre par défaut. À la souris, faites glisser l’intérieur du cadre pour le déplacer, ou l’un de ses coins pour le redimensionner ; une fois le cadre sélectionné, Ctrl + molette l’élargit vers le haut et le resserre vers le bas, et le pincement, au pavé tactile comme sur un écran tactile, suit l’écartement des doigts ; la molette seule fait défiler la page. Les boutons fléchés le déplacent d’un pas.',
         'dimensions' => 'Cadre de :width × :height pixels, soit :percent % de la surface du visuel.',
         'at_widest' => 'C’est le cadre le plus large que le plancher de recadrage admet.',
         'at_narrowest' => 'C’est le cadre le plus serré admis : l’image de jeu ne peut pas être davantage agrandie.',
