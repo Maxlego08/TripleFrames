@@ -14,9 +14,12 @@ Route::middleware(['auth', 'translations:account'])->group(function () {
     Route::patch('settings/profile', [ProfileController::class, 'update'])->name('profile.update');
 });
 
+// Ce groupe ne porte plus `profile.destroy` : aucune suppression de compte au
+// jalon 1 (spec 40 § 8.3). La suppression dure contredit 10 § 5.5 (suppression
+// = anonymisation), et le seul compte de production — l'administrateur, qui
+// signe toute la curation — tomberait en un clic. La route renaîtra au jalon 2
+// sur l'action d'anonymisation.
 Route::middleware(['auth', 'verified', 'translations:account'])->group(function () {
-    Route::delete('settings/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
-
     Route::get('settings/security', [SecurityController::class, 'edit'])
         ->middleware(RequirePassword::class)
         ->name('security.edit');
@@ -28,9 +31,13 @@ Route::middleware(['auth', 'verified', 'translations:account'])->group(function 
     Route::inertia('settings/appearance', 'settings/appearance')->name('appearance.edit');
 });
 
+// Hors du groupe de Fortify, donc `accounts.switches` posé ici aussi : quand
+// les passkeys sont fermées (spec 40 § 8.2), cette route répond 404 au lieu
+// d'annoncer aux gestionnaires de mots de passe un point d'enrôlement qui
+// n'existe pas.
 Route::get('.well-known/passkey-endpoints', function () {
     return response()->json([
         'enroll' => route('security.edit'),
         'manage' => route('security.edit'),
     ]);
-})->name('well-known.passkeys');
+})->middleware('accounts.switches')->name('well-known.passkeys');

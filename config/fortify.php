@@ -108,8 +108,16 @@ return [
      * groupe déclaré dans `routes/`. Sans ce domaine, les écrans
      * d'authentification recevraient `common` seul et afficheraient des clés
      * brutes.
+     *
+     * `accounts.switches` pour la même raison (spec 40 § 8.2) : il répond 404
+     * à l'inscription et aux passkeys quand `App\Support\Identity\AccountSwitches`
+     * les ferme — hors `local` et `testing` tant que rien n'est déclaré. Les
+     * fonctionnalités `registration()` et `passkeys()` restent activées
+     * ci-dessous, SANS condition : leurs routes doivent exister partout pour
+     * que les helpers Wayfinder, régénérés au build, soient les mêmes sur
+     * toute machine.
      */
-    'middleware' => ['web', 'translations:account'],
+    'middleware' => ['web', 'translations:account', 'accounts.switches'],
 
     /*
     |--------------------------------------------------------------------------

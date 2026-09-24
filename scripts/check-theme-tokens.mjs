@@ -129,6 +129,14 @@ const WATCHED = [
     // d'entrée n° 2) : ils entrent dans le commit qui les modifie.
     // `use-appearance.tsx` : docblocks du forçage, L90-1.
     'resources/js/hooks/use-appearance.tsx',
+    // L40-7 (spec 40 § 8.2 et § 8.5) : `auth.user` nullable, prop
+    // `accountsOpen`, bouton de passkey sur `canUsePasskeys`. Les autres
+    // fichiers hérités que retouche ce lot (`auth/login.tsx`,
+    // `settings/profile.tsx`, `user-info.tsx`, `app-header.tsx`) sont en
+    // infraction : ils restent dans `EXEMPT` (règle n° 3).
+    'resources/js/types/auth.ts',
+    'resources/js/types/global.d.ts',
+    'resources/js/pages/auth/confirm-password.tsx',
 ];
 
 /**
@@ -161,7 +169,6 @@ const EXEMPT = [
     'resources/js/components/app-sidebar.tsx',
     'resources/js/components/appearance-tabs.tsx',
     'resources/js/components/breadcrumbs.tsx',
-    'resources/js/components/delete-user.tsx',
     'resources/js/components/heading.tsx',
     'resources/js/components/input-error.tsx',
     'resources/js/components/manage-passkeys.tsx',
@@ -196,7 +203,6 @@ const EXEMPT = [
     'resources/js/layouts/settings/layout.tsx',
     'resources/js/lib/i18n.ts',
     'resources/js/lib/utils.ts',
-    'resources/js/pages/auth/confirm-password.tsx',
     'resources/js/pages/auth/forgot-password.tsx',
     'resources/js/pages/auth/login.tsx',
     'resources/js/pages/auth/register.tsx',
@@ -208,8 +214,6 @@ const EXEMPT = [
     'resources/js/pages/settings/profile.tsx',
     'resources/js/pages/settings/security.tsx',
     'resources/js/pages/welcome.tsx',
-    'resources/js/types/auth.ts',
-    'resources/js/types/global.d.ts',
     'resources/js/types/index.ts',
     'resources/js/types/navigation.ts',
     'resources/js/types/ui.ts',

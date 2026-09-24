@@ -50,6 +50,13 @@ export function AdminSidebar() {
     const { t } = useTranslations();
     const { auth } = usePage().props;
 
+    // Rendu derrière `auth` et `role:curator`, mais le type partagé ne le sait
+    // pas : `auth.user` est nul pour tout visiteur (spec 40 § 8.5). Garde
+    // explicite, jamais d'assertion non nulle.
+    if (!auth.user) {
+        return null;
+    }
+
     // La liste vit dans le rendu, pas au niveau module : un libellé calculé à
     // l'import resterait figé dans la langue du bundle.
     const navItems: AdminNavItem[] = [

@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\EnforceAccountSwitches;
 use App\Http\Middleware\EnsureUserHasRole;
 use App\Http\Middleware\ForceAdminLocale;
 use App\Http\Middleware\HandleAppearance;
@@ -42,7 +43,12 @@ return Application::configure(basePath: dirname(__DIR__))
         // Aucun alias de forçage d'apparence pour le back-office : il suit la
         // préférence du visiteur (D8 du 23/09, spec 90 § 2.2). Le seul forçage
         // prévu est celui des pages `game/*`, en sombre.
+        //
+        // `accounts.switches` ferme l'inscription et les passkeys hors `local`
+        // et `testing` (spec 40 § 8.2) : posé sur le groupe de Fortify par
+        // `config/fortify.php` et sur `well-known.passkeys`.
         $middleware->alias([
+            'accounts.switches' => EnforceAccountSwitches::class,
             'admin.locale' => ForceAdminLocale::class,
             'role' => EnsureUserHasRole::class,
             'translations' => SelectTranslationDomains::class,

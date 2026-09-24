@@ -6,6 +6,7 @@ use App\Enums\Locale;
 use App\Support\I18n\LangVersion;
 use App\Support\I18n\TranslationDomains;
 use App\Support\I18n\Translations;
+use App\Support\Identity\AccountSwitches;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\App;
 use Inertia\Middleware;
@@ -56,6 +57,12 @@ class HandleInertiaRequests extends Middleware
                 'user' => $request->user(),
             ],
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
+
+            // Liens de connexion et d'inscription de l'en-tête public, et
+            // crochet de compte d'après podium (spec 40 § 8.2, 90 § 2.4) :
+            // absents tant que l'inscription est fermée, donc en production
+            // au jalon 1. Le porteur atteint `/login` par son adresse.
+            'accountsOpen' => AccountSwitches::registrationOpen(),
 
             // Les trois props d'i18n sont des closures : `share()` est appelée
             // à l'entrée du middleware Inertia, donc AVANT les middlewares de

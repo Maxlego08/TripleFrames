@@ -1,6 +1,9 @@
 <?php
 
+use App\Http\Controllers\Settings\ProfileController;
 use App\Models\User;
+use Illuminate\Support\Facades\Route;
+use Inertia\Testing\AssertableInertia as Assert;
 
 test('profile page is displayed', function () {
     $user = User::factory()->create();
@@ -50,36 +53,31 @@ test('email verification status is unchanged when the email address is unchanged
     expect($user->refresh()->email_verified_at)->not->toBeNull();
 });
 
-test('user can delete their account', function () {
+test("n'expose aucune suppression de compte tant que l'anonymisation n'est pas livrée", function () {
+    // Spec 40 § 8.3 : la suppression dure contredit 10 § 5.5 (suppression =
+    // anonymisation) et ferait tomber en un clic l'administrateur unique du
+    // jalon 1. Route, action, requête et composant sont retirés ; le jalon 2
+    // les recrée sur l'anonymisation.
+    expect(Route::has('profile.destroy'))->toBeFalse()
+        ->and(method_exists(ProfileController::class, 'destroy'))->toBeFalse()
+        ->and(app_path('Http/Requests/Settings/ProfileDeleteRequest.php'))->not->toBeFile()
+        ->and(resource_path('js/components/delete-user.tsx'))->not->toBeFile();
+
     $user = User::factory()->create();
 
-    $response = $this
-        ->actingAs($user)
-        ->delete(route('profile.destroy'), [
+    // L'adresse du profil n'accepte plus DELETE, mot de passe correct compris.
+    $this->actingAs($user)
+        ->delete(route('profile.update'), [
             'password' => 'password',
-        ]);
+        ])
+        ->assertMethodNotAllowed();
 
-    $response
-        ->assertSessionHasNoErrors()
-        ->assertRedirect(route('home'));
-
-    $this->assertGuest();
-    expect($user->fresh())->toBeNull();
-});
-
-test('correct password must be provided to delete account', function () {
-    $user = User::factory()->create();
-
-    $response = $this
-        ->actingAs($user)
-        ->from(route('profile.edit'))
-        ->delete(route('profile.destroy'), [
-            'password' => 'wrong-password',
-        ]);
-
-    $response
-        ->assertSessionHasErrors('password')
-        ->assertRedirect(route('profile.edit'));
-
+    $this->assertAuthenticatedAs($user);
     expect($user->fresh())->not->toBeNull();
+
+    // La page de profil se rend toujours, sans `delete-user.tsx` à importer.
+    $this->actingAs($user)
+        ->get(route('profile.edit'))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page->component('settings/profile'));
 });

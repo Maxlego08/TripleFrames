@@ -4,6 +4,7 @@ namespace App\Providers;
 
 use App\Actions\Fortify\CreateNewUser;
 use App\Actions\Fortify\ResetUserPassword;
+use App\Support\Identity\AccountSwitches;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
@@ -45,11 +46,17 @@ class FortifyServiceProvider extends ServiceProvider
 
     /**
      * Configure Fortify views.
+     *
+     * `canRegister` et `canUsePasskeys` suivent les interrupteurs de compte
+     * (spec 40 § 8.2) : un lien d'inscription ou un bouton de passkey affiché
+     * sur une route fermée mènerait à un 404.
      */
     private function configureViews(): void
     {
         Fortify::loginView(fn (Request $request) => Inertia::render('auth/login', [
             'canResetPassword' => Features::enabled(Features::resetPasswords()),
+            'canRegister' => $this->canRegister(),
+            'canUsePasskeys' => $this->canUsePasskeys(),
             'status' => $request->session()->get('status'),
         ]));
 
@@ -73,7 +80,21 @@ class FortifyServiceProvider extends ServiceProvider
 
         Fortify::twoFactorChallengeView(fn () => Inertia::render('auth/two-factor-challenge'));
 
-        Fortify::confirmPasswordView(fn () => Inertia::render('auth/confirm-password'));
+        Fortify::confirmPasswordView(fn () => Inertia::render('auth/confirm-password', [
+            'canUsePasskeys' => $this->canUsePasskeys(),
+        ]));
+    }
+
+    /** Fonctionnalité Fortify activée ET inscription ouverte. */
+    private function canRegister(): bool
+    {
+        return Features::enabled(Features::registration()) && AccountSwitches::registrationOpen();
+    }
+
+    /** Fonctionnalité Fortify activée ET passkeys ouvertes. */
+    private function canUsePasskeys(): bool
+    {
+        return Features::canManagePasskeys() && AccountSwitches::passkeysEnabled();
     }
 
     /**

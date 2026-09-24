@@ -13,22 +13,33 @@ import { useTranslations } from '@/hooks/use-translations';
 import { store } from '@/routes/password/confirm';
 import type { AuthLayoutKeys } from '@/types';
 
-export default function ConfirmPassword() {
+/**
+ * `canUsePasskeys` suit l'interrupteur de compte (spec 40 § 8.2) : fermé en
+ * production au jalon 1, où les routes de confirmation par passkey
+ * répondent 404.
+ */
+type Props = {
+    canUsePasskeys: boolean;
+};
+
+export default function ConfirmPassword({ canUsePasskeys }: Props) {
     const { t } = useTranslations();
 
     return (
         <>
             <Head title={t('account.confirm_password.title')} />
 
-            <PasskeyVerify
-                routes={{
-                    options: confirmOptions(),
-                    submit: confirmStore(),
-                }}
-                label={t('account.confirm_password.passkey.submit')}
-                loadingLabel={t('account.confirm_password.passkey.loading')}
-                separator={t('account.confirm_password.passkey.separator')}
-            />
+            {canUsePasskeys && (
+                <PasskeyVerify
+                    routes={{
+                        options: confirmOptions(),
+                        submit: confirmStore(),
+                    }}
+                    label={t('account.confirm_password.passkey.submit')}
+                    loadingLabel={t('account.confirm_password.passkey.loading')}
+                    separator={t('account.confirm_password.passkey.separator')}
+                />
+            )}
 
             <Form {...store.form()} resetOnSuccess={['password']}>
                 {({ processing, errors }) => (

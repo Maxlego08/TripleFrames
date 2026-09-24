@@ -14,19 +14,31 @@ import { store } from '@/routes/login';
 import { request } from '@/routes/password';
 import type { AuthLayoutKeys } from '@/types';
 
+/**
+ * `canRegister` et `canUsePasskeys` suivent les interrupteurs de compte
+ * (spec 40 § 8.2) : fermés en production au jalon 1, où le lien et le bouton
+ * mèneraient à un 404.
+ */
 type Props = {
     status?: string;
     canResetPassword: boolean;
+    canRegister: boolean;
+    canUsePasskeys: boolean;
 };
 
-export default function Login({ status, canResetPassword }: Props) {
+export default function Login({
+    status,
+    canResetPassword,
+    canRegister,
+    canUsePasskeys,
+}: Props) {
     const { t } = useTranslations();
 
     return (
         <>
             <Head title={t('account.login.title')} />
 
-            <PasskeyVerify />
+            {canUsePasskeys && <PasskeyVerify />}
 
             <Form
                 {...store.form()}
@@ -108,12 +120,14 @@ export default function Login({ status, canResetPassword }: Props) {
                             </Button>
                         </div>
 
-                        <div className="text-center text-sm text-muted-foreground">
-                            {t('account.login.no_account')}{' '}
-                            <TextLink href={register()} tabIndex={5}>
-                                {t('account.login.sign_up')}
-                            </TextLink>
-                        </div>
+                        {canRegister && (
+                            <div className="text-center text-sm text-muted-foreground">
+                                {t('account.login.no_account')}{' '}
+                                <TextLink href={register()} tabIndex={5}>
+                                    {t('account.login.sign_up')}
+                                </TextLink>
+                            </div>
+                        )}
                     </>
                 )}
             </Form>

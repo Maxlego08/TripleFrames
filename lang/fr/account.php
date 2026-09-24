@@ -209,8 +209,8 @@ return [
     'delete_account' => [
         'cancel' => 'Annuler',
         'confirm' => 'Supprimer le compte',
-        'description' => 'Supprimez votre compte et toutes ses données',
-        'dialog_description' => 'Une fois votre compte supprimé, toutes ses données le seront définitivement. Saisissez votre mot de passe pour confirmer la suppression définitive de votre compte.',
+        'description' => 'Anonymisez votre compte et supprimez vos données personnelles',
+        'dialog_description' => 'Votre compte sera anonymisé : adresse e-mail, mot de passe, comptes liés, configurations sauvegardées et photo sont supprimés, et votre nom est remplacé par un libellé neutre. Les parties déjà jouées restent, sans votre nom, dans l’historique des autres joueurs jusqu’à leur effacement au bout de :months mois.',
         'dialog_heading' => 'Voulez-vous vraiment supprimer votre compte ?',
         'heading' => 'Supprimer le compte',
         'submit' => 'Supprimer le compte',

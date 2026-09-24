@@ -15,6 +15,13 @@ declare module '@inertiajs/core' {
             auth: Auth;
             sidebarOpen: boolean;
             /**
+             * Vrai si l'inscription est ouverte (`AccountSwitches::
+             * registrationOpen()`, spec 40 § 8.2). Gouverne les liens de
+             * connexion et d'inscription de l'en-tête public et le crochet de
+             * compte d'après podium : faux en production au jalon 1.
+             */
+            accountsOpen: boolean;
+            /**
              * Code de la locale active, ex. `'fr'`. Résolu côté serveur par
              * `SetLocale` avant que les props partagées soient construites.
              */

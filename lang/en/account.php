@@ -216,8 +216,8 @@ return [
     'delete_account' => [
         'cancel' => 'Cancel',
         'confirm' => 'Delete account',
-        'description' => 'Delete your account and all of its resources',
-        'dialog_description' => 'Once your account is deleted, all of its resources and data will also be permanently deleted. Please enter your password to confirm you would like to permanently delete your account.',
+        'description' => 'Anonymise your account and delete your personal data',
+        'dialog_description' => 'Your account will be anonymised: email address, password, linked accounts, saved configurations and photo are deleted, and your name is replaced by a neutral label. Games already played remain, without your name, in other players’ history until they are erased after :months months.',
         'dialog_heading' => 'Are you sure you want to delete your account?',
         'heading' => 'Delete account',
         'submit' => 'Delete account',

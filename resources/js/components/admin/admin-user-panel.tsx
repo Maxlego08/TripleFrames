@@ -46,7 +46,7 @@ export function AdminUserPanel({ user }: Props) {
             <SidebarMenuItem>
                 <div className="flex items-center gap-2 overflow-hidden rounded-md p-2 text-left">
                     <Avatar className="size-8 shrink-0 overflow-hidden rounded-full">
-                        <AvatarImage src={user.avatar} alt="" />
+                        <AvatarImage src={user.avatar ?? undefined} alt="" />
                         <AvatarFallback className="rounded-full bg-muted text-xs text-muted-foreground">
                             {getInitials(user.name)}
                         </AvatarFallback>
