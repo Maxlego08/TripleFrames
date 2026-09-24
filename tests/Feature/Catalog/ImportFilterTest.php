@@ -209,9 +209,10 @@ it('réduit une chaîne à l’alphabet que les deux moteurs jugent pareil', fun
         ->and(AnswerKeyNormalizer::normalize('The Thing'))->toBe('thing')
         // Jamais le dernier mot restant : « Le » seul reste « le ».
         ->and(AnswerKeyNormalizer::normalize('Le'))->toBe('le')
-        // Un titre entièrement non latin rend la chaîne vide, et c'est
-        // exactement pourquoi `title_original_latin` existe (A4).
-        ->and(AnswerKeyNormalizer::normalize('ガラスの果樹園'))->toBe('');
+        // Un titre entièrement non latin est translittéré, jamais vidé
+        // (spec 70 § 5.2) : la saisie dans l'écriture d'origine s'apparie à
+        // `title_original`, la translittération usuelle à `title_latin` (A4).
+        ->and(AnswerKeyNormalizer::normalize('ガラスの果樹園'))->toBe('garasunoguo shu yuan');
 });
 
 it('découpe un préfixe au premier séparateur configuré, et pas ailleurs', function (): void {

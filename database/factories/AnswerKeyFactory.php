@@ -27,9 +27,9 @@ use Illuminate\Database\Eloquent\Factories\Factory;
 class AnswerKeyFactory extends Factory
 {
     /**
-     * Longueur maximale d'une forme normalisée (§ 1.3) : la borne haute du
-     * réglage « longueur maximale d'une réponse », donc aucune chaîne
-     * saisissable n'est jamais tronquée.
+     * Longueur maximale d'une forme normalisée (§ 1.3) : la largeur de la
+     * colonne. Clés et saisies sont tronquées au même endroit, et aucune
+     * chaîne n'excède la colonne (spec 70 § 5.5, E10-12).
      */
     public const MAX_NORMALIZED_LENGTH = AnswerKeyNormalizer::MAX_NORMALIZED_LENGTH;
 

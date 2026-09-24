@@ -8,6 +8,7 @@ use App\Models\Game;
 use App\Models\Room;
 use App\Settings\PlatformLimits;
 use App\Settings\RoomSettings;
+use App\Support\Answers\AnswerRules;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
@@ -29,6 +30,8 @@ use Illuminate\Database\Eloquent\Factories\Factory;
  * - `draw_seed` en `bin2hex(random_bytes(32))`, **CSPRNG**, jamais `uniqid()` ni
  *   un dérivé d'horodatage — la règle de fabrication de la graine est au même
  *   rang normatif que l'interdiction des ENUM natifs (§ 7.2).
+ * - `validation_version` de {@see AnswerRules::VERSION}, la version de la règle
+ *   de validation que la partie applique (spec 70 § 12) ; aucune copie locale.
  *
  * `room_id` est nul en solo, et `mode` est figé à la création : aucun chemin ne le
  * mute (§ 7.10). {@see self::solo()} pose les deux ensemble.
@@ -47,14 +50,6 @@ class GameFactory extends Factory
      * > lue ici, et cette ligne disparaît.
      */
     public const int SCORING_VERSION = 1;
-
-    /**
-     * Version de la règle de VALIDATION — normaliseur, seuil de Levenshtein,
-     * séparateurs de sous-titre, longueur minimale de préfixe.
-     *
-     * Même provisoire, pour `70-validation-des-reponses.md`.
-     */
-    public const int VALIDATION_VERSION = 1;
 
     /** Marge du tirage matérialisé au-delà de `M` : `min(M + 3, |vivier|)` (§ 7.2). */
     public const int DRAW_MARGIN = 3;
@@ -174,7 +169,7 @@ class GameFactory extends Factory
             'settings_version' => $settings->sourceVersion,
             'settings_snapshot' => $settings,
             'scoring_version' => self::SCORING_VERSION,
-            'validation_version' => self::VALIDATION_VERSION,
+            'validation_version' => AnswerRules::VERSION,
         ];
     }
 }
