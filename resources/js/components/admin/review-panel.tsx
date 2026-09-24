@@ -8,6 +8,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
+import { useThroughputShortcuts } from '@/hooks/admin/use-throughput-shortcuts';
 import { useTranslations } from '@/hooks/use-translations';
 import type {
     AdminReviewFrame,
@@ -90,8 +91,14 @@ export function failedItemLabels(
  *   panneau n'a pas survécu au rechargement.
  *
  * Opérable au clavier sans aucun raccourci : boutons, cases à cocher
- * étiquetées, aides rattachées par `aria-describedby`. `Entrée` en
- * raccourci de débit arrive avec le lot L20-11.
+ * étiquetées, aides rattachées par `aria-describedby`.
+ *
+ * Raccourci de débit (lot L20-11, § 6.4) : `Entrée` vaut « Conforme,
+ * publier » — le même envoi que le bouton, réponses toutes vraies. Il n'agit
+ * que hors de tout contrôle : sur le titre, qui prend le focus à chaque
+ * image, ou sur le panneau, qu'un clic focalise ; sur un bouton ou une case,
+ * `Entrée` garde son effet habituel. Jamais pendant « Non conforme », où les
+ * réponses portent un rejet, ni pendant un envoi.
  */
 export function ReviewPanel({
     frame,
@@ -109,6 +116,15 @@ export function ReviewPanel({
 
     const [failing, setFailing] = useState(false);
     const [failed, setFailed] = useState<string[]>([]);
+
+    // Envoi en cours, et envoi par le raccourci `Entrée`.
+    const [sending, setSending] = useState(false);
+    const submitRef = useRef<(() => void) | null>(null);
+
+    const handleShortcut = useThroughputShortcuts(
+        { screen: 'review', choosingFailures: failing, busy: sending },
+        { onPass: () => submitRef.current?.() },
+    );
 
     useEffect(() => {
         if (autoFocus) {
@@ -139,7 +155,11 @@ export function ReviewPanel({
     return (
         <section
             aria-labelledby={headingId}
-            className="flex flex-col gap-6 rounded-lg border border-border bg-card p-4 text-card-foreground"
+            // Hors de la tabulation ; un clic sur le panneau le focalise,
+            // pour que `Entrée` y vaille « Conforme, publier ».
+            tabIndex={-1}
+            onKeyDown={handleShortcut}
+            className="flex flex-col gap-6 rounded-lg border border-border bg-card p-4 text-card-foreground outline-none"
         >
             <h2
                 id={headingId}
@@ -257,6 +277,10 @@ export function ReviewPanel({
                 </div>
 
                 <Form
+                    ref={(handle) => {
+                        submitRef.current =
+                            handle === null ? null : () => handle.submit();
+                    }}
                     {...FrameReviewController.store.form({
                         movie: frame.movie_id,
                         frame: frame.id,
@@ -274,6 +298,8 @@ export function ReviewPanel({
                         })
                     }
                     onError={(errors) => onRefused(refusalMessages(errors))}
+                    onStart={() => setSending(true)}
+                    onFinish={() => setSending(false)}
                     className="flex flex-col gap-4"
                 >
                     {({ processing, errors }) => {
@@ -429,39 +455,55 @@ export function ReviewPanel({
                                         </div>
                                     </div>
                                 ) : (
-                                    <div className="flex flex-wrap gap-2">
-                                        <Button
-                                            type="submit"
-                                            aria-disabled={
-                                                processing ? true : undefined
-                                            }
-                                            aria-busy={processing || undefined}
-                                            onClick={(event) => {
-                                                if (processing) {
-                                                    event.preventDefault();
-                                                }
-                                            }}
-                                            className="min-h-11 aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
-                                        >
-                                            <CheckIcon aria-hidden />
-                                            {processing
-                                                ? t(
-                                                      'admin.review.panel.sending',
-                                                  )
-                                                : t('admin.review.panel.pass')}
-                                        </Button>
-                                        {!alreadyRejected && (
+                                    <div className="flex flex-col gap-2">
+                                        <div className="flex flex-wrap gap-2">
                                             <Button
-                                                type="button"
-                                                variant="outline"
-                                                onClick={() => setFailing(true)}
-                                                disabled={processing}
-                                                className="min-h-11"
+                                                type="submit"
+                                                aria-disabled={
+                                                    processing
+                                                        ? true
+                                                        : undefined
+                                                }
+                                                aria-busy={
+                                                    processing || undefined
+                                                }
+                                                aria-keyshortcuts="Enter"
+                                                onClick={(event) => {
+                                                    if (processing) {
+                                                        event.preventDefault();
+                                                    }
+                                                }}
+                                                className="min-h-11 aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
                                             >
-                                                <XIcon aria-hidden />
-                                                {t('admin.review.panel.fail')}
+                                                <CheckIcon aria-hidden />
+                                                {processing
+                                                    ? t(
+                                                          'admin.review.panel.sending',
+                                                      )
+                                                    : t(
+                                                          'admin.review.panel.pass',
+                                                      )}
                                             </Button>
-                                        )}
+                                            {!alreadyRejected && (
+                                                <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    onClick={() =>
+                                                        setFailing(true)
+                                                    }
+                                                    disabled={processing}
+                                                    className="min-h-11"
+                                                >
+                                                    <XIcon aria-hidden />
+                                                    {t(
+                                                        'admin.review.panel.fail',
+                                                    )}
+                                                </Button>
+                                            )}
+                                        </div>
+                                        <p className="text-xs text-muted-foreground">
+                                            {t('admin.shortcuts.pass_hint')}
+                                        </p>
                                     </div>
                                 )}
                             </>

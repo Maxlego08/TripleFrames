@@ -33,6 +33,7 @@ import type {
     CropPoint,
     CropState,
 } from '@/lib/admin/crop-state';
+import { SHORTCUT_FRAME_ATTRIBUTE } from '@/lib/admin/shortcut-map';
 import { formatInteger } from '@/lib/admin-format';
 import { FRAME_GEOMETRY } from '@/lib/frame-geometry';
 import type { CropViolation } from '@/lib/frame-geometry';
@@ -192,6 +193,18 @@ type Props = {
     onCommand: (command: CropCommand) => void;
     /** Envoi en cours : le cadre ne bouge plus jusqu'à la réponse. */
     disabled?: boolean;
+    /**
+     * Prendre le focus au montage (lot L20-11) : le visuel voisin ou suivant
+     * s'ouvre dans le cadre **sans quitter le cadre** — après `[` ou `]`,
+     * après un envoi. Sans défilement : le cadre reste où le curateur l'a
+     * laissé.
+     */
+    autoFocus?: boolean;
+    /**
+     * Raccourcis de débit que l'écran branche sur le cadre, déclarés aux
+     * technologies d'assistance (`aria-keyshortcuts`).
+     */
+    keyShortcuts?: string;
     className?: string;
 };
 
@@ -242,6 +255,12 @@ type Props = {
  *   l'un des deux se lève, le pincement est clos, et aucun doigt restant ne
  *   reprend un glissement ni un pincement, pour que le cadre ne saute pas.
  *
+ * Raccourcis de débit (L20-11), branchés par l'écran et non ici : le cadre
+ * dit seulement s'il est prêt (`data-shortcut-frame`), pour que `1` à `5`
+ * ne classent qu'un visuel chargé, et prend le focus au montage quand le
+ * visuel voisin s'y ouvre (`autoFocus`). Une touche que le cadre tient pour
+ * un geste est consommée ici et n'atteint jamais les raccourcis.
+ *
  * Jamais au-delà du plancher de D6 du 23/09 : chaque geste est borné par
  * `crop-state.ts`, et les boutons à la borne restent focalisables, marqués
  * `aria-disabled` — un bouton qui devient `disabled` sous le focus renverrait
@@ -259,6 +278,8 @@ export function FrameCropper({
     state,
     onCommand,
     disabled = false,
+    autoFocus = false,
+    keyShortcuts,
     className,
 }: Props) {
     const { t, locale } = useTranslations();
@@ -362,6 +383,12 @@ export function FrameCropper({
 
         return () => region.removeEventListener('wheel', listener);
     }, []);
+
+    useEffect(() => {
+        if (autoFocus) {
+            regionRef.current?.focus({ preventScroll: true });
+        }
+    }, [autoFocus]);
 
     function handlePointerDown(event: ReactPointerEvent<HTMLDivElement>): void {
         const region = regionRef.current;
@@ -549,6 +576,11 @@ export function FrameCropper({
      * échec, le cadre est de toute façon hors de la tabulation.
      */
     const regionDisabled = status === 'ready' && disabled;
+    // L'état du cadre que relisent les raccourcis `1` à `5`, sous le nom
+    // partagé avec `use-throughput-shortcuts`.
+    const shortcutFrameAttribute = {
+        [SHORTCUT_FRAME_ATTRIBUTE]: interactive ? 'ready' : 'idle',
+    };
 
     return (
         <div className={cn('flex w-full flex-col gap-3', className)}>
@@ -559,7 +591,9 @@ export function FrameCropper({
                 aria-describedby={`${descriptionId} ${violationId} ${instructionsId}`}
                 aria-disabled={regionDisabled ? true : undefined}
                 aria-busy={status === 'loading' ? true : undefined}
+                aria-keyshortcuts={keyShortcuts}
                 tabIndex={status === 'ready' ? 0 : -1}
+                {...shortcutFrameAttribute}
                 onKeyDown={handleKeyDown}
                 className="relative w-full max-w-7xl overflow-hidden rounded-md bg-muted outline-none select-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             >

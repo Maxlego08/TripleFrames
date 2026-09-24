@@ -793,6 +793,30 @@ return [
     ],
 
     /*
+    | Raccourcis de débit (spec 20 § 6.4, lot L20-11). Facultatifs : l’outil
+    | s’utilise entièrement par ses boutons et son clavier sans eux. Aucun
+    | n’agit pendant une saisie dans un champ. `classify`, `neighbour` et
+    | `pass` forment le rappel du pied de l’éditeur, repris par la page
+    | « premiers pas » ; `cropper_hint` et `pass_hint` le rappellent sous le
+    | recadreur et sous la revue. `announce.*` est lu par la région vivante de
+    | l’éditeur : `:level` est le chiffre du niveau choisi, `:label` son
+    | libellé (`level.{n}.label`).
+    */
+    'shortcuts' => [
+        'heading' => 'Raccourcis de débit',
+        'description' => 'Facultatifs : chaque geste a aussi son bouton, et l’outil s’utilise entièrement sans eux. Aucun raccourci n’agit pendant une saisie dans un champ.',
+        'classify' => '1 à 5, le cadre sélectionné : classe l’image à ce niveau et l’ajoute à la banque en un seul geste.',
+        'neighbour' => '[ et ] : visuel précédent ou suivant de la bande, sans quitter le cadre. Sur un clavier AZERTY, AltGr + ( et AltGr + ).',
+        'pass' => 'Entrée, dans la passe de revue : conforme, publier. Sur un bouton ou une case, Entrée garde son effet habituel.',
+        'cropper_hint' => 'Raccourcis : 1 à 5 classent et ajoutent l’image depuis le cadre sélectionné ; [ et ] passent au visuel voisin de la bande.',
+        'pass_hint' => 'Raccourci : Entrée, hors d’un bouton ou d’une case, vaut « Conforme, publier ».',
+        'announce' => [
+            'sending' => 'Niveau :level — :label : ajout de l’image à la banque.',
+            'blocked' => 'Niveau :level — :label choisi. L’ajout attend un cadre admis par le plancher de recadrage.',
+        ],
+    ],
+
+    /*
     | Éditeur de la banque d'images (spec 20 § 6) : les visuels TMDB du film,
     | le recadreur et le niveau, la banque du film groupée par niveau avec sa
     | couverture, et la prévisualisation en conditions de jeu. Chaque geste
@@ -838,6 +862,29 @@ return [
             'adding' => 'Ajout en cours…',
             'locked' => 'Ce film est suspendu par un administrateur : aucune image ne peut y être ajoutée.',
             'level_required' => 'Choisissez un niveau avant d’ajouter l’image : aucun n’est coché d’avance.',
+        ],
+
+        /*
+        | Bande balayable (spec 20 § 6.2, lot L20-11) : les visuels non encore
+        | utilisés, sous le recadreur. `position` : `:index` est le rang du
+        | visuel ouvert dans la bande, `:count` la taille de la bande ;
+        | `opened` et `sent_next` : `:index` et `:count` le situent dans la
+        | grille, comme `backdrop_alt`.
+        */
+        'strip' => [
+            'heading' => 'Visuels non utilisés',
+            'description' => 'Les visuels dont aucune image n’est encore tirée et qui peuvent s’ouvrir dans le cadre, dans l’ordre de la grille. [ et ], un glissement sur la bande ou ses boutons passent au visuel voisin sans quitter le cadre ; après chaque ajout, le visuel suivant s’ouvre de lui-même.',
+            'list_label' => 'Bande des visuels non utilisés',
+            'previous' => 'Visuel précédent',
+            'next' => 'Visuel suivant',
+            'position' => 'Visuel :index sur :count de la bande',
+            'outside' => 'Le visuel ouvert a déjà servi : il n’est pas dans la bande.',
+            'empty' => 'Aucun visuel n’attend dans la bande : chacun a déjà servi ou ne peut pas s’ouvrir dans le cadre. La grille reste ouverte pour tirer une autre variante d’un visuel utilisé.',
+            'opened' => 'Visuel :index sur :count ouvert dans le cadre.',
+            'sent_next' => 'Image ajoutée. Visuel :index sur :count ouvert dans le cadre.',
+            'exhausted' => 'Image ajoutée. Plus aucun visuel non utilisé ne peut s’ouvrir dans le cadre : choisissez un visuel dans la grille pour une autre variante.',
+            'edge_previous' => 'Aucun visuel non utilisé avant celui-ci.',
+            'edge_next' => 'Aucun visuel non utilisé après celui-ci.',
         ],
 
         'list' => [

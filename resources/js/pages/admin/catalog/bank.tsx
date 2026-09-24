@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import type { RefObject } from 'react';
+import { flushSync } from 'react-dom';
 import { toast } from 'sonner';
 import FrameTmdbController from '@/actions/App/Http/Controllers/Admin/FrameTmdbController';
 import {
@@ -22,6 +23,7 @@ import { AdminLoadingState } from '@/components/admin/admin-loading-state';
 import { AdminPageHeading } from '@/components/admin/admin-page-heading';
 import { BackdropGrid } from '@/components/admin/backdrop-grid';
 import type { BackdropGridHandle } from '@/components/admin/backdrop-grid';
+import { BackdropStrip } from '@/components/admin/backdrop-strip';
 import { CoverageMeter } from '@/components/admin/coverage-meter';
 import { FrameBankList } from '@/components/admin/frame-bank-list';
 import type {
@@ -35,7 +37,7 @@ import type {
     FrameGesture,
 } from '@/components/admin/frame-gesture-dialog';
 import { GameConditionsPreview } from '@/components/admin/game-conditions-preview';
-import { LevelPicker } from '@/components/admin/level-picker';
+import { FRAME_LEVEL_KEYS, LevelPicker } from '@/components/admin/level-picker';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import {
@@ -45,7 +47,10 @@ import {
     CardHeader,
 } from '@/components/ui/card';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { useThroughputShortcuts } from '@/hooks/admin/use-throughput-shortcuts';
 import { useTranslations } from '@/hooks/use-translations';
+import { stripAfterSend, stripNeighbour } from '@/lib/admin/backdrop-strip';
+import type { StripDirection } from '@/lib/admin/backdrop-strip';
 import { BANK_WRITE_PROPS } from '@/lib/admin/bank-visits';
 import {
     applyCropCommand,
@@ -106,10 +111,21 @@ const OFFLINE_TOAST_ID = 'admin-bank-offline';
 /** Paramètre du rechargement qui demande l'avertissement de couverture. */
 const PREVIEW_FRAME_PARAMETER = 'preview_frame';
 
-/** Le visuel ouvert dans le cadre, et le cadre lui-même. */
+/**
+ * Raccourcis de débit que le cadre déclare (`aria-keyshortcuts`, § 6.4) : les
+ * cinq niveaux, puis les deux pas de la bande.
+ */
+const CROPPER_KEY_SHORTCUTS = '1 2 3 4 5 [ ]';
+
+/**
+ * Le visuel ouvert dans le cadre, et le cadre lui-même. `focusFrame` : le
+ * cadre prend le focus en s'ouvrant — visuel voisin ou suivant ouvert depuis
+ * le cadre ou après un envoi, « sans quitter le cadre » (§ 6.2, § 6.3).
+ */
 type OpenedVisual = {
     backdrop: AdminBackdrop;
     state: CropState;
+    focusFrame: boolean;
 };
 
 /** L'avertissement de couverture demandé, pour quelle image. */
@@ -138,11 +154,17 @@ type SequenceMask = 'in_play' | 'after_review';
  *   le dit, et le reste de la page demeure utilisable (§ 6.1).
  * - Une déconnexion pendant une visite laisse les formulaires tels quels et
  *   se signale par un toast (§ 6.8).
+ * - **Raccourcis de débit et bande balayable** (lot L20-11) : le cadre
+ *   focalisé classe et envoie d'une touche (`1` à `5`) ; `[` et `]`, la
+ *   bande des visuels non utilisés et ses gestes passent au visuel voisin
+ *   sans quitter le cadre ; après chaque envoi, le visuel suivant de la
+ *   bande s'ouvre dans le cadre, qui garde le focus. Une région vivante
+ *   annonce le niveau choisi et le visuel ouvert. L'écran reste
+ *   intégralement opérable par ses boutons et le clavier sans eux
+ *   (principe 8) : ils sont hors de la barre « terminé ».
  *
  * « Publier le film » et « Film suivant » rejoignent le pied avec les lots
- * L20-13 et L20-15 ; les raccourcis de débit et la bande balayable, avec
- * L20-11. L'écran est déjà intégralement opérable par ses boutons et le
- * clavier sans eux (principe 8).
+ * L20-13 et L20-15.
  */
 export default function AdminCatalogBank({
     movie,
@@ -163,6 +185,11 @@ export default function AdminCatalogBank({
     // Zone 2 : le visuel ouvert dans le cadre, et son niveau.
     const [opened, setOpened] = useState<OpenedVisual | null>(null);
     const [level, setLevel] = useState<FrameLevel | null>(null);
+
+    // Envoi en cours, envoi par raccourci, et ce que la région vivante dit.
+    const [sending, setSending] = useState(false);
+    const submitRef = useRef<(() => void) | null>(null);
+    const [announcement, setAnnouncement] = useState('');
 
     // Gestes sur une image de la banque.
     const [gesture, setGesture] = useState<FrameGesture | null>(null);
@@ -236,7 +263,24 @@ export default function AdminCatalogBank({
         });
     }
 
-    function openVisual(backdrop: AdminBackdrop): void {
+    const backdropItems: AdminBackdrop[] =
+        backdrops?.status === 'ready' ? backdrops.items : [];
+
+    /** Le visuel dans la grille, tel que son texte alternatif le situe. */
+    function gridPlace(backdrop: AdminBackdrop): {
+        index: number;
+        count: number;
+    } {
+        return {
+            index:
+                backdropItems.findIndex(
+                    (item) => item.file_path === backdrop.file_path,
+                ) + 1,
+            count: backdropItems.length,
+        };
+    }
+
+    function openVisual(backdrop: AdminBackdrop, focusFrame = false): boolean {
         const state = openCrop(
             masterHeightFor(backdrop.width, backdrop.height),
             limits,
@@ -245,18 +289,101 @@ export default function AdminCatalogBank({
 
         // Aucun cadre admis : le serveur l'a déjà dit, le visuel est proposé
         // désactivé et ne s'ouvre pas.
-        if (state !== null) {
-            // Chaque visuel ouvert repart sans niveau : aucun défaut
-            // pré-coché, pas même celui du visuel précédent (§ 6.5).
-            setLevel(null);
-            setOpened({ backdrop, state });
+        if (state === null) {
+            return false;
         }
+
+        // Chaque visuel ouvert repart sans niveau : aucun défaut pré-coché,
+        // pas même celui du visuel précédent (§ 6.5).
+        setLevel(null);
+        setOpened({ backdrop, state, focusFrame });
+
+        return true;
     }
 
     function closeVisual(): void {
         setOpened(null);
         setLevel(null);
         gridRef.current?.focus();
+    }
+
+    /**
+     * Le visuel voisin de la bande dans le cadre (`[`, `]`, boutons et
+     * glissement de la bande, § 6.2). `focusFrame` : le pas part du cadre ou
+     * de ses contrôles, que l'ouverture remplace — le nouveau cadre prend le
+     * focus ; depuis la bande, le focus reste dans la bande.
+     */
+    function stepVisual(
+        direction: StripDirection,
+        focusFrame: boolean,
+    ): AdminBackdrop | null {
+        const neighbour = stripNeighbour(
+            backdropItems,
+            opened?.backdrop.file_path ?? null,
+            direction,
+        );
+
+        if (neighbour === null || !openVisual(neighbour, focusFrame)) {
+            setAnnouncement(
+                t(
+                    direction === 'next'
+                        ? 'admin.bank.strip.edge_next'
+                        : 'admin.bank.strip.edge_previous',
+                ),
+            );
+
+            return null;
+        }
+
+        setAnnouncement(t('admin.bank.strip.opened', gridPlace(neighbour)));
+
+        return neighbour;
+    }
+
+    /**
+     * Après un envoi réussi, le visuel suivant de la bande s'ouvre dans le
+     * cadre, qui garde le focus (§ 6.3) ; la bande épuisée, le cadre se ferme
+     * et le focus revient à la grille. La liste lue est celle de l'envoi :
+     * le visuel envoyé n'y est jamais proposé.
+     */
+    function advanceAfterSend(sentPath: string): void {
+        const next = stripAfterSend(backdropItems, sentPath);
+
+        if (next !== null && openVisual(next, true)) {
+            setAnnouncement(t('admin.bank.strip.sent_next', gridPlace(next)));
+
+            return;
+        }
+
+        closeVisual();
+        setAnnouncement(t('admin.bank.strip.exhausted'));
+    }
+
+    /**
+     * `1` à `5` depuis le cadre (§ 6.4) : le niveau est posé et annoncé, puis
+     * l'image part — sauf si le cadre viole le plancher, auquel cas le niveau
+     * reste choisi et l'envoi attend. Le niveau est rendu avant l'envoi
+     * (`flushSync`), pour que le formulaire le soumette.
+     */
+    function classify(chosen: FrameLevel, send: boolean): void {
+        const values = {
+            level: chosen,
+            label: t(FRAME_LEVEL_KEYS[chosen].label),
+        };
+
+        flushSync(() => setLevel(chosen));
+        setAnnouncement(
+            t(
+                send
+                    ? 'admin.shortcuts.announce.sending'
+                    : 'admin.shortcuts.announce.blocked',
+                values,
+            ),
+        );
+
+        if (send) {
+            submitRef.current?.();
+        }
     }
 
     function requestWarning(frameId: number): void {
@@ -330,6 +457,17 @@ export default function AdminCatalogBank({
 
     const cropViolation =
         opened === null ? null : cropStateViolation(opened.state);
+
+    const handleCropperShortcut = useThroughputShortcuts(
+        { screen: 'cropper', canSend: cropViolation === null, busy: sending },
+        {
+            onClassify: classify,
+            onNeighbour: (direction) => {
+                stepVisual(direction, true);
+            },
+        },
+    );
+
     const publishable =
         movie.content_flag === 'clear' && movie.coverage.covers_publishable;
 
@@ -452,6 +590,12 @@ export default function AdminCatalogBank({
                                     // refus d'un envoi (doublon, dimensions)
                                     // ne s'affichent jamais sous un autre.
                                     key={opened.backdrop.file_path}
+                                    ref={(handle) => {
+                                        submitRef.current =
+                                            handle === null
+                                                ? null
+                                                : () => handle.submit();
+                                    }}
                                     {...FrameTmdbController.store.form(
                                         movie.id,
                                     )}
@@ -463,12 +607,24 @@ export default function AdminCatalogBank({
                                     }}
                                     transform={(data) => ({
                                         ...data,
+                                        // Le niveau tenu par l'écran fait foi,
+                                        // posé à l'instant par un raccourci.
+                                        ...(level === null
+                                            ? {}
+                                            : { frame_level: level }),
                                         crop_seconds: cropSecondsAt(
                                             opened.state,
                                             performance.now(),
                                         ),
                                     })}
-                                    onSuccess={closeVisual}
+                                    onStart={() => setSending(true)}
+                                    onFinish={() => setSending(false)}
+                                    onSuccess={() =>
+                                        advanceAfterSend(
+                                            opened.backdrop.file_path,
+                                        )
+                                    }
+                                    onKeyDown={handleCropperShortcut}
                                     className="flex flex-col gap-4"
                                 >
                                     {({ processing, errors }) => {
@@ -515,6 +671,12 @@ export default function AdminCatalogBank({
                                                     imageUrl={
                                                         opened.backdrop
                                                             .image_url
+                                                    }
+                                                    autoFocus={
+                                                        opened.focusFrame
+                                                    }
+                                                    keyShortcuts={
+                                                        CROPPER_KEY_SHORTCUTS
                                                     }
                                                     state={opened.state}
                                                     onCommand={(command) =>
@@ -603,11 +765,59 @@ export default function AdminCatalogBank({
                                                         )}
                                                     </Button>
                                                 </div>
+
+                                                <p className="text-xs text-muted-foreground">
+                                                    {t(
+                                                        'admin.shortcuts.cropper_hint',
+                                                    )}
+                                                </p>
                                             </>
                                         );
                                     }}
                                 </Form>
                             )}
+
+                            {/*
+                             * La région vivante des raccourcis et de la
+                             * bande : hors du formulaire, qui se remonte à
+                             * chaque visuel, pour qu'une annonce survive à
+                             * l'ouverture du suivant.
+                             */}
+                            <p
+                                role="status"
+                                aria-live="polite"
+                                aria-atomic="true"
+                                className="mt-4 text-sm text-foreground"
+                            >
+                                {announcement}
+                            </p>
+
+                            {abilities.createFrame &&
+                                backdrops?.status === 'ready' && (
+                                    <div className="mt-6">
+                                        <BackdropStrip
+                                            items={backdrops.items}
+                                            openedPath={
+                                                opened?.backdrop.file_path ??
+                                                null
+                                            }
+                                            disabled={sending}
+                                            onOpen={(backdrop) => {
+                                                if (openVisual(backdrop)) {
+                                                    setAnnouncement(
+                                                        t(
+                                                            'admin.bank.strip.opened',
+                                                            gridPlace(backdrop),
+                                                        ),
+                                                    );
+                                                }
+                                            }}
+                                            onStep={(direction) =>
+                                                stepVisual(direction, false)
+                                            }
+                                        />
+                                    </div>
+                                )}
                         </div>
                     </CardContent>
                 </Card>
@@ -692,6 +902,7 @@ export default function AdminCatalogBank({
                         </AdminCardTitle>
                     </CardHeader>
                     <CardContent className="space-y-4">
+                        <ShortcutReminder />
                         <Alert
                             variant={publishable ? 'default' : 'destructive'}
                         >
@@ -732,6 +943,33 @@ export default function AdminCatalogBank({
 }
 
 AdminCatalogBank.layout = { breadcrumbs };
+
+/**
+ * Le rappel des raccourcis de débit, au pied de l'éditeur (§ 6.1, § 6.4) :
+ * facultatifs, et décrits aussi sur la page « premiers pas » (§ 13.6).
+ */
+function ShortcutReminder() {
+    const { t } = useTranslations();
+
+    return (
+        <section aria-labelledby="bank-shortcuts-heading" className="space-y-2">
+            <h3
+                id="bank-shortcuts-heading"
+                className="text-sm font-semibold text-foreground"
+            >
+                {t('admin.shortcuts.heading')}
+            </h3>
+            <p className="text-sm text-muted-foreground">
+                {t('admin.shortcuts.description')}
+            </p>
+            <ul className="list-disc space-y-1 pl-5 text-sm text-foreground">
+                <li>{t('admin.shortcuts.classify')}</li>
+                <li>{t('admin.shortcuts.neighbour')}</li>
+                <li>{t('admin.shortcuts.pass')}</li>
+            </ul>
+        </section>
+    );
+}
 
 /**
  * Le verdict de publiabilité, les deux conditions ensemble (spec 10 § 4.3) :
