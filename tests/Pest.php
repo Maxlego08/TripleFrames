@@ -1,5 +1,6 @@
 <?php
 
+use App\Settings\PlatformLimits;
 use Illuminate\Foundation\Testing\DatabaseTruncation;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -97,4 +98,23 @@ function requireMysql(): void
         .'MySQL de TEST (DB_CONNECTION=mysql et DB_DATABASE exportés), jamais la base de développement.',
         $driver,
     ));
+}
+
+/**
+ * Pose des valeurs sous `game.platform.*` et oublie l'instance mémoïsée.
+ *
+ * `PlatformLimits` est liée `scoped` dans le conteneur : un `config()->set()`
+ * nu, une fois l'instance résolue, serait ignoré en silence. Tout test qui
+ * change `game.platform.*` en cours de test passe par cette fonction, qui
+ * rejoue ce que ferait le début d'une nouvelle requête ou d'un nouveau job.
+ *
+ * @param  array<string, mixed>  $values
+ */
+function platformLimitsConfigure(array $values): void
+{
+    foreach ($values as $key => $value) {
+        config()->set('game.platform.'.$key, $value);
+    }
+
+    app()->forgetInstance(PlatformLimits::class);
 }

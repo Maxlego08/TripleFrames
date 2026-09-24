@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use App\Listeners\SyncCarbonLocale;
+use App\Settings\PlatformLimits;
 use App\Support\I18n\LangVersion;
 use App\Support\I18n\NullPlayerTokenLocale;
 use App\Support\I18n\PlayerTokenLocale;
@@ -24,6 +25,7 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->registerLocalization();
+        $this->registerPlatformLimits();
     }
 
     /**
@@ -55,6 +57,22 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton(TranslationDomains::class);
         $this->app->singleton(LangVersion::class);
         $this->app->bind(PlayerTokenLocale::class, NullPlayerTokenLocale::class);
+    }
+
+    /**
+     * Les plafonds de plateforme sont mémoïsés **dans le conteneur**, une fois par
+     * cycle de vie (requête, job), et jamais dans une propriété statique de classe
+     * (spec 50 § 2.3).
+     *
+     * `scoped` et non `singleton` : un worker de file ou d'Octane oublie l'instance
+     * à chaque job ou requête, et un conteneur neuf par test Pest ne relit jamais
+     * la valeur d'un test précédent. Tous les accesseurs statiques de
+     * {@see PlatformLimits} délèguent à cette instance : la garde de bornes de son
+     * constructeur s'applique donc sur tous les chemins.
+     */
+    protected function registerPlatformLimits(): void
+    {
+        $this->app->scoped(PlatformLimits::class, static fn (): PlatformLimits => PlatformLimits::fromConfig());
     }
 
     /**

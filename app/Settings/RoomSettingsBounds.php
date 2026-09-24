@@ -21,12 +21,20 @@ use App\Enums\InputDifficulty;
  *
  * Les bornes CROISÉES vivent ici aussi, parce qu'un FormRequest champ par champ
  * laisserait passer 10 s × 5 images :
- *   1. `D ≥ 5 s × N`  ({@see self::minRoundDuration()})
- *   2. chaque `dᵢ ≥ 5 s` et `Σ dᵢ = D` dans les bornes de `D`
- *   4. `R` face au préchargement ({@see self::RECOMMENDED_MIN_REVEAL_DURATION}, avertissement)
- *   5. avertissements cumulables ({@see self::LONG_ROUND_WARNING_DURATION})
+ *   1. `D ≥ 5 s × N`  ({@see self::minRoundDuration()}) — refusée ;
+ *   2. chaque `dᵢ ≥ 5 s` et `Σ dᵢ = D` dans les bornes de `D` — refusée ;
+ *   4. `R` court ({@see self::RECOMMENDED_MIN_REVEAL_DURATION}) — avertissement ;
+ *   5. avertissements cumulables ({@see self::LONG_ROUND_WARNING_DURATION}).
  * La borne croisée 3 (`pool(thèmes, N) ≥ M`) n'est pas ici : elle dépend du
  * catalogue, que le value object ne voit pas, et reste une garde de lancement dédiée.
+ *
+ * Un RESSERREMENT de toute borne de cette classe incrémente `RoomSettings::VERSION`, avec
+ * son pas dans `upgrade()` : sinon un salon ouvert avant le déploiement garderait
+ * une valeur devenue hors bornes et la figerait au lancement (spec 50 § 2.1,
+ * règle 4). Les bornes lues dans {@see PlatformLimits} — aujourd'hui la seule
+ * borne haute de `capacity` — n'y passent pas : elles sont rattrapées à l'écriture.
+ *
+ * Le client reçoit ces bornes en données par {@see self::toClient()}.
  */
 final readonly class RoomSettingsBounds
 {
@@ -61,7 +69,16 @@ final readonly class RoomSettingsBounds
 
     public const int DEFAULT_REVEAL_DURATION = 8;
 
-    /** Borne croisée 4 : 3 s reste légal, 5 s sont recommandés (avertissement). */
+    /**
+     * Borne croisée 4 : 3 s reste légal, 5 s sont recommandés (avertissement).
+     *
+     * Son seul motif est l'ACCESSIBILITÉ : laisser à l'annonce `aria-live` du titre
+     * le temps d'être lue et au focus celui d'être repris. `R` n'est plus une
+     * fenêtre de préchargement dédiée : seul le palier 1 de la manche suivante
+     * devient servable, dans les `preload_lead_ms` finales de `R` (contrat C7
+     * § 4.14), ce que garantit à lui seul le garde-fou
+     * `MIN_REVEAL_DURATION × 1000 > PlatformLimits::MAX_PRELOAD_LEAD_MS`.
+     */
     public const int RECOMMENDED_MIN_REVEAL_DURATION = 5;
 
     /** Valeur d'un palier, en points. */
@@ -74,6 +91,14 @@ final readonly class RoomSettingsBounds
 
     /** Capacité du salon. La borne haute est le plafond de plateforme. */
     public const int MIN_CAPACITY = 2;
+
+    /**
+     * Seuil de lancement multijoueur : joueurs CONNECTÉS au moins (00 § Le jeu en
+     * une manche). Pour jouer seul, on passe par le mode solo. Jamais au-dessus de
+     * {@see self::MIN_CAPACITY}, sans quoi un salon à la capacité minimale ne
+     * pourrait jamais être lancé.
+     */
+    public const int MIN_CONNECTED_PLAYERS_TO_LAUNCH = 2;
 
     /** Cadence maximale de la saisie libre. */
     public const int MIN_ATTEMPTS_PER_SECOND = 1;
@@ -243,7 +268,9 @@ final readonly class RoomSettingsBounds
     }
 
     /**
-     * Bornes exposées au client, en données — jamais en chaînes pré-formatées.
+     * Bornes d'un `N` donné, en données — jamais en chaînes pré-formatées.
+     *
+     * Le client les reçoit pour chaque `N` par {@see self::toClient()}.
      *
      * @return array<string, array{min: int, max: int}>
      */
@@ -267,6 +294,45 @@ final readonly class RoomSettingsBounds
     }
 
     /**
+     * Forme unique de la prop `bounds` (`RoomSettingsBoundsPayload`) : des
+     * entiers partout, jamais une chaîne.
+     *
+     * Les bornes sont découpées par `N`, de `MIN_FRAMES_PER_ROUND` à
+     * `MAX_FRAMES_PER_ROUND` : un seul jeu, celui du `N` courant, laisserait le
+     * client sans `minRoundDuration(N')` pour le `N'` visé, donc sans retour
+     * immédiat quand `N` change. Les clés de `byFramesPerRound` voyagent en chaînes
+     * d'entier dans le JSON ; aucun type client n'énumère les valeurs de `N`.
+     *
+     * `derivation` et `warningThresholds` portent les seules constantes dont le
+     * client a besoin pour dériver le découpage égal, le barème par défaut,
+     * `attemptsPerRound` par défaut et les avertissements, sans aucun littéral. Le
+     * serveur reste seul juge.
+     *
+     * @return array{byFramesPerRound: array<int, array<string, array{min: int, max: int}>>, derivation: array{tierPointsUnit: int, attemptsPerRoundSecondsPerAttempt: int, attemptsPerRoundSoftCap: int}, warningThresholds: array{recommendedMinRevealDuration: int, longRoundWarningDuration: int}}
+     */
+    public static function toClient(): array
+    {
+        $byFramesPerRound = [];
+
+        for ($framesPerRound = self::MIN_FRAMES_PER_ROUND; $framesPerRound <= self::MAX_FRAMES_PER_ROUND; $framesPerRound++) {
+            $byFramesPerRound[$framesPerRound] = self::toArray($framesPerRound);
+        }
+
+        return [
+            'byFramesPerRound' => $byFramesPerRound,
+            'derivation' => [
+                'tierPointsUnit' => self::TIER_POINTS_UNIT,
+                'attemptsPerRoundSecondsPerAttempt' => self::ATTEMPTS_PER_ROUND_SECONDS_PER_ATTEMPT,
+                'attemptsPerRoundSoftCap' => self::ATTEMPTS_PER_ROUND_SOFT_CAP,
+            ],
+            'warningThresholds' => [
+                'recommendedMinRevealDuration' => self::RECOMMENDED_MIN_REVEAL_DURATION,
+                'longRoundWarningDuration' => self::LONG_ROUND_WARNING_DURATION,
+            ],
+        ];
+    }
+
+    /**
      * Écrêtage d'un entier dans un intervalle fermé — le geste de la normalisation
      * « borne resserrée = écrêtage ».
      */
@@ -275,6 +341,13 @@ final readonly class RoomSettingsBounds
         return max($min, min($max, $value));
     }
 
+    /**
+     * `N` ramené dans ses bornes, pour les dérivations de défaut et de bornes.
+     *
+     * Jamais pour `B_max` : `PlatformLimits::speedBonusMaxPercent()` refuse un `N`
+     * hors bornes au lieu de l'écrêter, pour qu'un rejeu ne masque jamais une
+     * partie invalide (R-05).
+     */
     public static function clampFramesPerRound(int $framesPerRound): int
     {
         return self::clamp($framesPerRound, self::MIN_FRAMES_PER_ROUND, self::MAX_FRAMES_PER_ROUND);

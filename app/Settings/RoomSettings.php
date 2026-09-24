@@ -24,13 +24,17 @@ use UnexpectedValueException;
  * ({@see self::roundDuration()}). Garder les deux ouvrirait une divergence
  * silencieuse entre 40 s annoncés et 13 + 13 + 14 matérialisés.
  *
- * `tierGraceMs`, `preloadLeadMs` et `speedBonusMaxFraction` n'y sont PAS : ce sont
- * des constantes serveur ({@see PlatformLimits}), et les poster est un refus dur.
+ * `tierGraceMs`, `preloadLeadMs` et `speedBonusMaxPercent` n'y sont PAS : ce sont
+ * des constantes d'instance ({@see PlatformLimits}), jamais des réglages d'hôte, et
+ * les poster est un refus dur. `B_max` n'est ni un champ ni un curseur : l'hôte n'a
+ * que l'interrupteur `speedBonus`.
  *
  * **Deux chemins de lecture, jamais confondus.**
  * - ENTRÉE (formulaire) : {@see self::fromInput()} — seul constructeur produisant une
- *   instance valide depuis des données non fiables. Valide bornes simples ET bornes
- *   croisées 1, 2, 4 et 5 ensemble, et REFUSE en renvoyant les erreurs indexées par champ.
+ *   instance valide depuis des données non fiables. Valide les bornes simples et les
+ *   bornes croisées 1 et 2 ensemble, et REFUSE en renvoyant les erreurs indexées par
+ *   champ. Les bornes croisées 4 et 5 ne refusent jamais : ce sont des avertissements,
+ *   rendus par {@see self::warnings()}.
  * - CHARGEMENT (`saved_config`, preset) : {@see self::normalize()} — chaîne ordonnée de
  *   normaliseurs, qui ne refuse JAMAIS et rend un rapport champ par champ.
  *
@@ -44,7 +48,11 @@ final readonly class RoomSettings
     /**
      * Version de la disposition des champs.
      *
-     * Incrémentée dès qu'un champ est ajouté, retiré ou change de sens. Elle est
+     * Incrémentée dès qu'un champ est ajouté, retiré ou change de sens, et dès
+     * qu'une borne de {@see RoomSettingsBounds} se resserre, avec son pas dans
+     * {@see self::upgrade()} : sinon un salon ouvert avant le déploiement garderait
+     * une valeur devenue hors bornes et la figerait au lancement. Les bornes lues
+     * dans {@see PlatformLimits} n'y passent pas (spec 50 § 2.1, règle 4). Elle est
      * écrite en COLONNE (`settings_version`), jamais dans le JSON : il faut savoir
      * lire la charge utile avant de l'ouvrir (§ 1.6).
      */
@@ -85,7 +93,12 @@ final readonly class RoomSettings
      */
     public const string INPUT_ROUND_DURATION = 'roundDuration';
 
-    /** Motifs de modification rendus par {@see self::normalize()}, en données. */
+    /**
+     * Motifs de modification, en données — liste close des codes du rapport de
+     * changements (`RoomSettingsChangeCode`).
+     *
+     * Les six premiers sont rendus par {@see self::normalize()}.
+     */
     public const string CHANGE_DEFAULTED = 'defaulted';
 
     public const string CHANGE_DROPPED = 'dropped';
@@ -97,6 +110,18 @@ final readonly class RoomSettings
     public const string CHANGE_PRUNED = 'pruned';
 
     public const string CHANGE_COERCED = 'coerced';
+
+    /** Onglet Simple (D34 du 23/09) : des paliers inégaux sont réégalisés sur `D`. */
+    public const string CHANGE_EQUALIZED = 'equalized';
+
+    /** Onglet Simple (D34 du 23/09) : un barème personnalisé revient au défaut quand `N` change. */
+    public const string CHANGE_RESET = 'reset';
+
+    /** [J2] Chargement d'une configuration : la capacité est relevée à l'effectif présent. */
+    public const string CHANGE_RAISED = 'raised';
+
+    /** [J2] Preset ou chargement : un champ avancé personnalisé est écrasé. */
+    public const string CHANGE_OVERWRITTEN = 'overwritten';
 
     /** Avertissements non bloquants — bornes croisées 4 et 5. */
     public const string WARNING_SHORT_REVEAL = 'short_reveal';
@@ -120,7 +145,8 @@ final readonly class RoomSettings
      * @param  InputDifficulty  $inputDifficulty  Difficulté de SAISIE du salon.
      * @param  int  $capacity  Nombre de sièges.
      * @param  bool  $allowLateJoin  Entrée après le lancement, à la manche suivante.
-     * @param  bool  $speedBonus  Interrupteur du bonus de rapidité (fraction du palier).
+     * @param  bool  $speedBonus  Interrupteur du bonus de rapidité ; son plafond `B_max(N)` vit
+     *                            dans {@see PlatformLimits::speedBonusMaxPercent()}.
      * @param  bool  $noRepeatMovies  Non-répétition des films déjà joués par le salon.
      * @param  int  $attemptsPerSecond  Cadence maximale de la saisie libre.
      * @param  int  $attemptsPerRound  Plafond absolu de tentatives en texte libre.
