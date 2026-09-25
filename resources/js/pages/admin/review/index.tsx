@@ -13,6 +13,7 @@ import type { ReviewUnpublishTarget } from '@/components/admin/review-unpublish-
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useCurationHeartbeat } from '@/hooks/admin/use-curation-heartbeat';
 import { useTranslations } from '@/hooks/use-translations';
 import { cn } from '@/lib/utils';
 import { dashboard as adminDashboard } from '@/routes/admin';
@@ -33,6 +34,8 @@ type Props = {
     queue: AdminReviewQueue;
     /** Prop facultative : servie au seul rechargement qui la demande. */
     unpublish_preview?: AdminUnpublishPreview | null;
+    /** Cadence du battement de débit (`catalog.curation.heartbeat_seconds`). */
+    heartbeat_seconds: number;
 };
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -131,11 +134,18 @@ function entriesOf(groups: AdminReviewGroup[]): Entry[] {
  *   listes restent utilisables (§ 6.1).
  * - Une déconnexion pendant un envoi laisse la revue telle quelle et se
  *   signale par un toast (§ 13.5).
+ * - Le temps passé à revoir une image compte dans le temps actif de son film
+ *   (§ 10.1) : un battement après chaque saisie, pour le film de l'image
+ *   affichée.
  * - Le panneau a pour identité l'image ET son empreinte : un rendu neuf le
  *   remonte, image rechargée. Un refus s'affiche sous le formulaire ; si le
  *   rechargement de la file a remplacé le panneau, il passe par un toast.
  */
-export default function AdminReviewIndex({ queue, unpublish_preview }: Props) {
+export default function AdminReviewIndex({
+    queue,
+    unpublish_preview,
+    heartbeat_seconds,
+}: Props) {
     const { t } = useTranslations();
     const listRef = useRef<HTMLDivElement>(null);
     const dialogTriggerRef = useRef<HTMLElement | null>(null);
@@ -157,6 +167,10 @@ export default function AdminReviewIndex({ queue, unpublish_preview }: Props) {
         entries[0] ??
         null;
     const currentKey = current === null ? null : panelKeyOf(current.frame);
+
+    // Le temps actif de curation du film de l'image revue (spec 20 § 10.1,
+    // lot L20-17) : la revue d'une image est une page de son film.
+    useCurationHeartbeat(current?.movie.id ?? null, heartbeat_seconds);
 
     // Déconnexion ou erreur réseau d'une visite : rien n'est parti, la
     // revue reste telle quelle, et le curateur l'apprend (§ 13.5).

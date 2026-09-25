@@ -124,6 +124,102 @@ export type AdminCurationOptions = {
 /** Le reste à curer, par voie d'entrée, filtres ignorés. */
 export type AdminCurationTotals = Record<AdminCurationEntry, number>;
 
+/** Une ligne des mesures du débit : une voie, ou les deux réunies. */
+export type AdminThroughputEntry = AdminCurationEntry | 'total';
+
+/**
+ * Les mesures d'une population de films terminés (`ThroughputReport`), en
+ * secondes. `null` : aucune valeur à mesurer — aucun film publié, aucune
+ * image recadrée.
+ */
+export type AdminThroughputMeasures = {
+    films: number;
+    published: number;
+    set_aside: number;
+    active_seconds_total: number;
+    active_seconds_median: number | null;
+    active_seconds_p90: number | null;
+    crop_frames: number;
+    crop_seconds_median: number | null;
+    crop_seconds_p90: number | null;
+};
+
+/** Un film écarté et son motif libre, tel que le journal l'a gardé. */
+export type AdminThroughputSetAside = {
+    movie_id: number;
+    title_original: string;
+    entry: AdminCurationEntry;
+    reason: string | null;
+    terminated_at: string;
+};
+
+/**
+ * Les cibles du jalon 1 et du volume à un p90, et leur projection
+ * (`PilotVerdict::projection()`). `weeks` nul : heures hebdomadaires non
+ * déclarées, ou pas de cible.
+ */
+export type AdminThroughputProjection = {
+    p90_seconds: number | null;
+    j1: {
+        films: number | null;
+        target_kept: boolean | null;
+        seconds: number | null;
+        weeks: number | null;
+    };
+    volume: {
+        films: number | null;
+        seconds: number | null;
+        weeks: number | null;
+    };
+    declared_hours: number;
+    weekly_hours_declared: boolean;
+};
+
+/** L'avancement d'une sous-fenêtre du pilote. */
+export type AdminPilotProgress = {
+    terminated: number;
+    quota: number;
+    first_rank: number;
+    full: boolean;
+};
+
+/** Le verdict du pilote (`PilotVerdict`), rendu une fois la fenêtre pleine. */
+export type AdminPilotVerdict = AdminThroughputProjection & {
+    filled_at: string;
+    films: number;
+    failures: number;
+    total_active_seconds: number;
+    disqualify_seconds: number;
+    disqualified: boolean;
+};
+
+/** Le tableau du débit (`ThroughputReport::toArray()`). */
+export type AdminThroughputReport = {
+    thresholds: {
+        composition: Record<AdminCurationEntry, number>;
+        size: number;
+        disqualify_seconds: number;
+        j1_target_films: number;
+        remaining_after_pilot: number;
+        reserve_seconds: number;
+        volume_cap: number;
+        weekly_curation_hours: number;
+        horizon_weeks: number;
+    };
+    all: {
+        measures: Record<AdminThroughputEntry, AdminThroughputMeasures>;
+        set_aside: AdminThroughputSetAside[];
+        projection: AdminThroughputProjection;
+    };
+    pilot: {
+        progress: Record<AdminCurationEntry, AdminPilotProgress>;
+        full: boolean;
+        measures: Record<AdminThroughputEntry, AdminThroughputMeasures>;
+        set_aside: AdminThroughputSetAside[];
+    };
+    verdict: AdminPilotVerdict | null;
+};
+
 /** Les trois états de curation dérivés (`CurationStatus`). */
 export type AdminCurationStatus =
     | 'ready_to_publish'

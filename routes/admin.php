@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Admin\CatalogController;
+use App\Http\Controllers\Admin\CurationHeartbeatController;
 use App\Http\Controllers\Admin\CurationQueueController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\FrameBankController;
@@ -26,6 +27,7 @@ use App\Http\Controllers\Admin\MovieGroupController;
 use App\Http\Controllers\Admin\MoviePublishController;
 use App\Http\Controllers\Admin\MovieTitleController;
 use App\Http\Controllers\Admin\MovieUnpublishController;
+use App\Http\Controllers\Admin\ThroughputController;
 use App\Http\Controllers\Admin\TwoFactorRequiredController;
 use App\Models\Frame;
 use App\Models\FrameReview;
@@ -84,7 +86,8 @@ use Illuminate\Support\Facades\Route;
 |
 | Les routes d'écriture de l'import — balayage, collage, reprise, aperçu à
 | blanc, liste d'amorçage — portent en plus `throttle:admin-import`, la
-| recherche TMDB `throttle:admin-tmdb-search` (§ 3.4) ; les écritures d'image qui téléchargent un original
+| recherche TMDB `throttle:admin-tmdb-search` (§ 3.4), le battement de débit
+| `throttle:admin-heartbeat` (§ 10.1) ; les écritures d'image qui téléchargent un original
 | ou distribuent un job Imagick — ajout, re-recadrage, relance —
 | `throttle:admin-frame` (C9 § 2) ; les gestes de curation qui n'écrivent
 | qu'en base — changer un niveau, passer une revue, dépublier ou écarter
@@ -136,6 +139,20 @@ Route::middleware(['auth', 'verified', 'role:curator', 'admin.2fa', 'admin.local
         Route::get('curation/next', [CurationQueueController::class, 'next'])
             ->middleware('can:viewAny,'.Movie::class)
             ->name('curation.next');
+
+        // Le débit de curation et le verdict du lot pilote (§ 10.2 à § 10.4,
+        // ligne 8) : un agrégat en lecture seule, jamais nominatif.
+        Route::get('throughput', [ThroughputController::class, 'index'])
+            ->middleware('can:viewAny,'.Movie::class)
+            ->name('throughput.index');
+
+        // Le battement de débit (§ 10.1, ligne 24) : posté par l'éditeur, la
+        // fiche et la revue après une saisie, il n'écrit que
+        // `movie.curation_active_seconds` et répond 204. À SON limiteur,
+        // réglé pour deux onglets ouverts sur la même page.
+        Route::post('catalog/{movie}/heartbeat', [CurationHeartbeatController::class, 'store'])
+            ->middleware(['can:curate,movie', 'throttle:admin-heartbeat'])
+            ->name('catalog.heartbeat');
 
         // Publier ou republier un film (§ 8.1, ligne 19) : un geste explicite,
         // derrière une confirmation qui montre d'abord l'aperçu d'ambiguïté et

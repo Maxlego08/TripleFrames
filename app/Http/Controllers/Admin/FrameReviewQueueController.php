@@ -9,6 +9,7 @@ use App\Support\Curation\CoverageLossPreview;
 use App\Support\Curation\ReviewList;
 use App\Support\Curation\ReviewQueue;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Config;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -38,6 +39,9 @@ class FrameReviewQueueController extends Controller
         return Inertia::render('admin/review/index', [
             'queue' => fn (): array => $this->queue($queue),
             'unpublish_preview' => Inertia::optional(fn (): ?array => $this->unpublishPreview($request, $coverageLoss)),
+            // La cadence du battement de débit (§ 10.1) : la revue d'une image
+            // est une page de son film, où le temps actif se mesure.
+            'heartbeat_seconds' => Config::integer('catalog.curation.heartbeat_seconds'),
         ]);
     }
 

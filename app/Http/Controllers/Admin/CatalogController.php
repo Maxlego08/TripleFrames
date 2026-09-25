@@ -31,6 +31,7 @@ use App\Support\Catalog\TextTarget;
 use App\Support\Curation\CurationStatus;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -188,6 +189,9 @@ class CatalogController extends Controller
                 'unpublish' => Gate::allows('unpublish', $movie),
                 'verifyContent' => Gate::allows('verifyContent', $movie),
             ],
+            // La cadence du battement de débit (§ 10.1) : la fiche est une
+            // page du film, où le temps actif se mesure.
+            'heartbeat_seconds' => Config::integer('catalog.curation.heartbeat_seconds'),
         ]);
     }
 

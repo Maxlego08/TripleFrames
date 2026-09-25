@@ -114,6 +114,9 @@ class FrameBankController extends Controller
             ],
             'captureEnabled' => Config::boolean('catalog.curation.capture_enabled', false),
             'pollSeconds' => Config::integer('catalog.curation.poll_seconds'),
+            // La cadence du battement de débit (§ 10.1) : l'éditeur est une
+            // page du film, où le temps actif se mesure.
+            'heartbeatSeconds' => Config::integer('catalog.curation.heartbeat_seconds'),
             // Ne sert qu'à masquer un bouton : l'ajout et la publication
             // gardent leur propre policy à l'écriture (§ 2.1).
             'abilities' => fn (): array => [

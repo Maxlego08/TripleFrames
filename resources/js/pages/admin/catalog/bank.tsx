@@ -61,6 +61,7 @@ import {
     CardHeader,
 } from '@/components/ui/card';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { useCurationHeartbeat } from '@/hooks/admin/use-curation-heartbeat';
 import { useThroughputShortcuts } from '@/hooks/admin/use-throughput-shortcuts';
 import { useTranslations } from '@/hooks/use-translations';
 import { stripAfterSend, stripNeighbour } from '@/lib/admin/backdrop-strip';
@@ -103,6 +104,8 @@ type Props = {
     limits: AdminFrameLimits;
     captureEnabled: boolean;
     pollSeconds: number;
+    /** Cadence du battement de débit (`catalog.curation.heartbeat_seconds`). */
+    heartbeatSeconds: number;
     sequencePreview: AdminSequencePreview[];
     abilities: AdminBankAbilities;
     /** Prop facultative : servie au seul rechargement qui la demande. */
@@ -190,6 +193,9 @@ type SequenceMask = 'in_play' | 'after_review';
  *   film de la file autre que celui-ci, dans la strate que les filtres de la
  *   file ont posée sur l'URL (§ 4.1, § 6.1) ; dernier arrêt de tabulation,
  *   après la publication (§ 6.4).
+ * - **Temps actif** (lot L20-17) : un battement de débit après chaque saisie
+ *   (§ 10.1) ; le serveur n'ajoute que les écarts qui tiennent dans la
+ *   fenêtre d'inactivité, et seulement tant que le film est en passe 1.
  */
 export default function AdminCatalogBank({
     movie,
@@ -197,6 +203,7 @@ export default function AdminCatalogBank({
     limits,
     captureEnabled,
     pollSeconds,
+    heartbeatSeconds,
     sequencePreview,
     abilities,
     unpublish_preview,
@@ -208,6 +215,10 @@ export default function AdminCatalogBank({
     const gridRef = useRef<BackdropGridHandle>(null);
     const bankRef = useRef<HTMLDivElement>(null);
     const gestureTriggerRef = useRef<HTMLElement | null>(null);
+
+    // Le temps actif de curation du film (spec 20 § 10.1, lot L20-17) : un
+    // battement après chaque saisie, le serveur décide du reste.
+    useCurationHeartbeat(movie.id, heartbeatSeconds);
 
     // La publication du film, au pied (lot L20-13).
     const [publishing, setPublishing] = useState(false);

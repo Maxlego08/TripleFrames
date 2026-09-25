@@ -164,6 +164,27 @@ function adminRoutesMatrix(): array
             ]),
         ),
 
+        // Ligne 8 — le débit de curation et le verdict du pilote : un agrégat
+        // en lecture seule, curateur et au-delà.
+        'admin.throughput.index' => adminRoutesRow(
+            row: 8,
+            method: 'GET',
+            guards: ['can:viewAny,'.Movie::class],
+            curator: 200,
+            admin: 200,
+        ),
+
+        // Ligne 24 — le battement de débit : `MoviePolicy::curate`, réponse
+        // 204 sans corps, sur un brouillon en passe 1.
+        'admin.catalog.heartbeat' => adminRoutesRow(
+            row: 24,
+            method: 'POST',
+            guards: ['can:curate,movie'],
+            curator: 204,
+            admin: 204,
+            parameters: fn (): array => ['movie' => Movie::factory()->create()->getKey()],
+        ),
+
         // Ligne 19 — publier un film : un brouillon PUBLIABLE — contenu
         // vérifié, niveaux 1, 3 et 5 en jeu, clés de réponse projetées — et
         // l'empreinte de l'aperçu d'ambiguïté que la confirmation montrerait.

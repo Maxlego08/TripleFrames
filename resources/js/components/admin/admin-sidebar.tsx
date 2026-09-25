@@ -2,6 +2,7 @@ import { Link, router, usePage } from '@inertiajs/react';
 import {
     Clapperboard,
     DownloadCloud,
+    Gauge,
     LayoutDashboard,
     ListChecks,
     ListOrdered,
@@ -36,6 +37,7 @@ import { index as catalogIndex } from '@/routes/admin/catalog';
 import { index as curationIndex } from '@/routes/admin/curation';
 import { index as importIndex } from '@/routes/admin/import';
 import { index as reviewIndex } from '@/routes/admin/review';
+import { index as throughputIndex } from '@/routes/admin/throughput';
 import type { AdminNavItem } from '@/types/navigation';
 
 /**
@@ -125,6 +127,11 @@ export function AdminSidebar() {
             title: t('admin.nav.import'),
             href: importIndex(),
             icon: DownloadCloud,
+        },
+        {
+            title: t('admin.nav.throughput'),
+            href: throughputIndex(),
+            icon: Gauge,
         },
     ];
 

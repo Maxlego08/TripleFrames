@@ -165,6 +165,18 @@ class FortifyServiceProvider extends ServiceProvider
                 ->by((string) $request->user()?->getAuthIdentifier());
         });
 
+        // Le battement de débit (spec 20 § 10.1, § 13.7) : un POST toutes les
+        // `catalog.curation.heartbeat_seconds` secondes depuis l'éditeur, la
+        // fiche ou la revue d'un film. Par UTILISATEUR, et au moins deux
+        // onglets à cette cadence (`2 × ⌈60 ÷ heartbeat_seconds⌉`, garde de
+        // `CurationConfigTest`) : un second onglet ouvert sur la même page ne
+        // reçoit jamais de 429. Valeur dans
+        // `catalog.curation.rate_limits.heartbeat`, jamais en littéral.
+        RateLimiter::for('admin-heartbeat', function (Request $request) {
+            return Limit::perMinute(Config::integer('catalog.curation.rate_limits.heartbeat'))
+                ->by((string) $request->user()?->getAuthIdentifier());
+        });
+
         // Les sondes d'exploitation (spec 100 § 15), AVANT la vérification du
         // jeton : les essais de jeton sont bornés par adresse. La supervision
         // interroge cinq sondes, dont la plus fréquente chaque minute ; trente

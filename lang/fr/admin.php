@@ -44,6 +44,7 @@ return [
         'catalog' => 'Catalogue',
         'import' => 'Import',
         'review' => 'Revue',
+        'throughput' => 'Débit',
         'back_to_site' => 'Retour au site',
         'role' => [
             'curator' => 'Curateur',
@@ -435,6 +436,115 @@ return [
             'touched_at' => 'Touché le :moment',
             'curate' => 'Curer',
             'open' => 'Fiche',
+        ],
+    ],
+
+    /*
+    | Débit de curation et verdict du lot pilote (spec 20 § 10.2 à § 10.4) :
+    | un agrégat, jamais nominatif. Toutes les substitutions reçoivent des
+    | valeurs DÉJÀ mises en forme par l’écran (nombres, durées, dates) :
+    | `:count`, `:quota`, `:rank` des nombres ; `:duration`, `:hours` des
+    | durées ; `:moment` une date.
+    */
+    'throughput' => [
+        'title' => 'Débit de curation',
+        'heading' => 'Débit de curation et lot pilote',
+        'description' => 'Le temps actif de curation par film et le temps de recadrage par image, mesurés en base pendant la passe 1. Agrégat seulement : aucun curateur n’est nommé. Le catalogue de démonstration est exclu.',
+        'refresh' => 'Rafraîchir',
+        'empty' => 'Aucun film réel n’est encore terminé : un film l’est à sa première publication, ou quand il est écarté.',
+        'go_curation' => 'Ouvrir la file de curation',
+        'no_value' => 'Sans mesure',
+        // Heures hebdomadaires de curation non déclarées : la projection en
+        // semaines est remplacée par ce texte, jamais par un quotient.
+        'hours_undeclared' => 'Heures hebdomadaires de curation non déclarées : aucune projection en semaines. Elles se déclarent avant le lot pilote.',
+
+        'entry' => [
+            'discover' => 'Voie du balayage',
+            'exception' => 'Voie d’exception',
+            'total' => 'Deux voies',
+        ],
+
+        'error' => [
+            'title' => 'Le tableau du débit n’a pas pu être rechargé.',
+            'description' => 'Les chiffres affichés sont ceux du dernier chargement réussi.',
+            'retry' => 'Réessayer',
+        ],
+
+        'pilot' => [
+            'heading' => 'Lot pilote',
+            'description' => 'Les :discover premiers films terminés de la voie du balayage et les :exception premiers de la voie d’exception, soit :size films, comptés à partir du rang fixé avant le lot pour chaque voie. Un film écarté compte comme un échec.',
+            'progress' => ':count sur :quota films terminés',
+            'first_rank' => 'Comptés à partir du rang :rank de la voie',
+            'full' => 'Quota atteint',
+            'open' => 'En cours',
+            'pending' => 'Le verdict attend que chaque voie ait son quota de films terminés.',
+        ],
+
+        'verdict' => [
+            'heading' => 'Verdict du pilote',
+            'filled_at' => 'Fenêtre du pilote remplie le :moment. Ce verdict ne bouge plus : recopiez-le, daté, dans le compte rendu du pilote, qui fait foi.',
+            'disqualified_title' => 'Outil disqualifié',
+            'disqualified' => 'Le temps actif total du pilote, :duration, dépasse le seuil de :hours. L’outil est re-livré avant toute curation de masse, puis un nouveau pilote est mené.',
+            'qualified_title' => 'Temps actif dans la limite',
+            'qualified' => 'Le temps actif total du pilote, :duration, tient sous le seuil de disqualification de :hours.',
+            'outside_back_office' => 'Toute intervention hors du back-office sur le chemin du curateur pendant le pilote disqualifie aussi l’outil : elle se consigne dans le compte rendu du pilote, pas sur cet écran.',
+            'total_active' => 'Temps actif total, films écartés compris',
+            'p90' => 'p90 du temps actif par film publié',
+            'failures' => 'Films écartés, comptés comme échecs',
+            'films' => 'Films du pilote',
+            'j1_heading' => 'Films du jalon 1',
+            'j1_kept' => 'Le jalon 1 reste à :count films : le p90 multiplié par les :remaining films restant après le pilote tient dans la réserve de curation de :hours.',
+            'j1_reduced' => 'Le jalon 1 compte :count films : le p90 multiplié par les :remaining films restant après le pilote dépasse la réserve de curation de :hours, qui, divisée par le p90, donne ce nombre.',
+            'no_published' => 'Aucun film publié dans le pilote : sans p90, ni le nombre de films du jalon 1 ni la cible de volume ne se calculent.',
+            'volume_heading' => 'Cible de volume',
+            'volume_target' => 'Cible de volume : :count films, au p90 de la passe 1, plafonnée à :cap films.',
+            'volume_undeclared' => 'Heures de curation non déclarées : aucune cible de volume. Déclarez avant le lot les heures hebdomadaires et l’horizon en semaines.',
+        ],
+
+        'projection' => [
+            'heading' => 'Projection',
+            'description' => 'Temps de curation projeté : la cible multipliée par le p90 du temps actif par film publié, puis divisé par les heures hebdomadaires déclarées.',
+            'indicative' => 'Projection indicative au p90 de tous les films terminés : elle suit la curation, là où le verdict du pilote est figé.',
+            'target' => 'Cible',
+            'films' => 'Films',
+            'hours' => 'Heures',
+            'weeks' => 'Semaines',
+            'j1' => 'Jalon 1',
+            'volume' => 'Volume',
+            'unavailable' => 'Pas de projection sans film publié.',
+        ],
+
+        'measures' => [
+            'pilot_heading' => 'Mesures du lot pilote',
+            'pilot_description' => 'Les films de la fenêtre du pilote, par voie d’entrée. Seules comptent les images créées avant la terminaison de leur film : la passe 2 n’entre pas dans la mesure.',
+            'all_heading' => 'Tous les films terminés',
+            'all_description' => 'Tous les films réels terminés, pilote compris, par voie d’entrée.',
+            'column' => [
+                'entry' => 'Voie',
+                'films' => 'Films terminés',
+                'published' => 'Publiés',
+                'set_aside' => 'Écartés',
+                'active_total' => 'Temps actif total',
+                'active_median' => 'Médiane par film publié',
+                'active_p90' => 'p90 par film publié',
+                'crop_frames' => 'Images recadrées',
+                'crop_median' => 'Médiane du recadrage',
+                'crop_p90' => 'p90 du recadrage',
+            ],
+        ],
+
+        'set_aside' => [
+            'heading' => 'Films écartés et motifs',
+            'description' => 'Les films terminés par un écart plutôt qu’une publication, dans l’ordre de leur terminaison. Un film écarté puis publié plus tard reste un échec de la mesure.',
+            'empty' => 'Aucun film terminé n’a été écarté.',
+            'in_pilot' => 'Pilote',
+            'no_reason' => 'Aucun motif enregistré',
+            'column' => [
+                'title' => 'Film',
+                'entry' => 'Voie',
+                'reason' => 'Motif',
+                'terminated_at' => 'Écarté le',
+            ],
         ],
     ],
 

@@ -28,7 +28,7 @@ type Props = {
  * Deux règles portées ici et nulle part ailleurs :
  *
  * 1. **Une entrée au-dessus du rôle ne s'affiche pas.** Aucune entrée n'est
- *    réservée à l'administrateur dans ce lot — les cinq écrans sont au seuil
+ *    réservée à l'administrateur au jalon 1 — ses écrans sont tous au seuil
  *    `curator` —, mais la gestion des accès et la modération de la spec 20 le
  *    seront : elles porteront `minRole: 'admin'` et disparaîtront pour un
  *    curateur. Masquage seulement : le serveur reste le seul juge.

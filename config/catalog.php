@@ -168,6 +168,42 @@ return [
     |   (§ 13.5) — plus long qu'un import qui tient la file `default`, pour
     |   ne jamais crier au loup. Au moins 1.
     |
+    | Mesure du débit (§ 10.1, décision 10) :
+    |
+    | - `idle_seconds` : la fenêtre d'inactivité du temps actif par film.
+    |   Vaut 60, et c'est une égalité vérifiée, pas une borne : « pauses de
+    |   plus de 60 s exclues » (décision 10, spec 10 § 3.1). Jamais modifiée
+    |   pendant un lot pilote.
+    | - `heartbeat_seconds` : la cadence du battement posté par l'éditeur, la
+    |   fiche et la revue, STRICTEMENT sous `idle_seconds` — sans quoi aucun
+    |   écart entre deux battements ne tiendrait jamais dans la fenêtre.
+    | - `rate_limits.heartbeat` : limiteur `admin-heartbeat`, par utilisateur
+    |   et par minute, au moins `2 × ⌈60 ÷ heartbeat_seconds⌉` : deux onglets
+    |   ouverts sur la même page ne reçoivent jamais de 429.
+    |
+    | Lot pilote (§ 10.3, § 10.4 ; D10 et D11 du 23/09), valeurs FIXÉES AVANT
+    | le lot et jamais modifiées pendant :
+    |
+    | - `composition.{discover, exception}` : la fenêtre stratifiée, les N
+    |   premiers films terminés de chaque voie ; `size` en est la somme, et
+    |   c'est une contrainte vérifiée (§ 13.7).
+    | - `first_rank.{discover, exception}` : le rang, dans sa voie, du premier
+    |   film terminé qui entre dans la fenêtre (1 au défaut). Se décale pour
+    |   mesurer un second pilote après une re-livraison, ou pour sauter un film
+    |   réel terminé à titre d'essai avant le lot. Aucune colonne ne marque le
+    |   pilote (B9).
+    | - `disqualify_hours` : au-delà de ce temps actif total (films écartés
+    |   compris), l'outil est disqualifié.
+    | - `j1_target_films`, `reserve_hours` : le jalon 1 reste à
+    |   `j1_target_films` films tant que `p90 × (j1_target_films − size)` tient
+    |   dans `reserve_hours` ; sinon il compte `⌊reserve_hours ÷ p90⌋` films.
+    | - `volume_cap` : plafond de la cible de volume.
+    | - `weekly_curation_hours`, `horizon_weeks` : les heures de curation
+    |   déclarées, en heures entières par semaine et en semaines, À DÉCLARER
+    |   AVANT LE LOT (étape 55 de `REPRISE.md`). Zéro = non déclaré : le
+    |   tableau le dit au lieu d'une cible ou d'un quotient, jamais une division
+    |   par zéro.
+    |
     */
 
     'curation' => [
@@ -195,11 +231,33 @@ return [
             'frame' => 30,
             'curation' => 60,
             'search' => 30,
+            'heartbeat' => 12,
         ],
 
         'images_cache_minutes' => 1_440,
         'poll_seconds' => 3,
         'stale_pending_minutes' => 10,
+
+        'idle_seconds' => 60,
+        'heartbeat_seconds' => 15,
+
+        'pilot' => [
+            'composition' => [
+                'discover' => 15,
+                'exception' => 5,
+            ],
+            'size' => 20,
+            'first_rank' => [
+                'discover' => 1,
+                'exception' => 1,
+            ],
+            'disqualify_hours' => 10,
+            'j1_target_films' => 60,
+            'reserve_hours' => 36,
+            'volume_cap' => 500,
+            'weekly_curation_hours' => 0,
+            'horizon_weeks' => 0,
+        ],
     ],
 
 ];

@@ -67,10 +67,20 @@ export function formatDuration(
         return null;
     }
 
-    const seconds = Math.max(
-        0,
+    return formatSeconds(
         Math.round((to.getTime() - from.getTime()) / 1000),
+        locale,
     );
+}
+
+/**
+ * Une durée donnée en secondes, en unités de la locale : secondes sous
+ * quatre-vingt-dix secondes, minutes sous quatre-vingt-dix minutes, heures
+ * au dixième au-delà. Sert aussi au tableau du débit (spec 20 § 10.2), où
+ * médiane et p90 arrivent en secondes entières.
+ */
+export function formatSeconds(value: number, locale: string): string {
+    const seconds = Math.max(0, Math.round(value));
 
     if (seconds < 90) {
         return formatUnit(seconds, 'second', locale);
@@ -81,6 +91,50 @@ export function formatDuration(
     }
 
     return formatUnit(Math.round(seconds / 360) / 10, 'hour', locale);
+}
+
+/**
+ * Une durée exacte à la seconde : heures, minutes et secondes de la locale,
+ * les unités nulles omises, jointes par la liste étroite de la locale.
+ *
+ * Sert au verdict du pilote (spec 20 § 10.3), recopié tel quel dans son
+ * compte rendu : le temps actif total et le p90 s'y comparent à des seuils
+ * ronds, et un arrondi au dixième d'heure ou à la minute afficherait « 10 h »
+ * au-dessus comme au-dessous d'un seuil de 10 h.
+ */
+export function formatPreciseDuration(value: number, locale: string): string {
+    const total = Math.max(0, Math.round(value));
+    const hours = Math.floor(total / 3600);
+    const minutes = Math.floor((total % 3600) / 60);
+    const seconds = total % 60;
+    const parts: string[] = [];
+
+    if (hours > 0) {
+        parts.push(formatUnit(hours, 'hour', locale));
+    }
+
+    if (minutes > 0) {
+        parts.push(formatUnit(minutes, 'minute', locale));
+    }
+
+    if (seconds > 0 || parts.length === 0) {
+        parts.push(formatUnit(seconds, 'second', locale));
+    }
+
+    return new Intl.ListFormat(locale, {
+        style: 'narrow',
+        type: 'unit',
+    }).format(parts);
+}
+
+/** Une durée en heures, au dixième : seuils et projections du débit. */
+export function formatHours(seconds: number, locale: string): string {
+    return formatUnit(Math.round(seconds / 360) / 10, 'hour', locale);
+}
+
+/** Un nombre de semaines, au dixième : projection du débit. */
+export function formatWeeks(weeks: number, locale: string): string {
+    return formatUnit(Math.round(weeks * 10) / 10, 'week', locale);
 }
 
 /**
@@ -110,7 +164,7 @@ export function levelsFromMask(mask: number): boolean[] {
 
 function formatUnit(
     value: number,
-    unit: 'second' | 'minute' | 'hour',
+    unit: 'second' | 'minute' | 'hour' | 'week',
     locale: string,
 ): string {
     return new Intl.NumberFormat(locale, {

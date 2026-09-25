@@ -55,6 +55,7 @@ import {
     TableRow,
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useCurationHeartbeat } from '@/hooks/admin/use-curation-heartbeat';
 import { useTranslations } from '@/hooks/use-translations';
 import {
     CERTIFICATION_COUNTRY_KEYS,
@@ -133,6 +134,8 @@ type Props = {
      */
     text_preview?: AdminTextPreview | null;
     abilities: AdminMovieAbilities;
+    /** Cadence du battement de débit (`catalog.curation.heartbeat_seconds`). */
+    heartbeat_seconds: number;
 };
 
 /** Les gestes de la fiche qui passent par une confirmation (spec 20 § 4.3). */
@@ -177,6 +180,9 @@ const TMDB_MOVIE_URL = 'https://www.themoviedb.org/movie/';
  * un film retiré. Titres, alias et formes acceptées (§ 9.1, § 9.2) vivent
  * dans leur onglet, le regroupement « même œuvre » (§ 9.4) dans le sien :
  * chaque bloc porte ses gestes, sous la même capacité `curate`.
+ *
+ * Le temps passé sur la fiche compte dans le temps actif du film (§ 10.1) :
+ * un battement après chaque saisie, tant que le film se cure.
  */
 export default function AdminCatalogShow({
     movie,
@@ -196,8 +202,13 @@ export default function AdminCatalogShow({
     publication_preview,
     text_preview,
     abilities,
+    heartbeat_seconds,
 }: Props) {
     const { t, locale } = useTranslations();
+
+    // Le temps actif de curation du film (spec 20 § 10.1, lot L20-17) : la
+    // fiche est une page du film. Jamais sur un film qui ne se cure plus.
+    useCurationHeartbeat(abilities.curate ? movie.id : null, heartbeat_seconds);
 
     // Les gestes : lequel est ouvert, et d'où il est parti.
     const [gesture, setGesture] = useState<MovieGesture | null>(null);
