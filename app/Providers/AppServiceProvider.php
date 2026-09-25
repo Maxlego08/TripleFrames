@@ -11,6 +11,7 @@ use App\Support\I18n\LangVersion;
 use App\Support\I18n\NullPlayerTokenLocale;
 use App\Support\I18n\PlayerTokenLocale;
 use App\Support\I18n\TranslationDomains;
+use App\Support\Identity\PlayerTokenManager;
 use App\Support\Ops\SystemLoad;
 use App\Support\Retention\PurgeHandler;
 use App\Support\Retention\PurgeHandlers;
@@ -65,15 +66,21 @@ class AppServiceProvider extends ServiceProvider
      * les middlewares de route le remplissent, la prop Inertia `translations`
      * le lit au rendu.
      *
-     * `PlayerTokenLocale` est le niveau 3 de la résolution de langue ; la
-     * forme du `player_token` appartenant aux specs 10 et 40, il est lié à une
-     * implémentation neutre tant que le jeton n'est pas frappé.
+     * `PlayerTokenLocale` est le niveau 3 de la résolution de langue ; il
+     * reste lié à une implémentation neutre jusqu'au lot L40-2 (spec 40 § 4),
+     * qui le branche sur le jeton.
+     *
+     * `PlayerTokenManager` est un singleton **sans état** (spec 40 § 3.1) : le
+     * jeton courant est mémorisé dans les attributs de la requête, jamais dans
+     * l'objet, pour qu'aucune identité ne fuie d'une requête à l'autre dans un
+     * processus long.
      */
     protected function registerLocalization(): void
     {
         $this->app->singleton(TranslationDomains::class);
         $this->app->singleton(LangVersion::class);
         $this->app->bind(PlayerTokenLocale::class, NullPlayerTokenLocale::class);
+        $this->app->singleton(PlayerTokenManager::class);
     }
 
     /**

@@ -493,7 +493,7 @@ Ensuite, à chaque session : **« Implémente l'étape suivante de l'ordre des l
 62. L90-5 — pages d'erreur, composants d'état → 15, 18 — ✅ livrée le 25/09
 63. L40-5 — registre des 24 avatars (Kenney CC0, D27) → — — ✅ livrée le 25/09
 64. P — licence du pack dans `public/avatars/LICENSE.md` → 63
-65. L40-1 — jeton d'invité, refus de l'expulsé (`kicked_at`) → 63
+65. L40-1 — jeton d'invité, refus de l'expulsé (`kicked_at`) → 63 — ✅ livrée le 25/09
 66. L40-2 — langue portée par le jeton → 65
 67. L40-3 — pseudo : forme canonique, écriture latine (D26) → 37, 63
 68. L40-4 — liste noire des pseudos → 67

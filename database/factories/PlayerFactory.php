@@ -95,6 +95,7 @@ class PlayerFactory extends Factory
             'last_seen_at' => now(),
             'disconnected_at' => null,
             'left_at' => null,
+            'kicked_at' => null,
         ];
     }
 
@@ -155,6 +156,26 @@ class PlayerFactory extends Factory
             'disconnected_at' => now(),
             'left_at' => now(),
         ]);
+    }
+
+    /**
+     * Siège expulsé par l'hôte (D15 du 23/09, spec 40 § 3.10) : `left`, et
+     * `left_at = kicked_at` au **même instant serveur**, à la milliseconde. Son
+     * jeton est refusé dans ce salon jusqu'à l'archivage ; `kicked_at` n'est
+     * jamais remise à NULL. Le pseudo reste réservé (unicité sur tous les sièges
+     * du salon, expulsés compris).
+     */
+    public function kicked(): static
+    {
+        return $this->state(function (array $attributes): array {
+            $now = now();
+
+            return [
+                'connection_state' => PlayerConnectionState::Left,
+                'left_at' => $now,
+                'kicked_at' => $now,
+            ];
+        });
     }
 
     /**

@@ -6,6 +6,7 @@ use App\Avatars\AvatarRef;
 use App\Enums\AvatarKind;
 use App\Enums\Locale;
 use App\Enums\PlayerConnectionState;
+use App\Support\Identity\PlayerToken;
 use Carbon\CarbonImmutable;
 use Database\Factories\PlayerFactory;
 use Illuminate\Database\Eloquent\Attributes\DateFormat;
@@ -41,6 +42,13 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  * prendre un second siège sous un autre `player_token`, et le schéma ne peut pas
  * le voir sans donnée personnelle.
  *
+ * **Un siège s'identifie par le seul hash du `player_token` courant, expulsé
+ * toujours exclu** (spec 40 § 3.9) : {@see self::heldByToken()} combiné à
+ * `whereNull('kicked_at')`, ou `PlayerTokenManager::seatIn()` pour un salon
+ * donné. Un siège expulsé passe `left` avec `kicked_at` posé au même instant que
+ * `left_at` (D15 du 23/09) ; son jeton est refusé dans ce salon jusqu'à
+ * l'archivage, qui efface le hash.
+ *
  * `player.created_at` **n'est pas une colonne pilote de purge** : un siège se
  * supprime uniquement par dépendance (§ 11). Deux déclencheurs effacent les
  * identifiants d'invité — `room.archived_at` pour un siège de salon,
@@ -57,9 +65,9 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  * @property int|null $room_id `#[Hidden]` : la liste des joueurs EST la charge utile du lobby, et `room.id` y partirait douze fois par salon.
  * @property int|null $user_id `#[Hidden]`.
  * @property string|null $nickname
- * @property string|null $nickname_normalized
+ * @property string|null $nickname_normalized `#[Hidden]` : forme repliée, jamais affichée.
  * @property CarbonImmutable|null $nickname_masked_at
- * @property string|null $player_token_hash
+ * @property string|null $player_token_hash `#[Hidden]` : SHA-256 du `tid` du `player_token`, jamais de la valeur du cookie (spec 40 § 3.5).
  * @property string|null $active_seat_token
  * @property Locale $locale
  * @property AvatarKind|null $avatar_kind
@@ -69,6 +77,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  * @property CarbonImmutable $last_seen_at
  * @property CarbonImmutable|null $disconnected_at
  * @property CarbonImmutable|null $left_at
+ * @property CarbonImmutable|null $kicked_at Expulsion par l'hôte (D15 du 23/09) : posée au même instant serveur que `left_at`, jamais remise à NULL. Hors `#[Fillable]`, `#[Hidden]`.
  * @property CarbonImmutable|null $created_at
  * @property CarbonImmutable|null $updated_at
  * @property-read Room|null $room
@@ -90,7 +99,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
     'avatar_kind',
     'avatar_preset',
 ])]
-#[Hidden(['id', 'room_id', 'user_id', 'player_token_hash', 'active_seat_token', 'user'])]
+#[Hidden(['id', 'room_id', 'user_id', 'user', 'player_token_hash', 'solo_token_hash', 'active_seat_token', 'nickname_normalized', 'kicked_at'])]
 class Player extends Model
 {
     /** @use HasFactory<PlayerFactory> */
@@ -112,6 +121,33 @@ class Player extends Model
     protected function holdingSeat(Builder $query): void
     {
         $query->where('connection_state', '<>', PlayerConnectionState::Left->value);
+    }
+
+    /**
+     * Sièges tenus par ce `player_token` : `player_token_hash = $token->hash()`
+     * (spec 40 § 3.1), servi par `player_room_token_uq` pour un salon donné et
+     * par `player_token_idx` sinon.
+     *
+     * **N'exclut pas un siège expulsé** : tout consommateur qui identifie un siège
+     * le combine à `whereNull('kicked_at')` (§ 3.9, I4.9), ou passe par
+     * `PlayerTokenManager::seatIn()` pour un salon donné.
+     *
+     * @param  Builder<static>  $query
+     */
+    #[Scope]
+    protected function heldByToken(Builder $query, PlayerToken $token): void
+    {
+        $query->where('player_token_hash', $token->hash());
+    }
+
+    /**
+     * Siège expulsé par l'hôte (D15 du 23/09) : son jeton est refusé dans ce
+     * salon jusqu'à l'archivage, qui efface le hash. `kicked_at` n'est jamais
+     * remise à NULL — aucune réadmission.
+     */
+    public function wasKicked(): bool
+    {
+        return $this->kicked_at !== null;
     }
 
     /**
@@ -223,6 +259,7 @@ class Player extends Model
             'last_seen_at' => 'datetime',
             'disconnected_at' => 'datetime',
             'left_at' => 'datetime',
+            'kicked_at' => 'datetime',
         ];
     }
 

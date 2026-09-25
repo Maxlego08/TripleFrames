@@ -55,7 +55,16 @@ function forbiddenSerializedKeys(): array
             'last_login_at',
         ]],
         'room' => [Room::class, ['id', 'host_player_id', 'settings_version']],
-        'player' => [Player::class, ['id', 'room_id', 'user_id', 'player_token_hash', 'active_seat_token']],
+        'player' => [Player::class, [
+            'id',
+            'room_id',
+            'user_id',
+            'player_token_hash',
+            'solo_token_hash',
+            'active_seat_token',
+            'nickname_normalized',
+            'kicked_at',
+        ]],
         'game' => [Game::class, ['room_id', 'draw_seed', 'draw_pool_size', 'settings_snapshot']],
         'game_player' => [GamePlayer::class, ['player_id']],
         'round' => [Round::class, [
@@ -181,4 +190,26 @@ it('never publishes the account of another player through the seat', function ()
     expect(array_key_exists('user', $serialized))->toBeFalse();
     expect($payload)->not->toContain((string) $user->email);
     expect($payload)->not->toContain('"role"');
+});
+
+it("ne sérialise jamais nickname_normalized ni kicked_at d'un siège", function () {
+    // Spec 10 § 7.1 (E10-34) : la forme repliée du pseudo n'est « jamais
+    // affichée », et l'instant d'expulsion ne regarde que le serveur. Un siège
+    // EXPULSÉ, pour que `kicked_at` soit réellement renseignée : sur un siège
+    // ordinaire, la clé manquerait par nullité et le test passerait à vide.
+    $seat = Player::factory()->kicked()->create();
+
+    expect($seat->nickname_normalized)->not->toBeNull()
+        ->and($seat->kicked_at)->not->toBeNull();
+
+    $serialized = $seat->refresh()->toArray();
+    $payload = json_encode($serialized, JSON_THROW_ON_ERROR);
+
+    expect(array_key_exists('nickname_normalized', $serialized))->toBeFalse()
+        ->and(array_key_exists('kicked_at', $serialized))->toBeFalse()
+        ->and($payload)->not->toContain('"'.$seat->nickname_normalized.'"')
+        ->and($seat->getHidden())->toContain('nickname_normalized', 'kicked_at');
+
+    // Ce qui reste visible : le public_id, seule adresse d'un siège côté client.
+    expect($serialized)->toHaveKey('public_id');
 });
