@@ -75,6 +75,8 @@ export default defineConfig({
             // le poste, jamais en CI, et leurs modules `k6/*` ne se résolvent
             // pas sous le lint à types.
             'tests/Load/**',
+            // Maquettes d'interface du porteur (design-test/MAQUETTES.md).
+            'design-test/**',
         ],
         options: {
             denyWarnings: true,
@@ -98,6 +100,7 @@ export default defineConfig({
             // rembourre chaque cellule de tableau. `CLAUDE.md`, versionné
             // depuis le 23/09 (D9), en est exclu pour la même raison.
             'CLAUDE.md',
+            'design-test/**',
             'docs/**',
             'resources/js/components/ui/*',
             'resources/views/mail/*',

@@ -92,6 +92,13 @@ function realFixtureIsAllowed(string $path, array $tracked): bool
         return in_array('public/avatars/LICENSE.md', $tracked, true);
     }
 
+    // Maquettes d'interface du porteur (décision du 26/09) : images seulement,
+    // jamais un vidage ni une archive, et seulement tant que le fichier qui
+    // interdit tout photogramme dans ce dossier est suivi à côté d'elles.
+    if (preg_match('#^design-test/.+\.(png|jpe?g|webp|svg)$#', $path) === 1) {
+        return in_array('design-test/MAQUETTES.md', $tracked, true);
+    }
+
     return false;
 }
 
