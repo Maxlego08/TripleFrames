@@ -23,10 +23,12 @@ use App\Models\MovieTheme;
 use App\Models\MovieTitle;
 use App\Models\MovieTmdbTag;
 use App\Models\User;
+use App\Settings\RoomSettingsBounds;
 use App\Support\Admin\AdminCatalogPresenter;
 use App\Support\Catalog\AmbiguityPreview;
 use App\Support\Catalog\AnswerKeyNormalizer;
 use App\Support\Catalog\TextTarget;
+use App\Support\Curation\CurationStatus;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -198,6 +200,8 @@ class CatalogController extends Controller
      *     content_flag: list<string>,
      *     import_source: list<string>,
      *     playable_at: list<int>,
+     *     missing_title: list<string>,
+     *     curation_status: list<string>,
      *     exception: list<string>,
      *     sort: list<string>,
      *     direction: list<string>,
@@ -209,10 +213,14 @@ class CatalogController extends Controller
             'availability' => array_column(ContentAvailability::cases(), 'value'),
             'content_flag' => array_column(ContentFlag::cases(), 'value'),
             'import_source' => array_column(ImportSource::cases(), 'value'),
+            // Les bornes de `N` des réglages de salon, jamais un littéral
+            // (règle 2, n° 26).
             'playable_at' => range(
-                CatalogIndexRequest::PLAYABLE_AT_MIN,
-                CatalogIndexRequest::PLAYABLE_AT_MAX,
+                RoomSettingsBounds::MIN_FRAMES_PER_ROUND,
+                RoomSettingsBounds::MAX_FRAMES_PER_ROUND,
             ),
+            'missing_title' => array_column(Locale::cases(), 'value'),
+            'curation_status' => array_column(CurationStatus::cases(), 'value'),
             'exception' => CatalogIndexRequest::EXCEPTIONS,
             'sort' => CatalogIndexRequest::SORTS,
             'direction' => CatalogIndexRequest::DIRECTIONS,
@@ -273,6 +281,26 @@ class CatalogController extends Controller
             $query->where('movie_projection.levels_count', '>=', $playableAt);
         }
 
+        $missingTitle = $request->missingTitle();
+
+        if ($missingTitle !== null) {
+            // La file « titres manquants » (§ 9.3) : le bit de la locale est nul
+            // dans `title_locale_mask` — arithmétique entière portable — et le
+            // masque est à la version COURANTE. Un masque périmé, ou une ligne
+            // de projection absente, ne se lit jamais comme valide : le film
+            // n'y entre pas, `catalog:reproject` l'y fera entrer.
+            $query->where('movie_projection.title_mask_version', Locale::MASK_VERSION)
+                ->whereRaw('(movie_projection.title_locale_mask & ?) = 0', [$missingTitle->maskBit()]);
+        }
+
+        $curationStatus = $request->curationStatus();
+
+        if ($curationStatus !== null) {
+            [$condition, $bindings] = $curationStatus->condition();
+
+            $query->whereRaw($condition, $bindings);
+        }
+
         if ($applyException) {
             $this->applyExceptionFilter($query, $request);
         }
@@ -316,12 +344,9 @@ class CatalogController extends Controller
      * pagination mentirait.
      *
      * `created_at` trie sur `movie.created_at`, la colonne que la tête de
-     * colonne annonce — et non sur l'auto-incrément. L'invariant « `movie.id`
-     * croît avec la date d'entrée » ne tient que pour les lignes écrites par
-     * l'import : il est faux dès qu'un `created_at` est posé à la main, et le
-     * bloc « films non curés » du tableau de bord trie, lui, sur la date. Deux
-     * écrans qui ouvrent la même file dans deux ordres différents sont pires
-     * qu'un filesort sur quelques centaines de lignes.
+     * colonne annonce — et non sur l'auto-incrément, dont l'invariant
+     * « `movie.id` croît avec la date d'entrée » est faux dès qu'un
+     * `created_at` est posé à la main.
      *
      * @param  Builder<Movie>  $query
      * @return Builder<Movie>
@@ -329,6 +354,15 @@ class CatalogController extends Controller
     private function sorted(Builder $query, CatalogIndexRequest $request): Builder
     {
         $direction = $request->direction();
+
+        // Titres manquants : les films publiés d'abord (§ 9.3) — ce sont eux
+        // qu'un joueur voit sans titre dans sa langue —, puis le tri choisi.
+        if ($request->missingTitle() !== null) {
+            $query->orderByRaw(
+                'case when movie.availability = ? then 0 else 1 end',
+                [ContentAvailability::Published->value],
+            );
+        }
 
         $column = match ($request->sort()) {
             'created_at' => 'movie.created_at',

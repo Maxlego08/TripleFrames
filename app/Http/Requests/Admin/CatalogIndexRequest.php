@@ -5,6 +5,9 @@ namespace App\Http\Requests\Admin;
 use App\Enums\ContentAvailability;
 use App\Enums\ContentFlag;
 use App\Enums\ImportSource;
+use App\Enums\Locale;
+use App\Settings\RoomSettingsBounds;
+use App\Support\Curation\CurationStatus;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -62,11 +65,6 @@ class CatalogIndexRequest extends FormRequest
     /** @var list<string> */
     public const array DIRECTIONS = ['asc', 'desc'];
 
-    /** Le vivier se compte de 2 à 5 images par manche, jamais ailleurs. */
-    public const int PLAYABLE_AT_MIN = 2;
-
-    public const int PLAYABLE_AT_MAX = 5;
-
     /** Une page de catalogue. */
     public const int PER_PAGE = 25;
 
@@ -87,12 +85,18 @@ class CatalogIndexRequest extends FormRequest
             'content_flag' => ['nullable', Rule::enum(ContentFlag::class)],
             'import_source' => ['nullable', Rule::enum(ImportSource::class)],
             'exception' => ['nullable', Rule::in(self::EXCEPTIONS)],
+            // Les bornes de `N` sont celles des réglages de salon, lues dans
+            // `RoomSettingsBounds` et jamais recopiées ici (règle 2, n° 26).
             'playable_at' => [
                 'nullable',
                 'integer',
-                'min:'.self::PLAYABLE_AT_MIN,
-                'max:'.self::PLAYABLE_AT_MAX,
+                'min:'.RoomSettingsBounds::MIN_FRAMES_PER_ROUND,
+                'max:'.RoomSettingsBounds::MAX_FRAMES_PER_ROUND,
             ],
+            // La file « titres manquants » (spec 20 § 9.3) : une locale ACTIVÉE.
+            'missing_title' => ['nullable', Rule::enum(Locale::class)],
+            // Prêts à publier, incomplets, écartés (§ 4.2, § 6.6, § 8.6).
+            'curation_status' => ['nullable', Rule::enum(CurationStatus::class)],
             'sort' => ['nullable', Rule::in(self::SORTS)],
             'direction' => ['nullable', Rule::in(self::DIRECTIONS)],
             'page' => ['nullable', 'integer', 'min:1'],
@@ -113,6 +117,8 @@ class CatalogIndexRequest extends FormRequest
             'import_source' => __('admin.validation.import_source'),
             'exception' => __('admin.validation.exception'),
             'playable_at' => __('admin.validation.playable_at'),
+            'missing_title' => __('admin.validation.missing_title'),
+            'curation_status' => __('admin.validation.curation_status'),
             'sort' => __('admin.validation.sort'),
             'direction' => __('admin.validation.direction'),
         ];
@@ -129,6 +135,8 @@ class CatalogIndexRequest extends FormRequest
      *     import_source: string|null,
      *     exception: string|null,
      *     playable_at: int|null,
+     *     missing_title: string|null,
+     *     curation_status: string|null,
      *     sort: string,
      *     direction: string,
      * }
@@ -142,6 +150,8 @@ class CatalogIndexRequest extends FormRequest
             'import_source' => $this->choice('import_source', array_column(ImportSource::cases(), 'value')),
             'exception' => $this->choice('exception', self::EXCEPTIONS),
             'playable_at' => $this->playableAt(),
+            'missing_title' => $this->missingTitle()?->value,
+            'curation_status' => $this->curationStatus()?->value,
             'sort' => $this->sort(),
             'direction' => $this->direction(),
         ];
@@ -164,7 +174,21 @@ class CatalogIndexRequest extends FormRequest
 
         $value = $this->integer('playable_at');
 
-        return $value >= self::PLAYABLE_AT_MIN && $value <= self::PLAYABLE_AT_MAX ? $value : null;
+        return $value >= RoomSettingsBounds::MIN_FRAMES_PER_ROUND && $value <= RoomSettingsBounds::MAX_FRAMES_PER_ROUND
+            ? $value
+            : null;
+    }
+
+    /** La locale activée dont le titre manque, hors registre ramenée à `null`. */
+    public function missingTitle(): ?Locale
+    {
+        return Locale::tryFrom(trim((string) $this->string('missing_title')));
+    }
+
+    /** L'état de curation filtré, hors liste ramené à `null`. */
+    public function curationStatus(): ?CurationStatus
+    {
+        return CurationStatus::tryFrom(trim((string) $this->string('curation_status')));
     }
 
     public function sort(): string

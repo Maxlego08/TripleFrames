@@ -22,6 +22,7 @@ use App\Models\MovieTheme;
 use App\Models\MovieTitle;
 use App\Models\MovieTmdbTag;
 use App\Models\ThemeLabel;
+use App\Settings\RoomSettingsBounds;
 use App\Support\Curation\ExclusionGrid;
 use App\Support\Curation\FrameCurationState;
 use App\Support\Curation\ReviewQueue;
@@ -144,6 +145,39 @@ final class AdminCatalogPresenter
     }
 
     /**
+     * Une ligne de la file de curation (spec 20 § 4.1) : la ligne de liste, son
+     * rang dans la file filtrée, et l'instant de sa dernière retouche — `null`
+     * pour un film non entamé, qui n'a encore aucune image hors des écartées.
+     *
+     * @return array<string, mixed>
+     */
+    public static function curationQueueRow(Movie $movie, ?CarbonImmutable $touchedAt, int $rank): array
+    {
+        return [
+            ...self::movieRow($movie),
+            'rank' => $rank,
+            'is_started' => $touchedAt !== null,
+            'touched_at' => self::moment($touchedAt),
+        ];
+    }
+
+    /**
+     * Un film écarté (spec 20 § 4.2), tel que le tableau de bord le liste : la
+     * ligne de liste, le motif — obligatoire au geste, relu tel quel — et
+     * l'instant où il a été écarté.
+     *
+     * @return array<string, mixed>
+     */
+    public static function setAsideRow(Movie $movie): array
+    {
+        return [
+            ...self::movieRow($movie),
+            'availability_reason' => $movie->availability_reason,
+            'availability_changed_at' => self::moment($movie->availability_changed_at),
+        ];
+    }
+
+    /**
      * La projection d'un film. `covers_publishable` et `playable_at` sont
      * **dérivés**, jamais stockés (§ 3.2) : la couverture se teste par
      * `levels_mask & 21 = 21`, arithmétique entière portable, et jamais par
@@ -171,7 +205,9 @@ final class AdminCatalogPresenter
         /** @var list<int> $playableAt */
         $playableAt = [];
 
-        foreach (range(2, 5) as $framesPerRound) {
+        // Les bornes de `N` sont celles des réglages de salon, jamais un
+        // littéral (règle 2, n° 26).
+        foreach (range(RoomSettingsBounds::MIN_FRAMES_PER_ROUND, RoomSettingsBounds::MAX_FRAMES_PER_ROUND) as $framesPerRound) {
             if ($projection->supportsFramesPerRound($framesPerRound)) {
                 $playableAt[] = $framesPerRound;
             }

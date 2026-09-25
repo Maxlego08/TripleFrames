@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Admin\CatalogController;
+use App\Http\Controllers\Admin\CurationQueueController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\FrameBankController;
 use App\Http\Controllers\Admin\FrameCaptureController;
@@ -119,6 +120,18 @@ Route::middleware(['auth', 'verified', 'role:curator', 'admin.2fa', 'admin.local
         Route::get('catalog/{movie}', [CatalogController::class, 'show'])
             ->middleware('can:view,movie')
             ->name('catalog.show');
+
+        // La file de curation et « film suivant » (§ 4.1, ligne 3) : deux
+        // lectures, la seconde une simple redirection vers l'éditeur du
+        // premier film de la file autre que le courant — ou vers la file,
+        // vide. L'éditeur garde sa propre policy (`curate`).
+        Route::get('curation', [CurationQueueController::class, 'index'])
+            ->middleware('can:viewAny,'.Movie::class)
+            ->name('curation.index');
+
+        Route::get('curation/next', [CurationQueueController::class, 'next'])
+            ->middleware('can:viewAny,'.Movie::class)
+            ->name('curation.next');
 
         // Publier ou republier un film (§ 8.1, ligne 19) : un geste explicite,
         // derrière une confirmation qui montre d'abord l'aperçu d'ambiguïté et

@@ -1,4 +1,6 @@
 import type {
+    AdminCurationEntry,
+    AdminCurationStatus,
     CertificationCountry,
     ContentAvailability,
     ContentFlag,
@@ -170,4 +172,32 @@ export const EXCEPTION_MOTIVE_KEYS: Record<
     language: 'admin.catalog.exception.motive.language',
     vote_count: 'admin.catalog.exception.motive.vote_count',
     release_year: 'admin.catalog.exception.motive.release_year',
+};
+
+/**
+ * Les trois états de curation dérivés (`CurationStatus`, spec 20 § 8.6) : le
+ * filtre du catalogue et les tuiles du tableau de bord parlent la même
+ * langue, et chaque tuile mène à la liste qu'elle annonce.
+ */
+export const CURATION_STATUS_KEYS: Record<AdminCurationStatus, TranslationKey> =
+    {
+        ready_to_publish:
+            'admin.catalog.filters.curation_status.ready_to_publish',
+        incomplete: 'admin.catalog.filters.curation_status.incomplete',
+        set_aside: 'admin.catalog.filters.curation_status.set_aside',
+    };
+
+/**
+ * Le filtre « titres manquants » (spec 20 § 9.3), une option par locale
+ * **activée** ; une valeur que la table ignore s'affiche brute.
+ */
+export const MISSING_TITLE_KEYS: Partial<Record<string, TranslationKey>> = {
+    fr: 'admin.catalog.filters.missing_title.fr',
+    en: 'admin.catalog.filters.missing_title.en',
+};
+
+/** Les deux voies d'entrée de la file de curation (lot pilote, § 10.3). */
+export const CURATION_ENTRY_KEYS: Record<AdminCurationEntry, TranslationKey> = {
+    discover: 'admin.curation.filters.entry.discover',
+    exception: 'admin.curation.filters.entry.exception',
 };

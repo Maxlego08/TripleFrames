@@ -5,6 +5,7 @@ use App\Enums\ContentFlag;
 use App\Enums\ContentOrigin;
 use App\Enums\FrameLevel;
 use App\Enums\ImportSource;
+use App\Enums\Locale;
 use App\Models\Alias;
 use App\Models\Collection;
 use App\Models\Frame;
@@ -12,6 +13,7 @@ use App\Models\ImportRun;
 use App\Models\Movie;
 use App\Models\MovieCertification;
 use App\Models\MovieGroup;
+use App\Models\MovieProjection;
 use App\Models\MovieTitle;
 use App\Models\MovieTmdbTag;
 use App\Models\User;
@@ -20,6 +22,7 @@ use Database\Factories\MovieFactory;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Testing\AssertableInertia as Assert;
+use Tests\Support\Frames\FrameBank;
 
 /*
 |--------------------------------------------------------------------------
@@ -408,4 +411,50 @@ test('la fiche ne fait aucun N+1 sur les titres, alias et thèmes', function ():
     DB::disableQueryLog();
 
     expect($large)->toBe($small);
+});
+
+test('le filtre des titres manquants lit title_locale_mask à la version courante', function (): void {
+    // Aucun titre : le français manque, masque à la version courante.
+    $draftMissing = Movie::factory()->create(['title_original' => 'Brouillon sans titre']);
+
+    // Publié et sans titre français : il vient en tête (§ 9.3).
+    $publishedMissing = Movie::factory()->published()->create(['title_original' => 'Publié sans titre']);
+
+    // Titré en français : hors de la file « titres manquants » en français,
+    // mais dedans en anglais.
+    $titled = Movie::factory()->create(['title_original' => 'Titré en français']);
+    MovieTitle::factory()->forLocale(Locale::French)->create(['movie_id' => $titled->id]);
+    MovieFactory::recomputeProjection($titled);
+
+    // Masque PÉRIMÉ : jamais lu comme valide, le film n'y entre pas, quel que
+    // soit le bit.
+    $stale = Movie::factory()->create(['title_original' => 'Masque périmé']);
+    MovieProjection::query()->whereKey($stale->id)->update(['title_mask_version' => Locale::MASK_VERSION - 1]);
+
+    // Sans ligne de projection : pas davantage.
+    Movie::factory()->withoutProjection()->create(['title_original' => 'Sans projection']);
+
+    expect(FrameBank::projection($titled)->title_locale_mask & Locale::French->maskBit())->not->toBe(0)
+        ->and(FrameBank::projection($draftMissing)->title_locale_mask & Locale::French->maskBit())->toBe(0);
+
+    $this->actingAs($this->curator)
+        ->get(route('admin.catalog.index', ['missing_title' => Locale::French->value]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('filters.missing_title', Locale::French->value)
+            ->where('options.missing_title', array_column(Locale::cases(), 'value'))
+            ->has('movies.data', 2)
+            ->where('movies.data.0.id', $publishedMissing->id)
+            ->where('movies.data.1.id', $draftMissing->id));
+
+    $this->actingAs($this->curator)
+        ->get(route('admin.catalog.index', ['missing_title' => Locale::English->value]))
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('movies.data', 3)
+            ->where('movies.data.0.id', $publishedMissing->id));
+
+    // Une locale non activée est refusée, jamais ignorée.
+    $this->actingAs($this->curator)
+        ->get(route('admin.catalog.index', ['missing_title' => 'ja']))
+        ->assertSessionHasErrors('missing_title');
 });

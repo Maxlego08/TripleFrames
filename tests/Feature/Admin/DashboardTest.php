@@ -3,16 +3,21 @@
 use App\Enums\ContentAvailability;
 use App\Enums\ContentFlag;
 use App\Enums\FrameLevel;
+use App\Http\Controllers\Admin\DashboardController;
+use App\Http\Requests\Admin\CatalogIndexRequest;
 use App\Models\Frame;
 use App\Models\ImportRun;
 use App\Models\Movie;
+use App\Models\MovieGroup;
 use App\Models\User;
+use App\Settings\RoomSettingsBounds;
+use App\Support\Draw\PoolReporter;
 use App\Support\Frames\FrameStoragePrefix;
-use Carbon\CarbonImmutable;
 use Database\Factories\MovieFactory;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Testing\AssertableInertia as Assert;
+use Tests\Support\Frames\FrameBank;
 
 /*
 |--------------------------------------------------------------------------
@@ -53,7 +58,7 @@ test('le tableau de bord rend son composant et la forme complète de ses props',
             ->has('stats.content_flag')
             ->has('stats.exceptions', fn (Assert $exceptions) => $exceptions
                 ->hasAll(['total', 'language', 'vote_count', 'release_year']))
-            ->has('stats.pool', 4)
+            ->has('stats.pool', RoomSettingsBounds::MAX_FRAMES_PER_ROUND - RoomSettingsBounds::MIN_FRAMES_PER_ROUND + 1)
             ->has('stats.coverage.levels', 5)
             ->hasAll([
                 'stats.coverage.variants_total',
@@ -61,7 +66,12 @@ test('le tableau de bord rend son composant et la forme complète de ses props',
                 'stats.coverage.without_frames',
                 'stats.coverage.single_variant_levels',
             ])
+            ->has('stats.curation', fn (Assert $curation) => $curation
+                ->hasAll(['ready_to_publish', 'incomplete', 'set_aside']))
+            ->has('stats.frames', fn (Assert $frames) => $frames
+                ->hasAll(['to_review', 'to_rereview', 'rejected', 'failed']))
             ->has('queue')
+            ->has('set_aside')
             ->has('runs')
             ->where('tmdb_configured', false));
 });
@@ -86,7 +96,7 @@ test('les cinq tuiles de disponibilité et les trois de contenu comptent chaque 
             ->where('stats.content_flag.'.ContentFlag::Blocked->value, 1));
 });
 
-test('le vivier par N est cumulatif et ne compte que les films publiés et clear', function (): void {
+test('le vivier par N est cumulatif et ne compte que les œuvres publiées et clear', function (): void {
     // Trois niveaux couverts (1, 3, 5) : jouable à 2 et à 3, pas à 4 ni 5.
     $playable = Movie::factory()
         ->playable(3)
@@ -125,10 +135,134 @@ test('le vivier par N est cumulatif et ne compte que les films publiés et clear
     $this->actingAs($this->curator)
         ->get(route('admin.dashboard'))
         ->assertInertia(fn (Assert $page) => $page
-            ->where('stats.pool.0', ['frames_per_round' => 2, 'movies' => 1])
-            ->where('stats.pool.1', ['frames_per_round' => 3, 'movies' => 1])
-            ->where('stats.pool.2', ['frames_per_round' => 4, 'movies' => 0])
-            ->where('stats.pool.3', ['frames_per_round' => 5, 'movies' => 0]));
+            ->where('stats.pool.0', ['frames_per_round' => 2, 'works' => 1])
+            ->where('stats.pool.1', ['frames_per_round' => 3, 'works' => 1])
+            ->where('stats.pool.2', ['frames_per_round' => 4, 'works' => 0])
+            ->where('stats.pool.3', ['frames_per_round' => 5, 'works' => 0]));
+});
+
+test('la supervision par N est celle du constructeur unique et lit ses bornes dans RoomSettingsBounds', function (): void {
+    // Deux films regroupés comme une même œuvre, couvrant 1, 3 et 5 : UNE
+    // œuvre à N ≤ 3, là où l'ancien comptage lisait deux films.
+    $group = MovieGroup::factory()->create();
+
+    foreach ([1, 2] as $ignored) {
+        FrameBank::movieWith(
+            Movie::factory()->playable(3)->inGroup($group)->create(),
+            [1, 3, 5],
+        );
+    }
+
+    // Une œuvre seule, couvrant les cinq niveaux : jouable à tout N.
+    FrameBank::movieWith(Movie::factory()->playable(3)->create(), [1, 2, 3, 4, 5]);
+
+    $bounds = range(RoomSettingsBounds::MIN_FRAMES_PER_ROUND, RoomSettingsBounds::MAX_FRAMES_PER_ROUND);
+    $reported = app(PoolReporter::class)->catalogueWorksByFramesPerRound();
+
+    // La source unique, en œuvres, un N par borne.
+    expect(array_keys($reported))->toBe($bounds)
+        ->and($reported[2])->toBe(2)
+        ->and($reported[3])->toBe(2)
+        ->and($reported[4])->toBe(1)
+        ->and($reported[5])->toBe(1);
+
+    $expected = [];
+
+    foreach ($reported as $framesPerRound => $works) {
+        $expected[] = ['frames_per_round' => $framesPerRound, 'works' => $works];
+    }
+
+    $this->actingAs($this->curator)
+        ->get(route('admin.dashboard'))
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('stats.pool', count($bounds))
+            ->where('stats.pool', $expected)
+            ->where('stats.pool.0.frames_per_round', RoomSettingsBounds::MIN_FRAMES_PER_ROUND)
+            ->where('stats.pool.'.(count($bounds) - 1).'.frames_per_round', RoomSettingsBounds::MAX_FRAMES_PER_ROUND));
+
+    // Le filtre « jouable à N » du catalogue lit les mêmes bornes.
+    $this->actingAs($this->curator)
+        ->get(route('admin.catalog.index'))
+        ->assertInertia(fn (Assert $page) => $page->where('options.playable_at', $bounds));
+
+    // Plus aucun second comptage : ni la méthode en `GROUP BY`, ni les bornes
+    // recopiées dans le FormRequest, ni un `range(2, 5)` écrit en dur.
+    expect(method_exists(DashboardController::class, 'poolByFramesPerRound'))->toBeFalse()
+        ->and(defined(CatalogIndexRequest::class.'::PLAYABLE_AT_MIN'))->toBeFalse()
+        ->and(defined(CatalogIndexRequest::class.'::PLAYABLE_AT_MAX'))->toBeFalse();
+
+    foreach ([
+        app_path('Http/Controllers/Admin/DashboardController.php'),
+        app_path('Http/Controllers/Admin/CatalogController.php'),
+        app_path('Http/Requests/Admin/CatalogIndexRequest.php'),
+        app_path('Support/Admin/AdminCatalogPresenter.php'),
+    ] as $path) {
+        $code = (string) file_get_contents($path);
+
+        expect(preg_match('/range\(\s*\d+\s*,\s*\d+\s*\)/', $code))->toBe(0, $path)
+            ->and(str_contains($code, 'groupBy(\'movie_projection.levels_count\')'))->toBeFalse($path);
+    }
+});
+
+test('le tableau de bord compte les films prêts à publier, incomplets et écartés', function (): void {
+    // Prêt à publier : brouillon, contenu vérifié, niveaux 1, 3 et 5 en jeu.
+    $ready = FrameBank::movieWith(
+        Movie::factory()->withCertification()->contentFlag(ContentFlag::Clear)->create(),
+        [1, 3, 5],
+    )[0];
+
+    // Pas prêts : couverture incomplète, ou contenu non vérifié.
+    FrameBank::movieWith(Movie::factory()->withCertification()->contentFlag(ContentFlag::Clear)->create(), [1, 3]);
+    FrameBank::movieWith(Movie::factory()->create(), [1, 3, 5]);
+
+    // Incomplet : publié, le niveau 5 manque ; un publié complet ne l'est pas.
+    $incomplete = FrameBank::publishedMovie([1, 3])[0];
+    FrameBank::publishedMovie([1, 3, 5]);
+
+    // Écarté : dépublié sans avoir jamais été publié ; un film dépublié
+    // APRÈS publication ne l'est pas.
+    $setAside = Movie::factory()->create([
+        'availability' => ContentAvailability::Unpublished,
+        'availability_changed_at' => now(),
+        'availability_reason' => 'Aucun visuel TMDB exploitable',
+        'first_published_at' => null,
+    ]);
+    Movie::factory()->unpublished()->create();
+
+    // Une image en échec compte ; une image écartée en échec, non.
+    Frame::factory()->for(Movie::factory()->create())->processingFailed()->create();
+    Frame::factory()->for(Movie::factory()->create())->processingFailed()->create([
+        'availability' => ContentAvailability::Unpublished,
+        'first_published_at' => null,
+    ]);
+
+    $this->actingAs($this->curator)
+        ->get(route('admin.dashboard'))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('stats.curation', [
+                'ready_to_publish' => 1,
+                'incomplete' => 1,
+                'set_aside' => 1,
+            ])
+            ->where('stats.frames.failed', 1)
+            // La liste « Films écartés », motif compris.
+            ->has('set_aside', 1)
+            ->where('set_aside.0.id', $setAside->id)
+            ->where('set_aside.0.availability_reason', 'Aucun visuel TMDB exploitable'));
+
+    // Chaque compteur mène à la liste qu'il annonce : le filtre du catalogue.
+    foreach ([
+        'ready_to_publish' => $ready,
+        'incomplete' => $incomplete,
+        'set_aside' => $setAside,
+    ] as $status => $movie) {
+        $this->actingAs($this->curator)
+            ->get(route('admin.catalog.index', ['curation_status' => $status]))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('filters.curation_status', $status)
+                ->has('movies.data', 1)
+                ->where('movies.data.0.id', $movie->id));
+    }
 });
 
 test('la couverture d’images dit la vérité, y compris quand elle vaut zéro', function (): void {
@@ -163,21 +297,24 @@ test('la couverture d’images dit la vérité, y compris quand elle vaut zéro'
             ->where('stats.coverage.levels.1', ['level' => 2, 'variants' => 0, 'movies' => 0]));
 });
 
-test('la file de curation montre les dix plus anciens brouillons, du plus ancien au plus récent', function (): void {
-    foreach (range(1, 12) as $offset) {
+test('la tête de la file du tableau de bord suit l’ordre de la file de curation', function (): void {
+    foreach (range(1, 12) as $rank) {
         Movie::factory()->create([
-            'title_original' => 'Brouillon '.$offset,
-            'created_at' => CarbonImmutable::now()->subDays(20 - $offset),
+            'title_original' => 'Brouillon '.$rank,
+            'vote_count' => 10_000 - $rank,
         ]);
     }
 
-    Movie::factory()->published()->create(['title_original' => 'Publié']);
+    Movie::factory()->published()->create(['title_original' => 'Publié', 'vote_count' => 90_000]);
+    Movie::factory()->demo()->create(['title_original' => 'Démonstration', 'vote_count' => 90_000]);
 
     $this->actingAs($this->curator)
         ->get(route('admin.dashboard'))
         ->assertInertia(fn (Assert $page) => $page
-            ->has('queue', 10)
+            ->has('queue', DashboardController::LIST_SIZE)
             ->where('queue.0.title_original', 'Brouillon 1')
+            ->where('queue.0.rank', 1)
+            ->where('queue.0.is_started', false)
             ->where('queue.9.title_original', 'Brouillon 10')
             ->where('queue.0.levels_count', 0)
             ->where('queue.0.variants_total', 0));

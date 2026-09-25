@@ -85,6 +85,52 @@ export type AdminMovieRow = {
 };
 
 /**
+ * Une ligne de la file de curation (spec 20 § 4.1) : son rang dans la file
+ * filtrée, et l'instant de sa dernière retouche — `null` pour un film non
+ * entamé.
+ */
+export type AdminCurationQueueRow = AdminMovieRow & {
+    rank: number;
+    is_started: boolean;
+    touched_at: string | null;
+};
+
+/** Un film écarté (spec 20 § 4.2), motif relu tel quel. */
+export type AdminSetAsideRow = AdminMovieRow & {
+    availability_reason: string | null;
+    availability_changed_at: string | null;
+};
+
+/** Les deux voies d'entrée du lot pilote (`is_import_exception`). */
+export type AdminCurationEntry = 'discover' | 'exception';
+
+/** Les trois motifs d'exception. */
+export type AdminExceptionMotive = 'language' | 'vote_count' | 'release_year';
+
+/** Les filtres de la file, miroir de la query string retenue. */
+export type AdminCurationFilters = {
+    entry: AdminCurationEntry | null;
+    motive: AdminExceptionMotive | null;
+    content_flag: ContentFlag | null;
+};
+
+/** Listes blanches relues de `CurationQueue` : un choix offert est un choix accepté. */
+export type AdminCurationOptions = {
+    entry: AdminCurationEntry[];
+    motive: AdminExceptionMotive[];
+    content_flag: ContentFlag[];
+};
+
+/** Le reste à curer, par voie d'entrée, filtres ignorés. */
+export type AdminCurationTotals = Record<AdminCurationEntry, number>;
+
+/** Les trois états de curation dérivés (`CurationStatus`). */
+export type AdminCurationStatus =
+    | 'ready_to_publish'
+    | 'incomplete'
+    | 'set_aside';
+
+/**
  * La fiche film. `content_verified_by` et `curated_by` sont des **noms**, pas
  * des identifiants : la fiche les affiche, elle ne s'en sert pas pour appeler
  * quoi que ce soit.
@@ -672,8 +718,11 @@ export type AdminDashboardStats = {
         vote_count: number;
         release_year: number;
     };
-    /** Toujours quatre entrées, `N` de 2 à 5. */
-    pool: { frames_per_round: number; movies: number }[];
+    /**
+     * Vivier catalogue compté en ŒUVRES (contrat C2), une entrée par `N`, dans
+     * l'ordre croissant, bornes de `RoomSettingsBounds`.
+     */
+    pool: { frames_per_round: number; works: number }[];
     coverage: {
         /** Toujours cinq entrées, un niveau par ligne. */
         levels: { level: number; variants: number; movies: number }[];
@@ -683,6 +732,8 @@ export type AdminDashboardStats = {
         /** Des COUPLES (film, niveau), et non des films. */
         single_variant_levels: number;
     };
+    curation: Record<AdminCurationStatus, number>;
+    frames: Record<AdminReviewList | 'failed', number>;
 };
 
 export type AdminCatalogExceptionFilter =
@@ -700,6 +751,8 @@ export type AdminCatalogFilters = {
     import_source: string | null;
     exception: AdminCatalogExceptionFilter | null;
     playable_at: number | null;
+    missing_title: string | null;
+    curation_status: AdminCurationStatus | null;
     sort: string;
     direction: AdminCatalogSortDirection;
 };
@@ -722,6 +775,8 @@ export type AdminCatalogOptions = {
     content_flag: string[];
     import_source: string[];
     playable_at: number[];
+    missing_title: string[];
+    curation_status: AdminCurationStatus[];
     exception: string[];
     sort: string[];
     direction: string[];

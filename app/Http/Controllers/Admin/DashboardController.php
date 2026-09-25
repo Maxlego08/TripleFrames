@@ -5,38 +5,52 @@ namespace App\Http\Controllers\Admin;
 use App\Enums\ContentAvailability;
 use App\Enums\ContentFlag;
 use App\Enums\FrameLevel;
+use App\Enums\FrameProcessingState;
 use App\Http\Controllers\Controller;
-use App\Http\Requests\Admin\CatalogIndexRequest;
+use App\Models\Frame;
 use App\Models\ImportRun;
 use App\Models\Movie;
 use App\Models\MovieProjection;
 use App\Support\Admin\AdminCatalogPresenter;
+use App\Support\Curation\CurationQueue;
+use App\Support\Curation\CurationStatus;
+use App\Support\Curation\ReviewList;
+use App\Support\Curation\ReviewQueue;
+use App\Support\Draw\PoolReporter;
 use App\Support\Tmdb\TmdbClient;
+use Illuminate\Database\Eloquent\Builder;
 use Inertia\Inertia;
 use Inertia\Response;
 
 /**
  * La supervision du catalogue — **aucune écriture**.
  *
- * Toutes les mesures viennent des colonnes de `movie` et de `movie_projection`,
- * et jamais d'un agrégat sur `frame` : la projection existe précisément pour
- * que le vivier ne coûte aucun `GROUP BY` sur la banque d'images (§ 3.2, § 12).
+ * Les mesures de catalogue viennent des colonnes de `movie` et de
+ * `movie_projection`, jamais d'un agrégat sur `frame` : la projection existe
+ * précisément pour que le vivier ne coûte aucun `GROUP BY` sur la banque
+ * d'images (§ 3.2, § 12). Les compteurs d'IMAGES à revoir, à re-revoir,
+ * rejetées et en échec (spec 20 § 8.6) se lisent, eux, sur `frame` : ils
+ * décrivent le travail de revue, que la projection ne porte pas.
  *
- * Trois pièges tenus ici, et pas ailleurs :
+ * Quatre pièges tenus ici, et pas ailleurs :
  *
  * 1. `ONLY_FULL_GROUP_BY` est actif en développement et pas en test — une
  *    requête verte en SQLite peut échouer en MySQL. **Chaque `GROUP BY` nomme
- *    donc toutes ses colonnes non agrégées.**
+ *    donc toutes ses colonnes non agrégées**, et les compteurs sont des
+ *    agrégats purs, sans `GROUP BY` du tout.
  * 2. La couverture de niveaux se teste par `levels_mask & 21 = 21`, arithmétique
  *    entière portable, et jamais par `BIT_COUNT`, inexistant en SQLite. Le 21
  *    lui-même vient de {@see MovieProjection::publishableLevelsMask()}, pour
  *    qu'aucun littéral ne traîne.
- * 3. Aucun formatage de nombre côté serveur : `Number::format` lève une
+ * 3. **Le vivier par `N` n'est pas compté ici** (C2, n° 26) : il vient du
+ *    constructeur unique de la spec 30, {@see PoolReporter::catalogueWorksByFramesPerRound()},
+ *    compté en œuvres, `N` de `RoomSettingsBounds::MIN_FRAMES_PER_ROUND` à
+ *    `MAX_FRAMES_PER_ROUND`. Un second comptage — l'ancien `GROUP BY
+ *    levels_count` sur des bornes écrites en dur — finirait par dire au
+ *    curateur un autre nombre que le lobby.
+ * 4. Aucun formatage de nombre côté serveur : `Number::format` lève une
  *    `RuntimeException` dans cet environnement (ni `intl`, ni `gd`, ni `exif`).
  *    Les compteurs partent en entiers, la mise en forme est un fait d'écran.
- *
- * Tout vaut zéro aujourd'hui du côté des images, et **c'est la vérité à
- * afficher** : aucune ligne `frame` n'existe encore.
  */
 class DashboardController extends Controller
 {
@@ -58,6 +72,13 @@ class DashboardController extends Controller
         .'coalesce(sum(case when movie.is_import_exception = 1 and movie.exception_for_language = 1 then 1 else 0 end), 0) as exception_language, '
         .'coalesce(sum(case when movie.is_import_exception = 1 and movie.exception_for_vote_count = 1 then 1 else 0 end), 0) as exception_vote_count, '
         .'coalesce(sum(case when movie.is_import_exception = 1 and movie.exception_for_release_year = 1 then 1 else 0 end), 0) as exception_release_year';
+
+    /**
+     * Le nombre de films de la tête de la file et de la liste des écartés :
+     * une taille d'écran, jamais une valeur de jeu. La liste entière vit
+     * derrière le lien de chaque bloc.
+     */
+    public const int LIST_SIZE = 10;
 
     /**
      * La couverture d'images, en agrégats purs — donc sans `GROUP BY`, donc
@@ -90,9 +111,10 @@ class DashboardController extends Controller
         .'coalesce(sum(case when coalesce(movie_projection.variants_total, 0) = 0 then 1 else 0 end), 0) as without_frames';
 
     /**
-     * Supervision du catalogue et des derniers balayages.
+     * Supervision du catalogue, de la file de curation et des derniers
+     * balayages.
      */
-    public function index(TmdbClient $tmdb): Response
+    public function index(TmdbClient $tmdb, PoolReporter $pool): Response
     {
         $availability = $this->countsBy('availability', array_column(ContentAvailability::cases(), 'value'));
         $contentFlag = $this->countsBy('content_flag', array_column(ContentFlag::cases(), 'value'));
@@ -103,10 +125,13 @@ class DashboardController extends Controller
                 'availability' => $availability,
                 'content_flag' => $contentFlag,
                 'exceptions' => $this->exceptionCounts(),
-                'pool' => $this->poolByFramesPerRound(),
+                'pool' => $this->poolWorks($pool),
                 'coverage' => $this->coverage(),
+                'curation' => $this->curationCounts(),
+                'frames' => $this->frameCounts(),
             ],
-            'queue' => $this->draftQueue(),
+            'queue' => $this->queueHead(),
+            'set_aside' => $this->setAside(),
             'runs' => $this->latestRuns(),
             'tmdb_configured' => $tmdb->isConfigured(),
         ]);
@@ -169,56 +194,25 @@ class DashboardController extends Controller
     }
 
     /**
-     * Le vivier CATALOGUE par `N`, de 2 à 5.
+     * Supervision « œuvres jouables à `N` » (spec 20 § 8.6, contrat C2) : le
+     * vivier CATALOGUE — ni thème, ni clause de salon —, compté en œuvres, un
+     * `N` par entrée, dans l'ordre croissant, bornes de `RoomSettingsBounds`.
      *
-     * C'est un **plafond**, jamais le vivier d'un salon : ni thème, ni
-     * non-répétition, les deux conditions qui ne vivent pas ici (§ 12).
-     * L'écran le dit en toutes lettres — sinon un curateur lirait 47 sur ce
-     * tableau et 7 dans un lobby, sans cause visible entre deux écrans.
+     * C'est un **plafond**, jamais le vivier d'un salon : l'écran le dit en
+     * toutes lettres — sinon un curateur lirait 47 sur ce tableau et 7 dans un
+     * lobby, sans cause visible entre deux écrans.
      *
-     * Une seule requête pour les quatre nombres : le comptage est groupé par
-     * `levels_count`, puis cumulé en PHP, `pool(N)` étant par définition la
-     * somme des groupes de niveau supérieur ou égal. Servie par
-     * `movie_projection_levels_idx (levels_count, movie_id)` puis
-     * `movie_pool_idx (availability, content_flag, id)`.
-     *
-     * @return list<array{frames_per_round: int, movies: int}>
+     * @return list<array{frames_per_round: int, works: int}>
      */
-    private function poolByFramesPerRound(): array
+    private function poolWorks(PoolReporter $pool): array
     {
-        $rows = MovieProjection::query()->toBase()
-            ->join('movie', 'movie.id', '=', 'movie_projection.movie_id')
-            ->where('movie.availability', ContentAvailability::Published->value)
-            ->where('movie.content_flag', ContentFlag::Clear->value)
-            ->where('movie_projection.levels_count', '>=', CatalogIndexRequest::PLAYABLE_AT_MIN)
-            ->select('movie_projection.levels_count')
-            ->selectRaw('count(*) as movies')
-            ->groupBy('movie_projection.levels_count')
-            ->get();
+        $entries = [];
 
-        /** @var array<int, int> $byLevelsCount */
-        $byLevelsCount = [];
-
-        foreach ($rows as $row) {
-            $byLevelsCount[(int) $row->levels_count] = (int) $row->movies;
+        foreach ($pool->catalogueWorksByFramesPerRound() as $framesPerRound => $works) {
+            $entries[] = ['frames_per_round' => $framesPerRound, 'works' => $works];
         }
 
-        /** @var list<array{frames_per_round: int, movies: int}> $pool */
-        $pool = [];
-
-        foreach (range(2, 5) as $framesPerRound) {
-            $movies = 0;
-
-            foreach ($byLevelsCount as $levelsCount => $count) {
-                if ($levelsCount >= $framesPerRound) {
-                    $movies += $count;
-                }
-            }
-
-            $pool[] = ['frames_per_round' => $framesPerRound, 'movies' => $movies];
-        }
-
-        return $pool;
+        return $entries;
     }
 
     /**
@@ -283,32 +277,108 @@ class DashboardController extends Controller
     }
 
     /**
-     * La file des films non curés : les dix plus anciens brouillons.
+     * Films prêts à publier, publiés incomplets et écartés (spec 20 § 8.6) —
+     * un agrégat pur, les trois prédicats lus dans {@see CurationStatus}, seul
+     * porteur de leur texte, que le filtre du catalogue emploie aussi : chaque
+     * compteur mène à la liste qu'il annonce.
      *
-     * File **non ordonnée par priorité et sans réservation** : le critère de
-     * tri d'une vraie file de curation, la réservation d'un film par un
-     * curateur et la reprise après interruption appartiennent à la spec 20.
-     * Ici, « plus anciens d'abord », et rien de plus.
+     * @return array<string, int>
+     */
+    private function curationCounts(): array
+    {
+        $query = Movie::query()->toBase()
+            ->leftJoin('movie_projection', 'movie_projection.movie_id', '=', 'movie.id');
+
+        foreach (CurationStatus::cases() as $status) {
+            [$condition, $bindings] = $status->condition();
+
+            $query->selectRaw("coalesce(sum(case when {$condition} then 1 else 0 end), 0) as {$status->value}", $bindings);
+        }
+
+        $row = $query->first();
+
+        $counts = [];
+
+        foreach (CurationStatus::cases() as $status) {
+            $counts[$status->value] = (int) ($row->{$status->value} ?? 0);
+        }
+
+        return $counts;
+    }
+
+    /**
+     * Les images à revoir, à re-revoir et rejetées — les trois listes de la
+     * file de revue, prédicats de {@see ReviewQueue}, seul porteur (§ 7.3) —,
+     * puis les images en échec de traitement : ni écartées, ni verrouillées
+     * par un administrateur, dans l'ordre de lecture de `FrameCurationState`,
+     * où l'écartée et la verrouillée l'emportent sur l'échec.
      *
-     * `movie.id` départage à date égale : sans lui, deux films entrés dans la
-     * même seconde s'échangeraient de place d'une page à l'autre.
+     * @return array<string, int>
+     */
+    private function frameCounts(): array
+    {
+        $counts = [];
+        $lists = (new ReviewQueue)->counts();
+
+        foreach (ReviewList::cases() as $list) {
+            $counts[$list->value] = $lists[$list->value] ?? 0;
+        }
+
+        $counts['failed'] = Frame::query()
+            ->where('processing_state', FrameProcessingState::Failed->value)
+            ->whereNotIn('availability', [ContentAvailability::Suspended->value, ContentAvailability::Withdrawn->value])
+            ->where(function (Builder $query): void {
+                $query->where('availability', '<>', ContentAvailability::Unpublished->value)
+                    ->orWhereNotNull('first_published_at');
+            })
+            ->count();
+
+        return $counts;
+    }
+
+    /**
+     * La tête de la file de curation (§ 4.1), dans l'ordre de la file : les
+     * films entamés d'abord, puis les autres par votes décroissants. La file
+     * entière vit sur son propre écran.
      *
      * @return list<array<string, mixed>>
      */
-    private function draftQueue(): array
+    private function queueHead(): array
     {
+        $rows = [];
+        $rank = 1;
+
+        foreach ((new CurationQueue)->head(self::LIST_SIZE) as $movie) {
+            $rows[] = AdminCatalogPresenter::curationQueueRow($movie, CurationQueue::touchedAt($movie), $rank++);
+        }
+
+        return $rows;
+    }
+
+    /**
+     * Les films écartés (§ 4.2) les plus récents, motif compris ; la liste
+     * entière est le filtre « écartés » du catalogue.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function setAside(): array
+    {
+        [$condition, $bindings] = CurationStatus::SetAside->condition();
+
         $movies = Movie::query()
+            ->select('movie.*')
+            ->leftJoin('movie_projection', 'movie_projection.movie_id', '=', 'movie.id')
+            ->whereRaw($condition, $bindings)
             ->with('projection')
-            ->where('availability', ContentAvailability::Draft->value)
-            ->orderBy('created_at')
-            ->orderBy('id')
-            ->limit(10)
+            ->orderByDesc('movie.availability_changed_at')
+            ->orderByDesc('movie.id')
+            ->limit(self::LIST_SIZE)
             ->get();
 
         $rows = [];
 
         foreach ($movies as $movie) {
-            $rows[] = AdminCatalogPresenter::movieRow($movie);
+            $rows[] = AdminCatalogPresenter::setAsideRow($movie);
         }
 
         return $rows;

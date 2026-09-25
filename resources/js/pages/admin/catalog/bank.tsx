@@ -1,6 +1,15 @@
-import { Deferred, Form, Head, Link, router, usePoll } from '@inertiajs/react';
+import {
+    Deferred,
+    Form,
+    Head,
+    Link,
+    router,
+    usePage,
+    usePoll,
+} from '@inertiajs/react';
 import {
     ArrowLeftIcon,
+    ArrowRightIcon,
     ImagePlusIcon,
     InfoIcon,
     TriangleAlertIcon,
@@ -57,6 +66,7 @@ import { useTranslations } from '@/hooks/use-translations';
 import { stripAfterSend, stripNeighbour } from '@/lib/admin/backdrop-strip';
 import type { StripDirection } from '@/lib/admin/backdrop-strip';
 import { BANK_WRITE_PROPS } from '@/lib/admin/bank-visits';
+import { curationFiltersFromUrl } from '@/lib/admin/curation-query';
 import {
     applyCropCommand,
     cropSecondsAt,
@@ -70,6 +80,7 @@ import {
     index as catalogIndex,
     show as catalogShow,
 } from '@/routes/admin/catalog';
+import { next as curationNext } from '@/routes/admin/curation';
 import type {
     AdminBackdrop,
     AdminBackdropSet,
@@ -174,7 +185,11 @@ type SequenceMask = 'in_play' | 'after_review';
  * - **Publier le film** (lot L20-13), au pied : actif quand le film est
  *   publiable, sinon inactif avec la condition manquante nommée ; la
  *   confirmation montre d'abord l'avertissement nominatif d'ambiguïté
- *   (spec 20 § 8.1, § 8.2). « Film suivant » rejoint le pied avec L20-15.
+ *   (spec 20 § 8.1, § 8.2).
+ * - **Film suivant** (lot L20-15), au pied, après la publication : le premier
+ *   film de la file autre que celui-ci, dans la strate que les filtres de la
+ *   file ont posée sur l'URL (§ 4.1, § 6.1) ; dernier arrêt de tabulation,
+ *   après la publication (§ 6.4).
  */
 export default function AdminCatalogBank({
     movie,
@@ -189,6 +204,7 @@ export default function AdminCatalogBank({
     backdrops,
 }: Props) {
     const { t } = useTranslations();
+    const { url } = usePage();
     const gridRef = useRef<BackdropGridHandle>(null);
     const bankRef = useRef<HTMLDivElement>(null);
     const gestureTriggerRef = useRef<HTMLElement | null>(null);
@@ -973,12 +989,32 @@ export default function AdminCatalogBank({
                                 />
                             )}
                         </div>
-                        <Button variant="outline" size="sm" asChild>
-                            <Link href={catalogShow(movie.id)}>
-                                <ArrowLeftIcon aria-hidden />
-                                {t('admin.bank.back')}
-                            </Link>
-                        </Button>
+                        <div className="flex flex-wrap items-center gap-2">
+                            {/* Le geste de débit qui enchaîne deux films
+                                (§ 4.1), au pied, après la publication
+                                (§ 6.1, § 6.4) : le premier film de la file
+                                autre que celui-ci, dans la strate que les
+                                filtres de la file ont posée sur cette URL. */}
+                            <Button size="sm" className="min-h-11" asChild>
+                                <Link
+                                    href={curationNext({
+                                        query: {
+                                            ...curationFiltersFromUrl(url),
+                                            current: movie.id,
+                                        },
+                                    })}
+                                >
+                                    {t('admin.curation.next')}
+                                    <ArrowRightIcon aria-hidden />
+                                </Link>
+                            </Button>
+                            <Button variant="outline" size="sm" asChild>
+                                <Link href={catalogShow(movie.id)}>
+                                    <ArrowLeftIcon aria-hidden />
+                                    {t('admin.bank.back')}
+                                </Link>
+                            </Button>
+                        </div>
                     </CardContent>
                 </Card>
             </div>

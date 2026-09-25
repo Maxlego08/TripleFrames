@@ -56,6 +56,14 @@ export function catalogQuery(
         query.playable_at = filters.playable_at;
     }
 
+    if (filters.missing_title !== null) {
+        query.missing_title = filters.missing_title;
+    }
+
+    if (filters.curation_status !== null) {
+        query.curation_status = filters.curation_status;
+    }
+
     query.sort = overrides.sort ?? filters.sort;
     query.direction = overrides.direction ?? filters.direction;
 
@@ -90,6 +98,8 @@ export function hasActiveFilters(filters: AdminCatalogFilters): boolean {
         filters.content_flag !== null ||
         filters.import_source !== null ||
         filters.exception !== null ||
-        filters.playable_at !== null
+        filters.playable_at !== null ||
+        filters.missing_title !== null ||
+        filters.curation_status !== null
     );
 }

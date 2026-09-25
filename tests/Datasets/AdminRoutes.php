@@ -135,6 +135,34 @@ function adminRoutesMatrix(): array
             parameters: fn (): array => ['movie' => Movie::factory()->withdrawn()->create()->getKey()],
         ),
 
+        // Ligne 3 — la file de curation, et « film suivant » : une redirection
+        // vers l'éditeur du premier film de la file. Un brouillon réel est
+        // créé d'abord : le 302 est le geste de débit lui-même, pas le repli
+        // d'une file vide.
+        'admin.curation.index' => adminRoutesRow(
+            row: 3,
+            method: 'GET',
+            guards: ['can:viewAny,'.Movie::class],
+            curator: 200,
+            admin: 200,
+        ),
+
+        'admin.curation.next' => adminRoutesRow(
+            row: 3,
+            method: 'GET',
+            guards: ['can:viewAny,'.Movie::class],
+            curator: 302,
+            admin: 302,
+            parameters: function (): array {
+                Movie::factory()->create();
+
+                return [];
+            },
+            redirect: fn (array $parameters): string => route('admin.catalog.bank', [
+                'movie' => Movie::query()->latest('id')->value('id'),
+            ]),
+        ),
+
         // Ligne 19 — publier un film : un brouillon PUBLIABLE — contenu
         // vérifié, niveaux 1, 3 et 5 en jeu, clés de réponse projetées — et
         // l'empreinte de l'aperçu d'ambiguïté que la confirmation montrerait.

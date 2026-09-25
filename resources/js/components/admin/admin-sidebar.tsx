@@ -4,6 +4,7 @@ import {
     DownloadCloud,
     LayoutDashboard,
     ListChecks,
+    ListOrdered,
 } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { AdminBrand } from '@/components/admin/admin-brand';
@@ -32,6 +33,7 @@ import {
 import { useTranslations } from '@/hooks/use-translations';
 import { dashboard as adminDashboard } from '@/routes/admin';
 import { index as catalogIndex } from '@/routes/admin/catalog';
+import { index as curationIndex } from '@/routes/admin/curation';
 import { index as importIndex } from '@/routes/admin/import';
 import { index as reviewIndex } from '@/routes/admin/review';
 import type { AdminNavItem } from '@/types/navigation';
@@ -103,6 +105,11 @@ export function AdminSidebar() {
             href: adminDashboard(),
             icon: LayoutDashboard,
             match: 'exact',
+        },
+        {
+            title: t('admin.nav.curation'),
+            href: curationIndex(),
+            icon: ListOrdered,
         },
         {
             title: t('admin.nav.catalog'),

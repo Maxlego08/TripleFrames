@@ -10,7 +10,9 @@ import {
     AVAILABILITY_KEYS,
     CATALOG_EXCEPTION_KEYS,
     CONTENT_FLAG_KEYS,
+    CURATION_STATUS_KEYS,
     IMPORT_SOURCE_KEYS,
+    MISSING_TITLE_KEYS,
 } from '@/lib/admin-enum-keys';
 import { index as catalogIndex } from '@/routes/admin/catalog';
 import type { AdminCatalogFilters, AdminCatalogOptions } from '@/types/admin';
@@ -164,6 +166,45 @@ export function AdminCatalogFiltersForm({ filters, options }: Props) {
                         t,
                     )}
                 />
+            </div>
+
+            <div className="space-y-1.5">
+                <Label htmlFor="catalog-curation-status">
+                    {t('admin.catalog.filters.curation_status.label')}
+                </Label>
+                <AdminSelect
+                    id="catalog-curation-status"
+                    name="curation_status"
+                    defaultValue={filters.curation_status ?? ''}
+                    options={choices(
+                        options.curation_status,
+                        CURATION_STATUS_KEYS,
+                        t,
+                    )}
+                />
+            </div>
+
+            <div className="space-y-1.5">
+                <Label htmlFor="catalog-missing-title">
+                    {t('admin.catalog.filters.missing_title.label')}
+                </Label>
+                <AdminSelect
+                    id="catalog-missing-title"
+                    name="missing_title"
+                    defaultValue={filters.missing_title ?? ''}
+                    options={choices(
+                        options.missing_title,
+                        MISSING_TITLE_KEYS,
+                        t,
+                    )}
+                    aria-describedby="catalog-missing-title-hint"
+                />
+                <p
+                    id="catalog-missing-title-hint"
+                    className="text-xs text-muted-foreground"
+                >
+                    {t('admin.catalog.filters.missing_title.hint')}
+                </p>
             </div>
 
             <div className="flex flex-wrap items-end gap-2 md:col-span-2 xl:col-span-3">

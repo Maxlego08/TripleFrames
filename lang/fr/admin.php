@@ -40,6 +40,7 @@ return [
     'nav' => [
         'section' => 'Curation',
         'dashboard' => 'Tableau de bord',
+        'curation' => 'File de curation',
         'catalog' => 'Catalogue',
         'import' => 'Import',
         'review' => 'Revue',
@@ -56,6 +57,8 @@ return [
         'filters_form' => 'Filtres du catalogue',
         'sort_by' => 'Trier par :column',
         'open_movie' => 'Ouvrir la fiche de :title',
+        'curate_movie' => 'Curer les images de :title',
+        'curation_filters_form' => 'Filtres de la file de curation',
         'open_run' => 'Ouvrir le balayage n° :id',
         'run_status' => 'État du balayage : :status',
         'pagination' => 'Pagination',
@@ -271,14 +274,16 @@ return [
     ],
 
     /*
-    | Tableau de bord — supervision, aucune écriture. Tout ce qui touche aux
-    | images vaut zéro aujourd’hui : aucune ligne `frame` n’existe encore, et
-    | c’est la vérité à afficher plutôt qu’un chiffre inventé.
+    | Tableau de bord — supervision, aucune écriture (spec 20 § 8.6). Une tuile
+    | à zéro est une information : elle s’affiche, elle ne s’escamote pas.
+    | `pool.*` : le vivier CATALOGUE compté en œuvres (contrat C2, n° 24), un
+    | plafond et jamais le vivier d’un salon. `curation.*` et `frames.*` :
+    | le travail restant, chaque compteur menant à la liste qu’il annonce.
     */
     'dashboard' => [
         'title' => 'Tableau de bord',
         'heading' => 'Tableau de bord de curation',
-        'description' => 'L’état du catalogue, du vivier et des derniers balayages. Cet écran ne modifie rien.',
+        'description' => 'L’état du catalogue, du vivier, de la curation et des derniers balayages. Cet écran ne modifie rien.',
 
         'availability' => [
             'heading' => 'Disponibilité',
@@ -292,12 +297,44 @@ return [
         ],
 
         'pool' => [
-            'heading' => 'Vivier par nombre d’images',
-            'description' => 'Films publiés, contenu vérifié, couvrant assez de niveaux pour une manche de N images.',
+            'heading' => 'Vivier catalogue, par nombre d’images',
+            'description' => 'Œuvres jouables à N images par manche : films publiés, au contenu vérifié, couvrant assez de niveaux. Des films regroupés comme une même œuvre comptent pour une seule.',
             'frames_per_round' => 'N = :count',
-            'movies' => 'films',
-            'empty' => 'Aucun film ne rentre encore dans le vivier.',
-            'scope_notice' => 'Vivier CATALOGUE : ni thème, ni non-répétition. C’est un plafond, jamais le vivier d’un salon — un lobby affichera toujours un nombre inférieur ou égal.',
+            'works' => 'œuvres',
+            'empty' => 'Aucune œuvre n’entre encore dans le vivier catalogue.',
+            'scope_notice' => 'Vivier catalogue : ni thème, ni non-répétition. C’est un plafond, jamais le vivier d’un salon — un lobby, qui écarte aussi les films déjà joués, affiche toujours un nombre inférieur ou égal.',
+        ],
+
+        'curation' => [
+            'heading' => 'Curation des films',
+            'description' => 'Les films prêts à publier, les films publiés devenus incomplets et les films écartés.',
+            'ready_to_publish' => 'Prêts à publier',
+            'ready_to_publish_hint' => 'Brouillons au contenu vérifié, niveaux 1, 3 et 5 en jeu.',
+            'incomplete' => 'Publiés incomplets',
+            'incomplete_hint' => 'Couverture 1, 3 et 5 perdue : ils restent jouables avec repli de niveau.',
+            'set_aside' => 'Écartés',
+            'set_aside_hint' => 'Sortis de la file sans être publiés.',
+            'see_list' => 'Voir la liste : :label',
+        ],
+
+        'frames' => [
+            'heading' => 'Images à traiter',
+            'description' => 'Le travail de revue en attente, et les traitements d’image qui ont échoué.',
+            'to_review' => 'À revoir',
+            'to_rereview' => 'À re-revoir',
+            'rejected' => 'Rejetées',
+            'failed' => 'Traitement en échec',
+            'see_review' => 'Ouvrir la file de revue',
+        ],
+
+        'set_aside' => [
+            'heading' => 'Films écartés',
+            'description' => 'Les derniers films sortis de la file sans être publiés, avec leur motif. Les curer puis les publier en fait une première publication.',
+            'empty' => 'Aucun film n’a été écarté.',
+            'reason' => 'Motif',
+            'no_reason' => 'Aucun motif enregistré',
+            'set_aside_at' => 'Écarté le',
+            'see_all' => 'Voir tous les films écartés',
         ],
 
         'coverage' => [
@@ -314,10 +351,10 @@ return [
         ],
 
         'queue' => [
-            'heading' => 'Films non curés',
-            'description' => 'Les dix plus anciens brouillons, du plus ancien au plus récent. File sans priorité ni réservation : la spec 20 tranchera.',
+            'heading' => 'Tête de la file de curation',
+            'description' => 'Les premiers films de la file : d’abord les films entamés, du plus récemment touché au plus ancien, puis les autres par nombre de votes décroissant.',
             'empty' => 'Aucun brouillon en attente de curation.',
-            'see_all' => 'Voir tous les brouillons',
+            'see_all' => 'Ouvrir la file de curation',
             'unrated_pending' => 'Films non publiables tant que le contenu n’est pas vérifié : :count',
         ],
 
@@ -337,10 +374,74 @@ return [
         'tmdb_disabled' => 'Aucune clé TMDB n’est configurée : l’import est indisponible. Le jeu, lui, n’appelle jamais TMDB.',
     ],
 
+    /*
+    | File de curation (spec 20 § 4.1) : les brouillons hors démonstration,
+    | films entamés d’abord puis par votes décroissants. « Film suivant »
+    | mène à l’éditeur du premier film de la file autre que le courant ;
+    | `empty` est aussi le message rendu quand il n’en reste aucun.
+    | `filters.*` : les filtres qui composent le lot pilote par voie.
+    | `results` : `:total` est un nombre déjà mis en forme ; `row.touched_at` :
+    | `:moment` une date déjà mise en forme.
+    */
+    'curation' => [
+        'title' => 'File de curation',
+        'heading' => 'File de curation',
+        'description' => 'Les films à curer, dans l’ordre de travail : d’abord les films entamés, du plus récemment touché au plus ancien, puis les autres par nombre de votes décroissant. Le catalogue de démonstration n’y figure pas.',
+        'next' => 'Film suivant',
+        'next_hint' => 'Ouvre l’éditeur du premier film de la file, filtres conservés.',
+        'empty' => 'Aucun autre film n’attend dans la file de curation. Importez de nouveaux films pour la remplir.',
+        'empty_filtered' => 'Aucun film de la file ne correspond à ces filtres. Effacez-les pour revoir toute la file.',
+        'empty_stratum' => 'Aucun autre film de cette sélection n’attend dans la file. Effacez les filtres pour revoir toute la file.',
+        'go_import' => 'Ouvrir l’import',
+        'results' => ':total film(s) dans la file au filtre courant',
+
+        'filters' => [
+            'heading' => 'Filtres',
+            'description' => 'Choisissez une voie d’entrée pour constituer le lot pilote, stratifié entre films du balayage et films entrés par exception. Les filtres ne changent jamais l’ordre de la file.',
+            'entry' => [
+                'label' => 'Voie d’entrée',
+                'discover' => 'Balayage',
+                'exception' => 'Entrés par exception',
+            ],
+            'motive' => 'Motif d’exception',
+            'content_flag' => 'Drapeau de contenu',
+            'submit' => 'Filtrer',
+            'reset' => 'Tout effacer',
+        ],
+
+        'totals' => [
+            'heading' => 'Reste à curer, par voie d’entrée',
+            'description' => 'Toute la file, filtres ignorés : de quoi constituer chaque strate du lot pilote.',
+            'discover' => 'Voie du balayage',
+            'exception' => 'Voie d’exception',
+        ],
+
+        'column' => [
+            'rank' => 'Rang',
+            'title' => 'Titre original',
+            'year' => 'Année',
+            'votes' => 'Votes',
+            'entry' => 'Voie',
+            'content_flag' => 'Contenu',
+            'levels' => 'Niveaux',
+            'variants' => 'Variantes',
+            'progress' => 'Avancement',
+            'actions' => 'Actions',
+        ],
+
+        'row' => [
+            'started' => 'Entamé',
+            'not_started' => 'Non entamé',
+            'touched_at' => 'Touché le :moment',
+            'curate' => 'Curer',
+            'open' => 'Fiche',
+        ],
+    ],
+
     'catalog' => [
         'title' => 'Catalogue',
         'heading' => 'Catalogue des films',
-        'description' => 'Liste en lecture seule. Publier, dépublier ou corriger appartient à la spec 20.',
+        'description' => 'Liste en lecture seule. Chaque film se publie, se dépublie, s’écarte et se corrige depuis sa fiche.',
         'results' => ':total film(s) au filtre courant',
 
         'filters' => [
@@ -363,6 +464,20 @@ return [
                 'language' => 'Motif : langue originale',
                 'vote_count' => 'Motif : notoriété',
                 'release_year' => 'Motif : année de sortie',
+            ],
+            // La file « titres manquants » (spec 20 § 9.3) : les films
+            // publiés d’abord.
+            'missing_title' => [
+                'label' => 'Titre manquant',
+                'fr' => 'Sans titre en français',
+                'en' => 'Sans titre en anglais',
+                'hint' => 'Lu dans la projection à jour ; les films publiés viennent en tête.',
+            ],
+            'curation_status' => [
+                'label' => 'État de curation',
+                'ready_to_publish' => 'Prêts à publier',
+                'incomplete' => 'Publiés incomplets',
+                'set_aside' => 'Écartés',
             ],
             'submit' => 'Filtrer',
             'reset' => 'Tout effacer',
@@ -1611,6 +1726,11 @@ return [
         'import_source' => 'voie d’entrée',
         'exception' => 'entrées par exception',
         'playable_at' => 'jouable à N images',
+        'missing_title' => 'titre manquant',
+        'curation_status' => 'état de curation',
+        'entry' => 'voie d’entrée',
+        'motive' => 'motif d’exception',
+        'current_movie' => 'film courant',
         'sort' => 'tri',
         'direction' => 'sens du tri',
         'min_votes' => 'seuil de votes',
