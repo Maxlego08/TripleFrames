@@ -1,0 +1,27 @@
+# Noms réservés, refusés comme pseudos : spec 40 § 5.7, lue par App\Support\Identity\NicknameBlocklist avec les listes de chaque locale activée.
+# UTF-8, LF, une entrée par ligne ; « # » en début de ligne : commentaire.
+# Un pseudo qui se présente comme l'équipe du site ou comme la source des données est une usurpation, que le jeu ait ou non une modération.
+# source: rédigée pour le projet TripleFrames : liste minimale du contrat C5 (docs/annexes/contrats-j1.md, I5.6), plus moderatrice, curatrice, tmdb et bot (spec 40 § 5.7)
+# license: tous droits réservés, comme le dépôt (LICENSE)
+# retrieved: 2026-09-25
+admin
+administrateur
+administrator
+moderateur
+moderatrice
+moderator
+modo
+curateur
+curatrice
+curator
+system
+systeme
+support
+staff
+officiel
+official
+tripleframes
+hote
+host
+tmdb
+bot

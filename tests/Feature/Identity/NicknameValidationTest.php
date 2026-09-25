@@ -4,6 +4,7 @@ use App\Avatars\AvatarPresetCatalog;
 use App\Enums\Locale;
 use App\Rules\ValidNickname;
 use App\Support\I18n\LocaleCookie;
+use App\Support\Identity\NicknameBlocklist;
 use App\Support\Identity\NicknameNormalizer;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Route;
@@ -13,13 +14,15 @@ use Tests\Support\Identity\NicknameFormRequest;
 
 /*
 |--------------------------------------------------------------------------
-| La règle de pseudo — spec 40 § 5.2 à § 5.5 et § 5.9, contrat C5 (L40-3)
+| La règle de pseudo — spec 40 § 5.2 à § 5.5 et § 5.9, contrat C5 (L40-3,
+| L40-4)
 |--------------------------------------------------------------------------
 |
 | Forme canonique (NFC, bords rognés, espaces intérieures réduites), puis la
 | règle `ValidNickname`, qui rend UN message, le premier échec l'emportant :
-| longueur, écriture, caractères, alphanumérique, longueur normalisée. La
-| liste noire (étape 5) est de L40-4 ; l'unicité (étape 6) est de `50`.
+| longueur, écriture, caractères, alphanumérique, longueur normalisée, liste
+| noire. La liste noire elle-même est éprouvée par `NicknameBlocklistTest` ;
+| l'unicité (étape 6) est de `50`.
 |
 | Tant que les FormRequest de `50` et `60` n'existent pas, la saisie traverse
 | la vraie pile `web` par une route de ce fichier et par
@@ -105,6 +108,10 @@ function nicknameSpecText(string $key, Locale $locale): string
         ValidNickname::KEY_NORMALIZED_LENGTH => [
             'This nickname is too long once its special letters are expanded (ß, æ, œ…). Please shorten it.',
             'Ce pseudo est trop long une fois ses lettres spéciales développées (ß, æ, œ…). Raccourcissez-le.',
+        ],
+        ValidNickname::KEY_BLOCKED => [
+            'This nickname is not available. Please choose another one.',
+            'Ce pseudo n’est pas disponible. Choisissez-en un autre.',
         ],
     ];
 
@@ -348,3 +355,49 @@ it('refuse avec un message traduit un pseudo dont la forme repliée dépasse 20 
     expectNicknameAccepted(str_repeat('ß', 10), str_repeat('ß', 10), str_repeat('ss', 10));
     expectNicknameAccepted('Œdipe Þór', 'Œdipe Þór', 'oedipethor');
 });
+
+it('ne rend qu\'un message, dans l\'ordre longueur, écriture, caractères, alphanumérique, longueur normalisée, liste noire', function (string $nickname, array $failing) {
+    $canonical = NicknameNormalizer::canonical($nickname);
+    $length = mb_strlen($canonical);
+    $refused = array_filter(
+        mb_str_split($canonical),
+        static fn (string $character): bool => preg_match(ValidNickname::ALLOWED_PATTERN, $character) !== 1,
+    );
+    $normalized = NicknameNormalizer::normalize($canonical);
+
+    // Les étapes que la saisie manque, mesurées une à une, sans la règle.
+    $steps = [
+        ValidNickname::KEY_LENGTH => $length < NicknameNormalizer::MIN_LENGTH || $length > NicknameNormalizer::MAX_LENGTH,
+        ValidNickname::KEY_SCRIPT => array_filter($refused, static fn (string $c): bool => preg_match('/[\p{L}\p{N}]/u', $c) === 1) !== [],
+        ValidNickname::KEY_CHARACTERS => array_filter($refused, static fn (string $c): bool => preg_match('/[\p{L}\p{N}]/u', $c) !== 1) !== [],
+        ValidNickname::KEY_ALNUM => $normalized === '',
+        ValidNickname::KEY_NORMALIZED_LENGTH => strlen($normalized) > NicknameNormalizer::MAX_LENGTH,
+        ValidNickname::KEY_BLOCKED => NicknameBlocklist::blocks($canonical),
+    ];
+
+    expect(array_keys(array_filter($steps)))->toBe($failing);
+
+    // Un seul message, celui de la première étape manquée, dans chaque
+    // langue ; par la vraie pile comme par la règle nue.
+    expectNicknameRefused($nickname, $failing[0]);
+    expectBareNicknameRefused($canonical, $failing[0]);
+})->with([
+    // `admin`, nom réservé, rend chaque saisie refusable par la liste noire.
+    'longueur avant tout' => ['admin'."\u{0439}".'!'.str_repeat('ß', 14), [
+        ValidNickname::KEY_LENGTH, ValidNickname::KEY_SCRIPT, ValidNickname::KEY_CHARACTERS,
+        ValidNickname::KEY_NORMALIZED_LENGTH, ValidNickname::KEY_BLOCKED,
+    ]],
+    'écriture avant caractères' => ['admin'."\u{0439}".'!'.str_repeat('ß', 13), [
+        ValidNickname::KEY_SCRIPT, ValidNickname::KEY_CHARACTERS,
+        ValidNickname::KEY_NORMALIZED_LENGTH, ValidNickname::KEY_BLOCKED,
+    ]],
+    'caractères avant la forme repliée' => ['admin!'.str_repeat('ß', 14), [
+        ValidNickname::KEY_CHARACTERS, ValidNickname::KEY_NORMALIZED_LENGTH, ValidNickname::KEY_BLOCKED,
+    ]],
+    // Une forme repliée vide ne peut être ni trop longue ni sur la liste.
+    'alphanumérique seul' => ['-- __ --', [ValidNickname::KEY_ALNUM]],
+    'longueur normalisée avant la liste noire' => ['admin'.str_repeat('ß', 15), [
+        ValidNickname::KEY_NORMALIZED_LENGTH, ValidNickname::KEY_BLOCKED,
+    ]],
+    'liste noire en dernier' => ['admin', [ValidNickname::KEY_BLOCKED]],
+]);

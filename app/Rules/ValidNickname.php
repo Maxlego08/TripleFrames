@@ -2,6 +2,7 @@
 
 namespace App\Rules;
 
+use App\Support\Identity\NicknameBlocklist;
 use App\Support\Identity\NicknameNormalizer;
 use Closure;
 use Illuminate\Contracts\Validation\ValidationRule;
@@ -28,11 +29,12 @@ use Illuminate\Contracts\Validation\ValidationRule;
  *    invalides ne sont ni une lettre ni un chiffre ;
  * 3. forme repliée vide → `alnum` ;
  * 4. forme repliée de plus de `MAX_LENGTH` octets → `normalized_length`,
- *    jamais une erreur 1406 de MySQL.
+ *    jamais une erreur 1406 de MySQL ;
+ * 5. {@see NicknameBlocklist::blocks()} → `blocked`, qui ne cite jamais le mot
+ *    et ne distingue jamais un nom réservé d'une grossièreté.
  *
- * L'étape 5 (liste noire, `blocked`) est livrée par L40-4 ; l'étape 6
- * (unicité, `taken`) appartient à `50`, sous le verrou du salon, **jamais** à
- * la règle.
+ * L'étape 6 (unicité, `taken`) appartient à `50`, sous le verrou du salon,
+ * **jamais** à la règle.
  */
 final class ValidNickname implements ValidationRule
 {
@@ -129,6 +131,14 @@ final class ValidNickname implements ValidationRule
 
         if (strlen($normalized) > NicknameNormalizer::MAX_LENGTH) {
             $fail(self::KEY_NORMALIZED_LENGTH)->translate();
+
+            return;
+        }
+
+        // Un message neutre : ni le mot, ni la nature de l'entrée (nom réservé
+        // ou grossièreté) — le dire enseignerait la liste (§ 5.9).
+        if (NicknameBlocklist::blocks($value)) {
+            $fail(self::KEY_BLOCKED)->translate();
         }
     }
 
