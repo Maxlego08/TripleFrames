@@ -198,6 +198,30 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Pseudo d’un siège
+    |--------------------------------------------------------------------------
+    |
+    | Miroir exact de `lang/en/validation.php` § `nickname`. Bâties par
+    | `App\Rules\ValidNickname` depuis ses constantes `KEY_*` (spec 40 § 5.9,
+    | contrat C5) : un seul message par envoi, le premier échec l’emporte.
+    | `taken` est émise par la prise de siège sous le verrou du salon, jamais
+    | par la règle. `blocked` ne cite jamais le mot et ne distingue jamais un
+    | nom réservé d’une grossièreté : le dire enseignerait la liste.
+    |
+    */
+
+    'nickname' => [
+        'length' => 'Le :attribute doit compter entre :min et :max caractères.',
+        'script' => 'Le :attribute ne peut utiliser que l’alphabet latin, accents compris, des chiffres, des espaces, « - » et « _ ».',
+        'characters' => 'Ce pseudo contient un caractère non autorisé : symbole, émoji ou caractère invisible.',
+        'alnum' => 'Le pseudo doit contenir au moins une lettre ou un chiffre.',
+        'normalized_length' => 'Ce pseudo est trop long une fois ses lettres spéciales développées (ß, æ, œ…). Raccourcissez-le.',
+        'blocked' => 'Ce pseudo n’est pas disponible. Choisissez-en un autre.',
+        'taken' => 'Ce pseudo est déjà pris dans ce salon.',
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Messages de validation personnalisés
     |--------------------------------------------------------------------------
     */
@@ -225,6 +249,7 @@ return [
         'allowLateJoin' => 'entrée en cours de partie',
         'attemptsPerRound' => 'tentatives par manche',
         'attemptsPerSecond' => 'tentatives par seconde',
+        'avatar' => 'avatar',
         'capacity' => 'nombre de sièges',
         'code' => 'code d’authentification',
         'current_password' => 'mot de passe actuel',

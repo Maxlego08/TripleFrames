@@ -9,6 +9,7 @@ use App\Models\RoundPlayer;
 use App\Models\User;
 use App\Settings\PlatformLimits;
 use App\Support\I18n\LocaleCookie;
+use App\Support\Identity\NicknameNormalizer;
 use App\Support\Identity\PlayerToken;
 use App\Support\Identity\PlayerTokenCookie;
 use App\Support\Identity\PlayerTokenManager;
@@ -46,9 +47,10 @@ use Symfony\Component\HttpFoundation\Cookie as SymfonyCookie;
 | `ensure()` fait glisser le cookie ; (3) `wasKickedFrom()` refuse avant tout
 | comptage ; (4) capacité et unicité du pseudo sous le verrou du salon ;
 | (5) `ensure()` seulement alors, écriture du siège, puis re-signature avec
-| l'avatar choisi. Le pliage du pseudo y emprunte le normaliseur provisoire de
-| la fabrique (`NicknameNormalizer` est de L40-3) : la règle de pseudo n'est
-| pas l'objet de ce fichier.
+| l'avatar choisi. Le pseudo y est plié par `NicknameNormalizer::normalize()`
+| (L40-3), seul écrivain de `nickname_normalized`, mais sa validation reste
+| minimale : la règle de pseudo n'est pas l'objet de ce fichier
+| (`NicknameValidationTest`).
 |
 */
 
@@ -114,7 +116,7 @@ function playerTokenRoutes(): void
             }
 
             $nickname = (string) $validated['nickname'];
-            $normalized = PlayerFactory::normalizeNickname($nickname);
+            $normalized = NicknameNormalizer::normalize($nickname);
 
             if (Player::query()->whereBelongsTo($locked)->where('nickname_normalized', $normalized)->exists()) {
                 return response()->json(['refused' => 'validation.nickname.taken'], 422);

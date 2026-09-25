@@ -5,6 +5,8 @@ use App\Avatars\AvatarRef;
 use App\Enums\Locale;
 use App\Settings\PlatformLimits;
 use App\Support\I18n\TranslationDomains;
+use Illuminate\Support\Facades\Validator;
+use Tests\Support\Identity\NicknameFormRequest;
 
 /*
 |--------------------------------------------------------------------------
@@ -226,13 +228,29 @@ it("refuse une clé d'avatar hors du catalogue", function () {
             ->and(AvatarPresetCatalog::suggest($key, []))->toBe($keys[0]);
     }
 
+    // La règle de formulaire (`avatarPresetRules()`, L40-3) lit le même
+    // registre : chaque clé passe, rien d'autre — ni tableau, ni chemin.
+    $avatarPasses = static fn (mixed $value): bool => Validator::make(
+        ['avatar' => $value],
+        ['avatar' => (new NicknameFormRequest)->rules()['avatar']],
+    )->passes();
+
+    foreach ($keys as $key) {
+        expect($avatarPasses($key))->toBeTrue("« {$key} » refusé par le formulaire");
+    }
+
+    foreach ([...$outside, null, [$keys[0]], 1] as $value) {
+        expect($avatarPasses($value))->toBeFalse('« '.json_encode($value).' » accepté par le formulaire');
+    }
+
     // Une clé sort du catalogue quand la limite de plate-forme baisse.
     $last = $keys[count($keys) - 1];
 
     platformLimitsConfigure(['avatar_presets' => count($keys) - 1]);
 
     expect(AvatarPresetCatalog::has($last))->toBeFalse()
-        ->and(AvatarPresetCatalog::has($keys[0]))->toBeTrue();
+        ->and(AvatarPresetCatalog::has($keys[0]))->toBeTrue()
+        ->and($avatarPasses($last))->toBeFalse();
 });
 
 it("résout chaque clé alt d'AvatarRef dans le domaine common", function () {

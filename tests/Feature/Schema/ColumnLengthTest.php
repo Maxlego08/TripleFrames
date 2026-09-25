@@ -3,9 +3,11 @@
 use App\Models\GamePlayer;
 use App\Models\Player;
 use App\Models\User;
-use Database\Factories\PlayerFactory;
+use App\Rules\ValidNickname;
+use App\Support\Identity\NicknameNormalizer;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 
 /*
@@ -150,15 +152,27 @@ function columnLengthEnumMismatch(array $declaration, array $values): ?string
 }
 
 /**
- * Pseudo de `$length` lettres latines hors ASCII, toutes admises par la règle
- * de pseudo (D26 du 23/09, contrat C5 : U+00C0–U+00D6, U+00D8–U+00F6,
- * U+00F8–U+017F), réparties de bout en bout des trois plages. Chacune pèse
- * deux octets en UTF-8 : c'est le pseudo le plus lourd qu'une saisie valide
- * puisse produire à longueur maximale. Déterministe, aucun Faker.
+ * Pseudo de `$length` lettres latines hors ASCII que la règle de pseudo
+ * accepte telles quelles : chacune est admise par
+ * `ValidNickname::ALLOWED_PATTERN` (D26 du 23/09, contrat C5) — lu, jamais
+ * recopié — et se replie en une seule lettre ASCII, pour que la forme repliée
+ * tienne aussi dans `nickname_normalized` (`ß` ou `œ`, qui se replient en deux
+ * lettres, feraient refuser le pseudo par `normalized_length`). Elles sont
+ * réparties de bout en bout du plan à deux octets d'UTF-8, où chacune pèse
+ * deux octets : c'est le pseudo le plus lourd qu'une saisie valide puisse
+ * produire à longueur maximale. Déterministe, aucun Faker.
  */
 function columnLengthExtendedLatinNickname(int $length): string
 {
-    $codePoints = [...range(0x00C0, 0x00D6), ...range(0x00D8, 0x00F6), ...range(0x00F8, 0x017F)];
+    $codePoints = array_values(array_filter(
+        range(0x0080, 0x07FF),
+        static function (int $codePoint): bool {
+            $letter = mb_chr($codePoint, 'UTF-8');
+
+            return preg_match(ValidNickname::ALLOWED_PATTERN, $letter) === 1
+                && strlen(NicknameNormalizer::normalize($letter)) === 1;
+        },
+    ));
     $step = intdiv(count($codePoints), $length);
     $nickname = '';
 
@@ -209,19 +223,25 @@ it("fait tenir la plus longue valeur d'enum dans chaque colonne castée en enum"
 });
 
 it('fait tenir un pseudo de longueur maximale en lettres latines étendues dans player.nickname et game_player.display_nickname', function () {
-    // Borne produit du pseudo. `NicknameNormalizer::MAX_LENGTH` (contrat C5) la
-    // remplacera ; la constante de fabrique disparaîtra avec lui, et ce test
-    // cessera alors de compiler au lieu de tester une borne périmée.
-    $length = PlayerFactory::NICKNAME_MAX_LENGTH;
+    // Borne de schéma du pseudo (contrat C5, spec 40 § 5.10), la même pour le
+    // pseudo affiché et pour sa forme repliée.
+    $length = NicknameNormalizer::MAX_LENGTH;
     $nickname = columnLengthExtendedLatinNickname($length);
 
     expect(mb_strlen($nickname))->toBe($length)
-        ->and(strlen($nickname))->toBe(2 * $length);
+        ->and(strlen($nickname))->toBe(2 * $length)
+        // Une saisie que la règle accepte, déjà sous sa forme canonique : ce
+        // test ne fait tenir que ce qu'un joueur peut réellement écrire.
+        ->and(NicknameNormalizer::canonical($nickname))->toBe($nickname)
+        ->and(Validator::make(['nickname' => $nickname], ['nickname' => [new ValidNickname]])->passes())->toBeTrue();
 
     $seat = Player::factory()->withNickname($nickname)->create();
     $participation = GamePlayer::factory()->frozenFrom($seat)->create();
+    $stored = Player::query()->findOrFail($seat->id);
 
-    expect(Player::query()->findOrFail($seat->id)->nickname)->toBe($nickname)
+    expect($stored->nickname)->toBe($nickname)
+        ->and($stored->nickname_normalized)->toBe(NicknameNormalizer::normalize($nickname))
+        ->and(strlen((string) $stored->nickname_normalized))->toBe($length)
         ->and(GamePlayer::query()->findOrFail($participation->id)->display_nickname)->toBe($nickname);
 });
 

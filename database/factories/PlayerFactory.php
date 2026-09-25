@@ -9,6 +9,7 @@ use App\Enums\PlayerConnectionState;
 use App\Models\Player;
 use App\Models\Room;
 use App\Models\User;
+use App\Support\Identity\NicknameNormalizer;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Str;
@@ -24,12 +25,10 @@ use Illuminate\Support\Str;
  * les pseudos par défaut portent des diacritiques : une fabrique qui ne
  * produirait que de l'ASCII rendrait le pliage invisible.
  *
- * > **Le normaliseur de cette fabrique est un provisoire assumé.** Le
- * > normaliseur canonique — celui d'`answer_key` — appartient à
- * > `70-validation-des-reponses.md`, qui n'est pas écrite. {@see self::normalizeNickname()}
- * > en reproduit le contrat minimal (minuscules, diacritiques translittérés sans
- * > `ext-intl`, espaces compressés, borne à 20) et devra être remplacé par un
- * > appel au normaliseur de la spec 70 le jour où il existe.
+ * Le pliage est celui du jeu, jamais un double : {@see self::normalizeNickname()}
+ * délègue à {@see NicknameNormalizer::normalize()} (contrat C5, spec 40 § 5.5),
+ * seul écrivain de `nickname_normalized`, et la borne du pseudo est
+ * {@see NicknameNormalizer::MAX_LENGTH}.
  *
  * `room_id` est **nullable parce qu'une partie solo n'a pas de salon** : le défaut
  * est un siège de salon, {@see self::solo()} produit l'autre cas. `user_id` reste
@@ -49,9 +48,6 @@ class PlayerFactory extends Factory
 
     /** Longueur de `public_id`, fixée par `char(12)`. */
     public const int PUBLIC_ID_LENGTH = 12;
-
-    /** Borne produit du pseudo, et longueur de `nickname_normalized` (§ 1.3). */
-    public const int NICKNAME_MAX_LENGTH = 20;
 
     /**
      * Prénoms de fabrique, volontairement accentués : c'est le pliage de
@@ -205,21 +201,12 @@ class PlayerFactory extends Factory
     }
 
     /**
-     * Forme repliée d'un pseudo : minuscules, diacritiques translittérés par table
-     * explicite (`ext-intl` est absent), espaces compressés, borne à 20.
-     *
-     * Provisoire nommé — voir le préambule de la classe.
+     * Forme repliée d'un pseudo, par {@see NicknameNormalizer::normalize()} :
+     * la fabrique n'a pas de normaliseur à elle.
      */
     public static function normalizeNickname(?string $nickname): ?string
     {
-        if ($nickname === null) {
-            return null;
-        }
-
-        $folded = Str::lower(Str::ascii($nickname));
-        $folded = trim((string) preg_replace('/\s+/u', ' ', $folded));
-
-        return mb_substr($folded, 0, self::NICKNAME_MAX_LENGTH);
+        return $nickname === null ? null : NicknameNormalizer::normalize($nickname);
     }
 
     /**
@@ -239,7 +226,7 @@ class PlayerFactory extends Factory
     {
         $name = self::NICKNAMES[self::$seatSequence % count(self::NICKNAMES)];
 
-        return mb_substr($name.(++self::$seatSequence), 0, self::NICKNAME_MAX_LENGTH);
+        return mb_substr($name.(++self::$seatSequence), 0, NicknameNormalizer::MAX_LENGTH);
     }
 
     /**

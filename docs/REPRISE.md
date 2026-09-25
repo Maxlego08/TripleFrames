@@ -495,7 +495,7 @@ Ensuite, à chaque session : **« Implémente l'étape suivante de l'ordre des l
 64. P — licence du pack dans `public/avatars/LICENSE.md` → 63
 65. L40-1 — jeton d'invité, refus de l'expulsé (`kicked_at`) → 63 — ✅ livrée le 25/09
 66. L40-2 — langue portée par le jeton → 65 — ✅ livrée le 25/09
-67. L40-3 — pseudo : forme canonique, écriture latine (D26) → 37, 63
+67. L40-3 — pseudo : forme canonique, écriture latine (D26) → 37, 63 — ✅ livrée le 25/09
 68. L40-4 — liste noire des pseudos → 67
 69. L40-6 — identité affichée, composants d'avatar → 12, 63, 67
 70. L30-4 — `SeededPrf`, `DrawContext` → —

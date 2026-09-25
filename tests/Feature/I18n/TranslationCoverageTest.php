@@ -9,6 +9,7 @@ use App\Enums\FrameProcessingFailure;
 use App\Enums\LegalPage;
 use App\Enums\Locale;
 use App\Enums\SettingPresetKey;
+use App\Rules\ValidNickname;
 use App\Support\Frames\CropViolation;
 use App\Support\I18n\TranslationDomains;
 use App\Support\Tmdb\TmdbErrorKind;
@@ -436,6 +437,9 @@ it('carries every key built by an enumerable key constructor', function () {
         AvatarRef::ALT_KEY_PRESET,
         AvatarRef::ALT_KEY_PROVIDER,
         AvatarRef::ALT_KEY_INITIALS,
+        // Les sept messages du pseudo, `taken` de `50` compris (40 § 5.9,
+        // L40-3) : la règle les émet par constante, jamais par littéral.
+        ...ValidNickname::MESSAGE_KEYS,
     ];
 
     $missing = array_values(array_filter(

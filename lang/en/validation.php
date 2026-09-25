@@ -203,6 +203,29 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Nickname of a seat
+    |--------------------------------------------------------------------------
+    |
+    | Built by `App\Rules\ValidNickname` from its `KEY_*` constants (spec 40
+    | § 5.9, contract C5): one message per submission, the first failure
+    | wins. `taken` is emitted by the seat-taking action under the room lock,
+    | never by the rule. `blocked` never quotes the word and never tells a
+    | reserved name from a slur: saying so would teach the list.
+    |
+    */
+
+    'nickname' => [
+        'length' => 'The :attribute must be between :min and :max characters.',
+        'script' => 'The :attribute may only use Latin letters (accents included), digits, spaces, "-" and "_".',
+        'characters' => 'This nickname contains a character that is not allowed: a symbol, an emoji or an invisible character.',
+        'alnum' => 'The nickname must contain at least one letter or digit.',
+        'normalized_length' => 'This nickname is too long once its special letters are expanded (ß, æ, œ…). Please shorten it.',
+        'blocked' => 'This nickname is not available. Please choose another one.',
+        'taken' => 'This nickname is already taken in this room.',
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Custom Validation Language Lines
     |--------------------------------------------------------------------------
     |
@@ -234,6 +257,7 @@ return [
         'allowLateJoin' => 'late join',
         'attemptsPerRound' => 'attempts per round',
         'attemptsPerSecond' => 'attempts per second',
+        'avatar' => 'avatar',
         'capacity' => 'seats',
         'code' => 'authentication code',
         'current_password' => 'current password',
