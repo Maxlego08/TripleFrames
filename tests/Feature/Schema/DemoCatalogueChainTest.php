@@ -25,8 +25,14 @@ use App\Models\MovieTmdbTag;
 use App\Models\SettingPreset;
 use App\Models\Theme;
 use App\Models\User;
+use App\Settings\PlatformLimits;
 use App\Settings\RoomSettingsBounds;
 use App\Support\Curation\ExclusionGrid;
+use App\Support\Draw\DrawnRound;
+use App\Support\Draw\GameDrawer;
+use App\Support\Draw\PoolQuery;
+use App\Support\Draw\PoolScope;
+use App\Support\Draw\SeededPrf;
 use App\Support\Frames\FrameStoragePrefix;
 use App\ValueObjects\Catalog\FrameLevelCoverage;
 use Database\Factories\AnswerKeyFactory;
@@ -52,43 +58,35 @@ use Illuminate\Support\Facades\Storage;
  * réponses ; et les **variantes**, sans lesquelles le tirage de la spec 30 n'a
  * rien à départager.
  *
- * **Périmètre, et il est volontairement étroit.** Le moteur de jeu n'existe pas :
- * aucun contrôleur, aucune route de jeu, aucun service de tirage, et la spec 60
- * n'est pas écrite. Ce test se joue donc **au niveau des données**, et c'est tout
- * ce qu'on peut prouver honnêtement aujourd'hui — que le catalogue de
- * démonstration seedé satisfait réellement la chaîne. Il ne lance aucune partie,
- * n'appelle aucune route et ne simule aucun moteur.
+ * **Périmètre, et il est volontairement étroit.** Ce test se joue **au niveau
+ * des données** — que le catalogue de démonstration seedé satisfait réellement la
+ * chaîne. Il ne lance aucune partie, n'appelle aucune route et ne simule aucun
+ * moteur : la transaction de lancement appartient à la spec 50, la
+ * matérialisation à la spec 60.
  *
- * Les requêtes de vivier et de tirage sont **écrites dans ce fichier**, avec leur
- * date de péremption : elles seront remplacées par le service de
- * `docs/specs/30-themes-vivier-et-tirage-des-variantes.md`, qui en est le
- * propriétaire. Les dupliquer ici est un choix assumé — une chaîne de fixtures ne
- * peut pas dépendre d'un service qui n'est pas encore écrit, et ces deux requêtes
- * sont exactement celles du § 12.
+ * Le vivier est lu, depuis le lot L30-5, par **le** constructeur unique de la
+ * spec 30, {@see PoolQuery} — jamais par un prédicat recopié ici, qui
+ * divergerait du lobby et de la garde sans qu'aucun test ne rougisse. FAIT 2
+ * rejoue le tirage lui-même ({@see GameDrawer}) sur ce vivier, marge lue dans
+ * {@see PlatformLimits}. Seul le prédicat de variante servable reste écrit dans
+ * ce fichier ({@see servableFramesOf()}) : il est confronté à
+ * `Frame::isServable()` frame par frame (FAIT 4).
  */
 
 /**
- * Le VIVIER pour un `N` donné — prédicat du § 12, ligne « Vivier », sans thème.
+ * Le VIVIER catalogue pour un `N` donné, sans thème — par {@see PoolQuery}, le
+ * constructeur unique de la spec 30 (§ 3), jamais par un prédicat recopié.
  *
- * Les trois conditions ensemble, et jamais deux sur trois : `availability`,
- * `content_flag` (arbitrage A3 : le filtre de contenu n'est contournable par
- * aucune voie) et `levels_count >= N`. `levels_mask & 21 = 21` redouble la
- * couverture des niveaux 1, 3 et 5 en arithmétique entière — portable, là où
- * `BIT_COUNT` existe en MySQL et pas en SQLite.
- *
- * **À REMPLACER** par le service de la spec 30 dès qu'il existe.
+ * `published` ET `clear` (arbitrage A3 : le filtre de contenu n'est contournable
+ * par aucune voie) ET `levels_count >= N`. **Aucun masque 1-3-5** : il est une
+ * garde de transition vers `published`, jamais une condition de jeu (spec 30
+ * § 2.5, E10-23).
  *
  * @return Builder<Movie>
  */
 function demoPool(int $framesPerRound): Builder
 {
-    return Movie::query()
-        ->join('movie_projection as p', 'p.movie_id', '=', 'movie.id')
-        ->where('movie.availability', ContentAvailability::Published->value)
-        ->where('movie.content_flag', ContentFlag::Clear->value)
-        ->where('p.levels_count', '>=', $framesPerRound)
-        ->whereRaw('(p.levels_mask & 21) = 21')
-        ->select('movie.*');
+    return app(PoolQuery::class)->movies(PoolScope::catalogue([], $framesPerRound));
 }
 
 /**
@@ -170,16 +168,39 @@ it('FAIT 1 — le vivier compte au moins 10 films éligibles, à CHAQUE N des bo
     }
 });
 
-it('FAIT 2 — le vivier dépasse la marge de tirage : min(M + 3, |pool|) matérialise bien 13 films', function () {
-    $pool = demoPool(DemoCatalogueSeeder::DEMO_FRAMES_PER_ROUND)->count();
+it('FAIT 2 — le vivier dépasse la marge de tirage : min(M + marge, œuvres) matérialise bien M + marge manches', function () {
+    // La marge est celle de la plateforme, jamais une copie locale : elle se
+    // compte en ŒUVRES, comme le vivier (spec 30 § 3.4).
+    $expected = DemoCatalogueSeeder::REFERENCE_ROUNDS + PlatformLimits::drawSubstituteMargin();
+    $scope = PoolScope::catalogue([], DemoCatalogueSeeder::DEMO_FRAMES_PER_ROUND);
+    $works = app(PoolQuery::class)->countWorks($scope);
 
     $this->assertGreaterThanOrEqual(
-        DemoCatalogueSeeder::REFERENCE_ROUNDS + DemoCatalogueSeeder::DRAW_MARGIN,
-        $pool,
-        "FAIT 2 — le vivier de {$pool} films est sous la marge de tirage de "
-        .(DemoCatalogueSeeder::REFERENCE_ROUNDS + DemoCatalogueSeeder::DRAW_MARGIN).' : le tirage ne '
+        $expected,
+        $works,
+        "FAIT 2 — le vivier de {$works} œuvres est sous la marge de tirage de {$expected} : le tirage ne "
         .'matérialiserait pas ses films de remplacement, et la partie en manquerait dès le premier incident '
         .'de manche.',
+    );
+
+    // Et le tirage lui-même, sur ce vivier : M manches numérotées, puis la
+    // réserve, sans numéro. Graine fixe, pour qu'un échec se rejoue.
+    $result = app(GameDrawer::class)->draw(
+        $scope,
+        DemoCatalogueSeeder::REFERENCE_ROUNDS,
+        new SeededPrf(hash('sha256', 'demo-catalogue-chain')),
+    );
+
+    $this->assertCount(
+        $expected,
+        $result->rounds,
+        'FAIT 2 — le tirage du catalogue de démonstration ne matérialise pas M + marge manches : une œuvre '
+        .'comptée par le vivier n’a pas de variantes couvrant N niveaux (projection périmée ?).',
+    );
+    $this->assertSame(
+        DemoCatalogueSeeder::REFERENCE_ROUNDS,
+        count(array_filter($result->rounds, static fn (DrawnRound $round): bool => $round->roundNumber !== null)),
+        'FAIT 2 — le tirage ne numérote pas exactement M manches : la réserve se confondrait avec la partie.',
     );
 });
 
@@ -777,9 +798,10 @@ it('FAIT 9 — chaque chaîne acceptée du catalogue a sa clé, préfixes, sous-
 it('VARIANTES — au moins un film porte plusieurs variantes d’un même niveau', function () {
     // `level_i_variants = 1` partout, c'est le signal back-office « variante
     // unique » sur la TOTALITÉ du catalogue : le mécanisme central de la spec 30 —
-    // préférence non vue par le salon, repli non vue par le joueur, tirage jamais
-    // bloqué — n'a alors aucune donnée sur laquelle s'écrire ni se tester, puisque
-    // le seul tirage possible sert la même image à chaque manche du même film.
+    // non vue par le salon → vue la moins récemment par le salon → graine, tirage
+    // jamais bloqué — n'a alors aucune donnée sur laquelle s'écrire ni se tester,
+    // puisque le seul tirage possible sert la même image à chaque manche du même
+    // film.
     $this->assertGreaterThan(
         0,
         MovieProjection::query()->where('level_1_variants', '>', 1)->count(),

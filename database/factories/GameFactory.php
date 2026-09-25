@@ -9,6 +9,7 @@ use App\Models\Room;
 use App\Settings\PlatformLimits;
 use App\Settings\RoomSettings;
 use App\Support\Answers\AnswerRules;
+use App\Support\Draw\SeededPrf;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
@@ -27,9 +28,13 @@ use Illuminate\Database\Eloquent\Factories\Factory;
  * - `tier_grace_ms` et `preload_lead_ms` de {@see PlatformLimits}, **constantes
  *   serveur** et jamais des réglages d'hôte : les loger dans le value object les
  *   rendrait réglables par la voie du JSON (§ 6.1) ;
- * - `draw_seed` en `bin2hex(random_bytes(32))`, **CSPRNG**, jamais `uniqid()` ni
- *   un dérivé d'horodatage — la règle de fabrication de la graine est au même
- *   rang normatif que l'interdiction des ENUM natifs (§ 7.2).
+ * - `draw_seed` de {@see SeededPrf::generateSeed()}, **CSPRNG**, seule source de
+ *   la graine (spec 30 § 5.1), jamais `uniqid()` ni un dérivé d'horodatage — la
+ *   règle de fabrication de la graine est au même rang normatif que
+ *   l'interdiction des ENUM natifs (§ 7.2) ;
+ * - `draw_pool_size` de `M` + {@see PlatformLimits::drawSubstituteMargin()}, un
+ *   vivier qui remplit juste la réserve du tirage : aucune copie locale de la
+ *   marge (spec 30, lot L30-5) ;
  * - `validation_version` de {@see AnswerRules::VERSION}, la version de la règle
  *   de validation que la partie applique (spec 70 § 12) ; aucune copie locale.
  *
@@ -51,9 +56,6 @@ class GameFactory extends Factory
      */
     public const int SCORING_VERSION = 1;
 
-    /** Marge du tirage matérialisé au-delà de `M` : `min(M + 3, |vivier|)` (§ 7.2). */
-    public const int DRAW_MARGIN = 3;
-
     /**
      * Define the model's default state.
      *
@@ -69,7 +71,7 @@ class GameFactory extends Factory
             'status' => GameStatus::Running,
         ], self::rule(RoomSettings::defaults()), [
             'rounds_completed' => 0,
-            'draw_seed' => bin2hex(random_bytes(32)),
+            'draw_seed' => SeededPrf::generateSeed(),
             'started_at' => now(),
             'paused_at' => null,
             'total_paused_ms' => 0,
@@ -163,7 +165,7 @@ class GameFactory extends Factory
             'input_difficulty' => $settings->inputDifficulty,
             'rounds_count' => $settings->roundsCount,
             'frames_per_round' => $settings->framesPerRound,
-            'draw_pool_size' => $settings->roundsCount + self::DRAW_MARGIN,
+            'draw_pool_size' => $settings->roundsCount + PlatformLimits::drawSubstituteMargin(),
             'tier_grace_ms' => PlatformLimits::tierGraceMs(),
             'preload_lead_ms' => PlatformLimits::preloadLeadMs(),
             'settings_version' => $settings->sourceVersion,

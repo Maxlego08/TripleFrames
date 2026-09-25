@@ -40,9 +40,10 @@ use RuntimeException;
  * a lâché.
  *
  * Pour lancer une partie de 10 manches, la garde exige `pool >= 10` et le tirage
- * matérialise `min(M + 3, |pool|) = 13` films : ce seeder en produit
- * {@see self::DEMO_MOVIE_COUNT}, **tous éligibles à `N = 5`**, la borne haute du
- * réglage de salon. Le vivier ne doit pas dépendre du `N` demandé : le preset
+ * matérialise `min(M + marge, pool)` œuvres, la marge étant
+ * `PlatformLimits::drawSubstituteMargin()` (3 par défaut, soit 13 œuvres) : ce
+ * seeder en produit {@see self::DEMO_MOVIE_COUNT}, **tous éligibles à `N = 5`**,
+ * la borne haute du réglage de salon. Le vivier ne doit pas dépendre du `N` demandé : le preset
  * `hardcore` livré par le site pose `framesPerRound = 5`, et un catalogue qui ne
  * couvrirait que les niveaux 1, 3 et 5 rendrait « 0 film » à l'hôte qui le clique
  * — le scénario même du § 13.3, arrivé par la porte du nombre de niveaux au lieu
@@ -80,9 +81,6 @@ class DemoCatalogueSeeder extends Seeder
     /** Nombre de manches de la partie de référence du § 13.3. */
     public const int REFERENCE_ROUNDS = 10;
 
-    /** Marge de tirage : `min(M + 3, |pool|)` films sont matérialisés au lancement. */
-    public const int DRAW_MARGIN = 3;
-
     /** Le `N` de référence du § 13.3 — jamais le seul auquel le catalogue est éligible. */
     public const int DEMO_FRAMES_PER_ROUND = 3;
 
@@ -99,9 +97,9 @@ class DemoCatalogueSeeder extends Seeder
      *
      * Sans cela, `level_i_variants` vaut 1 partout — c'est-à-dire le signal
      * back-office « variante unique » sur la totalité du catalogue — et le
-     * mécanisme central de la spec 30, « préférence non vue par le salon » puis
-     * repli non vue par le joueur, n'a rien à départager : à chaque manche du même
-     * film, le seul tirage possible sert la même image.
+     * mécanisme central de la spec 30, non vue par le salon → vue la moins
+     * récemment par le salon → graine, n'a rien à départager : à chaque manche du
+     * même film, le seul tirage possible sert la même image.
      *
      * @var list<FrameLevel>
      */
