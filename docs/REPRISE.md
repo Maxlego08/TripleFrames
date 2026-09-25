@@ -500,7 +500,7 @@ Ensuite, à chaque session : **« Implémente l'étape suivante de l'ordre des l
 69. L40-6 — identité affichée, composants d'avatar → 12, 63, 67 — ✅ livrée le 25/09
 70. L30-4 — `SeededPrf`, `DrawContext` → — — ✅ livrée le 25/09
 71. L30-5 — tirage des films et des variantes → 9, 34, 35, 70 — ✅ livrée le 26/09
-72. L30-6 — substitution et remplacement → 71
+72. L30-6 — substitution et remplacement → 71 — ✅ livrée le 26/09
 73. L70-3 — `AnswerMatcher` → 37, 38
 74. L70-11 — rapport de collisions, sonde de force brute → 73
 75. L100-7 (2e temps) — `ReportBruteForce` → 23, 74

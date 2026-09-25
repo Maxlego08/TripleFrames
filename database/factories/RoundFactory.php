@@ -95,7 +95,9 @@ class RoundFactory extends Factory
     }
 
     /**
-     * Position dans le tirage figé, `1..min(M + 3, |vivier|)`.
+     * Position dans le tirage figé,
+     * `1..min(M + PlatformLimits::drawSubstituteMargin(), W)`, `W` étant le
+     * nombre d'œuvres du vivier (spec 30 § 1.1).
      *
      * `round_number` est le numéro AFFICHÉ `1..M` et n'est **pas unique** : une
      * manche annulée et son remplaçant le partagent volontairement. Il vaut par

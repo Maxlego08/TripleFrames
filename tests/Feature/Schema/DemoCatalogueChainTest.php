@@ -2,9 +2,7 @@
 
 use App\Enums\AdminActionRetention;
 use App\Enums\AnswerKeyKind;
-use App\Enums\ContentAvailability;
 use App\Enums\ContentFlag;
-use App\Enums\FrameProcessingState;
 use App\Enums\ImportSource;
 use App\Enums\Locale;
 use App\Enums\ReviewDecision;
@@ -68,9 +66,10 @@ use Illuminate\Support\Facades\Storage;
  * spec 30, {@see PoolQuery} — jamais par un prédicat recopié ici, qui
  * divergerait du lobby et de la garde sans qu'aucun test ne rougisse. FAIT 2
  * rejoue le tirage lui-même ({@see GameDrawer}) sur ce vivier, marge lue dans
- * {@see PlatformLimits}. Seul le prédicat de variante servable reste écrit dans
- * ce fichier ({@see servableFramesOf()}) : il est confronté à
- * `Frame::isServable()` frame par frame (FAIT 4).
+ * {@see PlatformLimits}. Le prédicat de variante servable est lu, lui aussi, par
+ * la portée unique du modèle ({@see servableFramesOf()}, `Frame::servable()`,
+ * depuis le lot L30-6) : FAIT 4 la confronte à `Frame::isServable()` frame par
+ * frame.
  */
 
 /**
@@ -91,8 +90,11 @@ function demoPool(int $framesPerRound): Builder
 
 /**
  * Les variantes SERVABLES d'un film — prédicat unique du § 3.2, les trois
- * conditions ensemble. Un prédicat de comptage plus permissif que le prédicat de
- * service fabrique des films qui passent la garde de vivier et cassent une manche.
+ * conditions ensemble, lu par LA portée {@see Frame::servable()} que partagent le
+ * projecteur, le tirage et la substitution, jamais recopié ici (E71-3). Un
+ * prédicat de comptage plus permissif que le prédicat de service fabrique des
+ * films qui passent la garde de vivier et cassent une manche : FAIT 4 confronte
+ * cette portée SQL à `Frame::isServable()`, frame par frame.
  *
  * @return EloquentCollection<int, Frame>
  */
@@ -100,9 +102,7 @@ function servableFramesOf(Movie $movie): EloquentCollection
 {
     return Frame::query()
         ->where('movie_id', $movie->id)
-        ->where('availability', ContentAvailability::Published->value)
-        ->where('processing_state', FrameProcessingState::Ready->value)
-        ->whereNotNull('game_path')
+        ->servable()
         ->get();
 }
 

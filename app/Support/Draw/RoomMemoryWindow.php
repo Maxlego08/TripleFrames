@@ -28,10 +28,13 @@ use Carbon\CarbonImmutable;
  * La mémoire est portée par `round.room_id`, jamais par un joueur : un nouveau
  * salon repart d'une mémoire vide (§ 4.5).
  *
- * Appelée **une fois** par {@see PoolScope::forRoom()} et {@see PoolScope::forGame()} :
- * deux appels à quelques millisecondes d'écart pourraient chevaucher une
- * frontière de la fenêtre et faire diverger la garde et le tirage (§ 6.1). Une
- * lecture, sans verrou ni écriture, servie par `round_room_started_movie_idx`.
+ * Appelée **une fois** par lancement, par {@see PoolScope::forRoom()} et
+ * {@see PoolScope::forGame()} : deux appels à quelques millisecondes d'écart
+ * pourraient chevaucher une frontière de la fenêtre et faire diverger la garde
+ * et le tirage (§ 6.1) ; et, hors lancement, par
+ * {@see VariantChooser::substitute()} à chaque substitution, à l'instant de la
+ * frappe (§ 7.2, § 8.1), jamais en solo. Une lecture, sans verrou ni écriture,
+ * servie par `round_room_started_movie_idx`.
  */
 final readonly class RoomMemoryWindow
 {

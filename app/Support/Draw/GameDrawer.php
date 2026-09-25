@@ -2,9 +2,7 @@
 
 namespace App\Support\Draw;
 
-use App\Enums\ContentAvailability;
 use App\Enums\FrameLevel;
-use App\Enums\FrameProcessingState;
 use App\Models\Frame;
 use App\Settings\PlatformLimits;
 use App\ValueObjects\Catalog\FrameLevelCoverage;
@@ -225,12 +223,13 @@ final readonly class GameDrawer
     /**
      * Les variantes jouables de tous les candidats, en une requête (§ 6.2).
      *
-     * Prédicat unique de variante jouable (spec 10 § 3.2, `Frame::isServable()`,
-     * mot pour mot celui du projecteur) : `published` ET `ready` ET
-     * `game_path IS NOT NULL`, servi par `frame_movie_level_idx`, trié par
-     * `(movie_id, frame_level, id)`. Avec un salon, jointure gauche sur
-     * `seen_frame` du salon (`seen_frame_room_frame_uq`) pour `lastSeenAt` ;
-     * sans salon (solo, catalogue), aucune jointure : aucune mémoire n'est lue.
+     * Prédicat unique de variante jouable (spec 10 § 3.2) par la portée
+     * {@see Frame::servable()}, celle du projecteur et de la substitution :
+     * `published` ET `ready` ET `game_path IS NOT NULL`, servi par
+     * `frame_movie_level_idx`, trié par `(movie_id, frame_level, id)`. Avec
+     * un salon, jointure gauche sur `seen_frame` du salon
+     * (`seen_frame_room_frame_uq`) pour `lastSeenAt` ; sans salon (solo,
+     * catalogue), aucune jointure : aucune mémoire n'est lue.
      *
      * @param  list<PoolCandidate>  $candidates
      * @return array<int, list<VariantCandidate>>
@@ -243,9 +242,7 @@ final readonly class GameDrawer
 
         $query = Frame::query()
             ->select(['frame.id', 'frame.movie_id', 'frame.frame_level'])
-            ->where('frame.availability', ContentAvailability::Published->value)
-            ->where('frame.processing_state', FrameProcessingState::Ready->value)
-            ->whereNotNull('frame.game_path')
+            ->servable()
             ->whereIn('frame.movie_id', array_map(
                 static fn (PoolCandidate $candidate): int => $candidate->movieId,
                 $candidates,

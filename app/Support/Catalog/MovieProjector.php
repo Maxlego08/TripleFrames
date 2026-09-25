@@ -2,9 +2,7 @@
 
 namespace App\Support\Catalog;
 
-use App\Enums\ContentAvailability;
 use App\Enums\FrameLevel;
-use App\Enums\FrameProcessingState;
 use App\Enums\Locale;
 use App\Models\Frame;
 use App\Models\Movie;
@@ -35,11 +33,13 @@ use Illuminate\Database\Eloquent\Collection as EloquentCollection;
  *    incrémentation de `Locale::MASK_VERSION` : les quatre propositions du
  *    QCM basculant ensemble sur `title_original` pour tout le salon.
  *
- * **Prédicat unique de variante jouable**, cité partout ailleurs et jamais
- * réécrit : `availability = 'published'` **ET** `processing_state = 'ready'`
- * **ET** `game_path IS NOT NULL`. Les trois ensemble : sans la troisième, un
- * job Imagick à moitié échoué produit un film qui passe la garde de vivier et
- * casse une manche.
+ * **Prédicat unique de variante jouable**, lu par la portée
+ * {@see Frame::servable()} et jamais réécrit ici : `availability = 'published'`
+ * **ET** `processing_state = 'ready'` **ET** `game_path IS NOT NULL`. Les trois
+ * ensemble : sans la troisième, un job Imagick à moitié échoué produit un film
+ * qui passe la garde de vivier et casse une manche. Le tirage et la
+ * substitution (spec 30) lisent la même portée : la projection compte
+ * exactement les variantes que le tirage peut retenir.
  *
  * L'import ne crée **aucune** frame — la curation des images est un acte humain
  * (spec 20) —, donc un film fraîchement importé a `levels_count = 0` et n'entre
@@ -63,9 +63,7 @@ final class MovieProjector
         /** @var EloquentCollection<int, Frame> $servable */
         $servable = Frame::query()
             ->where('movie_id', $movie->id)
-            ->where('availability', ContentAvailability::Published->value)
-            ->where('processing_state', FrameProcessingState::Ready->value)
-            ->whereNotNull('game_path')
+            ->servable()
             ->get();
 
         foreach (FrameLevel::cases() as $level) {

@@ -43,7 +43,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property int $id
  * @property int $game_id Identifiant interne : `#[Hidden]` (§ 1.1).
  * @property int|null $room_id Dénormalisé depuis `game` au lancement et jamais modifié ; NULL en solo. `#[Hidden]`.
- * @property int $sequence_index Position dans le tirage figé, `1..min(M + 3, |vivier|)`.
+ * @property int $sequence_index Position dans le tirage figé, `1..min(M + PlatformLimits::drawSubstituteMargin(), W)`, `W` = œuvres du vivier.
  * @property int|null $round_number Numéro affiché `1..M`, NON unique : une manche annulée et son remplaçant le partagent.
  * @property int $movie_id La bonne réponse. `#[Hidden]`.
  * @property RoundStatus $status

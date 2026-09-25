@@ -933,8 +933,9 @@ it("une projection périmée fait sauter l'œuvre sans bloquer le tirage", funct
 
     // Chaque clause du prédicat de variante jouable (10 § 3.2 : `published` ET
     // `ready` ET `game_path` posé) cesse d'être vraie, chacune sur son film :
-    // tant que ce prédicat reste écrit en SQL dans `GameDrawer` (E71-3), ce
-    // test est la seule garde de chacune de ses clauses.
+    // le tirage la lit par la portée `Frame::servable()` (L30-6, E71-3), que
+    // ce test garde clause par clause côté tirage, `SubstitutionTest` côté
+    // substitution.
     $staleWrites = [
         ['availability' => ContentAvailability::Draft->value],
         ...array_map(

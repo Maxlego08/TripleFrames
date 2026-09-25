@@ -138,7 +138,9 @@ class Game extends Model
     }
 
     /**
-     * Les manches du tirage figé, `1..min(M + 3, |vivier|)`.
+     * Les manches du tirage figé, `sequence_index` = `1..K`, où
+     * `K = min(M + PlatformLimits::drawSubstituteMargin(), W)` et `W` le nombre
+     * d'œuvres du vivier (spec 30 § 1.1) ; réserve comprise.
      *
      * @return HasMany<Round, $this>
      */

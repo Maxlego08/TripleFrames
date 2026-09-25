@@ -11,7 +11,9 @@ use Carbon\CarbonImmutable;
 use Database\Factories\FrameFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
+use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Attributes\Table;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -120,12 +122,47 @@ class Frame extends Model
      * `RoundTier::isOpenForServing()` — `i = 1` compris — et l'appartenance du
      * demandeur à la manche, portée par `round_tier.serve_token` et jamais par un
      * chemin de fichier.
+     *
+     * Son jumeau SQL est la portée {@see self::servable()}, seule écriture du
+     * prédicat en requête : les deux doivent rendre le même verdict sur la même
+     * ligne.
      */
     public function isServable(): bool
     {
         return $this->availability->isPlayable()
             && $this->processing_state === FrameProcessingState::Ready
             && $this->game_path !== null;
+    }
+
+    /**
+     * **Le prédicat unique de variante jouable** (spec 10 § 3.2), en SQL, et
+     * nulle part ailleurs : `availability = 'published'` **ET**
+     * `processing_state = 'ready'` **ET** `game_path IS NOT NULL`. Les trois
+     * ensemble : sans la troisième, un job Imagick à moitié échoué produit un
+     * film qui passe la garde de vivier et casse une manche.
+     *
+     * Jumeau exact de {@see self::isServable()}, et le même compte partout : le
+     * projecteur de `movie_projection` (`levels_mask`, `levels_count`), le
+     * chargement des variantes du tirage (`GameDrawer`, spec 30 § 6.2) et les
+     * candidates de substitution (`VariantChooser::substitute()`, § 8.1). Un
+     * prédicat de comptage plus permissif que celui du tirage fabriquerait des
+     * films qui passent la garde de vivier et cassent une manche (E71-3).
+     *
+     * Colonnes qualifiées par la table : la portée reste juste sous une jointure
+     * (`seen_frame` au tirage et à la substitution).
+     *
+     * Ce n'est, comme son jumeau, qu'un prédicat de CATALOGUE : la présence du
+     * fichier sur le disque `frames`, la garde temporelle et l'appartenance du
+     * demandeur restent à la charge de leurs appelants.
+     *
+     * @param  Builder<self>  $query
+     */
+    #[Scope]
+    protected function servable(Builder $query): void
+    {
+        $query->where($query->qualifyColumn('availability'), ContentAvailability::Published->value)
+            ->where($query->qualifyColumn('processing_state'), FrameProcessingState::Ready->value)
+            ->whereNotNull($query->qualifyColumn('game_path'));
     }
 
     /**
