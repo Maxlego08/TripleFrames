@@ -42,12 +42,18 @@ final readonly class AvatarRef
      */
     public const string DEFAULT_PROVIDER_BASE = '/storage/avatar';
 
-    /** Clés de traduction de l'attribut `alt`, une par branche de la chaîne. */
-    public const string ALT_KEY_PRESET = 'avatar.alt.preset';
+    /**
+     * Clés de traduction de l'attribut `alt`, une par branche de la chaîne.
+     *
+     * Domaine `common` (spec 40 § 6.5) : il n'existe aucun domaine `avatar`
+     * (05, C15 § 2.2), et `common` est embarqué par toute page, écran de jeu
+     * compris, alors que `account` ne l'est pas.
+     */
+    public const string ALT_KEY_PRESET = 'common.avatar.alt.preset';
 
-    public const string ALT_KEY_PROVIDER = 'avatar.alt.provider';
+    public const string ALT_KEY_PROVIDER = 'common.avatar.alt.provider';
 
-    public const string ALT_KEY_INITIALS = 'avatar.alt.initials';
+    public const string ALT_KEY_INITIALS = 'common.avatar.alt.initials';
 
     /** Initiale de repli d'un nom vide ou non alphabétique. */
     public const string FALLBACK_INITIAL = '?';
@@ -74,15 +80,25 @@ final readonly class AvatarRef
      */
     public static function preset(string $preset, string $initials): self
     {
-        $base = rtrim(Config::string(self::CONFIG_PREFIX.'preset_base', self::DEFAULT_PRESET_BASE), '/');
-        $extension = Config::string(self::CONFIG_PREFIX.'preset_extension', self::DEFAULT_PRESET_EXTENSION);
-
         return new self(
             kind: AvatarKind::Preset,
-            url: $base.'/'.$preset.'.'.$extension,
+            url: self::presetUrl($preset),
             altKey: self::ALT_KEY_PRESET,
             initials: $initials,
         );
+    }
+
+    /**
+     * URL publique et cacheable du fichier statique d'un prédéfini, depuis sa
+     * CLÉ (spec 40 § 6.5) : seule construction de cette URL, partagée par
+     * {@see self::preset()} et {@see AvatarPresetCatalog::options()}.
+     */
+    public static function presetUrl(string $key): string
+    {
+        $base = rtrim(Config::string(self::CONFIG_PREFIX.'preset_base', self::DEFAULT_PRESET_BASE), '/');
+        $extension = Config::string(self::CONFIG_PREFIX.'preset_extension', self::DEFAULT_PRESET_EXTENSION);
+
+        return $base.'/'.$key.'.'.$extension;
     }
 
     /**

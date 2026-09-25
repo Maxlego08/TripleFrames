@@ -95,6 +95,48 @@ return [
         'label' => 'Langue',
     ],
 
+    // Avatars (spec 40 § 6.7). `alt` n'est lu que loin d'un pseudo affiché :
+    // à côté d'un pseudo, l'image est décorative (I5.9). Un libellé de
+    // prédéfini n'est que le nom accessible d'une option du sélecteur ; ses
+    // clés sont celles d'`AvatarPresetCatalog`, stables quand le pack change.
+    'avatar' => [
+        'alt' => [
+            'initials' => 'Initiales du joueur',
+            'preset' => 'Avatar du joueur',
+            'provider' => 'Photo de profil du joueur',
+        ],
+        'picker' => [
+            'label' => 'Choisissez un avatar',
+            'taken' => 'déjà choisi dans ce salon',
+        ],
+        'preset' => [
+            'preset-01' => 'Ours',
+            'preset-02' => 'Poussin',
+            'preset-03' => 'Vache',
+            'preset-04' => 'Crocodile',
+            'preset-05' => 'Chien',
+            'preset-06' => 'Canard',
+            'preset-07' => 'Éléphant',
+            'preset-08' => 'Grenouille',
+            'preset-09' => 'Girafe',
+            'preset-10' => 'Hippopotame',
+            'preset-11' => 'Cheval',
+            'preset-12' => 'Singe',
+            'preset-13' => 'Élan',
+            'preset-14' => 'Hibou',
+            'preset-15' => 'Panda',
+            'preset-16' => 'Perroquet',
+            'preset-17' => 'Manchot',
+            'preset-18' => 'Cochon',
+            'preset-19' => 'Lapin',
+            'preset-20' => 'Rhinocéros',
+            'preset-21' => 'Paresseux',
+            'preset-22' => 'Morse',
+            'preset-23' => 'Baleine',
+            'preset-24' => 'Zèbre',
+        ],
+    ],
+
     'home' => [
         'deploy' => 'Déployer',
         'description' => 'Nous vous suggérons de commencer par ceci.',

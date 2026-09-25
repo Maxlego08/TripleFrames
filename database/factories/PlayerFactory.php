@@ -2,14 +2,15 @@
 
 namespace Database\Factories;
 
+use App\Avatars\AvatarPresetCatalog;
 use App\Enums\AvatarKind;
 use App\Enums\Locale;
 use App\Enums\PlayerConnectionState;
 use App\Models\Player;
 use App\Models\Room;
 use App\Models\User;
-use App\Settings\PlatformLimits;
 use Illuminate\Database\Eloquent\Factories\Factory;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Str;
 
 /**
@@ -237,13 +238,12 @@ class PlayerFactory extends Factory
     }
 
     /**
-     * Clé stable du pack prédéfini, jamais un chemin de fichier (§ 5.3). Le pack
-     * n'étant pas encore livré, la fabrique tire dans les bornes de
-     * {@see PlatformLimits::avatarPresets()} sous une convention de nommage à
-     * réaligner le jour où le pack existe.
+     * Clé stable du pack prédéfini, jamais un chemin de fichier (§ 5.3), tirée
+     * dans {@see AvatarPresetCatalog::keys()}, seul registre des clés (spec 40
+     * § 6.3) : la fabrique n'écrit jamais `preset-%02d` elle-même.
      */
     private static function avatarPreset(): string
     {
-        return sprintf('preset-%02d', random_int(1, PlatformLimits::avatarPresets()));
+        return Arr::random(AvatarPresetCatalog::keys());
     }
 }

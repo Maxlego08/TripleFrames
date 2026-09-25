@@ -2,11 +2,11 @@
 
 namespace Database\Factories;
 
+use App\Avatars\AvatarPresetCatalog;
 use App\Enums\AvatarKind;
 use App\Enums\Locale;
 use App\Enums\UserRole;
 use App\Models\User;
-use App\Settings\PlatformLimits;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Facades\Hash;
@@ -206,17 +206,14 @@ class UserFactory extends Factory
     /**
      * Avatar prédéfini explicitement choisi — une CLÉ stable, jamais un chemin de
      * fichier : remplacer le pack doit être une migration de valeurs, pas une casse de
-     * données. Le nombre de clés disponibles est une limite de plate-forme, jamais un
-     * littéral.
+     * données. La clé est tirée dans {@see AvatarPresetCatalog::keys()}, seul registre
+     * des clés (spec 40 § 6.3), dont le nombre est une limite de plate-forme.
      */
     public function withPresetAvatar(?string $preset = null): static
     {
         return $this->state([
             'avatar_kind' => AvatarKind::Preset,
-            'avatar_preset' => $preset ?? sprintf(
-                'preset-%02d',
-                fake()->numberBetween(1, PlatformLimits::avatarPresets()),
-            ),
+            'avatar_preset' => $preset ?? fake()->randomElement(AvatarPresetCatalog::keys()),
         ]);
     }
 

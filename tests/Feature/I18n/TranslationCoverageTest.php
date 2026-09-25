@@ -1,5 +1,7 @@
 <?php
 
+use App\Avatars\AvatarPresetCatalog;
+use App\Avatars\AvatarRef;
 use App\Enums\AdminActionSubject;
 use App\Enums\AdminActionType;
 use App\Enums\ErrorPageStatus;
@@ -425,6 +427,15 @@ it('carries every key built by an enumerable key constructor', function () {
             static fn (FrameProcessingFailure $failure): string => $failure->value,
             FrameProcessingFailure::cases(),
         ),
+        // Libellé de chaque avatar prédéfini, bâti sur la clé du catalogue,
+        // et les trois clés `alt` d'`AvatarRef` (40 § 6.5 et § 6.7, L40-5).
+        ...array_map(
+            static fn (string $key): string => AvatarPresetCatalog::labelKey($key),
+            AvatarPresetCatalog::keys(),
+        ),
+        AvatarRef::ALT_KEY_PRESET,
+        AvatarRef::ALT_KEY_PROVIDER,
+        AvatarRef::ALT_KEY_INITIALS,
     ];
 
     $missing = array_values(array_filter(
