@@ -502,7 +502,7 @@ Ensuite, à chaque session : **« Implémente l'étape suivante de l'ordre des l
 71. L30-5 — tirage des films et des variantes → 9, 34, 35, 70 — ✅ livrée le 26/09
 72. L30-6 — substitution et remplacement → 71 — ✅ livrée le 26/09
 73. L70-3 — `AnswerMatcher` → 37, 38 — ✅ livrée le 26/09
-74. L70-11 — rapport de collisions, sonde de force brute → 73
+74. L70-11 — rapport de collisions, sonde de force brute → 73 — ✅ livrée le 26/09
 75. L100-7 (2e temps) — `ReportBruteForce` → 23, 74
 76. L70-4 — états de saisie (D20), `types/answers.ts` → —
 77. L70-7 — résolveur de titre, tirage des leurres (D21) → 35, 70
