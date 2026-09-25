@@ -16,6 +16,18 @@ export function formatInteger(value: number, locale: string): string {
     return new Intl.NumberFormat(locale).format(value);
 }
 
+/**
+ * Un pourcentage reçu sur l'échelle 0-100, au dixième, avec le signe et
+ * l'espacement de la locale active (« 64 % ») : jamais un « % » écrit dans
+ * un texte.
+ */
+export function formatPercent(value: number, locale: string): string {
+    return new Intl.NumberFormat(locale, {
+        style: 'percent',
+        maximumFractionDigits: 1,
+    }).format(value / 100);
+}
+
 /** Un instant ISO-8601 en date et heure courtes, ou `null` s'il manque. */
 export function formatMoment(
     iso: string | null | undefined,

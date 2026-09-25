@@ -45,6 +45,7 @@ return [
         'import' => 'Import',
         'review' => 'Revue',
         'throughput' => 'Débit',
+        'guide' => 'Premiers pas',
         'back_to_site' => 'Retour au site',
         'role' => [
             'curator' => 'Curateur',
@@ -120,6 +121,102 @@ return [
             'heading' => 'Double authentification confirmée',
             'description' => 'Votre compte est protégé par un second facteur : la porte du back-office est ouverte.',
             'enter' => 'Entrer dans le back-office',
+        ],
+    ],
+
+    /*
+    | Page « premiers pas du curateur » (`admin/guide`, spec 20 § 13.6, lot
+    | L20-18) : livrée avec l'outil, et condition du lot pilote. Elle ne
+    | recopie aucun texte normatif : l'échelle (`level.*`), la grille courante
+    | (`exclusion_grid.v{n}.*`) et les raccourcis (`shortcuts.*`) y sont rendus
+    | depuis leurs propres clés, que le serveur envoie — un libellé ne vit qu'à
+    | un seul endroit. Ce bloc ne porte que ce qui relie et explique.
+    |
+    | `floor.rule` : `:width` et `:surface` sont des pourcentages déjà mis en
+    | forme ; `floor.min_width` : `:min_width`, un nombre de pixels mis en
+    | forme. `grid.heading` : `:version`, la version courante de la grille ;
+    | `grid.levels` : `:levels`, une liste de niveaux ;
+    | `scale.specific_items` : `:items`, les libellés des points de la grille
+    | propres à ce niveau.
+    */
+    'guide' => [
+        'title' => 'Premiers pas du curateur',
+        'heading' => 'Premiers pas du curateur',
+        'description' => 'Ce qu’il faut savoir avant de curer un premier film : les deux passes, l’échelle des niveaux, le plancher de recadrage, la grille d’exclusion, la revue, la publication, écarter, les raccourcis, et ce qu’il ne faut jamais faire.',
+        'open_queue' => 'Ouvrir la file de curation',
+        // Déconnexion pendant une visite partie de cette page : rien n'a été
+        // envoyé, il n'y avait rien à saisir.
+        'offline' => 'Connexion perdue : l’écran demandé n’a pas pu s’ouvrir. Vérifiez votre réseau, puis réessayez.',
+        'toc' => [
+            'label' => 'Sommaire de la page',
+            'heading' => 'Sommaire',
+        ],
+        'passes' => [
+            'heading' => 'Les deux passes',
+            'intro' => 'Un film n’a pas une suite d’images ordonnée : il a une banque d’images, et chaque image porte un niveau, de 1, très cryptique, à 5, évident. Chaque manche tire ses images dans cette banque. Un film se cure en deux passes.',
+            'one' => 'Passe 1 : une variante jouable à chacun des niveaux 1, 3 et 5. Elle suffit à publier le film, qui entre alors dans le vivier des parties.',
+            'two' => 'Passe 2 : une deuxième variante aux niveaux 1, 3 et 5, et une variante aux niveaux 2 et 4. C’est un objectif de curation, jamais une condition de publication : un film publié s’enrichit sans quitter le jeu.',
+            'steps' => [
+                'heading' => 'Le parcours d’un film',
+                'open' => 'Ouvrez le film suivant de la file de curation. Les films entamés viennent d’abord : vous reprenez là où vous vous étiez arrêté.',
+                'crop' => 'Dans la banque d’images, choisissez un visuel, cadrez-le, choisissez son niveau, puis ajoutez l’image. Elle part en traitement : passez au visuel suivant sans l’attendre.',
+                'review' => 'Une fois l’image traitée, passez-la en revue sur son rendu final : une revue conforme la publie.',
+                'publish' => 'Quand le contenu du film est vérifié et que les niveaux 1, 3 et 5 ont chacun une image en jeu, publiez le film.',
+                'next' => '« Film suivant » vous mène au prochain film de la file.',
+            ],
+        ],
+        'scale' => [
+            'heading' => 'L’échelle de 1 à 5',
+            'specific_items' => 'Propre à ce niveau dans la grille d’exclusion : :items.',
+            'change' => 'Le niveau d’une image se change ensuite depuis la banque d’images. Une image publiée qui change de niveau sort du jeu et repasse en revue.',
+        ],
+        'floor' => [
+            'heading' => 'Le plancher de recadrage, et pourquoi',
+            'rule' => 'Le cadre, toujours au format 16:9, ne reprend jamais plus de :width de la largeur ni de la hauteur du visuel : il en couvre au plus :surface de la surface, quel que soit le format du visuel.',
+            'min_width' => 'Il ne descend pas non plus sous :min_width pixels de large : l’image de jeu serait trop agrandie, donc floue.',
+            'why' => 'Pourquoi : un visuel repris presque entier se retrouve en une recherche d’image inversée, et la manche se gagnerait sans avoir vu le film ; un cadre resserré, non. C’est aussi un engagement du projet : une image de jeu est une image transformée, jamais un visuel redistribué tel quel, et cet engagement doit se vérifier, pas seulement se déclarer.',
+            'checked' => 'Le recadreur vous arrête au plancher, et le serveur le revérifie à l’ajout de l’image puis à son traitement : un cadre hors du plancher n’entre jamais en jeu.',
+        ],
+        'grid' => [
+            'heading' => 'La grille d’exclusion, version :version',
+            'intro' => 'Chaque revue répond à chacun des points qui s’appliquent au niveau de l’image : un seul point en défaut suffit à la rejeter. Les points se jugent sur le rendu final, jamais sur l’aperçu du recadreur.',
+            'versioned' => 'Votre revue cite cette version de la grille. Un point publié ne se réécrit jamais : une grille modifiée devient une nouvelle version, et les images publiées sous l’ancienne rejoignent la liste « À re-revoir ».',
+            'items_label' => 'Points de la grille',
+            'levels_all' => 'Tous les niveaux',
+            'levels' => 'Niveaux :levels',
+        ],
+        'review' => [
+            'heading' => 'La revue et la source déclarée',
+            'final_render' => 'Une image n’entre en jeu qu’après une revue de son rendu final, tel qu’un joueur le verra : dans le cadre sombre du jeu, à la largeur d’un téléphone et à celle d’un ordinateur.',
+            'gestures' => '« Conforme, publier » répond « conforme » à chacun des points affichés et publie l’image. « Non conforme » vous fait cocher les points en défaut, puis « Rejeter » : l’image rejoint la liste « Rejetées », d’où elle peut être revue, re-recadrée ou écartée.',
+            'source' => 'La source de l’image s’affiche en lecture seule : le chemin du visuel TMDB, ou le minutage d’une capture. Votre revue la déclare, datée et signée de votre nom réel : c’est la preuve de l’origine de l’image, et elle ne se déclare jamais après coup.',
+            'immutable' => 'Une revue ne se modifie ni ne se supprime. Une image recadrée, changée de niveau ou dépubliée sort du jeu, et n’y revient que par une nouvelle revue.',
+            'open' => 'Ouvrir la passe de revue',
+        ],
+        'publication' => [
+            'heading' => 'La publication et l’avertissement d’ambiguïté',
+            'explicit' => 'Rien ne se publie seul : publier un film est votre geste. « Publier le film » s’active quand le contenu est vérifié, que les niveaux 1, 3 et 5 ont chacun une image en jeu et que le film a au moins un titre à deviner ; sinon, le bouton nomme ce qui manque.',
+            'frames_first' => 'Une image se publie par sa revue, même quand son film est encore un brouillon : c’est ainsi que se construit la passe 1.',
+            'ambiguity' => 'Avant de confirmer, l’écran liste les réponses que la publication rendra ambiguës, et les films qui les portent déjà. L’ambiguïté se mesure sur tout le catalogue publié, et elle ne change jamais un score déjà attribué.',
+            'stale' => 'Si le catalogue a changé entre l’aperçu et votre clic, la publication est refusée et l’aperçu se réaffiche : l’avertissement que vous lisez n’est jamais périmé.',
+        ],
+        'set_aside' => [
+            'heading' => 'Écarter un film ou une image',
+            'movie' => 'Un film incurable, sans aucun visuel TMDB exploitable, sort de la file par « Écarter le film », avec un motif obligatoire inscrit au journal. Rien n’est perdu : un film écarté peut toujours être curé, puis publié.',
+            'unpublish_movie' => 'Dépublier un film publié le sort du vivier, motif obligatoire ; ses images restent publiées. Il revient en jeu par « Republier le film ».',
+            'frame' => 'Écarter une image jamais publiée la met de côté pour de bon : elle ne repasse jamais en revue, et pour réutiliser son visuel, on ajoute une nouvelle variante. Dépublier une image publiée la sort du jeu ; elle y revient par une nouvelle revue.',
+            'coverage' => 'Si le geste retire à un film publié sa dernière image jouable au niveau 1, 3 ou 5, l’écran le dit avant confirmation : le film reste publié, mais incomplet, et l’écran annonce jusqu’à combien d’images par manche il reste jouable.',
+        ],
+        'shortcuts' => [
+            'operability' => 'Sans eux, tout se fait aussi au clavier : Tab parcourt l’écran ; dans la grille des visuels, les flèches passent d’un visuel à l’autre, et Entrée ou Espace l’ouvre dans le cadre ; le cadre sélectionné se déplace aux flèches, s’élargit avec « + », se resserre avec « - », et Origine rétablit le cadre par défaut ; dans le choix du niveau, les flèches changent de niveau.',
+        ],
+        'never' => [
+            'heading' => 'Ce qu’il ne faut jamais faire',
+            'poster' => 'Publier une affiche, une jaquette ou un visuel promotionnel : seul un photogramme du film est admis.',
+            'credits' => 'Publier un plan de générique, un carton-titre ou un logo de studio.',
+            'set_photo' => 'Publier une photo de plateau ou un portrait posé d’acteur : le droit à l’image de l’acteur s’ajoute au droit d’auteur sur l’œuvre.',
+            'delete' => 'Supprimer un film, une image ou une revue : c’est impossible, et c’est voulu. Un film ou une image s’écarte ou se dépublie ; une revue se corrige par une nouvelle revue.',
+            'alias_for_title' => 'Corriger un titre par un alias : un titre faux se corrige sur la fiche du film, dans sa langue. Un alias ajoute une réponse acceptée ; il ne change pas le titre que voient les joueurs.',
         ],
     ],
 

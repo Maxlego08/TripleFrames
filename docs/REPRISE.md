@@ -442,7 +442,7 @@ Ensuite, à chaque session : **« Implémente l'étape suivante de l'ordre des l
 50. L20-15 — file de curation, fiche, tableau de bord → 36, 48 — ✅ livrée le 24/09
 51. L20-16 — recherche TMDB, liste d'amorçage, aperçu à blanc, garde d'instantané des imports (I-9) → 18, 20* — ✅ livrée le 24/09
 52. L20-17 — débit et verdict du pilote → 8, 45, 48, 50 — ✅ livrée le 24/09
-53. L20-18 — « premiers pas du curateur » → 46, 47*
+53. L20-18 — « premiers pas du curateur » → 46, 47* — ✅ livrée le 24/09
 54. IA — versionner la liste dans `database/data/tmdb-seed-list.txt` → 3, 51
 55. P — déclarer les heures du pilote ; vérifier sans les modifier les seuils de D10 et la composition de D11 → 52
 56. P — **porte du pilote** : déploiement manuel du back-office complet → 29, 30, 32, 33 à 53, 54, 55

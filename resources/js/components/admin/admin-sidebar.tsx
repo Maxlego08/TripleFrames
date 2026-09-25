@@ -1,5 +1,6 @@
 import { Link, router, usePage } from '@inertiajs/react';
 import {
+    BookOpen,
     Clapperboard,
     DownloadCloud,
     Gauge,
@@ -32,7 +33,10 @@ import {
     useSidebar,
 } from '@/components/ui/sidebar';
 import { useTranslations } from '@/hooks/use-translations';
-import { dashboard as adminDashboard } from '@/routes/admin';
+import {
+    dashboard as adminDashboard,
+    guide as adminGuide,
+} from '@/routes/admin';
 import { index as catalogIndex } from '@/routes/admin/catalog';
 import { index as curationIndex } from '@/routes/admin/curation';
 import { index as importIndex } from '@/routes/admin/import';
@@ -132,6 +136,13 @@ export function AdminSidebar() {
             title: t('admin.nav.throughput'),
             href: throughputIndex(),
             icon: Gauge,
+        },
+        // La page « premiers pas du curateur » (spec 20 § 13.6) : atteinte
+        // d'un clic, jamais par une adresse à connaître.
+        {
+            title: t('admin.nav.guide'),
+            href: adminGuide(),
+            icon: BookOpen,
         },
     ];
 

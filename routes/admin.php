@@ -14,6 +14,7 @@ use App\Http\Controllers\Admin\FrameReviewController;
 use App\Http\Controllers\Admin\FrameReviewQueueController;
 use App\Http\Controllers\Admin\FrameTmdbController;
 use App\Http\Controllers\Admin\FrameUnpublishController;
+use App\Http\Controllers\Admin\GuideController;
 use App\Http\Controllers\Admin\ImportController;
 use App\Http\Controllers\Admin\ImportDiscoverController;
 use App\Http\Controllers\Admin\ImportIdsController;
@@ -73,11 +74,11 @@ use Illuminate\Support\Facades\Route;
 | **L'autorisation est posée route par route par `can:`, jamais par un test de
 | rôle dans un contrôleur.** Deux routes seulement n'en portent pas, parce que
 | la porte suffit à les garder : l'écran d'enrôlement
-| (`admin.two_factor.required`) et, au lot L20-18, la page de premiers pas
-| (`admin.guide`). Les policies vivent dans `app/Policies/` et sont
-| auto-découvertes par convention `App\Models\X` → `App\Policies\XPolicy` :
-| aucun enregistrement de provider, et surtout aucun `Gate::before` — il
-| contournerait la propriété d'une `saved_config`, déclarée strictement privée.
+| (`admin.two_factor.required`) et la page de premiers pas (`admin.guide`).
+| Les policies vivent dans `app/Policies/` et sont auto-découvertes par
+| convention `App\Models\X` → `App\Policies\XPolicy` : aucun enregistrement
+| de provider, et surtout aucun `Gate::before` — il contournerait la
+| propriété d'une `saved_config`, déclarée strictement privée.
 |
 | **Toute route ajoutée ici prend sa ligne dans `tests/Datasets/AdminRoutes.php`**,
 | la matrice des capacités de la spec 20 § 2.2 : `AuthorizationMatrixTest`
@@ -109,6 +110,14 @@ Route::middleware(['auth', 'verified', 'role:curator', 'admin.2fa', 'admin.local
         Route::get('two-factor', [TwoFactorRequiredController::class, 'show'])
             ->withoutMiddleware('admin.2fa')
             ->name('two_factor.required');
+
+        // La page « premiers pas du curateur » (§ 13.6, ligne 9) : sans `can:`,
+        // comme l'écran d'enrôlement — elle ne lit aucun modèle, seulement la
+        // grille d'exclusion courante et le plancher de recadrage, et la porte
+        // suffit à la garder. Elle reste derrière `admin.2fa` : c'est le guide
+        // de l'outil, pas de l'enrôlement.
+        Route::get('guide', [GuideController::class, 'show'])
+            ->name('guide');
 
         // DEUX gardes, parce que l'écran sert DEUX modèles : les compteurs de
         // catalogue et les cinq derniers `import_run` avec leur auteur, leur

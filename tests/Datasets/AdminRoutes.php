@@ -109,6 +109,16 @@ function adminRoutesMatrix(): array
             admin: 200,
         ),
 
+        // Ligne 9 — la page de premiers pas : la porte seule, elle aussi,
+        // mais derrière `admin.2fa`, comme tout le reste de l'outil.
+        'admin.guide' => adminRoutesRow(
+            row: 9,
+            method: 'GET',
+            guards: [],
+            curator: 200,
+            admin: 200,
+        ),
+
         // Ligne 1 — deux gardes, parce que l'écran lit deux modèles.
         'admin.dashboard' => adminRoutesRow(
             row: 1,

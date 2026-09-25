@@ -987,3 +987,55 @@ export type AdminCatalogOptions = {
     sort: string[];
     direction: string[];
 };
+
+/**
+ * Clé d'un libellé ou d'un guide de l'échelle 1-5 (`admin.level.{n}.label`
+ * et `.guide`, spec 20 § 6.5), envoyée par le serveur à la page « premiers
+ * pas ».
+ */
+export type AdminLevelKey = Extract<
+    TranslationKey,
+    `admin.level.${number}.${'label' | 'guide'}`
+>;
+
+/** Clé d'un raccourci de débit décrit par la page « premiers pas » (§ 6.4). */
+export type AdminShortcutKey = Extract<
+    TranslationKey,
+    `admin.shortcuts.${string}`
+>;
+
+/** Un niveau de l'échelle et ses deux clés — `GuideController::scale()`. */
+export type AdminGuideLevel = {
+    level: FrameLevel;
+    label_key: AdminLevelKey;
+    guide_key: AdminLevelKey;
+};
+
+/**
+ * Un item de la grille d'exclusion COURANTE, avec les niveaux auxquels il
+ * s'applique — `GuideController::grid()`.
+ */
+export type AdminGuideGridItem = {
+    slug: string;
+    levels: FrameLevel[];
+    label_key: ExclusionGridKey;
+    help_key: ExclusionGridKey;
+};
+
+export type AdminGuideGrid = {
+    version: number;
+    items: AdminGuideGridItem[];
+};
+
+/**
+ * Le plancher de recadrage réellement appliqué (spec 20 § 5.2), en nombres :
+ * la page les met en forme — `GuideController::floor()`.
+ */
+export type AdminGuideFloor = {
+    /** Part maximale de la largeur et de la hauteur du visuel, en %. */
+    max_width_percent: number;
+    /** Part maximale de sa surface qui en découle (`pct² ÷ 100`), en %. */
+    max_surface_percent: number;
+    /** Largeur minimale du cadre, en pixels du master. */
+    min_width_px: number;
+};
