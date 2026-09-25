@@ -42,8 +42,11 @@ export const PUBLICATION_BLOCKER_KEYS: Record<
     not_guessable: 'admin.movie.publish.not_guessable',
 };
 
-/** Chaque nature de clé de réponse, en minuscules, composée dans une phrase. */
-const ANSWER_KEY_KIND_KEYS: Record<AnswerKeyKind, TranslationKey> = {
+/**
+ * Chaque nature de clé de réponse, en minuscules, composée dans une phrase —
+ * ici, et dans l'aperçu d'un titre ou d'un alias saisi (spec 20 § 9.1, § 9.2).
+ */
+export const ANSWER_KEY_KIND_KEYS: Record<AnswerKeyKind, TranslationKey> = {
     title_original: 'admin.movie.publish.preview.kind.title_original',
     title_latin: 'admin.movie.publish.preview.kind.title_latin',
     title: 'admin.movie.publish.preview.kind.title',
@@ -368,7 +371,9 @@ function AmbiguitySection({
                 ) : (
                     <ul className="list-disc space-y-2 pl-5 text-sm text-foreground">
                         {preview.lines.map((line) => (
-                            <li key={line.form}>{lineText(line, t)}</li>
+                            <li key={line.form}>
+                                {ambiguityLineText(line, t)}
+                            </li>
                         ))}
                     </ul>
                 )}
@@ -398,9 +403,13 @@ function blockerText(
 /**
  * Une ligne de l'avertissement : « « forme » — préfixe de ce film, porté
  * aussi par : Titre (année), titre ». Les films sont joints par le
- * séparateur de liste du dictionnaire, jamais une ponctuation en dur.
+ * séparateur de liste du dictionnaire, jamais une ponctuation en dur. La
+ * même phrase sert l'aperçu d'un titre ou d'un alias saisi (§ 9.1, § 9.2).
  */
-function lineText(line: AdminAmbiguityLine, t: Translator['t']): string {
+export function ambiguityLineText(
+    line: AdminAmbiguityLine,
+    t: Translator['t'],
+): string {
     const separator = t('admin.common.list_separator');
 
     return t('admin.movie.publish.preview.line', {

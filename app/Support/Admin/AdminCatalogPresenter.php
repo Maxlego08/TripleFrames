@@ -2,6 +2,7 @@
 
 namespace App\Support\Admin;
 
+use App\Actions\Curation\SetMovieGroup;
 use App\Enums\ContentAvailability;
 use App\Enums\FrameProcessingState;
 use App\Enums\ImportRunKind;
@@ -9,11 +10,13 @@ use App\Enums\ImportRunStatus;
 use App\Enums\Locale;
 use App\Enums\ReviewDecision;
 use App\Models\Alias;
+use App\Models\AnswerKey;
 use App\Models\Frame;
 use App\Models\FrameReview;
 use App\Models\ImportRun;
 use App\Models\Movie;
 use App\Models\MovieCertification;
+use App\Models\MovieGroup;
 use App\Models\MovieProjection;
 use App\Models\MovieTheme;
 use App\Models\MovieTitle;
@@ -24,6 +27,7 @@ use App\Support\Curation\FrameCurationState;
 use App\Support\Curation\ReviewQueue;
 use App\Support\Frames\CropRect;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Pagination\LengthAwarePaginator;
 
@@ -211,14 +215,93 @@ final class AdminCatalogPresenter
      * Une variante acceptée en réponse — **à usage exclusif de validation**,
      * jamais affichée à un joueur (§ 3.4). L'écran le dit en toutes lettres.
      *
-     * @return array{locale: string, alias: string, origin: string}
+     * `id` adresse le geste « Retirer » (spec 20 § 9.2), vers le back-office
+     * seulement ; `created_by` est le NOM de l'auteur d'un alias curé, nul pour
+     * un alias TMDB.
+     *
+     * @return array{id: int, locale: string, alias: string, origin: string, created_by: string|null}
      */
     public static function movieAlias(Alias $alias): array
     {
         return [
+            'id' => $alias->id,
             'locale' => $alias->locale,
             'alias' => $alias->alias,
             'origin' => $alias->origin->value,
+            'created_by' => $alias->createdBy?->name,
+        ];
+    }
+
+    /**
+     * Une forme acceptée du film, en lecture seule (spec 20 § 9.2) : la forme
+     * normalisée, sa nature, et son ambiguïté — ce qui rend un alias
+     * vérifiable par un non-technicien.
+     *
+     * @return array{form: string, kind: string, is_ambiguous: bool}
+     */
+    public static function answerKey(AnswerKey $key): array
+    {
+        return [
+            'form' => (string) $key->normalized,
+            'kind' => $key->key_kind->value,
+            'is_ambiguous' => $key->is_ambiguous,
+        ];
+    }
+
+    /**
+     * Le groupe « même œuvre » d'un film (spec 20 § 9.4) : libellé interne,
+     * note, auteur, et ses films — jamais montré à un joueur.
+     *
+     * @param  EloquentCollection<int, Movie>  $members
+     * @return array{id: int, label: string, note: string|null, created_by: string|null, created_at: string|null, movies: list<array{id: int, title_original: string, release_year: int|null, availability: string}>}
+     */
+    public static function movieGroup(MovieGroup $group, EloquentCollection $members): array
+    {
+        $movies = [];
+
+        foreach ($members as $member) {
+            $movies[] = self::movieIdentity($member);
+        }
+
+        return [
+            'id' => $group->id,
+            'label' => $group->label,
+            'note' => $group->note,
+            'created_by' => $group->createdBy?->name,
+            'created_at' => self::moment($group->created_at),
+            'movies' => $movies,
+        ];
+    }
+
+    /**
+     * Un candidat exact au regroupement (spec 20 § 9.4) : un film au titre
+     * normalisé identique, son groupe éventuel, et le libellé que le
+     * regroupement pré-remplirait.
+     *
+     * @return array{id: int, title_original: string, release_year: int|null, availability: string, group_label: string|null, same_group: bool, default_label: string}
+     */
+    public static function groupCandidate(Movie $movie, Movie $candidate): array
+    {
+        return [
+            ...self::movieIdentity($candidate),
+            'group_label' => $candidate->group?->label,
+            'same_group' => $movie->group_id !== null && $candidate->group_id === $movie->group_id,
+            'default_label' => SetMovieGroup::defaultLabel($movie, $candidate),
+        ];
+    }
+
+    /**
+     * L'identité courte d'un film cité par un autre écran que sa fiche.
+     *
+     * @return array{id: int, title_original: string, release_year: int|null, availability: string}
+     */
+    private static function movieIdentity(Movie $movie): array
+    {
+        return [
+            'id' => $movie->id,
+            'title_original' => $movie->title_original,
+            'release_year' => $movie->release_year,
+            'availability' => $movie->availability->value,
         ];
     }
 

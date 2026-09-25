@@ -438,7 +438,7 @@ Ensuite, à chaque session : **« Implémente l'étape suivante de l'ordre des l
 46. L20-12 — grille v1, passe de revue → 17, 39, 40, 42, 45 — ✅ livrée le 24/09
 47. L20-11 — raccourcis de débit, bande balayable (D35) → 8, 45, 46 — ✅ livrée le 24/09
 48. L20-13 — publication d'un film, contenu vérifié, ambiguïté → 17, 38, 46 — ✅ livrée le 24/09
-49. L20-14 — titres, alias, `movie_group` manuel → 48
+49. L20-14 — titres, alias, `movie_group` manuel → 48 — ✅ livrée le 24/09
 50. L20-15 — file de curation, fiche, tableau de bord → 36, 48
 51. L20-16 — recherche TMDB, liste d'amorçage, aperçu à blanc, garde d'instantané des imports (I-9) → 18, 20*
 52. L20-17 — débit et verdict du pilote → 8, 45, 48, 50

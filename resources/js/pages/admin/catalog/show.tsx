@@ -24,6 +24,12 @@ import type { AdminField } from '@/components/admin/admin-field-list';
 import { AdminFieldList } from '@/components/admin/admin-field-list';
 import { AdminPageHeading } from '@/components/admin/admin-page-heading';
 import { AdminLevelDots } from '@/components/admin/admin-stat-tile';
+import { MovieGroupPanel } from '@/components/admin/movie-group-panel';
+import {
+    MovieAliasesCard,
+    MovieAnswerKeysCard,
+    MovieTitlesCard,
+} from '@/components/admin/movie-naming-panels';
 import {
     PublishButton,
     PublishDialog,
@@ -52,7 +58,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useTranslations } from '@/hooks/use-translations';
 import {
     CERTIFICATION_COUNTRY_KEYS,
-    CONTENT_ORIGIN_KEYS,
     EXCEPTION_MOTIVE_KEYS,
     FRAME_PROCESSING_KEYS,
     localeLabel,
@@ -70,18 +75,24 @@ import { dashboard as adminDashboard } from '@/routes/admin';
 import { bank, index as catalogIndex } from '@/routes/admin/catalog';
 import { show as runShow } from '@/routes/admin/import';
 import type {
+    AdminAnswerKeyRow,
+    AdminGroupCandidate,
+    AdminGroupManualLookup,
     AdminImportRunRow,
     AdminMovieAlias,
     AdminMovieCertification,
     AdminMovieAbilities,
     AdminMovieDetail,
     AdminMovieFrameRow,
+    AdminMovieGroup,
     AdminMovieProjection,
     AdminMovieTag,
     AdminMovieTheme,
     AdminMovieTitle,
     AdminPublication,
     AdminPublicationPreview,
+    AdminTextPreview,
+    AdminTitleLocale,
     ContentFlag,
 } from '@/types/admin';
 import type { BreadcrumbItem } from '@/types/navigation';
@@ -90,8 +101,24 @@ import type { TranslationKey } from '@/types/translations';
 type Props = {
     movie: AdminMovieDetail;
     projection: AdminMovieProjection | null;
+    /**
+     * Les locales ACTIVÉES — un titre éditable chacune (spec 20 § 9.1) — et
+     * leur couverture lue dans le masque de la projection (§ 9.3).
+     */
+    title_locales: AdminTitleLocale[];
     titles: AdminMovieTitle[];
     aliases: AdminMovieAlias[];
+    /** Les formes acceptées, en lecture seule (§ 9.2). */
+    answer_keys: AdminAnswerKeyRow[];
+    /** Le groupe « même œuvre » du film, et ses candidats exacts (§ 9.4). */
+    group: AdminMovieGroup | null;
+    group_exact_candidates: AdminGroupCandidate[];
+    /**
+     * Prop facultative : servie au seul rechargement qui cherche le film de
+     * la voie manuelle du regroupement ; `MovieGroupPanel` la lit dans la
+     * réponse de ce rechargement, jamais ici.
+     */
+    group_manual_candidate?: AdminGroupManualLookup | null;
     certifications: AdminMovieCertification[];
     tags: AdminMovieTag[];
     themes: AdminMovieTheme[];
@@ -100,6 +127,11 @@ type Props = {
     publication: AdminPublication;
     /** Prop facultative : servie au seul rechargement qui ouvre la publication. */
     publication_preview?: AdminPublicationPreview;
+    /**
+     * Prop facultative : servie au seul rechargement qui vérifie un titre ou
+     * un alias saisi ; `null` quand la demande est incomplète.
+     */
+    text_preview?: AdminTextPreview | null;
     abilities: AdminMovieAbilities;
 };
 
@@ -142,13 +174,19 @@ const TMDB_MOVIE_URL = 'https://www.themoviedb.org/movie/';
  *
  * Les images se curent dans l'éditeur de la banque (spec 20 § 6), que le lien
  * « Curer les images » ouvre quand `abilities.curate` le permet — jamais sur
- * un film retiré. Titres, alias et regroupement arrivent avec le lot L20-14.
+ * un film retiré. Titres, alias et formes acceptées (§ 9.1, § 9.2) vivent
+ * dans leur onglet, le regroupement « même œuvre » (§ 9.4) dans le sien :
+ * chaque bloc porte ses gestes, sous la même capacité `curate`.
  */
 export default function AdminCatalogShow({
     movie,
     projection,
+    title_locales,
     titles,
     aliases,
+    answer_keys,
+    group,
+    group_exact_candidates,
     certifications,
     tags,
     themes,
@@ -156,6 +194,7 @@ export default function AdminCatalogShow({
     import_run,
     publication,
     publication_preview,
+    text_preview,
     abilities,
 }: Props) {
     const { t, locale } = useTranslations();
@@ -372,6 +411,9 @@ export default function AdminCatalogShow({
                             <TabsTrigger value="frames">
                                 {t('admin.movie.tabs.frames')}
                             </TabsTrigger>
+                            <TabsTrigger value="group">
+                                {t('admin.movie.tabs.group')}
+                            </TabsTrigger>
                             <TabsTrigger value="import">
                                 {t('admin.movie.tabs.import')}
                             </TabsTrigger>
@@ -394,146 +436,29 @@ export default function AdminCatalogShow({
                         </Card>
                     </TabsContent>
 
-                    {/* Titres et alias */}
+                    {/*
+                     * Titres, alias et formes acceptées (spec 20 § 9.1,
+                     * § 9.2) : chaque bloc porte ses gestes et ses
+                     * confirmations, derrière l'aperçu du texte saisi.
+                     */}
                     <TabsContent value="titles" className="space-y-6">
-                        <Card>
-                            <CardHeader>
-                                <AdminCardTitle>
-                                    {t('admin.movie.titles.heading')}
-                                </AdminCardTitle>
-                                <CardDescription>
-                                    {t('admin.movie.titles.description')}
-                                </CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                                {titles.length === 0 ? (
-                                    <AdminEmptyState
-                                        title={t('admin.movie.titles.empty')}
-                                    />
-                                ) : (
-                                    <Table>
-                                        <TableHeader>
-                                            <TableRow>
-                                                <TableHead>
-                                                    {t(
-                                                        'admin.movie.titles.column.locale',
-                                                    )}
-                                                </TableHead>
-                                                <TableHead>
-                                                    {t(
-                                                        'admin.movie.titles.column.title',
-                                                    )}
-                                                </TableHead>
-                                                <TableHead>
-                                                    {t(
-                                                        'admin.movie.titles.column.origin',
-                                                    )}
-                                                </TableHead>
-                                                <TableHead>
-                                                    {t(
-                                                        'admin.movie.titles.column.edited_by',
-                                                    )}
-                                                </TableHead>
-                                            </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                            {titles.map((title) => (
-                                                <TableRow
-                                                    key={`${title.locale}-${title.title}`}
-                                                >
-                                                    <TableCell>
-                                                        {localeLabel(
-                                                            title.locale,
-                                                            t,
-                                                        )}
-                                                    </TableCell>
-                                                    <TableCell className="font-medium text-foreground">
-                                                        {title.title}
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        {t(
-                                                            CONTENT_ORIGIN_KEYS[
-                                                                title.origin
-                                                            ],
-                                                        )}
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        {title.edited_by ??
-                                                            t(
-                                                                'admin.common.none',
-                                                            )}
-                                                    </TableCell>
-                                                </TableRow>
-                                            ))}
-                                        </TableBody>
-                                    </Table>
-                                )}
-                            </CardContent>
-                        </Card>
-
-                        <Card>
-                            <CardHeader>
-                                <AdminCardTitle>
-                                    {t('admin.movie.aliases.heading')}
-                                </AdminCardTitle>
-                                <CardDescription>
-                                    {t('admin.movie.aliases.description')}
-                                </CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                                {aliases.length === 0 ? (
-                                    <AdminEmptyState
-                                        title={t('admin.movie.aliases.empty')}
-                                    />
-                                ) : (
-                                    <Table>
-                                        <TableHeader>
-                                            <TableRow>
-                                                <TableHead>
-                                                    {t(
-                                                        'admin.movie.aliases.column.locale',
-                                                    )}
-                                                </TableHead>
-                                                <TableHead>
-                                                    {t(
-                                                        'admin.movie.aliases.column.alias',
-                                                    )}
-                                                </TableHead>
-                                                <TableHead>
-                                                    {t(
-                                                        'admin.movie.aliases.column.origin',
-                                                    )}
-                                                </TableHead>
-                                            </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                            {aliases.map((alias) => (
-                                                <TableRow
-                                                    key={`${alias.locale}-${alias.alias}`}
-                                                >
-                                                    <TableCell>
-                                                        {localeLabel(
-                                                            alias.locale,
-                                                            t,
-                                                        )}
-                                                    </TableCell>
-                                                    <TableCell className="font-medium text-foreground">
-                                                        {alias.alias}
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        {t(
-                                                            CONTENT_ORIGIN_KEYS[
-                                                                alias.origin
-                                                            ],
-                                                        )}
-                                                    </TableCell>
-                                                </TableRow>
-                                            ))}
-                                        </TableBody>
-                                    </Table>
-                                )}
-                            </CardContent>
-                        </Card>
+                        <MovieTitlesCard
+                            movieId={movie.id}
+                            titles={titles}
+                            titleLocales={title_locales}
+                            canCurate={abilities.curate}
+                            preview={text_preview}
+                        />
+                        <MovieAliasesCard
+                            movieId={movie.id}
+                            aliases={aliases}
+                            enabledLocales={title_locales.map(
+                                (row) => row.locale,
+                            )}
+                            canCurate={abilities.curate}
+                            preview={text_preview}
+                        />
+                        <MovieAnswerKeysCard answerKeys={answer_keys} />
                     </TabsContent>
 
                     {/* Étiquettes TMDB et classifications */}
@@ -931,6 +856,16 @@ export default function AdminCatalogShow({
                         </Card>
                     </TabsContent>
 
+                    {/* Même œuvre (spec 20 § 9.4) */}
+                    <TabsContent value="group">
+                        <MovieGroupPanel
+                            movieId={movie.id}
+                            group={group}
+                            candidates={group_exact_candidates}
+                            canCurate={abilities.curate}
+                        />
+                    </TabsContent>
+
                     {/* Provenance */}
                     <TabsContent value="import" className="space-y-6">
                         <Card>
@@ -1237,6 +1172,10 @@ function identityFields(
     t: Translate,
 ): AdminField[] {
     return [
+        {
+            label: t('admin.movie.identity.id'),
+            value: movie.id,
+        },
         {
             label: t('admin.movie.identity.tmdb_id'),
             value:

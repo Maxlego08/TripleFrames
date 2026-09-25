@@ -16,8 +16,11 @@ use App\Http\Controllers\Admin\ImportController;
 use App\Http\Controllers\Admin\ImportDiscoverController;
 use App\Http\Controllers\Admin\ImportIdsController;
 use App\Http\Controllers\Admin\ImportResumeController;
+use App\Http\Controllers\Admin\MovieAliasController;
 use App\Http\Controllers\Admin\MovieContentVerifiedController;
+use App\Http\Controllers\Admin\MovieGroupController;
 use App\Http\Controllers\Admin\MoviePublishController;
+use App\Http\Controllers\Admin\MovieTitleController;
 use App\Http\Controllers\Admin\MovieUnpublishController;
 use App\Http\Controllers\Admin\TwoFactorRequiredController;
 use App\Models\Frame;
@@ -81,7 +84,8 @@ use Illuminate\Support\Facades\Route;
 | `throttle:admin-frame` (C9 § 2) ; les gestes de curation qui n'écrivent
 | qu'en base — changer un niveau, passer une revue, dépublier ou écarter
 | une image, publier, dépublier ou écarter un film, cocher son contenu
-| vérifié — `throttle:admin-curation` (§ 13.7). Limiteurs nommés déclarés dans
+| vérifié, corriger ou retirer un titre, ajouter ou retirer un alias,
+| regrouper deux films — `throttle:admin-curation` (§ 13.7). Limiteurs nommés déclarés dans
 | `FortifyServiceProvider::configureRateLimiting()`, là où vivent déjà
 | `login`, `two-factor` et `passkeys`.
 |
@@ -138,6 +142,36 @@ Route::middleware(['auth', 'verified', 'role:curator', 'admin.2fa', 'admin.local
         Route::post('catalog/{movie}/content-verified', [MovieContentVerifiedController::class, 'store'])
             ->middleware(['can:verifyContent,movie', 'throttle:admin-curation'])
             ->name('catalog.content_verified');
+
+        // Corriger ou retirer un titre (§ 9.1, ligne 22). `{locale}` est lié à
+        // `App\Enums\Locale` par le contrôleur : une locale de catalogue non
+        // activée répond 404, ses lignes restent en lecture seule. Seule une
+        // ligne `curator` se retire — refus traduit sinon, jamais un 403.
+        Route::put('catalog/{movie}/titles/{locale}', [MovieTitleController::class, 'update'])
+            ->middleware(['can:curate,movie', 'throttle:admin-curation'])
+            ->name('catalog.titles.update');
+
+        Route::delete('catalog/{movie}/titles/{locale}', [MovieTitleController::class, 'destroy'])
+            ->middleware(['can:curate,movie', 'throttle:admin-curation'])
+            ->name('catalog.titles.destroy');
+
+        // Ajouter ou retirer un alias (§ 9.2, ligne 22) — tout alias, TMDB
+        // compris. `scopeBindings` : l'alias d'un AUTRE film répond 404 avant
+        // la garde.
+        Route::post('catalog/{movie}/aliases', [MovieAliasController::class, 'store'])
+            ->middleware(['can:curate,movie', 'throttle:admin-curation'])
+            ->name('catalog.aliases.store');
+
+        Route::delete('catalog/{movie}/aliases/{alias}', [MovieAliasController::class, 'destroy'])
+            ->scopeBindings()
+            ->middleware(['can:curate,movie', 'throttle:admin-curation'])
+            ->name('catalog.aliases.destroy');
+
+        // Regrouper deux films en une même œuvre, ou retirer un film de son
+        // groupe (§ 9.4, ligne 23) : un geste manuel, jamais TMDB.
+        Route::patch('catalog/{movie}/group', [MovieGroupController::class, 'update'])
+            ->middleware(['can:curate,movie', 'throttle:admin-curation'])
+            ->name('catalog.group.update');
 
         // L'éditeur de la banque d'images (§ 6, ligne 4) : `MoviePolicy::curate`,
         // refusé sur un film retiré. Il n'écrit rien : chaque geste qu'il

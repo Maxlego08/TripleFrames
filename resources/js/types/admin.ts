@@ -138,11 +138,112 @@ export type AdminMovieTitle = {
     edited_by: string | null;
 };
 
-/** Un alias sert à VALIDER une réponse, jamais à afficher un film. */
+/**
+ * Un alias sert à VALIDER une réponse, jamais à afficher un film. `id`
+ * adresse « Retirer » (spec 20 § 9.2) ; `created_by` est le NOM de l'auteur
+ * d'un alias curé, nul pour un alias TMDB.
+ */
 export type AdminMovieAlias = {
+    id: number;
     locale: string;
     alias: string;
     origin: ContentOrigin;
+    created_by: string | null;
+};
+
+/**
+ * Une forme acceptée du film, en lecture seule (spec 20 § 9.2) : ce que le
+ * jeu compare vraiment à une réponse. `is_ambiguous` ne concerne que les
+ * natures dérivées, `prefix` et `subtitle`.
+ */
+export type AdminAnswerKeyRow = {
+    form: string;
+    kind: AnswerKeyKind;
+    is_ambiguous: boolean;
+};
+
+/**
+ * Une locale ACTIVÉE et sa couverture de titre (spec 20 § 9.3), lue dans
+ * `movie_projection.title_locale_mask` ; `covered` nul quand le masque est
+ * périmé ou absent — jamais lu comme valide.
+ */
+export type AdminTitleLocale = {
+    locale: string;
+    covered: boolean | null;
+};
+
+/** L'identité courte d'un film cité par la fiche d'un autre. */
+export type AdminMovieIdentity = {
+    id: number;
+    title_original: string;
+    release_year: number | null;
+    availability: ContentAvailability;
+};
+
+/**
+ * Le groupe « même œuvre » d'un film (spec 20 § 9.4) : libellé interne,
+ * jamais montré à un joueur, et ses films, du plus ancien au plus récent.
+ */
+export type AdminMovieGroup = {
+    id: number;
+    label: string;
+    note: string | null;
+    created_by: string | null;
+    created_at: string | null;
+    movies: AdminMovieIdentity[];
+};
+
+/**
+ * Un candidat exact au regroupement : un film au titre normalisé identique,
+ * son groupe éventuel, et le libellé que le regroupement pré-remplirait.
+ */
+export type AdminGroupCandidate = AdminMovieIdentity & {
+    group_label: string | null;
+    same_group: boolean;
+    default_label: string;
+};
+
+/** Ce qu'un texte saisi deviendra : un titre ou un alias (`TextTarget`). */
+export type AdminTextTarget = 'title' | 'alias';
+
+/**
+ * L'aperçu d'un titre ou d'un alias saisi, servi au rechargement partiel qui
+ * ouvre sa confirmation (spec 20 § 9.1, § 9.2). `form` vide : le texte ne
+ * contient ni lettre ni chiffre. Pour un alias seulement : `accepted_as`, la
+ * nature EXACTE sous laquelle le film accepte déjà la forme (alias
+ * redondant) ; `promoted_from`, la forme dérivée d'un titre qu'il rendrait
+ * exacte, donc toujours acceptée. `ambiguity` : nul sur un film non publié.
+ */
+export type AdminTextPreview = {
+    target: AdminTextTarget;
+    text: string;
+    form: string;
+    accepted_as: AnswerKeyKind | null;
+    promoted_from: { kind: AnswerKeyKind; is_ambiguous: boolean } | null;
+    ambiguity: AdminAmbiguityLine[] | null;
+};
+
+/**
+ * Pourquoi la voie manuelle ne regroupe pas avec le film désigné — miroir de
+ * `SetMovieGroup::REFUSAL_*` et de `CatalogController::GROUP_REFUSAL_SAME_GROUP`.
+ */
+export type AdminGroupRefusal =
+    | 'self'
+    | 'missing'
+    | 'withdrawn'
+    | 'both_grouped'
+    | 'same_group';
+
+/**
+ * La recherche de la voie manuelle du regroupement (spec 20 § 9.4), servie
+ * au rechargement partiel qui ouvre la confirmation : le film trouvé, présenté
+ * comme un candidat, ou le refus que le geste opposerait. `requested` est le
+ * texte cherché.
+ */
+export type AdminGroupManualLookup = {
+    requested: string;
+    candidate: AdminGroupCandidate | null;
+    refusal: AdminGroupRefusal | null;
 };
 
 export type AdminMovieCertification = {

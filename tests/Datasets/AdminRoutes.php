@@ -2,10 +2,13 @@
 
 use App\Enums\ContentFlag;
 use App\Enums\FrameLevel;
+use App\Enums\Locale;
+use App\Models\Alias;
 use App\Models\Frame;
 use App\Models\FrameReview;
 use App\Models\ImportRun;
 use App\Models\Movie;
+use App\Models\MovieTitle;
 use App\Models\User;
 use App\Settings\PlatformLimits;
 use App\Support\Catalog\AmbiguityPreview;
@@ -174,6 +177,80 @@ function adminRoutesMatrix(): array
             admin: 302,
             parameters: fn (): array => adminRoutesMovieGestureParameters(Movie::factory()->create()),
             payload: fn (): array => ['reason' => 'Motif de la matrice.'],
+            redirect: fn (array $parameters): string => route('admin.catalog.show', $parameters),
+        ),
+
+        // Ligne 22 — corriger un titre : la ligne française d'un brouillon,
+        // réécrite en correction de curateur ; puis la retirer, une ligne
+        // `curator` seulement. `{locale}` est une locale activée.
+        'admin.catalog.titles.update' => adminRoutesRow(
+            row: 22,
+            method: 'PUT',
+            guards: ['can:curate,movie'],
+            curator: 302,
+            admin: 302,
+            parameters: fn (): array => [
+                ...adminRoutesMovieGestureParameters(Movie::factory()->create()),
+                'locale' => Locale::French->value,
+            ],
+            payload: fn (): array => ['title' => 'Titre de la matrice'],
+            redirect: fn (array $parameters): string => route('admin.catalog.show', ['movie' => $parameters['movie']]),
+        ),
+
+        'admin.catalog.titles.destroy' => adminRoutesRow(
+            row: 22,
+            method: 'DELETE',
+            guards: ['can:curate,movie'],
+            curator: 302,
+            admin: 302,
+            parameters: fn (): array => [
+                ...adminRoutesMovieGestureParameters(
+                    MovieTitle::factory()->forLocale(Locale::French)->curated()->create()->movie,
+                ),
+                'locale' => Locale::French->value,
+            ],
+            redirect: fn (array $parameters): string => route('admin.catalog.show', ['movie' => $parameters['movie']]),
+        ),
+
+        // Ligne 22 — ajouter un alias dans une locale activée, puis retirer
+        // un alias, TMDB compris. L'alias est lié à son film.
+        'admin.catalog.aliases.store' => adminRoutesRow(
+            row: 22,
+            method: 'POST',
+            guards: ['can:curate,movie'],
+            curator: 302,
+            admin: 302,
+            parameters: fn (): array => adminRoutesMovieGestureParameters(Movie::factory()->create()),
+            payload: fn (): array => ['locale' => Locale::French->value, 'alias' => 'Alias de la matrice'],
+            redirect: fn (array $parameters): string => route('admin.catalog.show', $parameters),
+        ),
+
+        'admin.catalog.aliases.destroy' => adminRoutesRow(
+            row: 22,
+            method: 'DELETE',
+            guards: ['can:curate,movie'],
+            curator: 302,
+            admin: 302,
+            parameters: function (): array {
+                $alias = Alias::factory()->tmdb()->create();
+
+                return [
+                    ...adminRoutesMovieGestureParameters($alias->movie),
+                    'alias' => $alias->id,
+                ];
+            },
+            redirect: fn (array $parameters): string => route('admin.catalog.show', ['movie' => $parameters['movie']]),
+        ),
+
+        // Ligne 23 — regrouper deux films sans groupe : le groupe naît.
+        'admin.catalog.group.update' => adminRoutesRow(
+            row: 23,
+            method: 'PATCH',
+            guards: ['can:curate,movie'],
+            curator: 302,
+            admin: 302,
+            parameters: fn (): array => adminRoutesMovieGestureParameters(Movie::factory()->create()),
+            payload: fn (): array => ['with_movie_id' => Movie::factory()->create()->id],
             redirect: fn (array $parameters): string => route('admin.catalog.show', $parameters),
         ),
 

@@ -457,7 +457,7 @@ return [
         'title' => 'Fiche film',
         'heading' => 'Fiche film',
         'back' => 'Retour au catalogue',
-        'read_only_notice' => 'Les images du film se curent dans l’éditeur de la banque d’images. Le film se publie ici ou depuis l’éditeur, et se dépublie ou s’écarte ici.',
+        'read_only_notice' => 'Les images du film se curent dans l’éditeur de la banque d’images. Le film se publie ici ou depuis l’éditeur, et se dépublie ou s’écarte ici ; ses titres, ses alias et son regroupement se corrigent dans leurs onglets.',
         'curate' => 'Curer les images',
 
         'tabs' => [
@@ -467,11 +467,15 @@ return [
             'projection' => 'Projection',
             'themes' => 'Thèmes',
             'frames' => 'Banque d’images',
+            'group' => 'Même œuvre',
             'import' => 'Import',
         ],
 
         'identity' => [
             'heading' => 'Identité',
+            // L'identifiant du film AU CATALOGUE, que le regroupement manuel
+            // demande (spec 20 § 9.4) — distinct de l'identifiant TMDB.
+            'id' => 'Identifiant catalogue',
             'tmdb_id' => 'Identifiant TMDB',
             'tmdb_link' => 'Ouvrir sur themoviedb.org',
             'tmdb_missing' => 'Aucun identifiant TMDB',
@@ -506,18 +510,71 @@ return [
             'blocked_by_both' => 'Non publiable : ni le contenu vérifié, ni les niveaux 1, 3 et 5 couverts.',
         ],
 
+        /*
+        | Titres (spec 20 § 9.1) : un titre par locale ACTIVÉE, corrigé en
+        | `origin = curator` — protégé de toute resynchronisation —, retiré
+        | seulement s'il vient d'un curateur. `:locale` est le nom de la
+        | langue. Les lignes d'autres locales de catalogue restent en lecture
+        | seule. Aucun titre n'est recopié d'une langue à l'autre : l'absence
+        | d'une ligne est l'information.
+        */
         'titles' => [
             'heading' => 'Titres affichables',
-            'description' => 'Un titre sert à AFFICHER le film dans la langue d’un joueur. Il ne sert jamais à valider une réponse.',
+            'description' => 'Un titre sert à AFFICHER le film dans la langue d’un joueur, et il est aussi accepté comme réponse. Corrigé ici, il ne sera jamais réécrit par une resynchronisation TMDB.',
             'column' => [
                 'locale' => 'Locale de catalogue',
                 'title' => 'Titre',
                 'origin' => 'Origine',
                 'edited_by' => 'Corrigé par',
+                'coverage' => 'Couverture',
+                'actions' => 'Gestes',
             ],
-            'empty' => 'Aucun titre localisé.',
+            // La couverture par langue, lue dans le masque de la projection
+            // (spec 20 § 9.3) : ce que le tirage des propositions interroge.
+            'coverage' => [
+                'present' => 'Présent',
+                'absent' => 'Absent',
+                'stale' => 'Masque à reprojeter',
+            ],
+            'missing' => 'Aucun titre',
+            'missing_hint' => 'L’absence d’un titre est une information : aucun titre n’est recopié d’une autre langue. Le joueur de cette langue voit le titre d’une autre langue activée, sinon le titre original.',
+            'other_locales' => 'Autres locales de catalogue — lecture seule',
+            'other_locales_description' => 'Ces titres ne sont ni affichés à un joueur ni acceptés comme réponse : seules les langues activées du jeu le sont.',
+            'tmdb_hint' => 'Un titre TMDB se corrige, il ne se retire pas : la resynchronisation suivante le recréerait.',
+            'edit' => 'Corriger',
+            'edit_label' => 'Corriger le titre : :locale',
+            'add' => 'Saisir',
+            'add_label' => 'Saisir le titre : :locale',
+            'remove' => 'Retirer',
+            'remove_label' => 'Retirer le titre : :locale',
+            'dialog' => [
+                'title_edit' => 'Corriger le titre — :locale',
+                'title_add' => 'Saisir le titre — :locale',
+                'description' => 'Le titre est enregistré comme correction de curateur : aucune resynchronisation TMDB ne le réécrira. Il est aussi accepté comme réponse, avec son préfixe et son sous-titre.',
+                'field' => 'Titre affiché',
+                'submit' => 'Enregistrer le titre',
+            ],
+            'remove_dialog' => [
+                'title' => 'Retirer le titre — :locale',
+                'description' => 'Seule une correction de curateur se retire. Cette langue restera sans titre jusqu’à la prochaine resynchronisation TMDB, qui la repourvoira si TMDB en connaît un ; aucun titre ne sera recopié d’une autre langue.',
+                'submit' => 'Retirer le titre',
+            ],
+            'destroy' => [
+                'missing' => 'Ce film n’a aucun titre dans cette langue : rien à retirer.',
+                'not_curator' => 'Ce titre vient de TMDB : il se corrige, il ne se retire pas — la prochaine resynchronisation le recréerait.',
+            ],
+            'flash' => [
+                'saved' => 'Titre enregistré : il est affiché et accepté comme réponse.',
+                'removed' => 'Titre retiré.',
+            ],
         ],
 
+        /*
+        | Alias (spec 20 § 9.2) : ajoutés dans une langue activée, retirés
+        | quelle que soit leur origine, TMDB compris. Un alias valide une
+        | réponse, il n'est jamais affiché, et il ne donne ni préfixe ni
+        | sous-titre. `:alias` est le texte de l'alias.
+        */
         'aliases' => [
             'heading' => 'Alias acceptés',
             'description' => 'Un alias sert à VALIDER une réponse, jamais à afficher le film. Tous les alias de toutes les langues activées sont acceptés, quel que soit le joueur.',
@@ -525,8 +582,159 @@ return [
                 'locale' => 'Locale',
                 'alias' => 'Alias',
                 'origin' => 'Origine',
+                'created_by' => 'Ajouté par',
+                'actions' => 'Gestes',
             ],
             'empty' => 'Aucun alias.',
+            'add' => [
+                'heading' => 'Ajouter un alias',
+                'locale' => 'Langue de l’alias',
+                'locale_placeholder' => 'Choisir une langue',
+                'field' => 'Alias',
+                'hint' => 'Une variante que les joueurs tapent vraiment : « seigneur des anneaux 2 » est un alias, jamais une règle. Un alias ne donne ni préfixe ni sous-titre, et un titre ne se corrige jamais par un alias.',
+            ],
+            'dialog' => [
+                'title' => 'Ajouter l’alias',
+                'description' => 'L’alias sera accepté comme réponse dans tous les salons, quel que soit le joueur. Il n’est jamais affiché.',
+                'submit' => 'Ajouter l’alias',
+            ],
+            'remove' => 'Retirer',
+            'remove_label' => 'Retirer l’alias « :alias »',
+            'remove_dialog' => [
+                'title' => 'Retirer l’alias',
+                'description' => '« :alias » ne sera plus accepté comme réponse, sauf si un titre ou un autre alias du film donne la même forme.',
+                'tmdb_notice' => 'Cet alias vient de TMDB : la prochaine resynchronisation le fera réapparaître.',
+                'submit' => 'Retirer l’alias',
+            ],
+            'locale_not_enabled' => 'Cette langue n’est pas une langue activée du jeu : un alias n’y serait accepté nulle part.',
+            'flash' => [
+                'added' => 'Alias ajouté : il est accepté comme réponse.',
+                'removed' => 'Alias retiré : il n’est plus accepté comme réponse.',
+            ],
+        ],
+
+        /*
+        | Les formes acceptées du film (spec 20 § 9.2), en lecture seule :
+        | ce que le jeu compare vraiment à une réponse. `kind.*` : une feuille
+        | par nature de clé de réponse, en tête de cellule.
+        */
+        'answer_keys' => [
+            'heading' => 'Formes acceptées',
+            'description' => 'Ce que le jeu compare réellement à une réponse : la forme normalisée de chaque titre, alias, préfixe et sous-titre. Lecture seule — corrigez un titre ou un alias pour la changer.',
+            'column' => [
+                'form' => 'Forme normalisée',
+                'kind' => 'Nature',
+                'status' => 'Acceptation',
+            ],
+            'exact' => 'Toujours acceptée',
+            'accepted' => 'Acceptée',
+            'ambiguous' => 'Refusée seule : un autre film publié porte cette forme',
+            'empty' => 'Aucune forme acceptée : aucun titre de ce film ne peut se saisir comme réponse.',
+            'kind' => [
+                'title_original' => 'Titre original',
+                'title_latin' => 'Titre translittéré',
+                'title' => 'Titre',
+                'alias' => 'Alias',
+                'prefix' => 'Préfixe',
+                'subtitle' => 'Sous-titre',
+            ],
+        ],
+
+        /*
+        | L'aperçu d'un titre ou d'un alias saisi, avant confirmation (spec 20
+        | § 9.1, § 9.2) : sa forme normalisée ; pour un alias, la nature
+        | EXACTE sous laquelle le film l'accepte déjà, ou la forme dérivée
+        | qu'il rendrait exacte (`:kind`, feuille de `publish.preview.kind`) ;
+        | et, sur un film publié, les formes qu'il rendrait ambiguës — lignes
+        | rendues comme celles de l'avertissement de publication.
+        */
+        'text_preview' => [
+            'heading' => 'Aperçu',
+            'check' => 'Vérifier',
+            'pending' => 'Vérifiez l’aperçu avant d’enregistrer : il montre la forme acceptée et ce qu’elle rendrait ambigu.',
+            'stale' => 'Le texte a changé depuis l’aperçu : vérifiez de nouveau avant d’enregistrer.',
+            'loading' => 'Calcul de l’aperçu…',
+            'failed' => 'L’aperçu n’a pas pu être calculé : réessayez avant de confirmer.',
+            'form' => 'Forme acceptée : « :form »',
+            'form_empty' => 'Ce texte ne contient ni lettre ni chiffre : il ne sera jamais accepté comme réponse.',
+            'already_accepted' => 'Cette forme est déjà acceptée pour ce film (:kind) : l’ajouter n’accepte rien de plus.',
+            // Un alias qui reprend une forme DÉRIVÉE d'un titre du film la
+            // rend exacte (spec 10 § 3.5) : il change donc quelque chose.
+            'promotes_derived' => 'Cette forme est aujourd’hui dérivée d’un titre de ce film (:kind). En alias, elle deviendra exacte : toujours acceptée pour ce film, même si un autre film publié la porte un jour.',
+            'promotes_ambiguous' => 'Cette forme est aujourd’hui dérivée d’un titre de ce film (:kind) et refusée seule : un autre film publié la porte. En alias, elle deviendra exacte et sera toujours acceptée pour ce film.',
+            'not_published' => 'Film non publié : aucune de ses formes ne pèse encore dans le recompte d’ambiguïté.',
+            'ambiguity_heading' => 'Formes rendues ambiguës',
+        ],
+
+        /*
+        | Le regroupement « même œuvre » (spec 20 § 9.4) : manuel, jamais
+        | TMDB, jamais montré à un joueur ; sa seule conséquence est que les
+        | films du groupe ne tombent jamais dans une même partie. `:label` est
+        | le libellé interne d'un groupe, `:title` et `:year` identifient un
+        | film. Les refus sont rendus sous le champ de l'identifiant.
+        */
+        'group' => [
+            'heading' => 'Même œuvre',
+            'description' => 'Deux films regroupés ne tombent jamais dans une même partie : c’est la seule conséquence d’un groupe. Pour des homonymes ou un remake — jamais pour une saga, dont les films doivent pouvoir tomber ensemble. Jamais montré à un joueur.',
+            'none' => 'Ce film n’appartient à aucun groupe.',
+            'label' => 'Libellé du groupe',
+            'note' => 'Note',
+            'created_by' => 'Regroupé par',
+            'created_at' => 'Regroupé le',
+            'members' => 'Films du groupe',
+            'this_movie' => 'Ce film',
+            'movie' => ':title (:year)',
+            'movie_without_year' => ':title',
+            'leave' => [
+                'action' => 'Retirer du groupe',
+                'title' => 'Retirer ce film du groupe',
+                'description' => 'Ce film pourra de nouveau tomber dans la même partie que les autres films du groupe. Un groupe réduit à un seul film disparaît.',
+                'submit' => 'Retirer du groupe',
+            ],
+            'candidates' => [
+                'heading' => 'Candidats : même titre',
+                'description' => 'Les films qui portent exactement le même titre une fois normalisé : homonymes et remakes. Le back-office suggère, vous tranchez.',
+                'empty' => 'Aucun autre film ne porte le même titre normalisé.',
+                'in_group' => 'Groupe « :label »',
+                'same_group' => 'Déjà dans ce groupe',
+                'action' => 'Regrouper',
+                'action_label' => 'Regrouper avec :movie',
+            ],
+            // La voie manuelle : l'identifiant saisi est d'abord cherché,
+            // puis le regroupement passe par la même confirmation que celle
+            // d'un candidat — libellé pré-rempli, modifiable.
+            'manual' => [
+                'heading' => 'Regrouper avec un autre film',
+                'description' => 'Pour un remake au titre différent, qu’aucun candidat ne propose. Le regroupement se confirme ensuite, libellé pré-rempli.',
+                'movie' => 'Identifiant catalogue de l’autre film',
+                'movie_hint' => 'Il figure sur la fiche de l’autre film, onglet « Identité ». Si l’un des deux films a déjà un groupe, l’autre le rejoint.',
+                'submit' => 'Regrouper',
+                'searching' => 'Recherche du film…',
+                'failed' => 'Le film n’a pas pu être cherché : réessayez.',
+                'same_group' => 'Ces deux films sont déjà dans le même groupe : rien à regrouper.',
+            ],
+            'dialog' => [
+                'title' => 'Regrouper les deux films',
+                'description' => 'Ce film et :movie ne tomberont plus dans une même partie.',
+                'joins_theirs' => 'Ce film rejoindra le groupe « :label ».',
+                'joins_ours' => ':movie rejoindra le groupe de ce film.',
+                'label_hint' => 'Libellé interne, jamais montré à un joueur ; modifiable avant de regrouper.',
+                'note_hint' => 'Facultative : pourquoi ces films sont une même œuvre.',
+                'submit' => 'Regrouper',
+            ],
+            'movie_required' => 'Saisissez l’identifiant catalogue de l’autre film.',
+            'self' => 'Un film ne se regroupe pas avec lui-même.',
+            'other_missing' => 'Aucun film du catalogue ne porte cet identifiant.',
+            'other_withdrawn' => 'Ce film a été retiré : il ne se regroupe plus.',
+            'group_missing' => 'Ce groupe n’existe plus : rechargez la fiche.',
+            'both_grouped' => 'Les deux films appartiennent déjà à deux groupes différents : retirez d’abord l’un d’eux de son groupe.',
+            'already_grouped' => 'Ce film appartient déjà à un autre groupe : retirez-le d’abord de ce groupe.',
+            'flash' => [
+                'created' => 'Groupe créé : les deux films ne tomberont plus dans une même partie.',
+                'joined' => 'Film rattaché au groupe.',
+                'left' => 'Film retiré du groupe.',
+                'unchanged' => 'Rien n’a changé : le regroupement demandé était déjà en place.',
+            ],
         ],
 
         'certifications' => [
@@ -1424,6 +1632,14 @@ return [
         'reviewed_hash' => 'empreinte de l’image revue',
         'answers' => 'réponses de la grille',
         'declared_source_reference' => 'source déclarée',
+        'movie_title' => 'titre',
+        'alias' => 'alias',
+        'alias_locale' => 'langue de l’alias',
+        'group_movie' => 'identifiant de l’autre film',
+        'group' => 'groupe',
+        'group_leave' => 'retrait du groupe',
+        'group_label' => 'libellé du groupe',
+        'group_note' => 'note',
         'frame_source' => [
             'dimensions' => 'Ce visuel est en portrait, fait moins de :width pixels de large, ou ne laisse place à aucun cadre admis : il ne peut pas donner une image de jeu. Choisissez un autre visuel du film.',
         ],

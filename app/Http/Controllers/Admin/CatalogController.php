@@ -3,21 +3,32 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Actions\Curation\PublishMovie;
+use App\Actions\Curation\SetMovieGroup;
+use App\Enums\AnswerKeyKind;
 use App\Enums\ContentAvailability;
 use App\Enums\ContentFlag;
 use App\Enums\ImportSource;
+use App\Enums\Locale;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\CatalogIndexRequest;
+use App\Http\Requests\Admin\MovieTitleUpdateRequest;
 use App\Models\Alias;
+use App\Models\AnswerKey;
 use App\Models\Frame;
 use App\Models\Movie;
 use App\Models\MovieCertification;
+use App\Models\MovieGroup;
+use App\Models\MovieProjection;
 use App\Models\MovieTheme;
 use App\Models\MovieTitle;
 use App\Models\MovieTmdbTag;
+use App\Models\User;
 use App\Support\Admin\AdminCatalogPresenter;
 use App\Support\Catalog\AmbiguityPreview;
+use App\Support\Catalog\AnswerKeyNormalizer;
+use App\Support\Catalog\TextTarget;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -53,6 +64,24 @@ use Inertia\Response;
  */
 class CatalogController extends Controller
 {
+    /** Paramètre du rechargement partiel qui demande l'aperçu d'un texte : le texte saisi. */
+    public const string PREVIEW_TEXT_PARAMETER = 'preview_text';
+
+    /** Paramètre du même rechargement : `title` ou `alias` ({@see TextTarget}). */
+    public const string PREVIEW_TARGET_PARAMETER = 'preview_target';
+
+    /** La largeur d'un titre comme d'un alias : un texte plus long serait refusé à l'envoi. */
+    public const int PREVIEW_TEXT_MAX_LENGTH = MovieTitleUpdateRequest::TITLE_MAX_LENGTH;
+
+    /** Paramètre du rechargement partiel de la voie manuelle du regroupement : l'identifiant saisi. */
+    public const string GROUP_WITH_PARAMETER = 'group_with';
+
+    /**
+     * Refus propre à la recherche de la voie manuelle : les deux films sont
+     * déjà ensemble — le geste ne changerait rien, la fiche le dit.
+     */
+    public const string GROUP_REFUSAL_SAME_GROUP = 'same_group';
+
     /**
      * La liste du catalogue, entièrement pilotée par la query string.
      */
@@ -86,12 +115,13 @@ class CatalogController extends Controller
      * de fichier ne quitte le serveur** — la banque d'images n'expose que
      * niveau, disponibilité et état de traitement (§ 10).
      */
-    public function show(Movie $movie, AmbiguityPreview $ambiguity): Response
+    public function show(Request $request, Movie $movie, AmbiguityPreview $ambiguity): Response
     {
         $movie->load([
             'projection',
             'collection:id,name',
-            'group:id,label',
+            'group',
+            'group.createdBy:id,name',
             'contentVerifiedBy:id,name',
             'curatedBy:id,name',
             'importRun.actor:id,name',
@@ -104,8 +134,31 @@ class CatalogController extends Controller
             'projection' => $projection === null
                 ? null
                 : AdminCatalogPresenter::movieProjection($projection),
+            // Les locales ACTIVÉES : un titre éditable chacune (§ 9.1) — les
+            // lignes d'autres locales de catalogue restent en lecture seule —,
+            // et leur couverture lue dans `title_locale_mask` (§ 9.3).
+            'title_locales' => $this->titleLocales($projection),
             'titles' => $this->titles($movie),
             'aliases' => $this->aliases($movie),
+            // Les formes acceptées, en lecture seule (§ 9.2) : ce qui rend un
+            // alias vérifiable par un non-technicien.
+            'answer_keys' => $this->answerKeys($movie),
+            // Le regroupement « même œuvre » et ses candidats exacts (§ 9.4).
+            'group' => $this->group($movie),
+            'group_exact_candidates' => $this->groupCandidates($movie),
+            // La voie manuelle du regroupement : le film désigné par son
+            // identifiant, servi au seul rechargement partiel qui ouvre la
+            // même confirmation que celle d'un candidat — libellé pré-rempli,
+            // modifiable (§ 9.4). En lecture seule.
+            'group_manual_candidate' => Inertia::optional(
+                fn (): ?array => $this->manualGroupCandidate($request, $movie),
+            ),
+            // L'aperçu d'un titre ou d'un alias saisi, servi au seul
+            // rechargement partiel qui ouvre sa confirmation (§ 9.1, § 9.2) :
+            // en lecture seule, comme l'aperçu de publication.
+            'text_preview' => Inertia::optional(
+                fn (): ?array => $this->textPreview($request, $movie, $ambiguity),
+            ),
             'certifications' => $this->certifications($movie),
             'tags' => $this->tags($movie),
             'themes' => $this->themes($movie),
@@ -124,9 +177,9 @@ class CatalogController extends Controller
                 fn (): array => $ambiguity->forPublication($movie)->toArray(),
             ),
             // Ne sert qu'à afficher un bouton (spec 20 § 4.3) : chaque geste
-            // garde sa policy à l'écriture. Le lien « Curer » mène à
-            // l'éditeur de la banque ; titres, alias et regroupement arrivent
-            // avec leur lot (L20-14), les gestes administrateur au jalon 2.
+            // garde sa policy à l'écriture. `curate` ouvre l'éditeur de la
+            // banque, les titres, les alias et le regroupement ; les gestes
+            // administrateur arrivent au jalon 2.
             'abilities' => [
                 'curate' => Gate::allows('curate', $movie),
                 'publish' => Gate::allows('publish', $movie),
@@ -350,6 +403,7 @@ class CatalogController extends Controller
     private function aliases(Movie $movie): array
     {
         $aliases = Alias::query()
+            ->with('createdBy:id,name')
             ->where('movie_id', $movie->id)
             ->orderBy('locale')
             ->orderBy('id')
@@ -362,6 +416,202 @@ class CatalogController extends Controller
         }
 
         return $rows;
+    }
+
+    /**
+     * Les locales activées et leur couverture (§ 9.3) : présente ou absente,
+     * **lue dans `movie_projection.title_locale_mask`** — le masque que le
+     * tirage des leurres interroge —, et `null` quand le masque n'est pas à
+     * la version courante (`Locale::MASK_VERSION`) ou que la projection
+     * manque : un masque périmé ne se lit jamais comme valide.
+     *
+     * @return list<array{locale: string, covered: bool|null}>
+     */
+    private function titleLocales(?MovieProjection $projection): array
+    {
+        $mask = $projection !== null && $projection->hasCurrentTitleMask()
+            ? $projection->title_locale_mask
+            : null;
+
+        $rows = [];
+
+        foreach (Locale::cases() as $locale) {
+            $rows[] = [
+                'locale' => $locale->value,
+                'covered' => $mask === null ? null : ($mask & $locale->maskBit()) !== 0,
+            ];
+        }
+
+        return $rows;
+    }
+
+    /**
+     * Les formes acceptées du film (§ 9.2), dans l'ordre des natures de
+     * `AnswerKeyKind` — titres, alias, puis formes dérivées —, puis par forme.
+     *
+     * @return list<array{form: string, kind: string, is_ambiguous: bool}>
+     */
+    private function answerKeys(Movie $movie): array
+    {
+        $order = array_flip(array_column(AnswerKeyKind::cases(), 'value'));
+
+        $keys = AnswerKey::query()
+            ->where('movie_id', $movie->id)
+            ->get(['normalized', 'key_kind', 'is_ambiguous'])
+            ->sort(static fn (AnswerKey $a, AnswerKey $b): int => [$order[$a->key_kind->value], (string) $a->normalized]
+                <=> [$order[$b->key_kind->value], (string) $b->normalized]);
+
+        $rows = [];
+
+        foreach ($keys as $key) {
+            $rows[] = AdminCatalogPresenter::answerKey($key);
+        }
+
+        return $rows;
+    }
+
+    /**
+     * Le groupe du film et ses films, du plus ancien au plus récent ; `null`
+     * pour un film sans groupe.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function group(Movie $movie): ?array
+    {
+        $group = $movie->group;
+
+        if (! $group instanceof MovieGroup) {
+            return null;
+        }
+
+        $members = Movie::query()
+            ->where('group_id', $group->id)
+            ->orderBy('release_year')
+            ->orderBy('id')
+            ->get(['id', 'title_original', 'release_year', 'availability']);
+
+        return AdminCatalogPresenter::movieGroup($group, $members);
+    }
+
+    /**
+     * Les candidats exacts au regroupement (§ 9.4) : les films au titre
+     * normalisé identique, lus par `answer_key_norm_movie_uq`.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function groupCandidates(Movie $movie): array
+    {
+        $rows = [];
+
+        foreach (SetMovieGroup::exactCandidates($movie) as $candidate) {
+            $rows[] = AdminCatalogPresenter::groupCandidate($movie, $candidate);
+        }
+
+        return $rows;
+    }
+
+    /**
+     * Le film désigné par `group_with` pour la voie manuelle du regroupement
+     * (§ 9.4) — un remake au titre différent, qu'aucun candidat exact ne
+     * propose —, présenté comme un candidat : identité, groupe éventuel,
+     * libellé pré-rempli. Ou le refus que le geste opposerait
+     * ({@see SetMovieGroup::pairRefusal()}), plus `same_group` quand les deux
+     * films sont déjà ensemble : la fiche ne confirme jamais un geste vain.
+     *
+     * `requested` rend le texte cherché : seule la réponse à la DERNIÈRE
+     * demande fait foi. `null` quand la demande est vide.
+     *
+     * @return array{requested: string, candidate: array<string, mixed>|null, refusal: string|null}|null
+     */
+    private function manualGroupCandidate(Request $request, Movie $movie): ?array
+    {
+        $requested = trim((string) $request->string(self::GROUP_WITH_PARAMETER));
+
+        if ($requested === '') {
+            return null;
+        }
+
+        /** @var User $curator */
+        $curator = $request->user();
+
+        $id = filter_var($requested, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+        $other = $id === false ? null : Movie::query()->with('group:id,label')->find($id);
+
+        $refusal = $id === false
+            ? SetMovieGroup::REFUSAL_MISSING
+            : SetMovieGroup::pairRefusal($movie, $id, $other, $curator);
+
+        if ($refusal === null && $other instanceof Movie && $movie->group_id !== null && $other->group_id === $movie->group_id) {
+            $refusal = self::GROUP_REFUSAL_SAME_GROUP;
+        }
+
+        return [
+            'requested' => $requested,
+            'candidate' => $refusal === null && $other instanceof Movie
+                ? AdminCatalogPresenter::groupCandidate($movie, $other)
+                : null,
+            'refusal' => $refusal,
+        ];
+    }
+
+    /**
+     * L'aperçu d'un texte saisi — titre ou alias —, désigné par
+     * `preview_text` et `preview_target` (§ 9.1, § 9.2), en lecture seule :
+     *
+     * - `form` : sa forme normalisée, celle qu'`answer_key` porterait — vide
+     *   quand le texte ne contient ni lettre ni chiffre ;
+     * - `accepted_as` : pour un ALIAS, la nature EXACTE sous laquelle ce film
+     *   accepte déjà cette forme, ou `null` — l'écran avertit d'un alias
+     *   redondant (§ 9.2) ;
+     * - `promoted_from` : pour un ALIAS, la forme dérivée — préfixe ou
+     *   sous-titre d'un titre du film, et son ambiguïté — qu'il rendrait
+     *   exacte, donc toujours acceptée (spec 10 § 3.5 : toute nature exacte
+     *   l'emporte) ; `null` sinon. Un tel alias n'est jamais redondant ;
+     * - `ambiguity` : sur un film publié, ce que le texte rendrait ambigu
+     *   ({@see AmbiguityPreview::forText()}) ; `null` sur un film non publié,
+     *   dont aucune forme ne pèse dans le recompte.
+     *
+     * Un titre n'a ni `accepted_as` ni `promoted_from` : le corriger n'ajoute
+     * rien, il remplace — seule son ambiguïté se prévisualise (§ 9.1).
+     *
+     * `null` quand la demande est incomplète.
+     *
+     * @return array{target: string, text: string, form: string, accepted_as: string|null, promoted_from: array{kind: string, is_ambiguous: bool}|null, ambiguity: list<array<string, mixed>>|null}|null
+     */
+    private function textPreview(Request $request, Movie $movie, AmbiguityPreview $ambiguity): ?array
+    {
+        $target = TextTarget::tryFrom((string) $request->string(self::PREVIEW_TARGET_PARAMETER));
+        $text = mb_substr(trim((string) $request->string(self::PREVIEW_TEXT_PARAMETER)), 0, self::PREVIEW_TEXT_MAX_LENGTH);
+
+        if ($target === null || $text === '') {
+            return null;
+        }
+
+        $form = AnswerKeyNormalizer::normalize($text);
+
+        // Au plus une clé par forme et par film (`answer_key_norm_movie_uq`),
+        // de la nature la plus forte.
+        $accepted = $target !== TextTarget::Alias || $form === ''
+            ? null
+            : AnswerKey::query()
+                ->where('movie_id', $movie->id)
+                ->where('normalized', $form)
+                ->first(['key_kind', 'is_ambiguous']);
+
+        return [
+            'target' => $target->value,
+            'text' => $text,
+            'form' => $form,
+            'accepted_as' => $accepted !== null && $accepted->key_kind->isExact()
+                ? $accepted->key_kind->value
+                : null,
+            'promoted_from' => $accepted !== null && ! $accepted->key_kind->isExact()
+                ? ['kind' => $accepted->key_kind->value, 'is_ambiguous' => $accepted->is_ambiguous]
+                : null,
+            'ambiguity' => $movie->availability === ContentAvailability::Published
+                ? $ambiguity->forText($movie, $text, $target)->lines
+                : null,
+        ];
     }
 
     /**
