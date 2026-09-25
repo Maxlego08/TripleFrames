@@ -9,6 +9,7 @@ use App\Models\ImportRun;
 use App\Models\User;
 use App\Support\Catalog\ImportDecision;
 use App\Support\Catalog\ImportOutcome;
+use App\Support\Catalog\ImportSnapshotGuard;
 use App\Support\Catalog\MovieImporter;
 use App\Support\Catalog\TmdbQuotaLimiter;
 use App\Support\Tmdb\TmdbClient;
@@ -24,7 +25,9 @@ use Symfony\Component\Console\Output\OutputInterface;
 
 /**
  * Ce que les deux voies d'import partagent : le refus poli quand aucune clé
- * n'est posée, l'ouverture et la clôture d'un `import_run`, l'étranglement de
+ * n'est posée, l'instantané bloquant de la règle 12 quand la commande est
+ * lancée à la main ({@see self::guardSnapshot()}), l'ouverture et la clôture
+ * d'un `import_run` — jamais enregistré en simulation —, l'étranglement de
  * quota, l'interruption propre et le compte rendu.
  *
  * **Les textes de console sont en français littéral**, et c'est le précédent
@@ -55,6 +58,16 @@ abstract class CatalogImportCommand extends Command
 
     /** Posé par le piège de signal ; relu à chaque frontière sûre. */
     protected bool $interrupted = false;
+
+    /**
+     * Vrai sous `--dry-run` ou `--preview` : rien n'est écrit, **pas même la
+     * ligne `import_run`** (spec 20 § 3.3). Le balayage est alors construit en
+     * mémoire et n'est jamais sauvegardé — l'historique des balayages ne
+     * contient que des imports réels, et ses quatre compteurs restent la
+     * preuve opposable de ce qu'un import a FAIT, jamais de ce qu'il aurait
+     * fait.
+     */
+    protected bool $simulation = false;
 
     public function __construct(
         protected readonly TmdbClient $client,
@@ -101,6 +114,44 @@ abstract class CatalogImportCommand extends Command
     }
 
     /**
+     * La garde d'instantané de la règle 12 ({@see ImportSnapshotGuard}) : une
+     * commande d'import lancée à la main hors `local` et `testing` prend un
+     * instantané bloquant AVANT sa première écriture, et s'arrête sans rien
+     * écrire si `backup:snapshot` rend un code non nul. À appeler une fois les
+     * options lues et avant tout `openRun()` ou `resumableRun()`.
+     */
+    protected function guardSnapshot(): bool
+    {
+        if (! ImportSnapshotGuard::required($this->simulation)) {
+            return true;
+        }
+
+        if ($this->call('backup:snapshot') === self::SUCCESS) {
+            return true;
+        }
+
+        $this->components->error($this->renderReason('admin.console.import.snapshot_failed', []));
+
+        return false;
+    }
+
+    /**
+     * Une simulation ne reprend jamais un balayage : reprendre, c'est
+     * estampiller et faire avancer une ligne réelle, et une simulation n'écrit
+     * rien. Rend `false`, message à l'appui, si les deux sont demandés.
+     */
+    protected function assertSimulationIsFresh(): bool
+    {
+        if (! $this->simulation || ! $this->option('resume')) {
+            return true;
+        }
+
+        $this->components->error($this->renderReason('admin.console.import.simulation_resume', []));
+
+        return false;
+    }
+
+    /**
      * Arme l'interruption propre : à la prochaine frontière sûre — une page
      * terminée, un identifiant traité —, le balayage enregistre son curseur et
      * ses compteurs, et s'arrête **reprenable**.
@@ -124,14 +175,34 @@ abstract class CatalogImportCommand extends Command
         $run->forceFill(array_merge($filter->toColumns(), [
             'run_kind' => $kind,
             'status' => ImportRunStatus::Running,
-            'actor_id' => $this->actorId(),
+            // En simulation, aucun compte n'est cherché : la ligne n'existera
+            // jamais, et `--actor` y porte l'auteur d'un aperçu, pas d'un import.
+            'actor_id' => $this->simulation ? null : $this->actorId(),
             'is_widened' => $filter->isWiderThanDefault(),
             'started_at' => CarbonImmutable::now(),
+            // Les quatre compteurs sont posés à zéro ici plutôt que laissés aux
+            // défauts de la table : un balayage simulé n'est jamais relu de la
+            // base, et `MovieImporter::journal()` additionne sur ces valeurs.
+            'total_seen' => 0,
+            'total_imported' => 0,
+            'total_skipped' => 0,
+            'total_refused_content' => 0,
         ]));
 
-        $run->save();
+        $this->persist($run);
 
         return $run;
+    }
+
+    /**
+     * Enregistre un balayage, sauf en simulation : la ligne d'une simulation
+     * vit en mémoire le temps de la commande et n'atteint jamais la base.
+     */
+    protected function persist(ImportRun $run): void
+    {
+        if (! $this->simulation) {
+            $run->save();
+        }
     }
 
     /**
@@ -182,20 +253,25 @@ abstract class CatalogImportCommand extends Command
             $run->finished_at = CarbonImmutable::now();
         }
 
-        $run->save();
+        $this->persist($run);
     }
 
     /**
-     * Le compte rendu d'un balayage, en quatre compteurs plus la reprise.
+     * Le compte rendu d'un balayage, en quatre compteurs plus la reprise. Une
+     * simulation n'a pas de numéro : elle n'a jamais existé en base.
      */
     protected function reportRun(ImportRun $run): void
     {
         $this->newLine();
 
+        $label = $this->simulation
+            ? 'simulation ('.$run->run_kind->value.')'
+            : '#'.$run->id.' ('.$run->run_kind->value.')';
+
         $this->table(
             ['Balayage', 'Vus', 'Importés', 'Écartés', 'Refusés (contenu)'],
             [[
-                '#'.$run->id.' ('.$run->run_kind->value.')',
+                $label,
                 (string) $run->total_seen,
                 (string) $run->total_imported,
                 (string) $run->total_skipped,
@@ -203,7 +279,7 @@ abstract class CatalogImportCommand extends Command
             ]],
         );
 
-        if ($run->status === ImportRunStatus::Running) {
+        if (! $this->simulation && $run->status === ImportRunStatus::Running) {
             $this->components->warn(
                 'Balayage #'.$run->id.' suspendu et REPRENABLE : relancez la même commande avec --resume.',
             );

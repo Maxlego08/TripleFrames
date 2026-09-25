@@ -5,9 +5,12 @@ namespace App\Console\Commands;
 use App\Enums\ImportRunKind;
 use App\Enums\ImportRunStatus;
 use App\Models\ImportRun;
+use App\Support\Admin\PastePreview;
 use App\Support\Catalog\ImportOutcome;
 use App\Support\Catalog\TmdbIdentifierList;
+use App\Support\Tmdb\TmdbErrorKind;
 use App\Support\Tmdb\TmdbException;
+use App\Support\Tmdb\TmdbMovie;
 use App\ValueObjects\Catalog\ImportFilter;
 use Illuminate\Support\Facades\File;
 
@@ -19,7 +22,7 @@ use Illuminate\Support\Facades\File;
  * back-office, jamais silencieux (décision 11). C'est elle qui fait entrer
  * Parasite, Le Labyrinthe de Pan, Old Boy, La vita è bella et tout l'âge d'or
  * Disney antérieur à 1970 : la liste d'amorçage d'environ 200 identifiants est
- * un fichier livré au dépôt, collé ici en un geste.
+ * un fichier livré au dépôt, importé lot par lot depuis l'écran d'import.
  *
  * **Le filtre de contenu, lui, s'applique à l'identique.** `adult`, FR -18, US
  * NC-17 et US X refusent par cette voie exactement comme par le balayage, et
@@ -32,6 +35,13 @@ use Illuminate\Support\Facades\File;
  * disponibilité, ni la moindre frame. Elle ne réapplique jamais le filtre
  * d'import : un film marqué exception n'est jamais proposé au retrait pour sa
  * langue, ses votes ou sa date.
+ *
+ * **`--dry-run` et `--preview` sont des simulations** : aucune ligne n'est
+ * écrite, `import_run` compris (spec 20 § 3.3). `--preview=<jeton>` est la
+ * voie de l'aperçu à blanc du back-office, lancée par le job
+ * `PreviewCatalogPaste` : le sort de chaque identifiant — titre original,
+ * année, motifs d'exception, motif de refus — part dans le cache de
+ * {@see PastePreview}, sous la clé de son auteur (`--actor`, obligatoire ici).
  */
 class CatalogImportIdsCommand extends CatalogImportCommand
 {
@@ -47,7 +57,8 @@ class CatalogImportIdsCommand extends CatalogImportCommand
         {--resume : Reprend le dernier collage laissé en cours}
         {--run= : Identifiant du collage à reprendre, avec --resume}
         {--actor= : Identifiant ou e-mail du compte à qui attribuer le collage}
-        {--dry-run : N’écrit rien ; compte ce qui serait importé}';
+        {--dry-run : N’écrit rien, pas même le balayage ; compte ce qui serait importé}
+        {--preview= : Jeton d’un aperçu à blanc du back-office ; simulation, --actor obligatoire}';
 
     /**
      * The console command description.
@@ -56,9 +67,26 @@ class CatalogImportIdsCommand extends CatalogImportCommand
      */
     protected $description = 'Importe une liste d’identifiants ou d’URL TMDB, hors filtre de notoriété';
 
+    /** Auteur et jeton de l'aperçu en cours, sous `--preview`. */
+    private ?int $previewUserId = null;
+
+    private ?string $previewToken = null;
+
     public function handle(): int
     {
+        if (! $this->readPreview()) {
+            return self::FAILURE;
+        }
+
+        $this->simulation = $this->previewToken !== null || (bool) $this->option('dry-run');
+
         if (! $this->assertConfigured()) {
+            $this->failPreview('admin.tmdb.error.not_configured');
+
+            return self::FAILURE;
+        }
+
+        if (! $this->assertSimulationIsFresh()) {
             return self::FAILURE;
         }
 
@@ -72,11 +100,18 @@ class CatalogImportIdsCommand extends CatalogImportCommand
                 .'Les URL TMDB de la forme https://www.themoviedb.org/movie/1234-un-slug sont acceptées.',
             );
 
+            $this->failPreview(PastePreview::FAILED_KEY);
+
+            return self::FAILURE;
+        }
+
+        // Règle 12 : avant la première écriture, jamais après. Une simulation
+        // et le chemin d'import ordinaire du back-office en sont dispensés.
+        if (! $this->guardSnapshot()) {
             return self::FAILURE;
         }
 
         $kind = $this->option('resync') ? ImportRunKind::Resync : ImportRunKind::Paste;
-        $dryRun = (bool) $this->option('dry-run');
 
         $run = $this->option('resume') ? $this->resumableRun($kind) : null;
 
@@ -109,10 +144,18 @@ class CatalogImportIdsCommand extends CatalogImportCommand
             return self::SUCCESS;
         }
 
-        $status = $this->consume($remaining, $run, $filter, $dryRun);
+        if ($this->previewUserId !== null && $this->previewToken !== null) {
+            PastePreview::start($this->previewUserId, $this->previewToken);
+        }
 
-        if ($dryRun) {
-            $this->components->info('Simulation : aucune ligne écrite.');
+        $status = $this->consume($remaining, $run, $filter);
+
+        if ($this->simulation) {
+            $this->components->info('Simulation : aucune ligne écrite, pas même le balayage.');
+        }
+
+        if ($status === ImportRunStatus::Completed && $this->previewUserId !== null && $this->previewToken !== null) {
+            PastePreview::complete($this->previewUserId, $this->previewToken);
         }
 
         $this->closeRun($run, $status);
@@ -128,7 +171,7 @@ class CatalogImportIdsCommand extends CatalogImportCommand
      *
      * @param  list<int>  $identifiers
      */
-    private function consume(array $identifiers, ImportRun $run, ImportFilter $filter, bool $dryRun): ImportRunStatus
+    private function consume(array $identifiers, ImportRun $run, ImportFilter $filter): ImportRunStatus
     {
         // La déduplication en lot, servie par `movie_tmdb_uq` (§ 9.2) : un seul
         // aller-retour par tranche, au lieu d'un `SELECT` par identifiant.
@@ -145,10 +188,8 @@ class CatalogImportIdsCommand extends CatalogImportCommand
                 $outcome = $this->importer->outcomeForExisting($known, $run);
 
                 if ($outcome !== null) {
-                    $this->importer->journal($run, $outcome);
-                    $this->reportOutcome($outcome);
+                    $this->settle($run, $outcome, null);
                     $bar->advance();
-                    $run->save();
 
                     continue;
                 }
@@ -159,24 +200,28 @@ class CatalogImportIdsCommand extends CatalogImportCommand
                 $detail = $this->client->movie($identifier);
             } catch (TmdbException $exception) {
                 $bar->finish();
-                $run->save();
+                $this->persist($run);
+                $this->failPreview($this->previewFailureKey($exception));
 
-                return $this->reportTmdbFailure($exception);
+                $status = $this->reportTmdbFailure($exception);
+
+                // Un aperçu interrompu n'est pas un balayage suspendu : il n'a
+                // pas de curseur, et il se relance d'un bouton.
+                return $this->previewToken !== null ? ImportRunStatus::Failed : $status;
             }
 
             $outcome = $detail === null
                 ? ImportOutcome::notFound($identifier)
-                : $this->importer->import($detail, $run, $filter, $dryRun);
+                : $this->importer->import($detail, $run, $filter, $this->simulation);
 
-            $this->importer->journal($run, $outcome);
-            $this->reportOutcome($outcome);
+            $this->settle($run, $outcome, $detail);
             $bar->advance();
-            $run->save();
 
             if ($this->interrupted) {
                 $bar->finish();
                 $this->newLine();
                 $this->components->warn('Interruption demandée : le collage s’arrête, reprenable par --resume.');
+                $this->failPreview(PastePreview::FAILED_KEY);
 
                 return ImportRunStatus::Running;
             }
@@ -185,6 +230,82 @@ class CatalogImportIdsCommand extends CatalogImportCommand
         $bar->finish();
 
         return ImportRunStatus::Completed;
+    }
+
+    /**
+     * Le sort d'un identifiant : les compteurs, la ligne bavarde, la ligne de
+     * l'aperçu s'il y en a un, et l'enregistrement du balayage — jamais en
+     * simulation.
+     */
+    private function settle(ImportRun $run, ImportOutcome $outcome, ?TmdbMovie $detail): void
+    {
+        $this->importer->journal($run, $outcome);
+        $this->reportOutcome($outcome);
+
+        if ($this->previewUserId !== null && $this->previewToken !== null) {
+            PastePreview::record(
+                $this->previewUserId,
+                $this->previewToken,
+                PastePreview::row($outcome, $detail?->originalTitle, $detail?->releaseYear()),
+            );
+        }
+
+        $this->persist($run);
+    }
+
+    /**
+     * Lit `--preview` : un jeton bien formé et un auteur numérique, ou rien.
+     * Un aperçu ne se combine ni avec `--resync` ni avec `--resume` — il ne
+     * relit ni ne reprend rien.
+     */
+    private function readPreview(): bool
+    {
+        $token = $this->option('preview');
+
+        if ($token === null || $token === '') {
+            return true;
+        }
+
+        $actor = $this->integerOption('actor');
+
+        if (! PastePreview::isToken($token) || $actor === null || $actor < 1) {
+            $this->components->error($this->renderReason('admin.console.import.preview_invalid', []));
+
+            return false;
+        }
+
+        if ($this->option('resync') || $this->option('resume')) {
+            $this->components->error($this->renderReason('admin.console.import.preview_exclusive', []));
+
+            return false;
+        }
+
+        $this->previewUserId = $actor;
+        $this->previewToken = $token;
+
+        return true;
+    }
+
+    /** Interrompt l'aperçu en cours, s'il y en a un, avec son motif. */
+    private function failPreview(string $key): void
+    {
+        if ($this->previewUserId !== null && $this->previewToken !== null) {
+            PastePreview::fail($this->previewUserId, $this->previewToken, $key);
+        }
+    }
+
+    /**
+     * Le motif montré au curateur quand TMDB interrompt un aperçu. Un quota
+     * atteint est un appel INTERACTIF qui se rejoue d'un bouton (§ 3.6) ; le
+     * reste est une panne générique, dont le détail part au journal.
+     */
+    private function previewFailureKey(TmdbException $exception): string
+    {
+        return match ($exception->kind) {
+            TmdbErrorKind::RateLimited => 'admin.tmdb.error.rate_limited_interactive',
+            TmdbErrorKind::NotConfigured => 'admin.tmdb.error.not_configured',
+            default => PastePreview::FAILED_KEY,
+        };
     }
 
     /**

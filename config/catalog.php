@@ -85,6 +85,16 @@ return [
     | et c'est ce qui rend le balayage élargi possible — donc traçable par
     | `import_run.is_widened`, et non interdit.
     |
+    | `preview_ttl_minutes` (spec 20 § 3.3, § 13.7) : durée de vie d'un aperçu
+    | à blanc d'un collage, tenu en cache et lisible par son seul auteur. Au
+    | moins 1. L'aperçu est indicatif : l'import réel rejoue toutes les gardes.
+    |
+    | `seed_list_path` (§ 3.5) : la liste d'amorçage, fichier VERSIONNÉ au
+    | format du collage, relatif à la racine du projet (un chemin absolu est
+    | lu tel quel). Le bouton « Importer la liste d'amorçage » en importe les
+    | `paste_max_ids` premiers identifiants absents du catalogue, un collage à
+    | la fois.
+    |
     */
 
     'import' => [
@@ -94,6 +104,8 @@ return [
         'pages_min' => 1,
         'pages_max' => 5,
         'language_choices' => ['fr', 'en', 'ja', 'ko', 'it', 'es', 'de', 'zh', 'ru', 'sv'],
+        'preview_ttl_minutes' => 60,
+        'seed_list_path' => 'database/data/tmdb-seed-list.txt',
     ],
 
     /*
@@ -139,6 +151,10 @@ return [
     |   changer le niveau d'une image, la dépublier ou l'écarter, puis (lots
     |   suivants) revoir, publier, dépublier un film. Au-dessus du débit de
     |   « Entrée = conforme, publier » (§ 13.7). Au moins 1.
+    | - `rate_limits.search` : limiteur `admin-tmdb-search`, par utilisateur
+    |   et par minute, posé sur la seule recherche TMDB du back-office
+    |   (§ 3.4) — distinct d'`admin-import`, que ne consomment que les
+    |   écritures qui ouvrent un balayage. Au moins 1.
     | - `images_cache_minutes` : durée de vie, par identifiant TMDB, de la
     |   liste des visuels d'un film que propose l'éditeur de la banque
     |   (§ 6.2). Une liste un peu ancienne est inoffensive : un chemin de
@@ -178,6 +194,7 @@ return [
         'rate_limits' => [
             'frame' => 30,
             'curation' => 60,
+            'search' => 30,
         ],
 
         'images_cache_minutes' => 1_440,

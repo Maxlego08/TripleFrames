@@ -1,8 +1,10 @@
 import { Form, Head, router } from '@inertiajs/react';
 import { DownloadCloudIcon, InfoIcon, TriangleAlertIcon } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useEffectEvent, useState } from 'react';
+import { toast } from 'sonner';
 import ImportDiscoverController from '@/actions/App/Http/Controllers/Admin/ImportDiscoverController';
 import ImportIdsController from '@/actions/App/Http/Controllers/Admin/ImportIdsController';
+import ImportPreviewController from '@/actions/App/Http/Controllers/Admin/ImportPreviewController';
 import { AdminEmptyState } from '@/components/admin/admin-empty-state';
 import { AdminErrorState } from '@/components/admin/admin-error-state';
 import {
@@ -13,6 +15,9 @@ import { AdminInputError } from '@/components/admin/admin-input-error';
 import { AdminLoadingState } from '@/components/admin/admin-loading-state';
 import { AdminPageHeading } from '@/components/admin/admin-page-heading';
 import { AdminPagination } from '@/components/admin/admin-pagination';
+import { ImportSearchPanel } from '@/components/admin/import-search-panel';
+import { PastePreviewPanel } from '@/components/admin/paste-preview-panel';
+import { SeedListPanel } from '@/components/admin/seed-list-panel';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Checkbox } from '@/components/ui/checkbox';
 import { AdminCardTitle } from '@/components/admin/admin-card-title';
@@ -34,6 +39,9 @@ import { index as importIndex } from '@/routes/admin/import';
 import type {
     AdminImportDefaults,
     AdminImportRunRow,
+    AdminPastePreview,
+    AdminSeedList,
+    AdminTmdbSearchResults,
     Paginated,
 } from '@/types/admin';
 import type { BreadcrumbItem } from '@/types/navigation';
@@ -43,6 +51,13 @@ type Props = {
     defaults: AdminImportDefaults;
     resumable: AdminImportRunRow | null;
     tmdb_configured: boolean;
+    seed_list: AdminSeedList;
+    /** Le dernier aperçu à blanc de CE compte, sondé jusqu'à complétude. */
+    paste_preview: AdminPastePreview | null;
+    /** Cadence du sondage de l'aperçu (`catalog.curation.poll_seconds`). */
+    poll_seconds: number;
+    /** Présent sur `admin.import.search` seulement. */
+    search_results?: AdminTmdbSearchResults;
 };
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -58,6 +73,9 @@ const breadcrumbs: BreadcrumbItem[] = [
  * file (`192.168.10.10`).
  */
 const REFRESH_INTERVAL_MS = 5000;
+
+/** Un seul toast « connexion perdue » à la fois, quel que soit le geste. */
+const OFFLINE_TOAST_ID = 'admin-import-offline';
 
 /**
  * Les deux voies d'import, et leur ASYMÉTRIE dite AVANT les formulaires.
@@ -80,8 +98,35 @@ export default function AdminImportIndex({
     defaults,
     resumable,
     tmdb_configured,
+    seed_list,
+    paste_preview,
+    poll_seconds,
+    search_results,
 }: Props) {
     const { t, locale } = useTranslations();
+
+    /*
+     * L'écran de recherche est la MÊME page, servie par une route à son propre
+     * limiteur (`admin-tmdb-search`) : aucun sondage n'y tourne, sans quoi
+     * chaque tick consommerait le quota des recherches. Le suivi en direct
+     * reprend en fermant la recherche.
+     */
+    const isSearchPage = search_results !== undefined;
+
+    // Un collage ouvert tient le verrou : « Importer » (recherche, aperçu)
+    // attend sa fin, et le serveur refuserait de toute façon (§ 3.4).
+    const pasteBusy = seed_list.busy_run_id !== null;
+
+    // Le collage saisi, partagé par l'import direct et par « Prévisualiser ».
+    const [pasteText, setPasteText] = useState('');
+
+    // Déconnexion pendant une visite : rien n'est parti, la saisie reste en
+    // place, et le curateur l'apprend (§ 13.5).
+    const announceOffline = useEffectEvent((): void => {
+        toast.error(t('admin.common.offline'), { id: OFFLINE_TOAST_ID });
+    });
+
+    useEffect(() => router.on('networkError', () => announceOffline()), []);
 
     const [minVotes, setMinVotes] = useState<number>(defaults.min_vote_count);
     const [minYear, setMinYear] = useState<number>(defaults.min_release_year);
@@ -95,14 +140,20 @@ export default function AdminImportIndex({
     const [refreshing, setRefreshing] = useState(false);
     const [refreshFailed, setRefreshFailed] = useState(false);
 
-    // Un balayage ouvert fait vivre la page : `only` ne recharge que le journal
-    // et le bouton de reprise, jamais les deux formulaires — un curateur en
-    // train de coller cinquante identifiants ne doit pas les voir disparaître.
-    const isLive = runs.data.some((run) => run.status === 'running');
+    // Un balayage ouvert fait vivre la page : `only` ne recharge que le journal,
+    // le bouton de reprise et la liste d'amorçage, jamais les deux formulaires
+    // — un curateur en train de coller cinquante identifiants ne doit pas les
+    // voir disparaître. La liste d'amorçage est du lot parce qu'elle porte le
+    // verrou du collage (`busy_run_id`) : le tick qui voit le collage fini
+    // doit aussi rendre utiles « Importer la liste d'amorçage » et « Importer
+    // ces films », et remplacer le lot déjà importé par le suivant (§ 3.4,
+    // § 3.5).
+    const isLive =
+        !isSearchPage && runs.data.some((run) => run.status === 'running');
 
     const refresh = useCallback(() => {
         router.reload({
-            only: ['runs', 'resumable'],
+            only: ['runs', 'resumable', 'seed_list'],
             onStart: () => setRefreshing(true),
             onFinish: () => setRefreshing(false),
             onSuccess: () => setRefreshFailed(false),
@@ -143,6 +194,15 @@ export default function AdminImportIndex({
                     </Alert>
                 )}
 
+                {isSearchPage && (
+                    <Alert>
+                        <InfoIcon />
+                        <AlertDescription>
+                            {t('admin.import.search.live_paused')}
+                        </AlertDescription>
+                    </Alert>
+                )}
+
                 {/* L'asymétrie, en toutes lettres, AVANT les deux cartes. */}
                 <Card>
                     <CardHeader>
@@ -169,7 +229,12 @@ export default function AdminImportIndex({
                     </CardContent>
                 </Card>
 
-                <div className="grid gap-6 md:grid-cols-2">
+                {/* `grid-cols-1` et non la piste implicite : celle-ci
+                    s'élargirait à la largeur intrinsèque du collage — une
+                    zone de texte à dimensionnement par contenu, dont le
+                    texte indicatif porte une URL — et ferait défiler le
+                    document à 390 px. */}
+                <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                     {/* Voie ordinaire */}
                     <Card>
                         <CardHeader>
@@ -452,6 +517,12 @@ export default function AdminImportIndex({
                                                 name="ids"
                                                 rows={8}
                                                 spellCheck={false}
+                                                value={pasteText}
+                                                onChange={(event) =>
+                                                    setPasteText(
+                                                        event.target.value,
+                                                    )
+                                                }
                                                 placeholder={t(
                                                     'admin.import.ids.list.placeholder',
                                                 )}
@@ -485,9 +556,69 @@ export default function AdminImportIndex({
                                     </>
                                 )}
                             </Form>
+
+                            {/* L'aperçu à blanc du MÊME collage (§ 3.3) :
+                                un formulaire à part, qui poste la saisie
+                                telle quelle, et ses propres erreurs. */}
+                            <Form
+                                {...ImportPreviewController.store.form()}
+                                options={{ preserveScroll: true }}
+                                className="mt-4 space-y-2 border-t border-border pt-4"
+                            >
+                                {({ processing, errors }) => (
+                                    <>
+                                        <input
+                                            type="hidden"
+                                            name="ids"
+                                            value={pasteText}
+                                        />
+                                        <p
+                                            id="ids-preview-hint"
+                                            className="max-w-prose text-xs text-muted-foreground"
+                                        >
+                                            {t('admin.import.ids.preview_hint')}
+                                        </p>
+                                        <Button
+                                            type="submit"
+                                            variant="outline"
+                                            className="min-h-11"
+                                            disabled={
+                                                processing || !tmdb_configured
+                                            }
+                                            aria-describedby="ids-preview-hint"
+                                        >
+                                            {t('admin.import.ids.preview')}
+                                        </Button>
+                                        <AdminInputError message={errors.ids} />
+                                    </>
+                                )}
+                            </Form>
                         </CardContent>
                     </Card>
                 </div>
+
+                <ImportSearchPanel
+                    results={search_results}
+                    defaults={defaults}
+                    tmdbConfigured={tmdb_configured}
+                    pasteBusy={pasteBusy}
+                />
+
+                <SeedListPanel
+                    seedList={seed_list}
+                    tmdbConfigured={tmdb_configured}
+                />
+
+                {paste_preview !== null && (
+                    <PastePreviewPanel
+                        key={paste_preview.token}
+                        preview={paste_preview}
+                        live={!isSearchPage}
+                        pollSeconds={poll_seconds}
+                        tmdbConfigured={tmdb_configured}
+                        pasteBusy={pasteBusy}
+                    />
+                )}
 
                 {/* Journal des balayages */}
                 <Card>

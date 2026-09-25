@@ -127,6 +127,30 @@ final class ImportLauncher
      */
     public static function hasOpenRun(ImportRunKind $kind): bool
     {
+        return self::openRuns($kind)->exists();
+    }
+
+    /**
+     * Le balayage de cette nature qui tient le verrou, ou `null` — le PLUS
+     * RÉCENT, selon exactement le prédicat de {@see self::hasOpenRun()}.
+     *
+     * C'est ce que l'écran d'import lie sous le bouton inactif de la liste
+     * d'amorçage (spec 20 § 3.5) : le curateur suit le collage qui l'occupe.
+     * Lire le verrou n'est pas le contourner : aucune écriture ne passe ici.
+     */
+    public static function openRun(ImportRunKind $kind): ?ImportRun
+    {
+        return self::openRuns($kind)->latest('id')->first();
+    }
+
+    /**
+     * Le prédicat « ouvert », écrit une seule fois pour le refus et pour
+     * l'affichage.
+     *
+     * @return Builder<ImportRun>
+     */
+    private static function openRuns(ImportRunKind $kind): Builder
+    {
         $threshold = CarbonImmutable::now()->subMinutes(self::BUSY_GRACE_MINUTES);
 
         return ImportRun::query()
@@ -136,7 +160,6 @@ final class ImportLauncher
                 $scoped->whereNull('started_at')
                     ->orWhere('started_at', '>=', $threshold)
                     ->orWhere('last_request_at', '>=', $threshold);
-            })
-            ->exists();
+            });
     }
 }

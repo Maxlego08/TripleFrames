@@ -1,0 +1,7 @@
+# Liste d'amorçage de FIXTURE — identifiants inventés, jamais un film réel.
+# Lue par la matrice des capacités (`tests/Datasets/AdminRoutes.php`) : le
+# bouton « Importer la liste d'amorçage » doit y trouver un lot à ouvrir.
+
+# --- 1. Canon de fixture
+987654
+https://www.themoviedb.org/movie/987656-northbound-nine   # URL entière, comme au geste sûr

@@ -119,13 +119,14 @@ class FortifyServiceProvider extends ServiceProvider
             );
         });
 
-        // Les trois écritures du back-office d'import. Le limiteur n'est pas là
-        // contre un attaquant — le groupe est déjà derrière `auth`, `verified`
-        // et `role:curator` — mais contre le double-clic et le rechargement
-        // nerveux : chaque envoi ouvre une ligne `import_run` et dispatche un
-        // job qui consomme un quota TMDB partagé. Par UTILISATEUR, et non par
-        // IP : deux curateurs derrière le même NAT associatif ne se bloquent
-        // jamais l'un l'autre.
+        // Les écritures du back-office d'import — balayage, collage, reprise,
+        // liste d'amorçage, et l'aperçu à blanc d'un collage. Le limiteur
+        // n'est pas là contre un attaquant — le groupe est déjà derrière
+        // `auth`, `verified` et `role:curator` — mais contre le double-clic et
+        // le rechargement nerveux : chaque envoi dispatche un job qui consomme
+        // un quota TMDB partagé, et tous sauf l'aperçu ouvrent une ligne
+        // `import_run`. Par UTILISATEUR, et non par IP : deux curateurs
+        // derrière le même NAT associatif ne se bloquent jamais l'un l'autre.
         RateLimiter::for('admin-import', function (Request $request) {
             return Limit::perMinute(12)->by((string) $request->user()?->getAuthIdentifier());
         });
@@ -149,6 +150,18 @@ class FortifyServiceProvider extends ServiceProvider
         // utilisateur ; valeur dans `catalog.curation.rate_limits.curation`.
         RateLimiter::for('admin-curation', function (Request $request) {
             return Limit::perMinute(Config::integer('catalog.curation.rate_limits.curation'))
+                ->by((string) $request->user()?->getAuthIdentifier());
+        });
+
+        // La recherche TMDB du back-office (spec 20 § 3.4) : SON limiteur, par
+        // utilisateur, distinct d'`admin-import`. Une recherche n'ouvre aucun
+        // balayage et ne doit pas consommer le quota des vrais imports ; un
+        // import, réciproquement, ne doit jamais bloquer une recherche. Valeur
+        // dans `catalog.curation.rate_limits.search`, jamais en littéral.
+        // `admin.import.index`, que sonde l'aperçu d'un collage, n'en porte
+        // aucun.
+        RateLimiter::for('admin-tmdb-search', function (Request $request) {
+            return Limit::perMinute(Config::integer('catalog.curation.rate_limits.search'))
                 ->by((string) $request->user()?->getAuthIdentifier());
         });
 

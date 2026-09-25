@@ -706,6 +706,116 @@ export type AdminImportDefaults = {
     pages_max: number;
     pages_default: number;
     paste_max_ids: number;
+    /** Bornes de la recherche TMDB, relues d'`ImportSearchRequest`. */
+    search_min_length: number;
+    search_max_length: number;
+};
+
+/**
+ * Le sort d'un identifiant — miroir de `App\Support\Catalog\ImportDecision`,
+ * les huit cas, même ceux qu'un aperçu à blanc ne produit jamais.
+ */
+export type ImportDecision =
+    | 'imported'
+    | 'resynchronized'
+    | 'duplicate'
+    | 'skipped_by_filter'
+    | 'refused_content'
+    | 'refused_withdrawn'
+    | 'not_found'
+    | 'simulated';
+
+/** Le motif d'un sort, porté par `ImportOutcome::$reasonKey`. */
+export type ImportReasonKey = Extract<
+    TranslationKey,
+    `admin.catalog.import.${'refused' | 'skipped'}.${string}`
+>;
+
+/** Les états de l'aperçu à blanc (`PastePreview`). */
+export type AdminPastePreviewStatus =
+    | 'pending'
+    | 'running'
+    | 'completed'
+    | 'failed';
+
+/** Une ligne de l'aperçu : un identifiant et son sort, en données (règle 4). */
+export type AdminPastePreviewRow = {
+    tmdb_id: number;
+    decision: ImportDecision;
+    title_original: string | null;
+    release_year: number | null;
+    motives: AdminExceptionMotive[];
+    is_import_exception: boolean;
+    reason_key: ImportReasonKey | null;
+    reason_replacements: Record<string, string | number>;
+    movie_id: number | null;
+    availability: ContentAvailability | null;
+};
+
+/**
+ * Le dernier aperçu à blanc de l'auteur — miroir de `PastePreview::toProps()`
+ * (spec 20 § 3.3), sondé jusqu'à complétude.
+ */
+export type AdminPastePreview = {
+    token: string;
+    status: AdminPastePreviewStatus;
+    identifiers: number[];
+    total: number;
+    processed: number;
+    rows: AdminPastePreviewRow[];
+    error_key:
+        | 'admin.import.preview.failed'
+        | 'admin.tmdb.error.rate_limited_interactive'
+        | 'admin.tmdb.error.not_configured'
+        | null;
+    expires_at: string;
+};
+
+/** L'état du bouton de la liste d'amorçage (`SeedList::summary()`). */
+export type AdminSeedListState = 'empty' | 'busy' | 'done' | 'ready';
+
+export type AdminSeedList = {
+    state: AdminSeedListState;
+    total: number;
+    remaining: number;
+    /** Ce que « Prévisualiser le lot suivant » envoie, tel quel. */
+    next_batch: number[];
+    /** Le collage qui tient le verrou, lié sous le bouton inactif. */
+    busy_run_id: number | null;
+};
+
+/** Les états de la recherche TMDB (`ImportSearchController`). */
+export type AdminTmdbSearchStatus =
+    | 'ready'
+    | 'empty'
+    | 'rate_limited'
+    | 'failed'
+    | 'not_configured';
+
+/** Un résultat de recherche, marqué contre le catalogue local (§ 3.4). */
+export type AdminTmdbSearchItem = {
+    tmdb_id: number;
+    title: string;
+    title_original: string;
+    release_year: number | null;
+    original_language: string;
+    vote_count: number;
+    catalog: {
+        movie_id: number;
+        availability: ContentAvailability;
+    } | null;
+};
+
+export type AdminTmdbSearchResults = {
+    query: string;
+    status: AdminTmdbSearchStatus;
+    error_key:
+        | 'admin.error.tmdb_disabled'
+        | 'admin.tmdb.error.rate_limited_interactive'
+        | 'admin.import.search.failed'
+        | null;
+    total_results: number;
+    items: AdminTmdbSearchItem[];
 };
 
 export type AdminDashboardStats = {

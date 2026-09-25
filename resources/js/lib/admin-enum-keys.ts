@@ -6,6 +6,7 @@ import type {
     ContentFlag,
     ContentOrigin,
     FrameProcessingState,
+    ImportDecision,
     ImportRunKind,
     ImportSource,
     MovieDifficulty,
@@ -162,6 +163,21 @@ export const CATALOG_EXCEPTION_KEYS: Record<string, TranslationKey> = {
     language: 'admin.catalog.filters.exception.language',
     vote_count: 'admin.catalog.filters.exception.vote_count',
     release_year: 'admin.catalog.filters.exception.release_year',
+};
+
+/**
+ * Le sort d'un identifiant à l'aperçu à blanc (spec 20 § 3.3) — les huit cas
+ * de `ImportDecision`, même ceux qu'un aperçu ne produit pas.
+ */
+export const IMPORT_DECISION_KEYS: Record<ImportDecision, TranslationKey> = {
+    simulated: 'admin.import.preview.decision.simulated',
+    imported: 'admin.import.preview.decision.imported',
+    resynchronized: 'admin.import.preview.decision.resynchronized',
+    duplicate: 'admin.import.preview.decision.duplicate',
+    skipped_by_filter: 'admin.import.preview.decision.skipped_by_filter',
+    refused_content: 'admin.import.preview.decision.refused_content',
+    refused_withdrawn: 'admin.import.preview.decision.refused_withdrawn',
+    not_found: 'admin.import.preview.decision.not_found',
 };
 
 /** Les trois motifs d'entrée par exception, tels que la liste les affiche. */

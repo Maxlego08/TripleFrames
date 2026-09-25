@@ -1,5 +1,6 @@
 <?php
 
+use App\Support\Admin\SeedList;
 use App\Support\Frames\FrameGeometry;
 use Illuminate\Support\Facades\Config;
 
@@ -67,6 +68,11 @@ it('les bornes croisées de la configuration de curation tiennent', function ():
     // Limiteurs par utilisateur des gestes du back-office.
     expect($int('rate_limits.frame'))->toBeGreaterThanOrEqual(1);
     expect($int('rate_limits.curation'))->toBeGreaterThanOrEqual(1);
+    expect($int('rate_limits.search'))->toBeGreaterThanOrEqual(1);
+
+    // Import : durée de vie d'un aperçu à blanc, liste d'amorçage lisible.
+    expect(Config::integer('catalog.import.preview_ttl_minutes'))->toBeGreaterThanOrEqual(1);
+    expect(SeedList::path())->toBeReadableFile();
 
     // Éditeur de la banque : cache des visuels TMDB, rechargement partiel
     // pendant un traitement, délai d'alerte d'un traitement en panne.

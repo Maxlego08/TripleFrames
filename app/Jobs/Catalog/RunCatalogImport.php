@@ -6,6 +6,7 @@ use App\Enums\ImportRunKind;
 use App\Enums\ImportRunStatus;
 use App\Models\ImportRun;
 use App\Models\User;
+use App\Support\Catalog\ImportSnapshotGuard;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -131,7 +132,11 @@ class RunCatalogImport implements ShouldBeUnique, ShouldQueue
             return;
         }
 
-        $status = $this->kind === ImportRunKind::Paste
+        // Le chemin d'import ORDINAIRE (spec 30 § 13.2, spec 100 § 11.4) : la
+        // garde d'instantané des commandes lancées à la main n'y joue pas. Un
+        // vidage complet par balayage placerait un geste d'exploitation sur le
+        // chemin du curateur (D10 du 23/09).
+        $status = ImportSnapshotGuard::ordinaryPath(fn (): int => $this->kind === ImportRunKind::Paste
             ? Artisan::call('catalog:import-ids', [
                 // La commande n'accepte que des chaînes en argument variadique :
                 // un entier nu serait silencieusement ignoré par sa lecture, et
@@ -144,7 +149,7 @@ class RunCatalogImport implements ShouldBeUnique, ShouldQueue
                 '--resume' => true,
                 '--run' => $this->runId,
                 '--pages' => $this->pages,
-            ]);
+            ]));
 
         // La commande clôt elle-même le balayage dans tous les cas qu'elle
         // connaît — suspendu, terminé, échoué. Reste le refus d'entrée : sans

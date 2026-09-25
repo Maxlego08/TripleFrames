@@ -16,7 +16,10 @@ use App\Http\Controllers\Admin\FrameUnpublishController;
 use App\Http\Controllers\Admin\ImportController;
 use App\Http\Controllers\Admin\ImportDiscoverController;
 use App\Http\Controllers\Admin\ImportIdsController;
+use App\Http\Controllers\Admin\ImportPreviewController;
 use App\Http\Controllers\Admin\ImportResumeController;
+use App\Http\Controllers\Admin\ImportSearchController;
+use App\Http\Controllers\Admin\ImportSeedListController;
 use App\Http\Controllers\Admin\MovieAliasController;
 use App\Http\Controllers\Admin\MovieContentVerifiedController;
 use App\Http\Controllers\Admin\MovieGroupController;
@@ -79,8 +82,9 @@ use Illuminate\Support\Facades\Route;
 | refuse une route `admin.*` sans ligne, une ligne sans route, et une garde
 | `can:` autre que celle que la ligne écrit.
 |
-| Les trois routes d'écriture de l'import portent en plus
-| `throttle:admin-import` ; les écritures d'image qui téléchargent un original
+| Les routes d'écriture de l'import — balayage, collage, reprise, aperçu à
+| blanc, liste d'amorçage — portent en plus `throttle:admin-import`, la
+| recherche TMDB `throttle:admin-tmdb-search` (§ 3.4) ; les écritures d'image qui téléchargent un original
 | ou distribuent un job Imagick — ajout, re-recadrage, relance —
 | `throttle:admin-frame` (C9 § 2) ; les gestes de curation qui n'écrivent
 | qu'en base — changer un niveau, passer une revue, dépublier ou écarter
@@ -273,6 +277,13 @@ Route::middleware(['auth', 'verified', 'role:curator', 'admin.2fa', 'admin.local
             ->middleware('can:viewAny,'.ImportRun::class)
             ->name('import.index');
 
+        // La recherche TMDB (§ 3.4, ligne 12) : un appel TMDB DANS la requête,
+        // d'où SON limiteur, distinct d'`admin-import`. `admin.import.index`,
+        // que l'aperçu d'un collage sonde, n'en porte aucun.
+        Route::get('import/search', [ImportSearchController::class, 'index'])
+            ->middleware(['can:viewAny,'.ImportRun::class, 'throttle:admin-tmdb-search'])
+            ->name('import.search');
+
         Route::get('import/run/{importRun}', [ImportController::class, 'show'])
             ->middleware('can:view,importRun')
             ->name('import.show');
@@ -288,4 +299,15 @@ Route::middleware(['auth', 'verified', 'role:curator', 'admin.2fa', 'admin.local
         Route::post('import/run/{importRun}/resume', [ImportResumeController::class, 'store'])
             ->middleware(['can:update,importRun', 'throttle:admin-import'])
             ->name('import.resume');
+
+        // L'aperçu à blanc d'un collage et la liste d'amorçage (§ 3.3, § 3.5,
+        // ligne 11). L'aperçu n'ouvre aucune ligne `import_run` mais confie un
+        // collage entier à TMDB : même limiteur contre le double clic.
+        Route::post('import/preview', [ImportPreviewController::class, 'store'])
+            ->middleware(['can:create,'.ImportRun::class, 'throttle:admin-import'])
+            ->name('import.preview');
+
+        Route::post('import/seed-list', [ImportSeedListController::class, 'store'])
+            ->middleware(['can:create,'.ImportRun::class, 'throttle:admin-import'])
+            ->name('import.seed_list');
     });

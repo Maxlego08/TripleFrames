@@ -16,6 +16,7 @@ use App\Support\Catalog\AnswerKeyProjector;
 use App\Support\Curation\ExclusionGrid;
 use App\Support\Curation\ReviewQueue;
 use App\Support\Frames\FrameGeometry;
+use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Http;
 use Tests\Fixtures\TmdbFixture;
 use Tests\Support\Frames\FrameBank;
@@ -465,6 +466,52 @@ function adminRoutesMatrix(): array
             admin: 302,
             parameters: fn (): array => ['importRun' => ImportRun::factory()->discover()->running()->create()->getKey()],
             redirect: fn (array $parameters): string => route('admin.import.show', $parameters),
+        ),
+
+        // Ligne 11 — l'aperçu à blanc d'un collage : aucune ligne
+        // `import_run`, un job en file (`Bus::fake()`), retour à l'écran
+        // d'import qui le sonde.
+        'admin.import.preview' => adminRoutesRow(
+            row: 11,
+            method: 'POST',
+            guards: ['can:create,'.ImportRun::class],
+            curator: 302,
+            admin: 302,
+            payload: fn (): array => ['ids' => '550'],
+            redirect: fn (array $parameters): string => route('admin.import.index'),
+        ),
+
+        // Ligne 11 — la liste d'amorçage : la liste de fixture porte des
+        // identifiants absents du catalogue, le 302 est le collage ouvert.
+        'admin.import.seed_list' => adminRoutesRow(
+            row: 11,
+            method: 'POST',
+            guards: ['can:create,'.ImportRun::class],
+            curator: 302,
+            admin: 302,
+            parameters: function (): array {
+                Config::set('catalog.import.seed_list_path', 'tests/Fixtures/Import/seed-list.txt');
+
+                return [];
+            },
+            redirect: $latestRun,
+        ),
+
+        // Ligne 12 — la recherche TMDB, à son propre limiteur. TMDB est
+        // simulé : la page rend ses résultats, jamais un appel réel.
+        'admin.import.search' => adminRoutesRow(
+            row: 12,
+            method: 'GET',
+            guards: ['can:viewAny,'.ImportRun::class],
+            curator: 200,
+            admin: 200,
+            payload: function (): array {
+                Http::fake([
+                    '*themoviedb.org/3/search/movie*' => Http::response(TmdbFixture::json('search-page')),
+                ]);
+
+                return ['q' => 'Orchard'];
+            },
         ),
     ];
 }

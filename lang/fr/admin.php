@@ -1623,6 +1623,105 @@ return [
             ],
             'exception_notice' => 'Tout film entré par cette voie est marqué « entré par exception », même s’il satisfait tout le filtre de notoriété.',
             'submit' => 'Importer ces identifiants',
+            'preview' => 'Prévisualiser',
+            'preview_hint' => 'L’aperçu à blanc lit chaque fiche sans rien importer et montre le sort de chaque identifiant : c’est le geste normal avant tout import, un identifiant erroné important sinon un autre film en silence.',
+        ],
+
+        /*
+        | Recherche TMDB et import unitaire (spec 20 § 3.4). `results` reçoit
+        | `:count` et `:query` ; `state.in_catalog`, `:availability`, le
+        | libellé déjà traduit de la disponibilité du film.
+        */
+        'search' => [
+            'heading' => 'Rechercher un film sur TMDB',
+            'description' => 'Pour faire entrer un film précis, un à la fois. Importer un résultat ouvre un collage d’un seul identifiant : le film sera marqué « entré par exception », même s’il satisfait tout le filtre de notoriété.',
+            'label' => 'Titre recherché',
+            'placeholder' => 'Un titre, dans n’importe quelle langue',
+            'hint' => 'Entre :min et :max caractères. Seule la première page de résultats de TMDB est affichée, sans contenu pour adultes.',
+            'submit' => 'Rechercher',
+            'close' => 'Fermer la recherche',
+            'loading' => 'Recherche en cours sur TMDB…',
+            'results' => ':count résultats sur TMDB pour « :query »',
+            'empty' => 'TMDB ne connaît aucun film sous ce titre. Essayez le titre original, ou une autre graphie.',
+            'failed' => 'TMDB n’a pas pu répondre à cette recherche. Réessayez dans un instant ; si l’échec persiste, signalez-le à l’administrateur du site.',
+            'retry' => 'Réessayer',
+            'live_paused' => 'Le suivi en direct des balayages et de l’aperçu est suspendu pendant la recherche : fermez-la pour le reprendre.',
+            'column' => [
+                'title' => 'Titre',
+                'title_original' => 'Titre original',
+                'year' => 'Année',
+                'language' => 'Langue originale',
+                'votes' => 'Votes',
+                'state' => 'Au catalogue',
+                'actions' => 'Actions',
+            ],
+            'state' => [
+                'absent' => 'Absent du catalogue',
+                'in_catalog' => 'Déjà au catalogue — :availability',
+                'withdrawn' => 'Retiré — réimport bloqué',
+            ],
+            'import' => 'Importer',
+            'import_label' => 'Importer « :title »',
+            'import_busy' => 'Un collage est déjà ouvert : l’import d’un résultat redevient possible à sa fin.',
+            'open_movie' => 'Ouvrir la fiche',
+        ],
+
+        /*
+        | Aperçu à blanc d'un collage (spec 20 § 3.3). `progress` reçoit
+        | `:processed` et `:total` ; `decision.*`, une feuille par sort de
+        | `ImportDecision`, les huit, même ceux qu'un aperçu ne produit pas.
+        */
+        'preview' => [
+            'heading' => 'Aperçu à blanc',
+            'description' => 'Le sort de chaque identifiant, sans rien importer. L’aperçu est indicatif : l’import réel rejoue toutes les gardes, filtre de contenu compris.',
+            'pending' => 'L’aperçu attend le traitement d’arrière-plan : il démarrera de lui-même.',
+            'running' => 'Lecture des fiches TMDB en cours…',
+            'progress' => ':processed identifiants lus sur :total',
+            'failed' => 'L’aperçu n’a pas pu aller au bout : TMDB n’a pas répondu. Les lignes déjà lues restent affichées ; réessayez dans un instant.',
+            'retry' => 'Réessayer l’aperçu',
+            'import' => 'Importer ces films',
+            'import_hint' => 'Ouvre un collage réel de ces identifiants : chaque film entrera « par exception », et les refus seront comptés au balayage.',
+            'empty' => 'Aucun identifiant n’a encore été lu.',
+            'exception' => 'Entrera par exception',
+            'toast' => [
+                'queued' => 'Aperçu lancé : le sort de chaque identifiant s’affiche ci-dessous dès qu’il est lu. Rien n’est importé.',
+            ],
+            'column' => [
+                'tmdb_id' => 'Identifiant TMDB',
+                'title' => 'Titre original',
+                'year' => 'Année',
+                'decision' => 'Sort',
+                'detail' => 'Motif',
+            ],
+            'decision' => [
+                'simulated' => 'Serait importé',
+                'imported' => 'Importé',
+                'resynchronized' => 'Relu',
+                'duplicate' => 'Déjà au catalogue',
+                'skipped_by_filter' => 'Sous le filtre de notoriété',
+                'refused_content' => 'Refusé — filtre de contenu',
+                'refused_withdrawn' => 'Refusé — film retiré',
+                'not_found' => 'Inconnu de TMDB',
+            ],
+        ],
+
+        /*
+        | Liste d'amorçage (spec 20 § 3.5). `total`, `remaining` et `batch`
+        | reçoivent `:count`.
+        */
+        'seed_list' => [
+            'heading' => 'Liste d’amorçage',
+            'description' => 'La liste versionnée des classiques qui n’entrent que par exception — canon Disney d’avant 1970, classiques non anglophones. Elle s’importe lot par lot, un collage à la fois : chaque clic reprend au premier identifiant absent du catalogue.',
+            'caveat' => 'Un identifiant refusé ou inconnu de TMDB n’entre jamais au catalogue et reste donc compté parmi les restants : signalez-le à l’administrateur pour qu’il soit retiré de la liste.',
+            'total' => ':count identifiants dans la liste',
+            'remaining' => ':count identifiants restent à importer',
+            'batch' => 'Le prochain lot porte :count identifiants, dans l’ordre de la liste.',
+            'submit' => 'Importer la liste d’amorçage',
+            'preview' => 'Prévisualiser le lot suivant',
+            'empty' => 'La liste d’amorçage ne contient encore aucun identifiant : le bouton s’activera quand elle sera constituée.',
+            'busy' => 'Un collage est en cours : le lot suivant pourra partir à sa fin.',
+            'busy_link' => 'Suivre le collage en cours',
+            'done' => 'Chaque identifiant de la liste d’amorçage est déjà au catalogue : il n’y a plus rien à importer.',
         ],
 
         'toast' => [
@@ -1737,6 +1836,7 @@ return [
         'languages' => 'langues originales',
         'min_year' => 'année minimale',
         'pages' => 'pages TMDB',
+        'tmdb_query' => 'recherche TMDB',
         'ids' => [
             'required' => 'Collez au moins un identifiant ou une URL TMDB.',
             'max' => 'Un envoi accepte au plus :max identifiants : scindez la liste en plusieurs envois.',
@@ -1819,6 +1919,17 @@ return [
     | la commande elle-même.
     */
     'console' => [
+        /*
+        | Commandes d'import lancées à la main (spec 20 § 3.3, spec 100 § 11.4,
+        | règle 12). La garde d'instantané précède toute écriture.
+        */
+        'import' => [
+            'snapshot_failed' => 'Instantané refusé : l’import s’arrête sans rien écrire. Corrigez la cause signalée par backup:snapshot, puis relancez la commande.',
+            'simulation_resume' => 'Une simulation ne reprend aucun balayage : --dry-run et --preview ne se combinent pas avec --resume.',
+            'preview_invalid' => 'Aperçu refusé : --preview attend un jeton de 32 caractères hexadécimaux et --actor l’identifiant numérique de son auteur.',
+            'preview_exclusive' => 'Aperçu refusé : --preview ne se combine ni avec --resync ni avec --resume.',
+        ],
+
         'first_admin' => [
             'ask_email' => 'Adresse e-mail du compte à promouvoir',
             'invalid_email' => 'Adresse e-mail invalide.',

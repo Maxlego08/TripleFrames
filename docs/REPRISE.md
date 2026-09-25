@@ -440,7 +440,7 @@ Ensuite, à chaque session : **« Implémente l'étape suivante de l'ordre des l
 48. L20-13 — publication d'un film, contenu vérifié, ambiguïté → 17, 38, 46 — ✅ livrée le 24/09
 49. L20-14 — titres, alias, `movie_group` manuel → 48 — ✅ livrée le 24/09
 50. L20-15 — file de curation, fiche, tableau de bord → 36, 48 — ✅ livrée le 24/09
-51. L20-16 — recherche TMDB, liste d'amorçage, aperçu à blanc, garde d'instantané des imports (I-9) → 18, 20*
+51. L20-16 — recherche TMDB, liste d'amorçage, aperçu à blanc, garde d'instantané des imports (I-9) → 18, 20* — ✅ livrée le 24/09
 52. L20-17 — débit et verdict du pilote → 8, 45, 48, 50
 53. L20-18 — « premiers pas du curateur » → 46, 47*
 54. IA — versionner la liste dans `database/data/tmdb-seed-list.txt` → 3, 51

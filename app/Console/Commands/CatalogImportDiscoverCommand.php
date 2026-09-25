@@ -48,7 +48,7 @@ class CatalogImportDiscoverCommand extends CatalogImportCommand
         {--languages= : Remplace les langues originales du filtre, séparées par des virgules}
         {--min-year= : Remplace l’année de sortie minimale du filtre}
         {--actor= : Identifiant ou e-mail du compte à qui attribuer le balayage}
-        {--dry-run : N’écrit rien ; compte ce qui serait importé}';
+        {--dry-run : N’écrit rien, pas même le balayage ; compte ce qui serait importé}';
 
     /**
      * The console command description.
@@ -59,13 +59,20 @@ class CatalogImportDiscoverCommand extends CatalogImportCommand
 
     public function handle(): int
     {
-        if (! $this->assertConfigured()) {
+        $this->simulation = (bool) $this->option('dry-run');
+
+        if (! $this->assertConfigured() || ! $this->assertSimulationIsFresh()) {
+            return self::FAILURE;
+        }
+
+        // Règle 12 : avant la première écriture — la reprise estampille déjà
+        // une ligne. Une simulation et le chemin d'import ordinaire du
+        // back-office en sont dispensés.
+        if (! $this->guardSnapshot()) {
             return self::FAILURE;
         }
 
         $this->trapInterrupts();
-
-        $dryRun = (bool) $this->option('dry-run');
 
         $run = $this->option('resume') ? $this->resumableRun(ImportRunKind::Discover) : null;
 
@@ -90,10 +97,10 @@ class CatalogImportDiscoverCommand extends CatalogImportCommand
 
         $this->limiter->resumeFrom($run);
 
-        $status = $this->sweep($run, $filter, $dryRun);
+        $status = $this->sweep($run, $filter);
 
-        if ($dryRun) {
-            $this->components->info('Simulation : aucune ligne écrite, aucun compteur figé au-delà de ce balayage.');
+        if ($this->simulation) {
+            $this->components->info('Simulation : aucune ligne écrite, pas même le balayage.');
         }
 
         $this->closeRun($run, $status);
@@ -106,7 +113,7 @@ class CatalogImportDiscoverCommand extends CatalogImportCommand
      * Le balayage proprement dit : une série paginée par langue, reprise à la
      * position composite portée par `tmdb_page_cursor`.
      */
-    private function sweep(ImportRun $run, ImportFilter $filter, bool $dryRun): ImportRunStatus
+    private function sweep(ImportRun $run, ImportFilter $filter): ImportRunStatus
     {
         $languages = $filter->languages;
         $budget = max(1, (int) $this->option('pages'));
@@ -126,14 +133,14 @@ class CatalogImportDiscoverCommand extends CatalogImportCommand
             } catch (TmdbException $exception) {
                 $bar->finish();
                 $run->tmdb_page_cursor = $cursor->toColumn();
-                $run->save();
+                $this->persist($run);
 
                 return $this->reportTmdbFailure($exception);
             }
 
             $this->growProgressBar($bar, $page);
 
-            $status = $this->consume($page, $run, $filter, $dryRun, $bar);
+            $status = $this->consume($page, $run, $filter, $bar);
 
             $budget--;
 
@@ -148,7 +155,7 @@ class CatalogImportDiscoverCommand extends CatalogImportCommand
             // `outcomeForExisting()` rendent `Duplicate` sans appel de détail.
             if ($status !== null) {
                 $run->tmdb_page_cursor = $cursor->toColumn();
-                $run->save();
+                $this->persist($run);
 
                 $bar->finish();
 
@@ -158,7 +165,7 @@ class CatalogImportDiscoverCommand extends CatalogImportCommand
             // Page consommée jusqu'au bout : le curseur enregistré est celui de
             // la prochaine page à lire.
             $run->tmdb_page_cursor = ($next ?? $cursor)->toColumn();
-            $run->save();
+            $this->persist($run);
 
             if ($next === null) {
                 $bar->finish();
@@ -190,7 +197,6 @@ class CatalogImportDiscoverCommand extends CatalogImportCommand
         TmdbPage $page,
         ImportRun $run,
         ImportFilter $filter,
-        bool $dryRun,
         ProgressBar $bar,
     ): ?ImportRunStatus {
         $existing = $this->importer->existingByTmdbId(array_map(
@@ -211,7 +217,7 @@ class CatalogImportDiscoverCommand extends CatalogImportCommand
                     $this->limiter->throttle($run);
                     $detail = $this->client->movie($summary->tmdbId);
                 } catch (TmdbException $exception) {
-                    $run->save();
+                    $this->persist($run);
 
                     // Un 404 rend déjà `null` sans lever : ce qui passe ici est
                     // un quota, une panne serveur ou un transport. Suspendre
@@ -221,7 +227,7 @@ class CatalogImportDiscoverCommand extends CatalogImportCommand
 
                 $outcome = $detail === null
                     ? ImportOutcome::notFound($summary->tmdbId)
-                    : $this->importer->import($detail, $run, $filter, $dryRun);
+                    : $this->importer->import($detail, $run, $filter, $this->simulation);
             }
 
             $this->importer->journal($run, $outcome);

@@ -7,6 +7,7 @@ use App\Models\AnswerKey;
 use App\Models\ImportRun;
 use App\Models\Movie;
 use App\Models\User;
+use App\Support\Admin\PastePreview;
 use App\Support\Catalog\DiscoverCursor;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Config;
@@ -236,13 +237,57 @@ it('rejoue un balayage repris avec le filtre figé sur sa ligne, jamais avec le 
 it('n’écrit rien en simulation, mais journalise ce qui serait entré', function (): void {
     tmdbFake();
 
-    $this->artisan('catalog:import-discover', ['--pages' => 9, '--dry-run' => true])->assertSuccessful();
-
     // Une simulation n'écrit rien, donc elle ne dédoublonne contre rien : les
     // deux films retenus sont comptés une fois par langue du filtre. C'est la
-    // propriété attendue d'un `--dry-run`, pas un compteur faux.
+    // propriété attendue d'un `--dry-run`, pas un compteur faux. Le compte
+    // rendu est celui de la CONSOLE : la simulation n'a pas de ligne
+    // `import_run` où l'écrire (spec 20 § 3.3).
+    $this->artisan('catalog:import-discover', ['--pages' => 9, '--dry-run' => true])
+        ->expectsTable(
+            ['Balayage', 'Vus', 'Importés', 'Écartés', 'Refusés (contenu)'],
+            [['simulation (discover)', '9', '6', '3', '0']],
+        )
+        ->assertSuccessful();
+
     expect(Movie::query()->count())->toBe(0)
-        ->and(ImportRun::query()->sole()->total_imported)->toBe(6);
+        ->and(ImportRun::query()->count())->toBe(0);
+});
+
+test('une simulation n\'ouvre jamais de ligne import_run', function (): void {
+    tmdbFake([
+        '*themoviedb.org/3/movie/987661*' => tmdbJson('movie-987661-fr-18'),
+    ]);
+
+    // Les deux voies en `--dry-run`, refus de contenu compris…
+    $this->artisan('catalog:import-discover', ['--pages' => 9, '--dry-run' => true])->assertSuccessful();
+    $this->artisan('catalog:import-ids', ['ids' => ['987654', '987661', '987656'], '--dry-run' => true])
+        ->expectsOutputToContain('pas même le balayage')
+        ->assertSuccessful();
+    $this->artisan('catalog:import-ids', ['ids' => ['987654'], '--resync' => true, '--dry-run' => true])->assertSuccessful();
+
+    // … et l'aperçu à blanc du back-office, sous son jeton et son auteur.
+    $author = User::factory()->curator()->create();
+    $token = PastePreview::open($author->id, [987654, 987661]);
+
+    $this->artisan('catalog:import-ids', [
+        'ids' => ['987654', '987661'],
+        '--preview' => $token,
+        '--actor' => (string) $author->id,
+    ])->assertSuccessful();
+
+    expect(ImportRun::query()->count())->toBe(0)
+        ->and(Movie::query()->count())->toBe(0)
+        ->and(PastePreview::find($author->id, $token)['status'] ?? null)->toBe(PastePreview::COMPLETED);
+
+    // Une simulation ne reprend rien : reprendre, c'est écrire.
+    ImportRun::factory()->paste()->running()->create();
+
+    $this->artisan('catalog:import-ids', ['ids' => ['987654'], '--resume' => true, '--dry-run' => true])
+        ->assertFailed();
+    $this->artisan('catalog:import-discover', ['--resume' => true, '--dry-run' => true])
+        ->assertFailed();
+
+    expect(ImportRun::query()->count())->toBe(1);
 });
 
 /*

@@ -113,6 +113,34 @@ final class TmdbClient
     }
 
     /**
+     * Une page de la recherche de films par titre — l'import unitaire du
+     * back-office (spec 20 § 3.4). **Sans contenu adulte** : TMDB filtre à
+     * la source, et l'écran écarte encore tout résultat qui se déclarerait
+     * `adult` ; le filtre de contenu complet, certifications comprises, reste
+     * celui de l'import, qui le rejoue sur chaque fiche.
+     *
+     * Aucun filtre de goût non plus : ce qui est trouvé ici s'importe par la
+     * voie d'exception, un identifiant à la fois.
+     *
+     * @throws TmdbException
+     */
+    public function search(string $query, int $page = 1): TmdbPage
+    {
+        if ($page < 1 || $page > TmdbPage::MAX_PAGE) {
+            throw new InvalidArgumentException(
+                'Page de recherche hors bornes ['.$page.'] : TMDB plafonne la pagination à '.TmdbPage::MAX_PAGE.'.',
+            );
+        }
+
+        return TmdbPage::fromArray($this->get('/search/movie', [
+            'query' => $query,
+            'include_adult' => 'false',
+            'language' => $this->config->language,
+            'page' => $page,
+        ], 'search'), 'search');
+    }
+
+    /**
      * La fiche d'un film, `append_to_response` compris — un seul appel, donc un
      * seul jeton de quota.
      *
