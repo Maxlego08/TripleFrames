@@ -1,12 +1,27 @@
 <?php
 
+use App\Support\Draw\PoolRemedy;
+use App\Support\Draw\PoolReport;
+use App\Support\Draw\SeededPrf;
 use Database\Factories\MovieFactory;
+use Illuminate\Contracts\Support\Arrayable;
+use Illuminate\Contracts\Support\Jsonable;
 use Illuminate\Support\Str;
 
 /*
 |--------------------------------------------------------------------------
-| Frontières du tirage — spec 30, lots L30-1 (puis L30-4)
+| Frontières du tirage — spec 30, lots L30-1 et L30-4
 |--------------------------------------------------------------------------
+|
+| Trois frontières, que rien ne rendrait visibles en relecture :
+|
+| - la table nominale `N` → niveaux n'a qu'un domicile (L30-1, ci-dessous) ;
+| - aucun chemin dépendant de la graine ne tire d'aléa hors de `SeededPrf`
+|   (L30-4, § 5.5) ;
+| - seuls `PoolReport` et `PoolRemedy` sont sérialisables dans
+|   `App\Support\Draw` (L30-4, § 5.5, règle 3).
+|
+| TABLE NOMINALE (L30-1)
 |
 | La répartition nominale `N` → niveaux (`2 → 1,5`, `3 → 1,3,5`,
 | `4 → 1,2,4,5`, `5 → 1..5`) n'a qu'un domicile : `FrameLevelCoverage`
@@ -322,4 +337,298 @@ it("la table nominale n'est écrite que dans FrameLevelCoverage", function () {
 
     expect($violations)->toBe([])
         ->and(method_exists(MovieFactory::class, 'expectedFrameLevels'))->toBeFalse();
+});
+
+/*
+|--------------------------------------------------------------------------
+| Aléa dérivé de la graine (L30-4, spec 30 § 5.5)
+|--------------------------------------------------------------------------
+|
+| Un `random_int()` non seedé casserait la rejouabilité que la matérialisation
+| existe pour garantir ; un `shuffle` seedé retomberait dans l'état de 32 bits
+| que la PRF existe pour éviter. D'où deux preuves complémentaires, limitées
+| NOMMÉMENT aux chemins qui dépendent de la graine — `App\Support\Draw` et
+| `App\Support\Answers` (leurres et ordre du QCM de 70) —, jamais à
+| `App\Actions\Game`, où `MintTierServeToken` frappe légitimement son jeton
+| par `random_bytes` (§ 5.1) :
+|
+| - l'analyse d'architecture de Pest (`not->toUse`) sur les fonctions
+|   nommées ;
+| - un balayage au tokeniseur de TOUTE la liste du § 5.5, que l'analyse
+|   d'architecture ne sait pas exprimer sans bannir `Arr` ou `Collection`
+|   entiers : appels (qualifiés ou non, casse indifférente — PHP l'ignore),
+|   callables en chaîne, `->shuffle(` / `->random(` (collections),
+|   `::shuffle(` / `::random(` (`Arr`, sous tout alias).
+|
+| Le balayage déborde la lettre du § 5.5 pour en tenir l'esprit (E70-3) :
+| l'API d'aléa native de PHP 8.2 (`Random\Randomizer`, `Random\Engine\*` —
+| `Mt19937` ne prend qu'une graine de 32 bits, soit exactement l'état que la
+| PRF existe pour éviter), `lcg_value` et `openssl_random_pseudo_bytes` (une
+| seconde source CSPRNG concurrente de `generateSeed()`).
+|
+| Dans ces deux espaces, `random_bytes` n'est admis que dans
+| `SeededPrf::generateSeed()`, seule source de la graine.
+|
+*/
+
+/**
+ * Espaces de noms des chemins qui dépendent de la graine, et leur répertoire.
+ *
+ * @return array<string, string>
+ */
+function drawBoundarySeedPaths(): array
+{
+    return [
+        'App\Support\Draw' => 'app/Support/Draw',
+        'App\Support\Answers' => 'app/Support/Answers',
+    ];
+}
+
+/**
+ * Fonctions d'aléa interdites dans un chemin dépendant de la graine : la liste
+ * du § 5.5, plus `lcg_value` et `openssl_random_pseudo_bytes` (E70-3).
+ *
+ * @return list<string>
+ */
+function drawBoundaryForbiddenFunctions(): array
+{
+    return ['mt_srand', 'srand', 'rand', 'mt_rand', 'random_int', 'array_rand', 'shuffle', 'str_shuffle', 'crc32', 'lcg_value', 'openssl_random_pseudo_bytes'];
+}
+
+/**
+ * Tirages d'aléa d'une source PHP, commentaires exclus : fonctions interdites
+ * et `random_bytes` (appel, appel pleinement qualifié, callable de première
+ * classe, callable en chaîne), toute mention de l'API `Random\` de PHP 8.2
+ * (`Randomizer`, `Random\Engine\*` : import, instanciation, nom qualifié),
+ * méthodes `->shuffle(` / `->random(` / `->shuffleArray(` /
+ * `->shuffleBytes(` / `->pickArrayKeys(` et statiques `::shuffle(` /
+ * `::random(`. L'appelant décide où `random_bytes` est admis.
+ *
+ * @return list<array{line: int, form: string}>
+ */
+function drawBoundaryRandomnessCalls(string $source): array
+{
+    $tokens = array_values(array_filter(
+        PhpToken::tokenize($source),
+        static fn (PhpToken $token): bool => ! $token->isIgnorable(),
+    ));
+    $functions = [...drawBoundaryForbiddenFunctions(), 'random_bytes'];
+    $calls = [];
+
+    foreach ($tokens as $index => $token) {
+        if ($token->is(T_CONSTANT_ENCAPSED_STRING)) {
+            $literal = strtolower(substr($token->text, 1, -1));
+
+            if (in_array($literal, $functions, true)) {
+                $calls[] = ['line' => $token->line, 'form' => "'{$literal}'"];
+            }
+
+            continue;
+        }
+
+        // L'API d'aléa native (`Random\Randomizer`, `Random\Engine\Mt19937`…),
+        // sous toute forme : import, instanciation, nom qualifié ou non.
+        if ($token->is([T_STRING, T_NAME_QUALIFIED, T_NAME_FULLY_QUALIFIED])) {
+            $bare = strtolower(ltrim($token->text, '\\'));
+
+            if ($bare === 'randomizer' || str_starts_with($bare, 'random\\')) {
+                $calls[] = ['line' => $token->line, 'form' => $token->text];
+
+                continue;
+            }
+        }
+
+        if (! $token->is([T_STRING, T_NAME_FULLY_QUALIFIED]) || ($tokens[$index + 1] ?? null)?->text !== '(') {
+            continue;
+        }
+
+        $name = strtolower(ltrim($token->text, '\\'));
+        $previous = $tokens[$index - 1] ?? null;
+
+        if ($previous !== null && $previous->is([T_OBJECT_OPERATOR, T_NULLSAFE_OBJECT_OPERATOR])) {
+            if (in_array($name, ['shuffle', 'random', 'shufflearray', 'shufflebytes', 'pickarraykeys'], true)) {
+                $calls[] = ['line' => $token->line, 'form' => "{$previous->text}{$name}("];
+            }
+
+            continue;
+        }
+
+        if ($previous !== null && $previous->is(T_DOUBLE_COLON)) {
+            if (in_array($name, ['shuffle', 'random'], true)) {
+                $calls[] = ['line' => $token->line, 'form' => ($tokens[$index - 2]->text ?? '')."::{$name}("];
+            }
+
+            continue;
+        }
+
+        // Une déclaration ou une instanciation n'est pas un appel de fonction.
+        if ($previous !== null && $previous->is([T_FUNCTION, T_NEW, T_CONST])) {
+            continue;
+        }
+
+        if (in_array($name, $functions, true)) {
+            $calls[] = ['line' => $token->line, 'form' => "{$name}("];
+        }
+    }
+
+    return $calls;
+}
+
+it("aucun chemin dépendant de la graine n'emploie shuffle, mt_rand, srand, random_int, array_rand ni crc32", function () {
+    // 1. Analyse d'architecture, sur les fonctions nommées. Une expectation
+    // PAR espace de noms : un tableau d'espaces en cible
+    // (`expect([...])->not->toUse(...)`) reste vert avec un `mt_rand` dans
+    // `App\Support\Draw` (constaté à la porte de l'étape 70, E70-3).
+    foreach (array_keys(drawBoundarySeedPaths()) as $namespace) {
+        expect($namespace)->not->toUse(drawBoundaryForbiddenFunctions());
+    }
+
+    expect('App\Support\Answers')->not->toUse('random_bytes');
+    expect('App\Support\Draw')->not->toUse('random_bytes')->ignoring(SeededPrf::class);
+
+    // Témoin : l'analyse voit bien les appels de fonctions globales — sans
+    // lui, une analyse qui ne les verrait jamais serait verte pour de
+    // mauvaises raisons.
+    expect(SeededPrf::class)->toUse(['random_bytes', 'hash_hmac']);
+
+    // 2. Le balayage est prouvé dans les deux sens. Témoin négatif : chaque
+    // forme de la liste du § 5.5, puis chaque forme ajoutée par E70-3 (API
+    // `Random\`, `lcg_value`, `openssl_random_pseudo_bytes`), est signalée,
+    // dans l'ordre.
+    $forbidden = drawBoundaryRandomnessCalls(<<<'PHP'
+        <?php
+        namespace App\Support\Draw;
+
+        use Illuminate\Support\Arr;
+        use Random\Engine\Mt19937;
+
+        function witness(array $items, $collection): void
+        {
+            shuffle($items);
+            \mt_rand(1, 6);
+            MT_SRAND(42);
+            srand(1);
+            rand();
+            random_int(0, 9);
+            array_rand($items);
+            str_shuffle('abc');
+            crc32('seed');
+            Arr::random($items);
+            \Illuminate\Support\Arr::shuffle($items);
+            $collection->shuffle();
+            $collection?->random();
+            array_map('mt_rand', $items);
+            $draw = shuffle(...);
+            random_bytes(16);
+            $r = new \Random\Randomizer(new \Random\Engine\Mt19937(42));
+            $r->shuffleArray($items);
+            (new Randomizer())->getInt(0, 9);
+            lcg_value();
+            openssl_random_pseudo_bytes(32);
+        }
+        PHP);
+
+    expect(array_column($forbidden, 'form'))->toBe([
+        'Random\Engine\Mt19937',
+        'shuffle(',
+        'mt_rand(',
+        'mt_srand(',
+        'srand(',
+        'rand(',
+        'random_int(',
+        'array_rand(',
+        'str_shuffle(',
+        'crc32(',
+        'Arr::random(',
+        '\Illuminate\Support\Arr::shuffle(',
+        '->shuffle(',
+        '?->random(',
+        "'mt_rand'",
+        'shuffle(',
+        'random_bytes(',
+        '\Random\Randomizer',
+        '\Random\Engine\Mt19937',
+        '->shufflearray(',
+        'Randomizer',
+        'lcg_value(',
+        'openssl_random_pseudo_bytes(',
+    ]);
+
+    // Témoin positif : ni un commentaire, ni une déclaration, ni une
+    // instanciation, ni un texte, ni la PRF elle-même.
+    $clean = drawBoundaryRandomnessCalls(<<<'PHP'
+        <?php
+        namespace App\Support\Draw;
+
+        final class Clean
+        {
+            public function shuffle(): void {}
+
+            public function run(SeededPrf $prf, array $items): array
+            {
+                // shuffle($items); mt_rand(); Arr::random($items);
+                $label = 'shuffle the deck';
+                $order = $prf->permutation(DrawContext::movies(), count($items));
+                $pick = $prf->index(DrawContext::variant(1, 1), 3);
+                $operand = new Rand();
+
+                return [hash_hmac('sha256', 'x', 'k'), $order, $pick, $label, $operand];
+            }
+        }
+        PHP);
+
+    expect($clean)->toBe([]);
+
+    // 3. Le balayage des deux espaces.
+    $generateSeed = new ReflectionMethod(SeededPrf::class, 'generateSeed');
+    $seedFile = 'app/Support/Draw/SeededPrf.php';
+    $violations = [];
+    $admitted = 0;
+
+    foreach (drawBoundaryFiles(array_values(drawBoundarySeedPaths()), ['php']) as $file) {
+        foreach (drawBoundaryRandomnessCalls((string) file_get_contents(base_path($file))) as ['line' => $line, 'form' => $form]) {
+            $inGenerateSeed = $file === $seedFile
+                && $line >= $generateSeed->getStartLine()
+                && $line <= $generateSeed->getEndLine();
+
+            if ($form === 'random_bytes(' && $inGenerateSeed) {
+                $admitted++;
+
+                continue;
+            }
+
+            $violations[] = "{$file}:{$line} : {$form}";
+        }
+    }
+
+    // La graine a une source, et une seule.
+    expect($violations)->toBe([])
+        ->and($admitted)->toBe(1);
+});
+
+it('seuls PoolReport et PoolRemedy sont sérialisables dans App\Support\Draw', function () {
+    $classes = array_map(
+        static fn (string $file): string => 'App\\'.str_replace('/', '\\', Str::between($file, 'app/', '.php')),
+        drawBoundaryFiles(['app/Support/Draw'], ['php']),
+    );
+
+    $serializable = array_values(array_filter(
+        $classes,
+        static fn (string $class): bool => array_intersect(
+            [Arrayable::class, Jsonable::class, JsonSerializable::class],
+            class_implements($class) ?: [],
+        ) !== [],
+    ));
+
+    // Témoin : le balayage voit les classes du lot, et les deux sérialisables
+    // le sont bien.
+    expect($classes)->toContain(SeededPrf::class, PoolReport::class, PoolRemedy::class)
+        ->and($serializable)->toBe([PoolRemedy::class, PoolReport::class]);
+
+    // Et l'analyse d'architecture le redit, pour les classes à venir du
+    // tirage (`DrawResult`, `DrawnRound`, `DrawnTier`, `DrawInput`,
+    // `VariantCandidate`…).
+    expect('App\Support\Draw')
+        ->not->toImplement([Arrayable::class, Jsonable::class, JsonSerializable::class])
+        ->ignoring([PoolReport::class, PoolRemedy::class]);
 });
