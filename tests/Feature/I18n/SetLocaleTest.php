@@ -5,8 +5,11 @@ use App\Models\User;
 use App\Support\I18n\LocaleCookie;
 use App\Support\I18n\TranslationDomains;
 use App\Support\I18n\Translations;
+use App\Support\Identity\PlayerToken;
+use App\Support\Identity\PlayerTokenCookie;
 use Illuminate\Support\Facades\App;
 use Illuminate\Testing\TestResponse;
+use Symfony\Component\HttpFoundation\Cookie as SymfonyCookie;
 
 /**
  * Ordre de résolution de la langue et forme des props partagées.
@@ -68,6 +71,94 @@ it('ignores a cookie that does not name an activated locale', function () {
     $response->assertOk();
 
     expect(inertiaProps($response)['locale'])->toBe('en');
+});
+
+/*
+|--------------------------------------------------------------------------
+| Niveau 3 : la revendication `locale` du `player_token` (spec 40 § 4.1)
+|--------------------------------------------------------------------------
+|
+| Il couvre exactement un cas (A-38) : le cookie `locale` a disparu alors
+| que le jeton est toujours là. Le cookie `locale`, choix manuel exprimé sur
+| cet appareil, passe avant lui.
+|
+*/
+
+/** Les `Set-Cookie` `player_token` d'une réponse. */
+function setLocalePlayerTokenCookies(TestResponse $response): array
+{
+    return array_values(array_filter(
+        $response->headers->getCookies(),
+        static fn (SymfonyCookie $cookie): bool => $cookie->getName() === PlayerTokenCookie::NAME,
+    ));
+}
+
+it("restaure la langue d'un invité depuis le player_token quand le cookie locale a disparu", function () {
+    $token = PlayerToken::mint(Locale::French, 'preset-07');
+
+    // Pas de cookie `locale` ; la négociation dirait `en`, le jeton dit `fr`.
+    $response = $this
+        ->withCookie(PlayerTokenCookie::NAME, json_encode($token->toClaims(), JSON_THROW_ON_ERROR))
+        ->withHeader('Accept-Language', 'en-US,en;q=0.9')
+        ->get('/');
+
+    $response->assertOk();
+
+    expect(inertiaProps($response)['locale'])->toBe('fr')
+        ->and(App::getLocale())->toBe('fr')
+        // Lire le jeton ne le repose pas : aucun identifiant posé (I4.1).
+        ->and(setLocalePlayerTokenCookies($response))->toBe([]);
+
+    // Une revendication que l'enum ne connaît plus est nulle : la chaîne
+    // descend à la négociation, sans erreur.
+    $claims = $token->toClaims();
+    $claims['locale'] = 'de';
+
+    $unknown = $this
+        ->withCookie(PlayerTokenCookie::NAME, json_encode($claims, JSON_THROW_ON_ERROR))
+        ->withHeader('Accept-Language', 'en-US,en;q=0.9')
+        ->get('/');
+
+    $unknown->assertOk();
+
+    expect(inertiaProps($unknown)['locale'])->toBe('en');
+
+    // Un jeton invalide — ici non chiffré — est absent : négociation aussi.
+    $forged = $this
+        ->withUnencryptedCookie(PlayerTokenCookie::NAME, json_encode($token->toClaims(), JSON_THROW_ON_ERROR))
+        ->withHeader('Accept-Language', 'en-US,en;q=0.9')
+        ->get('/');
+
+    $forged->assertOk();
+
+    expect(inertiaProps($forged)['locale'])->toBe('en');
+});
+
+it('préfère le cookie locale à la revendication du player_token', function () {
+    $french = PlayerToken::mint(Locale::French);
+
+    $response = $this
+        ->withCookie(PlayerTokenCookie::NAME, json_encode($french->toClaims(), JSON_THROW_ON_ERROR))
+        ->withUnencryptedCookie(LocaleCookie::NAME, Locale::English->value)
+        ->withHeader('Accept-Language', 'fr-FR,fr;q=0.9')
+        ->get('/');
+
+    $response->assertOk();
+
+    expect(inertiaProps($response)['locale'])->toBe('en');
+
+    // Dans l'autre sens aussi : c'est le rang qui décide, pas la langue.
+    $english = PlayerToken::mint(Locale::English);
+
+    $reverse = $this
+        ->withCookie(PlayerTokenCookie::NAME, json_encode($english->toClaims(), JSON_THROW_ON_ERROR))
+        ->withUnencryptedCookie(LocaleCookie::NAME, Locale::French->value)
+        ->withHeader('Accept-Language', 'en-US,en;q=0.9')
+        ->get('/');
+
+    $reverse->assertOk();
+
+    expect(inertiaProps($reverse)['locale'])->toBe('fr');
 });
 
 it('prefers the account language over every device signal', function () {

@@ -7,8 +7,8 @@ use App\Listeners\SyncCarbonLocale;
 use App\Settings\EngineConstants;
 use App\Settings\PlatformLimits;
 use App\Support\Draw\PoolQuery;
+use App\Support\I18n\CookiePlayerTokenLocale;
 use App\Support\I18n\LangVersion;
-use App\Support\I18n\NullPlayerTokenLocale;
 use App\Support\I18n\PlayerTokenLocale;
 use App\Support\I18n\TranslationDomains;
 use App\Support\Identity\PlayerTokenManager;
@@ -66,9 +66,9 @@ class AppServiceProvider extends ServiceProvider
      * les middlewares de route le remplissent, la prop Inertia `translations`
      * le lit au rendu.
      *
-     * `PlayerTokenLocale` est le niveau 3 de la résolution de langue ; il
-     * reste lié à une implémentation neutre jusqu'au lot L40-2 (spec 40 § 4),
-     * qui le branche sur le jeton.
+     * `PlayerTokenLocale` est le niveau 3 de la résolution de langue, lié à
+     * la revendication `locale` du `player_token` courant (spec 40 § 4.1) :
+     * lue par `PlayerTokenManager::current()`, qui ne frappe jamais rien.
      *
      * `PlayerTokenManager` est un singleton **sans état** (spec 40 § 3.1) : le
      * jeton courant est mémorisé dans les attributs de la requête, jamais dans
@@ -79,7 +79,7 @@ class AppServiceProvider extends ServiceProvider
     {
         $this->app->singleton(TranslationDomains::class);
         $this->app->singleton(LangVersion::class);
-        $this->app->bind(PlayerTokenLocale::class, NullPlayerTokenLocale::class);
+        $this->app->bind(PlayerTokenLocale::class, CookiePlayerTokenLocale::class);
         $this->app->singleton(PlayerTokenManager::class);
     }
 

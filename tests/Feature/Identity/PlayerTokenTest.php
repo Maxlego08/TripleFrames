@@ -5,12 +5,14 @@ use App\Enums\AvatarKind;
 use App\Enums\Locale;
 use App\Models\Player;
 use App\Models\Room;
+use App\Models\RoundPlayer;
 use App\Models\User;
 use App\Settings\PlatformLimits;
 use App\Support\I18n\LocaleCookie;
 use App\Support\Identity\PlayerToken;
 use App\Support\Identity\PlayerTokenCookie;
 use App\Support\Identity\PlayerTokenManager;
+use Carbon\CarbonImmutable;
 use Database\Factories\PlayerFactory;
 use Illuminate\Cookie\CookieValuePrefix;
 use Illuminate\Encryption\Encrypter;
@@ -31,7 +33,7 @@ use Symfony\Component\HttpFoundation\Cookie as SymfonyCookie;
 
 /*
 |--------------------------------------------------------------------------
-| Le `player_token` — spec 40 § 3, contrat C4 (L40-1)
+| Le `player_token` — spec 40 § 3 et § 4, contrat C4 (L40-1, L40-2)
 |--------------------------------------------------------------------------
 |
 | Cookie HttpOnly chiffré, frappé paresseusement, glissant sur 30 jours ; en
@@ -200,18 +202,13 @@ function playerTokenRoutes(): void
         ]);
     });
 
-    // Re-signature d'une revendication, comme le fera `locale.update` (L40-2).
+    // Re-signature d'avatar hors prise de siège, comme le fera un changement
+    // d'avatar de `50` (I4.5). La re-signature de langue, elle, passe par la
+    // vraie route `locale.update` depuis L40-2.
     Route::middleware('web')->post(playerTokenPrefix().'/resign', function (Request $request, PlayerTokenManager $tokens): JsonResponse {
         $token = $tokens->current($request) ?? abort(409);
 
-        $locale = $request->input('locale');
-        $avatar = $request->input('avatar');
-
-        $resigned = $tokens->resign($request, match (true) {
-            is_string($locale) => $token->withLocale(Locale::from($locale)),
-            is_string($avatar) => $token->withAvatar($avatar),
-            default => $token,
-        });
+        $resigned = $tokens->resign($request, $token->withAvatar($request->string('avatar')->toString()));
 
         return response()->json(['hash' => $resigned->hash()]);
     });
@@ -735,12 +732,14 @@ it('repart de 30 jours pleins à chaque re-signature, changement de langue compr
         ->assertCreated();
     $tid = playerTokenClaims($seated)['tid'];
 
-    // Douze jours plus tard, un changement de langue re-signe le jeton.
+    // Douze jours plus tard, un changement de langue re-signe le jeton — par
+    // la vraie route, `locale.update` (L40-2).
     $this->travel(12)->days();
 
     $language = $this->withUnencryptedCookie(PlayerTokenCookie::NAME, playerTokenRaw($seated))
-        ->postJson(playerTokenPrefix().'/resign', ['locale' => Locale::French->value])
-        ->assertOk();
+        ->from('/')
+        ->post(route('locale.update'), ['locale' => Locale::French->value])
+        ->assertRedirect('/');
 
     expect(playerTokenSetCookies($language))->toHaveCount(1)
         ->and($language->getCookie(PlayerTokenCookie::NAME, decrypt: false)?->getExpiresTime())->toBe(now()->addDays(30)->getTimestamp())
@@ -810,4 +809,203 @@ it("prend le siège d'un compte connecté sous le pseudo saisi, sans user_id au 
         ->not->toContain($user->name)
         // Aucune écriture de masse ne peut rattacher un siège à un compte.
         ->and($seat->isFillable('user_id'))->toBeFalse();
+});
+
+/*
+|--------------------------------------------------------------------------
+| La langue portée par le jeton — spec 40 § 4.2, I4.8 (L40-2)
+|--------------------------------------------------------------------------
+|
+| `locale.update` garde son comportement (compte, cookie `locale`, `back()`)
+| et, SI la requête porte un jeton, le re-signe sous le même `tid` puis passe
+| chaque siège qu'il tient à la nouvelle langue. Sans jeton, rien n'est frappé.
+|
+*/
+
+/**
+ * Les lignes brutes d'une table, par identifiant, telles que la base les
+ * stocke : millisecondes comprises, sans aucun cast du modèle.
+ *
+ * @return array<int, array<string, mixed>>
+ */
+function playerTokenRawRows(string $table): array
+{
+    $rows = [];
+
+    foreach (DB::table($table)->orderBy('id')->get() as $row) {
+        $rows[(int) $row->id] = (array) $row;
+    }
+
+    return $rows;
+}
+
+it('re-signe le player_token avec la nouvelle langue et le même tid', function () {
+    $this->freezeSecond();
+    $room = Room::factory()->create();
+
+    $seated = $this->withUnencryptedCookie(LocaleCookie::NAME, Locale::English->value)
+        ->postJson(playerTokenSeatUri($room), ['nickname' => 'Zoé', 'avatar' => 'preset-07'])
+        ->assertCreated();
+    $claims = playerTokenClaims($seated);
+    $seat = Player::query()->sole();
+
+    expect($claims['locale'])->toBe('en');
+
+    // Le changement de langue garde son comportement — cookie `locale`,
+    // `back()` — et re-signe le jeton : un seul Set-Cookie, même tid, avatar
+    // conservé, nouvelle langue, 30 jours pleins.
+    $changed = $this->withUnencryptedCookie(PlayerTokenCookie::NAME, playerTokenRaw($seated))
+        ->from('/')
+        ->post(route('locale.update'), ['locale' => Locale::French->value])
+        ->assertRedirect('/')
+        ->assertCookie(LocaleCookie::NAME, Locale::French->value, encrypted: false);
+
+    expect(playerTokenSetCookies($changed))->toHaveCount(1)
+        ->and(playerTokenClaims($changed))->toBe(['v' => PlayerToken::VERSION, 'tid' => $claims['tid'], 'locale' => 'fr', 'avatar' => 'preset-07'])
+        ->and(playerTokenRaw($changed))->not->toBe(playerTokenRaw($seated))
+        ->and($changed->getCookie(PlayerTokenCookie::NAME, decrypt: false)?->getExpiresTime())->toBe(now()->addDays(30)->getTimestamp());
+
+    // Le siège ne change pas : le hash du tid le retrouve, et le jeton re-signé
+    // le reprend, comme un navigateur qui renvoie les deux cookies reçus.
+    $this->withUnencryptedCookie(PlayerTokenCookie::NAME, playerTokenRaw($changed))
+        ->withUnencryptedCookie(LocaleCookie::NAME, Locale::French->value);
+
+    $this->getJson(playerTokenPrefix().'/probe')
+        ->assertOk()
+        ->assertJson(['present' => true, 'hash' => $seat->player_token_hash, 'locale' => 'fr', 'avatar' => 'preset-07']);
+
+    $this->postJson(playerTokenSeatUri($room))
+        ->assertOk()
+        ->assertJson(['outcome' => 'resumed', 'seat' => $seat->public_id]);
+
+    // Idempotent : rejouer le geste rend le même jeton et le même siège.
+    $again = $this->from('/')
+        ->post(route('locale.update'), ['locale' => Locale::French->value])
+        ->assertRedirect('/');
+
+    expect(playerTokenSetCookies($again))->toHaveCount(1)
+        ->and(playerTokenClaims($again))->toBe(['v' => PlayerToken::VERSION, 'tid' => $claims['tid'], 'locale' => 'fr', 'avatar' => 'preset-07'])
+        ->and(Player::query()->sole()->is($seat))->toBeTrue()
+        ->and(Player::query()->sole()->locale)->toBe(Locale::French)
+        ->and(Player::query()->sole()->player_token_hash)->toBe(hash('sha256', (string) $claims['tid']));
+
+    // Connecté, le compte ET le jeton suivent : la connexion ne remplace pas
+    // le jeton, elle s'y ajoute (I4.6).
+    $user = User::factory()->locale(Locale::French)->create();
+
+    $account = $this->actingAs($user)
+        ->withUnencryptedCookie(PlayerTokenCookie::NAME, playerTokenRaw($again))
+        ->from('/')
+        ->post(route('locale.update'), ['locale' => Locale::English->value])
+        ->assertRedirect('/');
+
+    expect($user->refresh()->locale)->toBe(Locale::English)
+        ->and(playerTokenClaims($account))->toBe(['v' => PlayerToken::VERSION, 'tid' => $claims['tid'], 'locale' => 'en', 'avatar' => 'preset-07'])
+        ->and(Player::query()->sole()->locale)->toBe(Locale::English);
+});
+
+it("passe chaque siège tenu par le jeton à la nouvelle langue, et rien d'autre", function () {
+    $this->travelTo(CarbonImmutable::parse('2026-09-25 10:00:00.000'));
+
+    $token = PlayerToken::mint(Locale::English, 'preset-07');
+    $room = Room::factory()->create();
+
+    // Tenus par le jeton : connecté, déconnecté (il tient toujours sa place),
+    // et le siège solo, sans salon.
+    $held = [
+        'connecté' => Player::factory()->for($room)->create(['player_token_hash' => $token->hash()]),
+        'déconnecté' => Player::factory()->disconnected()->create(['player_token_hash' => $token->hash()]),
+        'solo' => Player::factory()->solo()->create(['player_token_hash' => $token->hash()]),
+    ];
+
+    // Hors d'atteinte : un siège parti (sa reprise réaligne la langue, § 2.2),
+    // un siège expulsé (`left`), un siège archivé (plus de hash), et le siège
+    // d'un autre jeton dans le même salon.
+    $untouched = [
+        'parti' => Player::factory()->left()->create(['player_token_hash' => $token->hash()]),
+        'expulsé' => Player::factory()->kicked()->create(['player_token_hash' => $token->hash()]),
+        'archivé' => Player::factory()->for(Room::factory()->archived())->archivedIdentity()->create(),
+        'autre jeton' => Player::factory()->for($room)->create(['player_token_hash' => PlayerToken::mint(Locale::English)->hash()]),
+    ];
+
+    // Un QCM déjà composé en anglais pour le siège connecté : jamais recomposé.
+    RoundPlayer::factory()->withChoices(Locale::English)->create(['player_id' => $held['connecté']->id]);
+
+    foreach ([...$held, ...$untouched] as $case => $seat) {
+        expect($seat->locale)->toBe(Locale::English, "[{$case}] ne part pas de l'anglais.");
+    }
+
+    $players = playerTokenRawRows('player');
+    $roundPlayers = playerTokenRawRows('round_player');
+    $users = playerTokenRawRows('users');
+
+    // Plus tard, à une milliseconde non nulle : l'écriture doit la garder.
+    $this->travelTo(CarbonImmutable::parse('2026-09-25 10:05:00.456'));
+
+    $this->withCookie(PlayerTokenCookie::NAME, json_encode($token->toClaims(), JSON_THROW_ON_ERROR))
+        ->from('/')
+        ->post(route('locale.update'), ['locale' => Locale::French->value])
+        ->assertRedirect('/');
+
+    $after = playerTokenRawRows('player');
+
+    // Chaque siège tenu : la langue, et l'horodatage d'Eloquent en `timestamp(3)`
+    // (jamais `DB::table()`, qui ne le poserait pas) — rien d'autre.
+    foreach ($held as $case => $seat) {
+        $changed = array_keys(array_diff_assoc($after[$seat->id], $players[$seat->id]));
+        sort($changed);
+
+        expect($changed)->toBe(['locale', 'updated_at'], "[{$case}] : colonnes écrites inattendues.")
+            ->and($after[$seat->id]['locale'])->toBe(Locale::French->value, "[{$case}] n'est pas passé au français.")
+            ->and($after[$seat->id]['updated_at'])->toBe('2026-09-25 10:05:00.456', "[{$case}] : millisecondes perdues.");
+    }
+
+    foreach ($untouched as $case => $seat) {
+        expect($after[$seat->id])->toBe($players[$seat->id], "[{$case}] a été touché.");
+    }
+
+    // Aucun état de jeu : le QCM reste dans sa langue de composition, et aucun
+    // compte n'existe ni n'est écrit pour un invité.
+    expect(playerTokenRawRows('round_player'))->toBe($roundPlayers)
+        ->and(playerTokenRawRows('users'))->toBe($users)
+        ->and(Player::query()->count())->toBe(count($held) + count($untouched));
+});
+
+it("ne frappe pas de player_token quand un invité qui n'en a pas change de langue", function () {
+    // Des sièges existent sous d'autres jetons : aucun n'est touché.
+    Player::factory()->count(2)->create();
+    $players = playerTokenRawRows('player');
+
+    $guest = $this->from('/')
+        ->post(route('locale.update'), ['locale' => Locale::French->value])
+        ->assertRedirect('/')
+        ->assertCookie(LocaleCookie::NAME, Locale::French->value, encrypted: false);
+
+    expect(playerTokenSetCookies($guest))->toBe([]);
+
+    // Connecté sans jeton : le compte suit, aucun jeton n'est frappé — la
+    // connexion ne lit ni n'écrit le cookie (I4.6).
+    $user = User::factory()->locale(Locale::English)->create();
+
+    $account = $this->actingAs($user)
+        ->from('/')
+        ->post(route('locale.update'), ['locale' => Locale::French->value])
+        ->assertRedirect('/');
+
+    expect($user->refresh()->locale)->toBe(Locale::French)
+        ->and(playerTokenSetCookies($account))->toBe([]);
+
+    // Un jeton invalide — ici non chiffré — vaut absence (I4.7) : pas de frappe
+    // non plus.
+    $forged = $this->withUnencryptedCookie(PlayerTokenCookie::NAME, json_encode(PlayerToken::mint(Locale::English)->toClaims(), JSON_THROW_ON_ERROR))
+        ->from('/')
+        ->post(route('locale.update'), ['locale' => Locale::French->value])
+        ->assertRedirect('/');
+
+    expect(playerTokenSetCookies($forged))->toBe([])
+        ->and(playerTokenRawRows('player'))->toBe($players);
+
+    $this->getJson(playerTokenPrefix().'/probe')
+        ->assertOk()
+        ->assertJson(['present' => false]);
 });

@@ -7,25 +7,27 @@ use Illuminate\Http\Request;
 
 /**
  * Niveau 3 de l'ordre de résolution de la spec 05 : la revendication `locale`
- * du `player_token` signé, qui restaure la langue d'un invité revenu sans
- * cookie en même temps que son siège.
+ * du `player_token`, qui restaure la langue d'un invité revenu sans cookie
+ * `locale` alors que son jeton est toujours là.
  *
  * C'est un contrat et non une implémentation parce que la **forme** du
- * `player_token` — signature, revendications, re-signature au changement de
- * langue — appartient à `10-catalogue-et-modele-de-donnees.md` et à
- * `40-comptes-auth-sociale-et-avatars.md`. Le schéma ne porte aujourd'hui que
- * `player.player_token_hash` : aucun jeton n'est encore frappé.
+ * `player_token` — charge utile, transport en cookie `HttpOnly` chiffré,
+ * re-signature au changement de langue — appartient à
+ * `40-comptes-auth-sociale-et-avatars.md` [J1] (§ 3 et § 4) ;
+ * `10-catalogue-et-modele-de-donnees.md` n'en garde que le hash,
+ * `player.player_token_hash` (E10-11, E10-33).
  *
- * Point de branchement unique : lier ce contrat à une implémentation réelle
- * dans `AppServiceProvider::register()` suffit à activer le niveau 3, sans
- * toucher au middleware ni à son test.
+ * Liée à {@see CookiePlayerTokenLocale} dans
+ * `AppServiceProvider::registerLocalization()` (lot L40-2) : le middleware
+ * `SetLocale` dépend de ce contrat, jamais d'une implémentation.
  */
 interface PlayerTokenLocale
 {
     /**
      * Locale portée par le `player_token` de la requête, ou `null` si la
-     * requête n'en porte aucun, si sa signature est invalide, ou si sa
-     * revendication ne désigne pas une locale activée.
+     * requête n'en porte aucun, s'il est invalide (MAC faux, charge illisible,
+     * version inconnue), ou si sa revendication ne désigne pas une locale
+     * activée.
      */
     public function fromRequest(Request $request): ?Locale;
 }
