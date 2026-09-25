@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="fr">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <meta
+            name="description"
+            content="TripleFrames, le blindtest cinéma à jouer entre amis."
+        />
+        <title>TripleFrames — Devine le film</title>
+        <link rel="stylesheet" href="styles.css" />
+    </head>
+    <body>
+        <a class="skip-link" href="#main-content">Aller au contenu</a>
+
+        <header class="site-header">
+            <div class="header-inner">
+                <a class="brand" href="#" aria-label="TripleFrames, accueil">
+                    <span class="brand-mark" aria-hidden="true">
+                        <span></span><span></span><span></span>
+                    </span>
+                    <span class="brand-name">TripleFrames</span>
+                </a>
+
+                <nav class="account-nav guest-nav" aria-label="Compte">
+                    <button class="nav-link" type="button" data-dialog="login-dialog">
+                        Connexion
+                    </button>
+                    <button class="nav-pill" type="button" data-dialog="register-dialog">
+                        S’inscrire
+                    </button>
+                </nav>
+
+                <nav class="account-nav member-nav" aria-label="Compte connecté">
+                    <a class="account-button" href="#account-demo">
+                        <span class="account-avatar" aria-hidden="true">MC</span>
+                        <span>Mon compte</span>
+                    </a>
+                </nav>
+            </div>
+        </header>
+
+        <main id="main-content">
+            <section class="playground" aria-labelledby="hero-title">
+                <div class="confetti confetti-one" aria-hidden="true"></div>
+                <div class="confetti confetti-two" aria-hidden="true"></div>
+                <div class="confetti confetti-three" aria-hidden="true"></div>
+
+                <div class="hero-card">
+                    <div class="hero-copy">
+                        <div class="triple-logo" aria-hidden="true">
+                            <span class="frame frame-back"></span>
+                            <span class="frame frame-middle"></span>
+                            <span class="frame frame-front">
+                                <span class="play-icon"></span>
+                            </span>
+                        </div>
+
+                        <div class="hero-text">
+                            <p class="kicker">Blindtest cinéma</p>
+                            <h1 id="hero-title">Trois images.<br />Un film à trouver.</h1>
+                            <p class="hero-description">
+                                Devine le titre avant tes amis. Plus tu trouves tôt,
+                                plus tu marques de points.
+                            </p>
+                            <ul class="game-notes" aria-label="Les points forts du jeu">
+                                <li>Sans installation</li>
+                                <li>Sans compte obligatoire</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <form class="join-panel" id="join-form" novalidate>
+                        <div class="panel-heading">
+                            <span class="panel-number" aria-hidden="true">1</span>
+                            <h2>Rejoins la partie</h2>
+                        </div>
+
+                        <div class="field-group">
+                            <label for="nickname">Ton pseudo</label>
+                            <input
+                                id="nickname"
+                                name="nickname"
+                                type="text"
+                                autocomplete="nickname"
+                                maxlength="24"
+                                placeholder="Ex. Marty McFly"
+                                aria-describedby="nickname-error"
+                            />
+                            <p class="field-error" id="nickname-error"></p>
+                        </div>
+
+                        <div class="field-group">
+                            <label for="room-code">Code de la partie</label>
+                            <input
+                                id="room-code"
+                                name="room-code"
+                                class="code-input"
+                                type="text"
+                                inputmode="text"
+                                autocomplete="off"
+                                autocapitalize="characters"
+                                spellcheck="false"
+                                maxlength="8"
+                                placeholder="ABCD"
+                                aria-describedby="code-help room-code-error"
+                            />
+                            <p class="field-help" id="code-help">
+                                Le code est affiché sur l’écran de l’hôte.
+                            </p>
+                            <p class="field-error" id="room-code-error"></p>
+                        </div>
+
+                        <button class="primary-button" type="submit">
+                            <span>Rejoindre la partie</span>
+                            <span class="button-burst" aria-hidden="true">✦</span>
+                        </button>
+                    </form>
+                </div>
+
+                <div class="create-zone">
+                    <div class="create-copy">
+                        <span class="panel-number panel-number-alt" aria-hidden="true">2</span>
+                        <p><strong>Pas encore de code ?</strong> Lance ton propre salon.</p>
+                    </div>
+                    <button class="secondary-button" id="create-game" type="button">
+                        Créer une partie
+                    </button>
+                </div>
+            </section>
+        </main>
+
+        <footer class="site-footer">
+            <div class="footer-inner">
+                <p><strong>TripleFrames</strong> — Le cinéma se joue à plusieurs.</p>
+                <nav aria-label="Informations légales">
+                    <a href="#rules">Comment jouer</a>
+                    <a href="#terms">Conditions</a>
+                    <a href="#privacy">Confidentialité</a>
+                </nav>
+                <p class="footer-note">Prototype de direction artistique</p>
+            </div>
+        </footer>
+
+        <dialog class="auth-dialog" id="login-dialog">
+            <form method="dialog" class="dialog-card">
+                <button class="dialog-close" value="cancel" aria-label="Fermer">×</button>
+                <p class="dialog-symbol" aria-hidden="true">◉</p>
+                <h2>Bon retour !</h2>
+                <p>La connexion sera branchée à l’application finale.</p>
+                <label for="login-email">Adresse e-mail</label>
+                <input id="login-email" type="email" placeholder="toi@exemple.fr" />
+                <button class="primary-button compact" value="confirm">Continuer</button>
+            </form>
+        </dialog>
+
+        <dialog class="auth-dialog" id="register-dialog">
+            <form method="dialog" class="dialog-card">
+                <button class="dialog-close" value="cancel" aria-label="Fermer">×</button>
+                <p class="dialog-symbol dialog-symbol-alt" aria-hidden="true">✦</p>
+                <h2>Crée ton compte</h2>
+                <p>Garde tes statistiques et tes réglages de partie.</p>
+                <label for="register-email">Adresse e-mail</label>
+                <input id="register-email" type="email" placeholder="toi@exemple.fr" />
+                <button class="primary-button compact" value="confirm">Commencer</button>
+            </form>
+        </dialog>
+
+        <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+        <script src="script.js"></script>
+    </body>
+</html>
