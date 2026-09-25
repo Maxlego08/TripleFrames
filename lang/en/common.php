@@ -64,6 +64,34 @@ return [
         'restored' => 'Connection restored.',
     ],
 
+    'error' => [
+        'back_home' => 'Back to home',
+        'forbidden' => [
+            'title' => 'Access denied',
+            'description' => 'You are not allowed to open this page.',
+        ],
+        'not_found' => [
+            'title' => 'Page not found',
+            'description' => 'This page does not exist, or no longer does. Check the address, or the room code if you were joining a game.',
+        ],
+        'page_expired' => [
+            'title' => 'Page expired',
+            'description' => 'The page expired after a period of inactivity. Please try your last action again.',
+        ],
+        'too_many_requests' => [
+            'title' => 'Too many requests',
+            'description' => 'Too many requests in a short time. Please wait a moment before trying again.',
+        ],
+        'server_error' => [
+            'title' => 'Server error',
+            'description' => 'Something unexpected went wrong on our side. Please try again in a moment.',
+        ],
+        'service_unavailable' => [
+            'title' => 'Service unavailable',
+            'description' => 'The site is temporarily unavailable, most likely for an update. Please try again a little later.',
+        ],
+    ],
+
     'language' => [
         'change' => 'Change language',
         'current' => 'Current language: :language',

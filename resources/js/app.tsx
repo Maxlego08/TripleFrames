@@ -19,6 +19,10 @@ void createInertiaApp({
             // (L90-8), qui la fait entrer dans `PublicLayout`.
             case name === 'welcome':
                 return null;
+            // La page d'erreur joueur est une page publique, dans l'apparence
+            // du visiteur, même levée depuis une route de jeu (spec 90 § 4.8).
+            // `admin/error` reste dans la coquille du back-office.
+            case name === 'error':
             case name.startsWith('legal/'):
                 return PublicLayout;
             // Le back-office a sa propre coquille : il n'hérite pas de la

@@ -4,6 +4,7 @@ use App\Models\User;
 use App\Support\I18n\TranslationDomains;
 use Illuminate\Routing\Route as RoutingRoute;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Testing\TestResponse;
 use Tests\Support\I18n\FrontSource;
 
 /*
@@ -13,15 +14,16 @@ use Tests\Support\I18n\FrontSource;
 |
 | Une page ne reçoit que les domaines que sa route déclare (`common` joint
 | d'office, `translations:…`) : une clé d'un domaine non déclaré s'affiche
-| brute, sans qu'aucune erreur ne le signale (règle 4). Trois propriétés :
+| brute, sans qu'aucune erreur ne le signale (règle 4). Quatre propriétés :
 |
 | 1. toute route joueur déclare `legal`, parce que le pied de page est présent
 |    sur tous les écrans (n° 68, D3 du 23/09) ;
 | 2. le back-office ne reçoit que `admin`, jamais un domaine joueur ;
 | 3. chaque page, et chaque répertoire de composants qui lui est rattaché,
-|    n'appelle que des clés des domaines que sa route déclare.
-|
-| Complété par L90-5 (pages d'erreur joueur et back-office).
+|    n'appelle que des clés des domaines que sa route déclare ;
+| 4. une page d'erreur, rendue par le gestionnaire d'exceptions et non par une
+|    route, reçoit `common` et `legal` côté joueur, `admin` seul côté
+|    back-office (L90-5).
 |
 */
 
@@ -201,6 +203,62 @@ it("n'envoie que le domaine admin au back-office", function () {
             ))->toBe([], "{$name} reçoit une clé hors du domaine admin")
             ->and($response->inertiaProps('locale'))->toBe('fr');
     }
+});
+
+it('rend les pages d\'erreur joueur avec le domaine legal et les erreurs du back-office avec le domaine admin', function () {
+    // Le chemin de production : la page d'erreur n'est rendue que hors debug.
+    config(['app.debug' => false]);
+    $this->withoutVite();
+
+    Route::middleware(['web', 'translations:game,room,legal'])
+        ->get('/__domains/game-failure', fn () => abort(500));
+    Route::middleware(['web', 'admin.locale'])
+        ->get('/__domains/admin-failure', fn () => abort(500));
+
+    /**
+     * Domaines réellement expédiés : le premier segment de chaque clé.
+     *
+     * @return list<string>
+     */
+    $shipped = static function (TestResponse $response): array {
+        $translations = $response->inertiaProps('translations');
+
+        expect($translations)->toBeArray()->not->toBeEmpty();
+
+        $domains = array_values(array_unique(array_map(
+            static fn (string $key): string => explode('.', $key, 2)[0],
+            array_keys($translations),
+        )));
+        sort($domains);
+
+        return $domains;
+    };
+
+    // Joueur : `common` et `legal` exactement, que l'erreur naisse avant tout
+    // middleware de route (URL inconnue) ou dans une route de jeu qui avait
+    // déjà déclaré `game` et `room` — la page `error` ne les appelle jamais.
+    $player = [
+        'URL inconnue' => '/__domains/definitely-unknown-url',
+        'route de jeu' => '/__domains/game-failure',
+    ];
+
+    foreach ($player as $label => $uri) {
+        // Singleton : une requête neuve repart d'une sélection vide.
+        app()->forgetInstance(TranslationDomains::class);
+
+        $response = $this->get($uri);
+
+        expect($response->inertiaPage()['component'])->toBe('error', $label)
+            ->and($shipped($response))->toBe(['common', 'legal'], $label);
+    }
+
+    // Back-office : `admin` seul, jamais `common` ni `legal` (spec 90 § 6.3).
+    app()->forgetInstance(TranslationDomains::class);
+
+    $admin = $this->actingAs(User::factory()->curator()->create())->get('/__domains/admin-failure');
+
+    expect($admin->inertiaPage()['component'])->toBe('admin/error')
+        ->and($shipped($admin))->toBe([TranslationDomains::ADMIN]);
 });
 
 it("n'appelle que des clés des domaines déclarés pour son préfixe de page", function () {

@@ -2,6 +2,7 @@
 
 use App\Enums\AdminActionSubject;
 use App\Enums\AdminActionType;
+use App\Enums\ErrorPageStatus;
 use App\Enums\FrameProcessingFailure;
 use App\Enums\LegalPage;
 use App\Enums\Locale;
@@ -392,6 +393,19 @@ it('carries every key built by an enumerable key constructor', function () {
             static fn (LegalPage $page): string => $page->titleKey(),
             LegalPage::cases(),
         ),
+        // Les six erreurs HTTP rendues en page (spec 90 § 4.8, L90-5) : page
+        // `error` joueur, clés construites par l'enum, et page `admin/error`
+        // du back-office, que le même gestionnaire choisit pour les mêmes
+        // statuts.
+        ...array_merge(...array_map(
+            static fn (ErrorPageStatus $status): array => [
+                $status->titleKey(),
+                $status->descriptionKey(),
+                "admin.error.http.{$status->value}.title",
+                "admin.error.http.{$status->value}.description",
+            ],
+            ErrorPageStatus::cases(),
+        )),
         // Libellés du journal `admin_action` et de ses sujets (20 § 2.7, L20-1).
         ...array_map(
             static fn (AdminActionType $action): string => $action->labelKey(),

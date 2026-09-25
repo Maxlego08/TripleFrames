@@ -61,6 +61,34 @@ return [
         'restored' => 'Connexion rétablie.',
     ],
 
+    'error' => [
+        'back_home' => 'Retour à l’accueil',
+        'forbidden' => [
+            'title' => 'Accès refusé',
+            'description' => 'Vous n’avez pas l’autorisation d’ouvrir cette page.',
+        ],
+        'not_found' => [
+            'title' => 'Page introuvable',
+            'description' => 'Cette page n’existe pas ou n’existe plus. Vérifiez l’adresse, ou le code du salon si vous rejoigniez une partie.',
+        ],
+        'page_expired' => [
+            'title' => 'Page expirée',
+            'description' => 'La page a expiré faute d’activité récente. Recommencez votre dernière action.',
+        ],
+        'too_many_requests' => [
+            'title' => 'Trop de demandes',
+            'description' => 'Trop de demandes en peu de temps. Patientez quelques instants avant de réessayer.',
+        ],
+        'server_error' => [
+            'title' => 'Erreur du serveur',
+            'description' => 'Une erreur inattendue est survenue de notre côté. Réessayez dans un instant.',
+        ],
+        'service_unavailable' => [
+            'title' => 'Service indisponible',
+            'description' => 'Le site est momentanément indisponible, sans doute le temps d’une mise à jour. Réessayez un peu plus tard.',
+        ],
+    ],
+
     'language' => [
         'change' => 'Changer de langue',
         'current' => 'Langue actuelle : :language',

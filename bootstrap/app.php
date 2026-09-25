@@ -11,6 +11,7 @@ use App\Http\Middleware\RobotsDirectives;
 use App\Http\Middleware\SelectTranslationDomains;
 use App\Http\Middleware\SetLocale;
 use App\Http\Middleware\VaryOnLanguage;
+use App\Support\Http\ErrorPageResponder;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -18,6 +19,8 @@ use Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Support\Facades\Route;
+use Inertia\ExceptionResponse;
+use Inertia\Inertia;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -116,7 +119,20 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
+        // Une seule règle « attend du JSON », partagée avec le rendu des pages
+        // d'erreur ci-dessous : une requête qui l'attend reçoit toujours du
+        // JSON, jamais la page `error` (spec 90 § 4.8).
         $exceptions->shouldRenderJsonWhen(
-            fn (Request $request) => $request->is('api/*') || $request->expectsJson(),
+            fn (Request $request) => ErrorPageResponder::expectsJson($request),
+        );
+
+        // Pages d'erreur traduites, HORS mode debug (spec 90 § 4.8) : `error`
+        // côté joueur, `admin/error` quand le back-office avait sélectionné son
+        // domaine, retour arrière avec message sur une page expirée en visite
+        // Inertia. La locale, le domaine `legal` et l'apparence du visiteur y
+        // sont résolus par le gestionnaire lui-même : la plupart des erreurs
+        // naissent avant `SetLocale` et `HandleInertiaRequests`.
+        Inertia::handleExceptionsUsing(
+            fn (ExceptionResponse $response) => app(ErrorPageResponder::class)($response),
         );
     })->create();

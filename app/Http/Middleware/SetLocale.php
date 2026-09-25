@@ -31,6 +31,11 @@ use Symfony\Component\HttpFoundation\Response;
  * `LocaleUpdated` qui s'en charge, pour que la bascule s'applique aussi dans
  * un job de mail en file, où aucun middleware HTTP ne tourne.
  *
+ * La chaîne elle-même est exposée, **sans effet de bord**, par
+ * {@see self::resolve()} (spec 05 § Négociation, 90 § 4.8) : le rendu des pages
+ * d'erreur la réemploie, parce que les erreurs les plus fréquentes naissent
+ * avant que ce middleware ne s'exécute.
+ *
  * **Aucune valeur d'origine utilisateur n'atteint `App::setLocale()` sans
  * passer par `Locale::tryFrom()`** : une locale construit des chemins de
  * fichiers.
@@ -42,27 +47,61 @@ class SetLocale
     /**
      * Handle an incoming request.
      *
+     * Seul lieu des deux effets : la pose de la locale et, après une
+     * négociation, celle du cookie qui la rend collante.
+     *
      * @param  Closure(Request): (Response)  $next
      */
     public function handle(Request $request, Closure $next): Response
     {
-        $locale = $this->fromUser($request)
-            ?? LocaleCookie::read($request)
-            ?? $this->playerToken->fromRequest($request);
+        [$locale, $negotiated] = $this->resolution($request);
 
-        if (! $locale instanceof Locale) {
-            $negotiated = $this->fromAcceptLanguage($request->header('Accept-Language'));
-
-            if ($negotiated instanceof Locale) {
-                LocaleCookie::queue($negotiated);
-            }
-
-            $locale = $negotiated ?? Translations::fallback();
+        if ($negotiated) {
+            LocaleCookie::queue($locale);
         }
 
         App::setLocale($locale->value);
 
         return $next($request);
+    }
+
+    /**
+     * La locale de la requête, par la chaîne de résolution de ce middleware,
+     * **sans effet de bord** : ni `App::setLocale()`, ni cookie mis en file.
+     *
+     * Réemployée par le rendu des pages d'erreur (spec 90 § 4.8), où la
+     * requête n'a pas forcément traversé le groupe `web` : pour une URL
+     * inconnue, ni session ni cookie chiffré ne sont lisibles, et la
+     * résolution retombe sur le cookie `locale` (en clair), puis
+     * `Accept-Language`, puis la locale de repli. Chaque niveau rend `null`
+     * sur une valeur illisible, jamais une exception.
+     */
+    public function resolve(Request $request): Locale
+    {
+        return $this->resolution($request)[0];
+    }
+
+    /**
+     * La chaîne de résolution, et si la locale vient de la négociation — seul
+     * cas où `handle()` repose le cookie.
+     *
+     * @return array{0: Locale, 1: bool}
+     */
+    private function resolution(Request $request): array
+    {
+        $stored = $this->fromUser($request)
+            ?? LocaleCookie::read($request)
+            ?? $this->playerToken->fromRequest($request);
+
+        if ($stored instanceof Locale) {
+            return [$stored, false];
+        }
+
+        $negotiated = $this->fromAcceptLanguage($request->header('Accept-Language'));
+
+        return $negotiated instanceof Locale
+            ? [$negotiated, true]
+            : [Translations::fallback(), false];
     }
 
     /** Niveau 1. */
