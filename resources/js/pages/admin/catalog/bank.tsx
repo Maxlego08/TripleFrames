@@ -38,6 +38,11 @@ import type {
 } from '@/components/admin/frame-gesture-dialog';
 import { GameConditionsPreview } from '@/components/admin/game-conditions-preview';
 import { FRAME_LEVEL_KEYS, LevelPicker } from '@/components/admin/level-picker';
+import {
+    PublishButton,
+    PublishDialog,
+    usePublicationPreview,
+} from '@/components/admin/publish-dialog';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import {
@@ -72,6 +77,7 @@ import type {
     AdminBankMovie,
     AdminFrameLimits,
     AdminMovieFrame,
+    AdminPublicationPreview,
     AdminSequencePreview,
     AdminUnpublishPreview,
     ContentFlag,
@@ -90,6 +96,8 @@ type Props = {
     abilities: AdminBankAbilities;
     /** Prop facultative : servie au seul rechargement qui la demande. */
     unpublish_preview?: AdminUnpublishPreview | null;
+    /** Prop facultative : l'aperçu d'ambiguïté, au rechargement qui ouvre la publication. */
+    publication_preview?: AdminPublicationPreview;
     /** Prop différée : absente tant que TMDB n'a pas répondu. */
     backdrops?: AdminBackdropSet;
 };
@@ -163,8 +171,10 @@ type SequenceMask = 'in_play' | 'after_review';
  *   intégralement opérable par ses boutons et le clavier sans eux
  *   (principe 8) : ils sont hors de la barre « terminé ».
  *
- * « Publier le film » et « Film suivant » rejoignent le pied avec les lots
- * L20-13 et L20-15.
+ * - **Publier le film** (lot L20-13), au pied : actif quand le film est
+ *   publiable, sinon inactif avec la condition manquante nommée ; la
+ *   confirmation montre d'abord l'avertissement nominatif d'ambiguïté
+ *   (spec 20 § 8.1, § 8.2). « Film suivant » rejoint le pied avec L20-15.
  */
 export default function AdminCatalogBank({
     movie,
@@ -175,12 +185,19 @@ export default function AdminCatalogBank({
     sequencePreview,
     abilities,
     unpublish_preview,
+    publication_preview,
     backdrops,
 }: Props) {
     const { t } = useTranslations();
     const gridRef = useRef<BackdropGridHandle>(null);
     const bankRef = useRef<HTMLDivElement>(null);
     const gestureTriggerRef = useRef<HTMLElement | null>(null);
+
+    // La publication du film, au pied (lot L20-13).
+    const [publishing, setPublishing] = useState(false);
+    const publishTriggerRef = useRef<HTMLElement | null>(null);
+    const footerRef = useRef<HTMLDivElement>(null);
+    const publicationPreview = usePublicationPreview();
 
     // Zone 2 : le visuel ouvert dans le cadre, et son niveau.
     const [opened, setOpened] = useState<OpenedVisual | null>(null);
@@ -437,6 +454,33 @@ export default function AdminCatalogBank({
             trigger.focus();
         } else {
             bankRef.current?.focus();
+        }
+    }
+
+    /**
+     * « Publier le film » : l'avertissement d'ambiguïté est demandé à
+     * l'ouverture, avant tout envoi (spec 20 § 8.2).
+     */
+    function openPublish(): void {
+        publishTriggerRef.current =
+            document.activeElement instanceof HTMLElement
+                ? document.activeElement
+                : null;
+        setPublishing(true);
+        publicationPreview.request();
+    }
+
+    /**
+     * Un film publié n'a plus de bouton « Publier » : le focus revient alors
+     * au pied lui-même, jamais au document.
+     */
+    function returnPublishFocus(): void {
+        const trigger = publishTriggerRef.current;
+
+        if (trigger !== null && trigger.isConnected) {
+            trigger.focus();
+        } else {
+            footerRef.current?.focus();
         }
     }
 
@@ -903,18 +947,32 @@ export default function AdminCatalogBank({
                     </CardHeader>
                     <CardContent className="space-y-4">
                         <ShortcutReminder />
-                        <Alert
-                            variant={publishable ? 'default' : 'destructive'}
+                        <div
+                            ref={footerRef}
+                            tabIndex={-1}
+                            className="space-y-4 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring"
                         >
-                            <AlertTitle>
-                                {t(
-                                    publishabilityKey(
-                                        movie.content_flag,
-                                        movie.coverage.covers_publishable,
-                                    ),
-                                )}
-                            </AlertTitle>
-                        </Alert>
+                            <Alert
+                                variant={
+                                    publishable ? 'default' : 'destructive'
+                                }
+                            >
+                                <AlertTitle>
+                                    {t(
+                                        publishabilityKey(
+                                            movie.content_flag,
+                                            movie.coverage.covers_publishable,
+                                        ),
+                                    )}
+                                </AlertTitle>
+                            </Alert>
+                            {abilities.publish && (
+                                <PublishButton
+                                    publication={movie.publication}
+                                    onOpen={openPublish}
+                                />
+                            )}
+                        </div>
                         <Button variant="outline" size="sm" asChild>
                             <Link href={catalogShow(movie.id)}>
                                 <ArrowLeftIcon aria-hidden />
@@ -937,6 +995,18 @@ export default function AdminCatalogBank({
                 }}
                 onClose={() => setGesture(null)}
                 onReturnFocus={returnGestureFocus}
+            />
+
+            <PublishDialog
+                open={publishing}
+                movieId={movie.id}
+                first={movie.publication.first}
+                preview={publication_preview}
+                status={publicationPreview.status}
+                onRetryPreview={publicationPreview.request}
+                only={BANK_WRITE_PROPS}
+                onClose={() => setPublishing(false)}
+                onReturnFocus={returnPublishFocus}
             />
         </>
     );

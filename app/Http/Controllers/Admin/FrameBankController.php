@@ -2,11 +2,13 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Actions\Curation\PublishMovie;
 use App\Http\Controllers\Controller;
 use App\Models\Frame;
 use App\Models\Movie;
 use App\Settings\PlatformLimits;
 use App\Support\Admin\AdminCatalogPresenter;
+use App\Support\Catalog\AmbiguityPreview;
 use App\Support\Curation\CoverageLossPreview;
 use App\Support\Curation\FrameBankSnapshot;
 use App\Support\Frames\FrameGeometry;
@@ -49,6 +51,9 @@ use Inertia\Response;
  * `unpublish_preview` est une prop FACULTATIVE, calculée au seul rechargement
  * partiel qui ouvre la confirmation d'un geste faisant sortir une image du
  * jeu (§ 5.7, § 8.4) : l'image visée est désignée par `preview_frame`.
+ * `publication_preview` aussi, au rechargement qui ouvre la confirmation de
+ * « Publier le film » (§ 8.1, § 8.2) : l'aperçu d'ambiguïté, en lecture
+ * seule, dont l'empreinte repart avec la publication (lot L20-13).
  *
  * Seul endroit, avec l'ajout d'une image, où le back-office parle à TMDB
  * (`TmdbBoundaryTest`) ; aucun DTO `App\Support\Tmdb` ne quitte ce
@@ -87,8 +92,13 @@ class FrameBankController extends Controller
     /**
      * L'éditeur. Aucune écriture, aucun appel TMDB avant l'affichage.
      */
-    public function show(Request $request, Movie $movie, TmdbClient $tmdb, CoverageLossPreview $coverageLoss): Response
-    {
+    public function show(
+        Request $request,
+        Movie $movie,
+        TmdbClient $tmdb,
+        CoverageLossPreview $coverageLoss,
+        AmbiguityPreview $ambiguity,
+    ): Response {
         $bank = new FrameBankSnapshot($movie);
 
         return Inertia::render('admin/catalog/bank', [
@@ -104,19 +114,24 @@ class FrameBankController extends Controller
             ],
             'captureEnabled' => Config::boolean('catalog.curation.capture_enabled', false),
             'pollSeconds' => Config::integer('catalog.curation.poll_seconds'),
-            // Ne sert qu'à masquer un bouton : l'ajout garde sa propre policy
-            // à l'écriture (§ 2.1).
+            // Ne sert qu'à masquer un bouton : l'ajout et la publication
+            // gardent leur propre policy à l'écriture (§ 2.1).
             'abilities' => fn (): array => [
                 'createFrame' => Gate::allows('create', [Frame::class, $movie]),
+                'publish' => Gate::allows('publish', $movie),
             ],
             'unpublish_preview' => Inertia::optional(fn (): ?array => $this->unpublishPreview($request, $movie, $coverageLoss)),
+            'publication_preview' => Inertia::optional(fn (): array => $ambiguity->forPublication($movie)->toArray()),
             'backdrops' => Inertia::defer(fn (): array => $this->backdrops($tmdb, $bank)),
         ]);
     }
 
     /**
-     * Le film : identité, disponibilité, drapeau, couverture (§ 6.1), et
-     * l'état « le traitement d'arrière-plan ne répond pas » (§ 13.5).
+     * Le film : identité, disponibilité, drapeau, couverture (§ 6.1),
+     * l'état « le traitement d'arrière-plan ne répond pas » (§ 13.5), et les
+     * conditions de publication qui manquent — le pied de l'éditeur les nomme
+     * sous « Publier le film » (§ 8.1). Rechargées avec le film, par le
+     * sondage comme après chaque écriture.
      *
      * @return array<string, mixed>
      */
@@ -139,6 +154,7 @@ class FrameBankController extends Controller
                 Date::now()->toImmutable(),
                 Config::integer('catalog.curation.stale_pending_minutes'),
             ),
+            'publication' => PublishMovie::conditions($movie, $bank->projection()),
         ];
     }
 

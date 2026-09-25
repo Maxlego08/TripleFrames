@@ -134,6 +134,10 @@ return [
         'error' => 'Ces données n’ont pas pu être rechargées.',
         'read_only' => 'Lecture seule',
         'deleted_account' => 'Auteur supprimé',
+        'cancel' => 'Annuler',
+        // Motif obligatoire d'un geste consigné au journal (C14) : l'envoi
+        // reste inactif tant qu'il est vide, et ce texte dit pourquoi.
+        'reason_required' => 'Saisissez un motif : il est inscrit tel quel au journal d’administration et sur la fiche du film.',
         // Déconnexion ou erreur réseau pendant une visite : rien n'est parti,
         // et le formulaire reste tel quel (spec 20 § 6.8, § 13.5).
         'offline' => 'Connexion perdue : rien n’a été envoyé et votre saisie est conservée. Vérifiez votre réseau, puis réessayez.',
@@ -453,7 +457,7 @@ return [
         'title' => 'Fiche film',
         'heading' => 'Fiche film',
         'back' => 'Retour au catalogue',
-        'read_only_notice' => 'Fiche en lecture seule. Les images du film se curent dans l’éditeur de la banque d’images.',
+        'read_only_notice' => 'Les images du film se curent dans l’éditeur de la banque d’images. Le film se publie ici ou depuis l’éditeur, et se dépublie ou s’écarte ici.',
         'curate' => 'Curer les images',
 
         'tabs' => [
@@ -604,6 +608,110 @@ return [
             'curated_by' => 'Curé par',
             'not_curated' => 'Jamais curé',
             'active_seconds' => 'Temps actif de curation (secondes)',
+        ],
+
+        /*
+        | Gestes de la fiche (spec 20 § 4.3) : `heading` nomme le groupe de
+        | boutons du bandeau de disponibilité.
+        */
+        'gestures' => [
+            'heading' => 'Gestes sur le film',
+            'none' => 'Aucun geste de curation n’est possible sur ce film dans son état actuel.',
+        ],
+
+        /*
+        | Publier ou republier un film (spec 20 § 8.1, § 8.2) — un geste
+        | explicite, derrière une confirmation qui montre d'abord l'aperçu
+        | d'ambiguïté. `content_not_clear`, `coverage_missing` (`:levels`, les
+        | niveaux exigés sans image en jeu) et `not_guessable` nomment la
+        | condition manquante sous le bouton inactif ET motivent le refus du
+        | serveur ; `preview_stale`, le refus d'une confirmation dont
+        | l'avertissement a changé entre-temps.
+        |
+        | `preview.line` : `:form` la forme normalisée, `:kinds` sa nature pour
+        | ce film, `:movies` les films publiés qui la portent aussi, chacun
+        | rendu par `preview.movie` (`:title`, `:year`, `:kind`) et joints par
+        | `common.list_separator`. `preview.kind.*` : une feuille par nature de
+        | clé de réponse, en minuscules, composée dans ces phrases.
+        */
+        'publish' => [
+            'action' => 'Publier le film',
+            'action_republish' => 'Republier le film',
+            'blocked_heading' => 'Pas encore publiable :',
+            'title' => 'Publier le film',
+            'title_republish' => 'Republier le film',
+            'description' => 'Le film entre au vivier : toute partie lancée ensuite pourra le tirer, à chaque nombre d’images par manche que sa banque couvre. Une partie déjà en cours n’est pas touchée.',
+            'submit' => 'Publier le film',
+            'submit_republish' => 'Republier le film',
+            'content_not_clear' => 'Le contenu du film n’est pas vérifié comme libre de toute classification restrictive : un film « à vérifier » se débloque par « Contenu vérifié » sur sa fiche ; un film bloqué ne se publie jamais.',
+            'coverage_missing' => 'Niveaux sans image en jeu : :levels. Chacun des niveaux 1, 3 et 5 doit avoir au moins une image publiée par une revue conforme.',
+            'not_guessable' => 'Aucun titre de ce film ne peut se saisir comme réponse : ni son titre original, ni ses titres, ni ses alias ne contiennent de lettre ou de chiffre. Donnez-lui un titre ou un alias lisible avant de le publier.',
+            'preview_stale' => 'Le catalogue a changé depuis l’affichage de l’avertissement : rien n’a été publié. Relisez l’avertissement mis à jour, puis confirmez de nouveau.',
+            'preview' => [
+                'heading' => 'Formes rendues ambiguës',
+                'description' => 'Un préfixe ou un sous-titre porté par plusieurs films publiés n’est plus accepté seul comme réponse, pour aucun d’eux. Les titres complets et les alias restent toujours acceptés.',
+                'loading' => 'Calcul de l’avertissement d’ambiguïté…',
+                'failed' => 'L’avertissement d’ambiguïté n’a pas pu être calculé : réessayez avant de confirmer.',
+                'none' => 'Aucune forme ne deviendra ambiguë.',
+                'line' => '« :form » — :kinds de ce film, porté aussi par : :movies',
+                'movie' => ':title (:year), :kind',
+                'movie_without_year' => ':title, :kind',
+                'kind' => [
+                    'title_original' => 'titre original',
+                    'title_latin' => 'titre translittéré',
+                    'title' => 'titre',
+                    'alias' => 'alias',
+                    'prefix' => 'préfixe',
+                    'subtitle' => 'sous-titre',
+                ],
+            ],
+            'flash' => [
+                'published' => 'Film publié : il entre au vivier des parties lancées désormais.',
+                'republished' => 'Film republié : il revient au vivier des parties lancées désormais.',
+            ],
+        ],
+
+        /*
+        | Dépublier un film publié (spec 20 § 8.3) : motif obligatoire, les
+        | images restent publiées.
+        */
+        'unpublish' => [
+            'action' => 'Dépublier le film',
+            'title' => 'Dépublier le film',
+            'description' => 'Le film sort du vivier : aucune partie lancée ensuite ne le tirera. Ses images restent publiées, et une partie en cours le termine normalement. Une republication le remettra en jeu.',
+            'reason' => 'Motif de la dépublication',
+            'submit' => 'Dépublier le film',
+            'flash' => 'Film dépublié : il sort du vivier des parties lancées désormais.',
+        ],
+
+        /*
+        | Écarter un brouillon incurable (spec 20 § 4.2) : dépublier un film
+        | jamais publié. `default_reason` pré-remplit le motif, modifiable.
+        */
+        'set_aside' => [
+            'action' => 'Écarter le film',
+            'title' => 'Écarter le film',
+            'description' => 'Le film sort de la file de curation sans être publié. Rien n’est perdu : curé puis publié plus tard, il fera sa première publication.',
+            'reason' => 'Motif de la mise à l’écart',
+            'default_reason' => 'Aucun visuel TMDB exploitable',
+            'submit' => 'Écarter le film',
+            'flash' => 'Film écarté : il sort de la file de curation.',
+        ],
+
+        /*
+        | Coche « contenu vérifié, pas de classification restrictive » (spec 20
+        | § 4.4) : motif obligatoire, pas de décoche. Un contenu bloqué ne se
+        | lève par aucun geste (décision 12) : aucun bouton ne le propose, et
+        | `blocked_notice` le dit à la place du bouton.
+        */
+        'content_verified' => [
+            'action' => 'Contenu vérifié',
+            'title' => 'Contenu vérifié, pas de classification restrictive',
+            'description' => 'Vous déclarez avoir vérifié qu’aucune classification restrictive — France -18, États-Unis NC-17 ou X — ne frappe ce film. La coche ne se retire pas : si elle se révèle fausse, dépubliez le film.',
+            'reason' => 'Ce que vous avez vérifié',
+            'submit' => 'Confirmer la vérification',
+            'blocked_notice' => 'Contenu bloqué par une classification restrictive : ce film n’entrera jamais au vivier, et aucun geste ne lève ce blocage.',
+            'flash' => 'Contenu vérifié : cette condition de publication est levée.',
         ],
     ],
 

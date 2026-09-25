@@ -367,11 +367,78 @@ export type AdminBankMovie = {
     has_pending: boolean;
     /** Une image attend son rendu au-delà du délai configuré. */
     processing_stalled: boolean;
+    /** Les conditions de publication qui manquent (spec 20 § 8.1). */
+    publication: AdminPublication;
 };
 
 /** Booléens d'affichage seulement : chaque écriture garde sa policy. */
 export type AdminBankAbilities = {
     createFrame: boolean;
+    publish: boolean;
+};
+
+/**
+ * Une condition de publication qui manque — miroir des constantes de
+ * `App\Actions\Curation\PublishMovie` (spec 20 § 8.1). Chacune a sa clé
+ * `admin.movie.publish.{blocker}`, qui nomme la condition sous le bouton
+ * inactif ET motive le refus du serveur.
+ */
+export type AdminPublicationBlocker =
+    | 'content_not_clear'
+    | 'coverage_missing'
+    | 'not_guessable';
+
+/**
+ * Les conditions de publication d'un film, lues par `PublishMovie::conditions()`
+ * — la même lecture que la garde, rejouée sous verrou. Elles ne servent qu'à
+ * nommer la condition manquante : la publication garde sa policy et ses
+ * gardes à l'écriture.
+ */
+export type AdminPublication = {
+    /** La prochaine publication serait la première (`movie.published`), sinon une republication. */
+    first: boolean;
+    /** Vide : le film est publiable. */
+    blockers: AdminPublicationBlocker[];
+    /** Les niveaux exigés (1, 3, 5) sans image en jeu, croissants. */
+    missing_levels: FrameLevel[];
+};
+
+/** Nature d'une clé de réponse — miroir de `App\Enums\AnswerKeyKind`. */
+export type AnswerKeyKind =
+    | 'title_original'
+    | 'title_latin'
+    | 'title'
+    | 'alias'
+    | 'prefix'
+    | 'subtitle';
+
+/** Un film publié qui porte aussi la forme, et sous quelle nature. */
+export type AdminAmbiguityMovie = {
+    id: number;
+    title_original: string;
+    release_year: number | null;
+    kind: AnswerKeyKind;
+};
+
+/**
+ * Une forme que la publication rendra ambiguë (spec 20 § 8.2) : la forme
+ * normalisée, sa nature pour CE film, et les films publiés qui la portent.
+ */
+export type AdminAmbiguityLine = {
+    form: string;
+    kinds: AnswerKeyKind[];
+    movies: AdminAmbiguityMovie[];
+};
+
+/**
+ * L'aperçu d'ambiguïté, servi au rechargement partiel qui ouvre la
+ * confirmation de publication — `AmbiguityReport::toArray()`. `digest`
+ * repart avec la publication : un catalogue changé entre-temps la fait
+ * refuser, et l'aperçu se réaffiche.
+ */
+export type AdminPublicationPreview = {
+    lines: AdminAmbiguityLine[];
+    digest: string;
 };
 
 /**
@@ -447,6 +514,9 @@ export type AdminReviewQueue = Record<AdminReviewList, AdminReviewGroup[]>;
 /** Les gestes de la fiche film, pour l'affichage seulement. */
 export type AdminMovieAbilities = {
     curate: boolean;
+    publish: boolean;
+    unpublish: boolean;
+    verifyContent: boolean;
 };
 
 export type AdminImportRunRow = {

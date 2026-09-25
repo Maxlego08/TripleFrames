@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Actions\Curation\PublishMovie;
 use App\Enums\ContentAvailability;
 use App\Enums\ContentFlag;
 use App\Enums\ImportSource;
@@ -15,19 +16,22 @@ use App\Models\MovieTheme;
 use App\Models\MovieTitle;
 use App\Models\MovieTmdbTag;
 use App\Support\Admin\AdminCatalogPresenter;
+use App\Support\Catalog\AmbiguityPreview;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
 use Inertia\Response;
 
 /**
- * Le catalogue, en **lecture seule**.
+ * Le catalogue et la fiche d'un film, **en lecture** : aucune méthode
+ * d'écriture ici.
  *
- * Publier, dépublier, suspendre, retirer, corriger un titre, cocher « contenu
- * vérifié » : chacun de ces gestes a son propre seuil — curateur pour la
- * publication, administrateur seul pour la suspension et le retrait juridique —
- * et tous sont tranchés par la spec 20. Aucune méthode d'écriture n'est écrite
- * ici, et aucune policy fantôme ne les annonce.
+ * Publier, dépublier, écarter, cocher « contenu vérifié » (spec 20 § 4.3,
+ * § 4.4, § 8), puis corriger un titre, suspendre ou retirer : chacun de ces
+ * gestes a sa propre route, son contrôleur et son seuil — curateur pour la
+ * publication, administrateur seul pour la suspension et le retrait
+ * juridique. La fiche n'en envoie que les booléens `abilities`, qui masquent
+ * un bouton et n'autorisent rien.
  *
  * La liste est **paginée et jointe**, jamais chargée puis filtrée en PHP, et
  * elle ne fait jamais N+1 : la projection de chaque film est chargée d'avance
@@ -82,7 +86,7 @@ class CatalogController extends Controller
      * de fichier ne quitte le serveur** — la banque d'images n'expose que
      * niveau, disponibilité et état de traitement (§ 10).
      */
-    public function show(Movie $movie): Response
+    public function show(Movie $movie, AmbiguityPreview $ambiguity): Response
     {
         $movie->load([
             'projection',
@@ -109,12 +113,25 @@ class CatalogController extends Controller
             'import_run' => $movie->importRun === null
                 ? null
                 : AdminCatalogPresenter::importRunRow($movie->importRun),
+            // Les conditions de publication, pour le bouton « Publier le film »,
+            // inactif avec la condition manquante nommée (§ 8.1) : la même
+            // lecture que la garde de `PublishMovie`, qui la rejoue sous verrou.
+            'publication' => PublishMovie::conditions($movie, $projection),
+            // L'aperçu d'ambiguïté, servi au seul rechargement partiel qui
+            // ouvre la confirmation de publication (§ 8.2) : en lecture seule,
+            // et son empreinte repart avec la publication.
+            'publication_preview' => Inertia::optional(
+                fn (): array => $ambiguity->forPublication($movie)->toArray(),
+            ),
             // Ne sert qu'à afficher un bouton (spec 20 § 4.3) : chaque geste
             // garde sa policy à l'écriture. Le lien « Curer » mène à
-            // l'éditeur de la banque ; les autres gestes de la fiche arrivent
-            // avec leurs lots.
+            // l'éditeur de la banque ; titres, alias et regroupement arrivent
+            // avec leur lot (L20-14), les gestes administrateur au jalon 2.
             'abilities' => [
                 'curate' => Gate::allows('curate', $movie),
+                'publish' => Gate::allows('publish', $movie),
+                'unpublish' => Gate::allows('unpublish', $movie),
+                'verifyContent' => Gate::allows('verifyContent', $movie),
             ],
         ]);
     }

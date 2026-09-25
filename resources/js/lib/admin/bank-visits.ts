@@ -1,7 +1,7 @@
 /**
  * Les props qu'une ÉCRITURE de l'éditeur de la banque d'images recharge
  * (spec 20 § 6.1) : ajout, relance, re-recadrage, changement de niveau,
- * dépublication ou mise à l'écart.
+ * dépublication ou mise à l'écart d'une image, publication du film.
  *
  * Chaque écriture revient sur l'éditeur par une redirection. Cette visite
  * doit être PARTIELLE et nommer `backdrops` :
@@ -17,8 +17,9 @@
  *
  * Les en-têtes de la visite partielle suivent la redirection : le GET qui
  * rend l'éditeur est partiel lui aussi. `abilities` suit l'état du film (une
- * suspension retire l'ajout) ; `limits`, `captureEnabled` et `pollSeconds`
- * ne changent pas d'une écriture à l'autre.
+ * suspension retire l'ajout, une publication retire « Publier le film »), et
+ * `movie` porte ses conditions de publication ; `limits`, `captureEnabled` et
+ * `pollSeconds` ne changent pas d'une écriture à l'autre.
  */
 export const BANK_WRITE_PROPS: string[] = [
     'frames',

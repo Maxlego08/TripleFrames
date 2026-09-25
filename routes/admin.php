@@ -16,6 +16,9 @@ use App\Http\Controllers\Admin\ImportController;
 use App\Http\Controllers\Admin\ImportDiscoverController;
 use App\Http\Controllers\Admin\ImportIdsController;
 use App\Http\Controllers\Admin\ImportResumeController;
+use App\Http\Controllers\Admin\MovieContentVerifiedController;
+use App\Http\Controllers\Admin\MoviePublishController;
+use App\Http\Controllers\Admin\MovieUnpublishController;
 use App\Http\Controllers\Admin\TwoFactorRequiredController;
 use App\Models\Frame;
 use App\Models\FrameReview;
@@ -77,7 +80,8 @@ use Illuminate\Support\Facades\Route;
 | ou distribuent un job Imagick — ajout, re-recadrage, relance —
 | `throttle:admin-frame` (C9 § 2) ; les gestes de curation qui n'écrivent
 | qu'en base — changer un niveau, passer une revue, dépublier ou écarter
-| une image — `throttle:admin-curation` (§ 13.7). Limiteurs nommés déclarés dans
+| une image, publier, dépublier ou écarter un film, cocher son contenu
+| vérifié — `throttle:admin-curation` (§ 13.7). Limiteurs nommés déclarés dans
 | `FortifyServiceProvider::configureRateLimiting()`, là où vivent déjà
 | `login`, `two-factor` et `passkeys`.
 |
@@ -111,6 +115,29 @@ Route::middleware(['auth', 'verified', 'role:curator', 'admin.2fa', 'admin.local
         Route::get('catalog/{movie}', [CatalogController::class, 'show'])
             ->middleware('can:view,movie')
             ->name('catalog.show');
+
+        // Publier ou republier un film (§ 8.1, ligne 19) : un geste explicite,
+        // derrière une confirmation qui montre d'abord l'aperçu d'ambiguïté et
+        // en poste l'empreinte (§ 8.2). La garde porte l'état — brouillon,
+        // dépublié ou écarté — ; contenu, couverture, devinabilité et aperçu
+        // périmé sont des erreurs traduites relues sous le verrou, jamais des
+        // 403.
+        Route::post('catalog/{movie}/publish', [MoviePublishController::class, 'store'])
+            ->middleware(['can:publish,movie', 'throttle:admin-curation'])
+            ->name('catalog.publish');
+
+        // Dépublier un film publié, ou écarter un brouillon (§ 8.3, § 4.2,
+        // ligne 20) : motif obligatoire, les images restent publiées.
+        Route::post('catalog/{movie}/unpublish', [MovieUnpublishController::class, 'store'])
+            ->middleware(['can:unpublish,movie', 'throttle:admin-curation'])
+            ->name('catalog.unpublish');
+
+        // Cocher « contenu vérifié » (§ 4.4, ligne 21) : un film
+        // `unrated_pending` seulement, motif obligatoire. Aucune route ne
+        // décoche, aucune ne lève `blocked` (décision 12).
+        Route::post('catalog/{movie}/content-verified', [MovieContentVerifiedController::class, 'store'])
+            ->middleware(['can:verifyContent,movie', 'throttle:admin-curation'])
+            ->name('catalog.content_verified');
 
         // L'éditeur de la banque d'images (§ 6, ligne 4) : `MoviePolicy::curate`,
         // refusé sur un film retiré. Il n'écrit rien : chaque geste qu'il

@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\ContentFlag;
 use App\Enums\FrameLevel;
 use App\Models\Frame;
 use App\Models\FrameReview;
@@ -7,11 +8,14 @@ use App\Models\ImportRun;
 use App\Models\Movie;
 use App\Models\User;
 use App\Settings\PlatformLimits;
+use App\Support\Catalog\AmbiguityPreview;
+use App\Support\Catalog\AnswerKeyProjector;
 use App\Support\Curation\ExclusionGrid;
 use App\Support\Curation\ReviewQueue;
 use App\Support\Frames\FrameGeometry;
 use Illuminate\Support\Facades\Http;
 use Tests\Fixtures\TmdbFixture;
+use Tests\Support\Frames\FrameBank;
 use Tests\Support\Frames\SourceImages;
 
 /*
@@ -126,6 +130,51 @@ function adminRoutesMatrix(): array
             curator: 200,
             admin: 200,
             parameters: fn (): array => ['movie' => Movie::factory()->withdrawn()->create()->getKey()],
+        ),
+
+        // Ligne 19 — publier un film : un brouillon PUBLIABLE — contenu
+        // vérifié, niveaux 1, 3 et 5 en jeu, clés de réponse projetées — et
+        // l'empreinte de l'aperçu d'ambiguïté que la confirmation montrerait.
+        // Le 302 est la publication elle-même, retour à la fiche.
+        'admin.catalog.publish' => adminRoutesRow(
+            row: 19,
+            method: 'POST',
+            guards: ['can:publish,movie'],
+            curator: 302,
+            admin: 302,
+            parameters: fn (): array => adminRoutesPublishableParameters(),
+            payload: fn (): array => [
+                'ambiguity_digest' => app(AmbiguityPreview::class)
+                    ->forPublication(Movie::query()->latest('id')->firstOrFail())
+                    ->digest(),
+            ],
+            redirect: fn (array $parameters): string => route('admin.catalog.show', $parameters),
+        ),
+
+        // Ligne 20 — dépublier un film publié (ou écarter un brouillon) :
+        // motif obligatoire.
+        'admin.catalog.unpublish' => adminRoutesRow(
+            row: 20,
+            method: 'POST',
+            guards: ['can:unpublish,movie'],
+            curator: 302,
+            admin: 302,
+            parameters: fn (): array => adminRoutesMovieGestureParameters(Movie::factory()->published()->create()),
+            payload: fn (): array => ['reason' => 'Motif de la matrice.'],
+            redirect: fn (array $parameters): string => route('admin.catalog.show', $parameters),
+        ),
+
+        // Ligne 21 — cocher « contenu vérifié » sur un film dont la
+        // classification reste à vérifier : motif obligatoire.
+        'admin.catalog.content_verified' => adminRoutesRow(
+            row: 21,
+            method: 'POST',
+            guards: ['can:verifyContent,movie'],
+            curator: 302,
+            admin: 302,
+            parameters: fn (): array => adminRoutesMovieGestureParameters(Movie::factory()->create()),
+            payload: fn (): array => ['reason' => 'Motif de la matrice.'],
+            redirect: fn (array $parameters): string => route('admin.catalog.show', $parameters),
         ),
 
         // Ligne 4 — l'éditeur de la banque d'images : `MoviePolicy::curate`,
@@ -352,6 +401,36 @@ function adminRoutesFrameGestureParameters(bool $published, bool $failed = false
     test()->from(route('admin.catalog.show', ['movie' => $movie->id]));
 
     return ['movie' => $movie->id, 'frame' => $frame->id];
+}
+
+/**
+ * Un geste sur un film, posté depuis sa fiche, où le retour arrière mène.
+ *
+ * @return array{movie: int}
+ */
+function adminRoutesMovieGestureParameters(Movie $movie): array
+{
+    test()->from(route('admin.catalog.show', ['movie' => $movie->id]));
+
+    return ['movie' => $movie->id];
+}
+
+/**
+ * Un brouillon publiable (spec 20 § 8.1) : contenu vérifié par la voie d'une
+ * certification non restrictive, une image publiée à chacun des niveaux 1, 3
+ * et 5 — octets sur le disque `frames`, faux pour toute la matrice —, et ses
+ * clés de réponse projetées.
+ *
+ * @return array{movie: int}
+ */
+function adminRoutesPublishableParameters(): array
+{
+    $movie = Movie::factory()->withCertification()->contentFlag(ContentFlag::Clear)->create();
+
+    FrameBank::movieWith($movie, [1, 3, 5]);
+    (new AnswerKeyProjector)->project($movie);
+
+    return adminRoutesMovieGestureParameters($movie);
 }
 
 /**

@@ -1,10 +1,18 @@
-import { Head, Link } from '@inertiajs/react';
+import { Head, Link, router } from '@inertiajs/react';
 import {
     ArrowLeftIcon,
+    ArchiveIcon,
+    EyeOffIcon,
     ExternalLinkIcon,
     ImageOffIcon,
     ImagesIcon,
+    ShieldCheckIcon,
 } from 'lucide-react';
+import { useEffect, useEffectEvent, useRef, useState } from 'react';
+import type { RefObject } from 'react';
+import { toast } from 'sonner';
+import MovieContentVerifiedController from '@/actions/App/Http/Controllers/Admin/MovieContentVerifiedController';
+import MovieUnpublishController from '@/actions/App/Http/Controllers/Admin/MovieUnpublishController';
 import {
     AvailabilityBadge,
     ContentFlagBadge,
@@ -16,6 +24,12 @@ import type { AdminField } from '@/components/admin/admin-field-list';
 import { AdminFieldList } from '@/components/admin/admin-field-list';
 import { AdminPageHeading } from '@/components/admin/admin-page-heading';
 import { AdminLevelDots } from '@/components/admin/admin-stat-tile';
+import {
+    PublishButton,
+    PublishDialog,
+    usePublicationPreview,
+} from '@/components/admin/publish-dialog';
+import { ReasonDialog } from '@/components/admin/reason-dialog';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -66,6 +80,8 @@ import type {
     AdminMovieTag,
     AdminMovieTheme,
     AdminMovieTitle,
+    AdminPublication,
+    AdminPublicationPreview,
     ContentFlag,
 } from '@/types/admin';
 import type { BreadcrumbItem } from '@/types/navigation';
@@ -81,8 +97,17 @@ type Props = {
     themes: AdminMovieTheme[];
     frames: AdminMovieFrameRow[];
     import_run: AdminImportRunRow | null;
+    publication: AdminPublication;
+    /** Prop facultative : servie au seul rechargement qui ouvre la publication. */
+    publication_preview?: AdminPublicationPreview;
     abilities: AdminMovieAbilities;
 };
+
+/** Les gestes de la fiche qui passent par une confirmation (spec 20 § 4.3). */
+type MovieGesture = 'publish' | 'unpublish' | 'set_aside' | 'content_verified';
+
+/** Identifiant du toast de déconnexion : un seul à l'écran, jamais une pile. */
+const OFFLINE_TOAST_ID = 'admin-movie-offline';
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'admin.nav.dashboard', href: adminDashboard() },
@@ -94,7 +119,7 @@ const breadcrumbs: BreadcrumbItem[] = [
 const TMDB_MOVIE_URL = 'https://www.themoviedb.org/movie/';
 
 /**
- * La fiche film — **lecture seule**, en onglets.
+ * La fiche film, en onglets.
  *
  * Le bandeau de disponibilité vit HORS des onglets, et c'est le point de la
  * spec 10 § 3.1 : devant une mise en demeure, la fiche doit se suffire. État,
@@ -106,10 +131,18 @@ const TMDB_MOVIE_URL = 'https://www.themoviedb.org/movie/';
  * manque. Un « non publiable » sec laisserait un curateur cocher le contenu
  * d'un film dont ce sont les images qui manquent.
  *
- * Aucun geste d'écriture n'est offert ici : les images se curent dans
- * l'éditeur de la banque (spec 20 § 6), que le lien « Curer les images »
- * ouvre quand `abilities.curate` le permet — jamais sur un film retiré. Le
- * booléen ne fait que montrer le lien : la route garde sa policy.
+ * **Les gestes sur le film** vivent dans ce bandeau (spec 20 § 4.3, lot
+ * L20-13) : publier ou republier — derrière l'avertissement nominatif
+ * d'ambiguïté (§ 8.2) —, dépublier un film publié, écarter un brouillon,
+ * cocher « contenu vérifié ». Chacun passe par une confirmation, et les trois
+ * derniers exigent un motif (C14). Les booléens `abilities` ne font que
+ * montrer un bouton : chaque route garde sa policy. Un geste réussi peut
+ * faire disparaître son bouton (un film écarté n'a plus « Écarter ») : le
+ * focus revient alors à la zone des gestes, jamais au document.
+ *
+ * Les images se curent dans l'éditeur de la banque (spec 20 § 6), que le lien
+ * « Curer les images » ouvre quand `abilities.curate` le permet — jamais sur
+ * un film retiré. Titres, alias et regroupement arrivent avec le lot L20-14.
  */
 export default function AdminCatalogShow({
     movie,
@@ -121,9 +154,55 @@ export default function AdminCatalogShow({
     themes,
     frames,
     import_run,
+    publication,
+    publication_preview,
     abilities,
 }: Props) {
     const { t, locale } = useTranslations();
+
+    // Les gestes : lequel est ouvert, et d'où il est parti.
+    const [gesture, setGesture] = useState<MovieGesture | null>(null);
+    const triggerRef = useRef<HTMLElement | null>(null);
+    const gesturesRef = useRef<HTMLElement>(null);
+    const preview = usePublicationPreview();
+
+    // Déconnexion ou erreur réseau d'une visite : rien n'est parti, la saisie
+    // reste telle quelle, et le curateur l'apprend (spec 20 § 13.5).
+    const announceOffline = useEffectEvent((): void => {
+        toast.error(t('admin.common.offline'), { id: OFFLINE_TOAST_ID });
+    });
+
+    useEffect(() => router.on('networkError', () => announceOffline()), []);
+
+    function openGesture(next: MovieGesture): void {
+        triggerRef.current =
+            document.activeElement instanceof HTMLElement
+                ? document.activeElement
+                : null;
+        setGesture(next);
+
+        // L'avertissement d'ambiguïté précède toute confirmation (§ 8.2).
+        if (next === 'publish') {
+            preview.request();
+        }
+    }
+
+    /*
+     * À la fermeture d'une confirmation, le focus revient au bouton qui l'a
+     * ouverte ; un geste réussi peut l'avoir fait disparaître — il revient
+     * alors à la zone des gestes, jamais au document.
+     */
+    function returnFocus(): void {
+        const trigger = triggerRef.current;
+
+        if (trigger !== null && trigger.isConnected) {
+            trigger.focus();
+        } else {
+            gesturesRef.current?.focus();
+        }
+    }
+
+    const closeGesture = (): void => setGesture(null);
 
     const genres = tags.filter((tag) => tag.tag_kind === 'genre');
     const companies = tags.filter((tag) => tag.tag_kind === 'company');
@@ -144,9 +223,6 @@ export default function AdminCatalogShow({
                     description={t('admin.movie.read_only_notice')}
                     actions={
                         <>
-                            <Badge variant="outline">
-                                {t('admin.common.read_only')}
-                            </Badge>
                             {abilities.curate && (
                                 <Button size="sm" asChild>
                                     <Link href={bank(movie.id)}>
@@ -263,6 +339,15 @@ export default function AdminCatalogShow({
                                 })}
                             </AlertDescription>
                         </Alert>
+
+                        <MovieGestures
+                            sectionRef={gesturesRef}
+                            availability={movie.availability}
+                            contentFlag={movie.content_flag}
+                            publication={publication}
+                            abilities={abilities}
+                            onOpen={openGesture}
+                        />
                     </CardContent>
                 </Card>
 
@@ -952,11 +1037,168 @@ export default function AdminCatalogShow({
                     </TabsContent>
                 </Tabs>
             </div>
+
+            <PublishDialog
+                open={gesture === 'publish'}
+                movieId={movie.id}
+                first={publication.first}
+                preview={publication_preview}
+                status={preview.status}
+                onRetryPreview={preview.request}
+                onClose={closeGesture}
+                onReturnFocus={returnFocus}
+            />
+
+            <ReasonDialog
+                open={gesture === 'unpublish'}
+                form={MovieUnpublishController.store.form(movie.id)}
+                title={t('admin.movie.unpublish.title')}
+                description={t('admin.movie.unpublish.description')}
+                reasonLabel={t('admin.movie.unpublish.reason')}
+                submitLabel={t('admin.movie.unpublish.submit')}
+                onClose={closeGesture}
+                onReturnFocus={returnFocus}
+            />
+
+            <ReasonDialog
+                open={gesture === 'set_aside'}
+                form={MovieUnpublishController.store.form(movie.id)}
+                title={t('admin.movie.set_aside.title')}
+                description={t('admin.movie.set_aside.description')}
+                reasonLabel={t('admin.movie.set_aside.reason')}
+                defaultReason={t('admin.movie.set_aside.default_reason')}
+                submitLabel={t('admin.movie.set_aside.submit')}
+                onClose={closeGesture}
+                onReturnFocus={returnFocus}
+            />
+
+            <ReasonDialog
+                open={gesture === 'content_verified'}
+                form={MovieContentVerifiedController.store.form(movie.id)}
+                title={t('admin.movie.content_verified.title')}
+                description={t('admin.movie.content_verified.description')}
+                reasonLabel={t('admin.movie.content_verified.reason')}
+                submitLabel={t('admin.movie.content_verified.submit')}
+                onClose={closeGesture}
+                onReturnFocus={returnFocus}
+            />
         </>
     );
 }
 
 AdminCatalogShow.layout = { breadcrumbs };
+
+/**
+ * Les gestes sur le film (spec 20 § 4.3), dans le bandeau de disponibilité :
+ * chacun n'apparaît que si sa policy le permet (`abilities`, affichage
+ * seulement). « Dépublier » vaut pour un film publié, « Écarter » pour un
+ * brouillon — le même geste serveur (§ 4.2, § 8.3). Un contenu bloqué ne se
+ * lève par aucun geste (décision 12) : la zone le dit, sans bouton.
+ *
+ * La zone reçoit le focus quand un geste réussi a fait disparaître son
+ * bouton (`tabIndex={-1}` : hors de l'ordre de tabulation).
+ */
+function MovieGestures({
+    sectionRef,
+    availability,
+    contentFlag,
+    publication,
+    abilities,
+    onOpen,
+}: {
+    sectionRef: RefObject<HTMLElement | null>;
+    availability: AdminMovieDetail['availability'];
+    contentFlag: ContentFlag;
+    publication: AdminPublication;
+    abilities: AdminMovieAbilities;
+    onOpen: (gesture: MovieGesture) => void;
+}) {
+    const { t } = useTranslations();
+
+    const canUnpublish = abilities.unpublish && availability === 'published';
+    const canSetAside = abilities.unpublish && availability === 'draft';
+    const any =
+        abilities.publish ||
+        canUnpublish ||
+        canSetAside ||
+        abilities.verifyContent ||
+        contentFlag === 'blocked';
+
+    return (
+        <section
+            ref={sectionRef}
+            tabIndex={-1}
+            aria-labelledby="movie-gestures-heading"
+            className="space-y-3 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+            <h3
+                id="movie-gestures-heading"
+                className="text-sm font-semibold text-foreground"
+            >
+                {t('admin.movie.gestures.heading')}
+            </h3>
+
+            {contentFlag === 'blocked' && (
+                <p className="text-sm text-muted-foreground">
+                    {t('admin.movie.content_verified.blocked_notice')}
+                </p>
+            )}
+
+            {!any && (
+                <p className="text-sm text-muted-foreground">
+                    {t('admin.movie.gestures.none')}
+                </p>
+            )}
+
+            {any && (
+                <div className="flex flex-wrap items-start gap-3">
+                    {abilities.publish && (
+                        <PublishButton
+                            publication={publication}
+                            onOpen={() => onOpen('publish')}
+                        />
+                    )}
+
+                    {abilities.verifyContent && (
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => onOpen('content_verified')}
+                            className="min-h-11"
+                        >
+                            <ShieldCheckIcon aria-hidden />
+                            {t('admin.movie.content_verified.action')}
+                        </Button>
+                    )}
+
+                    {canUnpublish && (
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => onOpen('unpublish')}
+                            className="min-h-11"
+                        >
+                            <EyeOffIcon aria-hidden />
+                            {t('admin.movie.unpublish.action')}
+                        </Button>
+                    )}
+
+                    {canSetAside && (
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => onOpen('set_aside')}
+                            className="min-h-11"
+                        >
+                            <ArchiveIcon aria-hidden />
+                            {t('admin.movie.set_aside.action')}
+                        </Button>
+                    )}
+                </div>
+            )}
+        </section>
+    );
+}
 
 type Translate = (
     key: TranslationKey,
