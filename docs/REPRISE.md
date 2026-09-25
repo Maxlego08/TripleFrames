@@ -1,6 +1,8 @@
 # Reprise — TripleFrames
 
-**Dernière session : 23/09/2026 — specs du jalon 1 écrites.** `20`, `30`, `50`, `60`, `70` et `80` sont complètes ; `40`, `90` et `100` ont leur section du jalon 1 ; `00`, `05`, `10`, `questions-ouvertes.md` et `CLAUDE.md` sont amendés. Aux 19 décisions du 22/09 s'ajoutent les décisions du 23/09 : **S1 à S4** pour le cadre, **D1 à D37** pour le fond. Le lot 10 (D35 à D37) a fixé le périmètre et le rythme : **jalon 1 complet, sans aucune coupe** ; **développement confié à l'IA** ; **ordre « curation d'abord »**. Aucune ligne de code métier n'a été écrite pendant cette session : la suite est l'implémentation, dans l'ordre donné en annexe.
+**Dernière session : 24-25/09/2026 — phases A et B implémentées (étapes 6 à 25 et 33 à 53), back-office de curation du J1 complet ; phase C en cours.** Les écarts relevés pendant l'implémentation (journal des écarts, entrées « E<étape>-<n> ») sont reportés dans les specs propriétaires, marqués « amendé le 25/09 » ; les gestes du porteur qu'ils ajoutent sont au § 3, ses questions au § 4. Restent dus avant la porte du pilote (56), outre la phase 0 : les étapes 26 à 30, 32, 54 et 55, gestes du porteur ou préparation de la mise en service — amendé le 25/09.
+
+**Session du 23/09/2026 — specs du jalon 1 écrites.** `20`, `30`, `50`, `60`, `70` et `80` sont complètes ; `40`, `90` et `100` ont leur section du jalon 1 ; `00`, `05`, `10`, `questions-ouvertes.md` et `CLAUDE.md` sont amendés. Aux 19 décisions du 22/09 s'ajoutent les décisions du 23/09 : **S1 à S4** pour le cadre, **D1 à D37** pour le fond. Le lot 10 (D35 à D37) a fixé le périmètre et le rythme : **jalon 1 complet, sans aucune coupe** ; **développement confié à l'IA** ; **ordre « curation d'abord »**. Aucune ligne de code métier n'a été écrite pendant cette session : la suite est l'implémentation, dans l'ordre donné en annexe.
 
 Ce fichier dit :
 
@@ -189,6 +191,10 @@ Le développement ne borne plus rien : **ce qui fixe la date de la première vra
 | 5 | **Choisir les fournisseurs UE du J1** : stockage objet de sauvegarde chez un fournisseur **distinct** de l'hébergeur du VPS, supervision externe, second canal d'alerte ; ouvrir les comptes | la sauvegarde active avant la première image curée (30), donc le pilote | 4 |
 | 6 | **Nommer les sous-traitants UE (J2)** : un par catégorie branchée (hébergeur, SMTP, sauvegarde, supervision, second canal, suivi d'erreurs s'il est branché), plus le registrar | la page de confidentialité, donc l'ouverture du J2 | — |
 | 7 | **Commander les textes légaux (J2)** (décision 4). Délai externe de 2 à 6 semaines, **à lancer pendant le J1**. Poser au même conseil la question de la **licéité de la capture** (liste fermée des sources autorisées) | l'ouverture du J2 et la voie capture (L20-33, J2) | 5 |
+| 8 | **Rafraîchir la base de dev** : `php artisan backup:snapshot` (code 0 exigé, règle 12), puis `php artisan migrate:fresh --seed`. La base de dev a joué l'ancienne migration de création de `game_player` et garde `final_rank` en `tinyint` (I-12) ; `migrate:fresh` recrée toute la base, catalogue compris (`10` § 13.2, n° 47, E25-1) — amendé le 25/09 | la parité du schéma de dev avec celui des tests et de la production | tout de suite |
+| 9 | **Nom réel complet du titulaire dans `LICENSE`**. Le fichier a été livré par L100-2 avec le nom d'auteur git (« Maxence »), faute de saisie possible par une porte non interactive ; `LicenseTest` n'écrit aucun nom en dur (`100` § 7.6, E7-6, E7-15) — amendé le 25/09 | tout push vers la forge | avant le premier push |
+| 10 | **Déposer le logo officiel TMDB** dans `public/brand/tmdb.svg` et **dater ses conditions d'usage** dans `public/brand/LICENSE.md` ; dans le même commit, passer sa ligne dans « Actifs livrés » de `THIRD_PARTY_NOTICES.md` (`90` § 3.2 et point resté ouvert n° 13, E15-2) — amendé le 25/09 | la mise en service (27), au plus tard | 27 au plus tard |
+| 11 | **Vérifications manuelles au navigateur**, qu'aucune porte automatisée n'a pu jouer : (a) le back-office **à 375 px** — parcours clavier et affichage de la coquille mobile et d'`admin/two-factor-required` (`20`, L20-2, E18-9) ; (b) le **recadreur au clavier et à la souris sur la vraie page de l'éditeur** (L20-9a, L20-9b, L20-10) ; (c) sur **iOS Safari, l'appui long** sur une image de jeu, qui ne doit ouvrir aucun menu (`-webkit-touch-callout: none`, `90`, L90-6a, E39-6) — amendé le 25/09 | la porte du pilote (56) ; (c) est rejouée à la recette sur appareil réel (127) | avant 56 |
 
 Les autres gestes du chemin humain :
 
@@ -215,7 +221,7 @@ Points secondaires, sans effet sur la date du J1 :
 | Question | Propriétaire | Quand, et ce qu'elle bloque |
 |---|---|---|
 | **Lot 9 non posé**, trois questions : effet de « bannir un pseudo » (`nickname.banned`), preuve du consentement aux données provider, avatar d'un invité qui crée un compte | `40` § 10.2, à poser avec options et recommandation | à l'écriture de `40` J2 ; rien au J1 |
-| Confirmation de la 2FA de `curator` **et** `admin`, et de la dormance (24 mois + 30 jours) | `40` J2 | réversibles jusqu'à la garde `admin.2fa` (L20-2) |
+| Confirmation de la 2FA de `curator` **et** `admin`, et de la dormance (24 mois + 30 jours). La garde `admin.2fa` (L20-2, livrée) applique déjà la 2FA aux deux rôles ; revenir à `admin` seul coûterait une condition dans `EnsurePrivilegedTwoFactor` et ses tests (E18-8) — amendé le 25/09 | `40` J2, `20` | réversible ; rien au J1 |
 | **R-46 — voie capture** : le serveur dérive toujours le dérivé de jeu du master et du rectangle ; le navigateur n'envoie qu'une source normalisée d'au plus 1 536 Ko et un rectangle. Tranché par le rédacteur, **à confirmer par le porteur** | `20` § 5.4 | sans effet au J1 (capture désactivée) |
 | **R-47** — suffixe `.label` des clés de la grille (`admin.exclusion_grid.v{n}.{slug}.label` et `.help`) : écart de forme seulement | `20` § 7.1 | à confirmer ; L20-12 applique la forme de `20` |
 | **Liste fermée des sources autorisées** pour une capture personnelle (licéité, décision 7) | conseil du porteur | bloque L20-33 (J2) ; au J1, voie TMDB seule |
@@ -271,10 +277,37 @@ Points ouverts signalés au porteur dans les sections « Ce que cette spec ne d�
   - dette n° 24 (J2).
 - **`100`** :
   - N100-2 ;
-  - exigences aux specs sœurs, dont la garde d'instantané des imports (I-9) ;
+  - exigences aux specs sœurs, dont la garde d'instantané des imports (I-9, appliquée par L20-16) ;
   - personne de confiance.
 
-L'ordre d'exécution relève aussi des **correctifs de dépendances** (I-1 à I-13, annexe § A.3). Ils sont déjà appliqués dans l'ordre, mais pas encore reportés dans les specs propriétaires. Trois attendent l'accord du porteur : **I-12** (élargir `final_rank` dans la migration de création, étape 25, en option), **I-13** (drainage livré en deux déploiements) et la **règle de branche pendant la curation** (§ A.2).
+**Questions relevées par le report des écarts des phases A et B** (— amendé le 25/09). Chacune est écrite dans la section « Ce que cette spec ne décide pas » de sa spec propriétaire, sous son identifiant `E<étape>-<n>`. Tant qu'aucune n'est arbitrée, **le code livré fait foi** et l'IA applique la lecture retenue quand il y en a une. Aucune ne bloque la phase C avant l'étape indiquée.
+
+| Question | Propriétaire | Quand, et ce qu'elle bloque |
+|---|---|---|
+| **E22-7** — l'audit du plancher ne compte que les frames **corrigibles** (ni `withdrawn` ni sans `game_path`) : lecture de `20` § 5.2, retenue contre la formule littérale de `20` § 5.9, qui laisserait la sonde `integrity` rouge pour toujours après un durcissement du plancher. À ratifier | `20`, `10` § 4.1, `100` | lecture retenue appliquée ; à ratifier avant le calibrage du plancher (59) |
+| **E46-1** — une image **dépubliée puis rejetée** reste pour toujours dans « Rejetées ». (a) l'accepter, **retenu au J1** ; (b) l'exclure de la liste, sa revue devenant impossible ; (c) un geste « laisser hors du jeu », qui ajouterait une colonne ou un cas `admin_action` | `10` § 15, `20` | lecture (a) appliquée ; (c) toucherait le schéma |
+| **E46-8** — une garde `deleting` sur `FrameReview` ? Policy, garde `saving` et `AppendOnlyBuilder` ferment déjà le reste, mais un `$review->delete()` écrit dans le code passe encore | `10` § 15 | aucun lot bloqué |
+| **E24-2** — un index `failed_jobs(failed_at)` avant le J2 ? `failed_at` n'est que la troisième colonne d'un index composite, et `password_reset_tokens.created_at` n'a aucun index. Au J1, aucune migration : tables petites, balayage par lots | `10` § 12 et § 15 | avant le J2 |
+| **E42-10** — annoncer la baisse de `k` d'un film déjà incomplet qui reste jouable ? | `20` | aucun lot bloqué |
+| **E43-2** — la lecture des touches `+`, `-`, `=`, `_` et Maj du recadreur convient-elle ? | `20` | à confirmer à la vérification manuelle du recadreur (§ 3, geste 11) |
+| **E50-2** — une revue rejetée ne fait pas remonter son film dans la file de curation. Faut-il élargir l'ordre ? | `20` | aucun lot bloqué |
+| **E42-8** — une sortie du jeu dans la même seconde qu'une revue passante fait disparaître l'image de toutes les files. Signalé à L20-12, non tranché | `20` | aucun lot bloqué |
+| **E40-6** — les aperçus admin en `<img>` écrivent `_previous.url` et `url.intended` : passer par `fetch`, ou accepter le risque ? Non tranché par L20-10 | `20` | aucun lot bloqué |
+| **E46-12** — le `game_url` de l'éditeur (`bankFrame()`, `sequencePreview`) n'est pas versionné : un rendu refait peut rester affiché sous l'ancienne adresse. Quel marqueur choisir ? | `20` | aucun lot bloqué |
+| **E18-5** — défaut hors lot, non corrigé : `import/show.tsx` affiche `worker_missing` sans le délai de grâce de 60 s | `20` | à corriger ; aucun lot ne le porte |
+| **E36-1** — salon ouvert pendant un déploiement qui **resserre une borne** : (a) le remède `reduce_rounds_count` propose une valeur que l'éditeur refuse (`count > MAX`) — plafonner `value`, ou garder la lecture littérale de `30` § 4.3 ? (b) la garde de `N` de `PoolScope` lève hors bornes et fait échouer l'état du lobby et ses diffusions (`RoomSettingsPresenter::state()`) — tolérer un `N` périmé au lobby, ou garder la garde ? | `30`, `50` point ouvert n° 17 | avant L50-2 (84) |
+| **E9-7** — le test « garde VERSION à 1 tant que FIELDS est inchangé » est livré à la lettre, sans instantané des bornes. Valider la proposition de le renommer | `50` point ouvert n° 8 | aucun lot bloqué |
+| **Constat de l'étape 14** (L40-7) — l'accueil du starter (`welcome.tsx`) montre « Se connecter » et « Créer un compte » à tout invité jusqu'à L90-8 : avancer leur retrait avant la mise en service, ou accepter un lien d'inscription qui mène à une 404 en production ? | `40`, `90` point ouvert n° 14 | avant la mise en service (27) |
+| **E16-3** — quatre affirmations des partiels légaux de L90-4 sont à relire : trois reposent sur des règles pas encore codées (pseudo unique dans un salon, liste noire, source déclarée de chaque image), la quatrième porte sur l'adresse IP en session | `90` point ouvert n° 15, `40` | avant l'ouverture du J2 |
+| **E39-1** — avant qu'une URL d'objet existe, `GameFrame` n'a que `null` et affiche « indisponible » au lieu du chargement : ne monter le cadre qu'une fois l'URL connue, ou ajouter une prop `pending?` (écart consigné à C16 § 2.5) | `60` § 24, `90` point ouvert n° 12 | à trancher par L60-9 (95) |
+| **E10-1** — le retour à Guzzle 8 attend une version de `laravel/reverb` compatible avec `guzzlehttp/psr7 ^3` (Guzzle rétrogradé de 8.2 à 7.15 par L60-1) | `60` § 24 | rien au J1 |
+| **E10-8** — (a) ajouter au § 19.1 de `60` une note : les gardes de débit bornent le pic d'une fenêtre fixe (39 lectures, 30 chargements), pas la moyenne ; (b) activer ou non `REVERB_APP_RATE_LIMITING_ENABLED` en production (défaut du paquet : faux) | `60` § 24, `100` | (b) après la séance de charge (131) |
+| **E7-11** — les icônes héritées du starter (`public/favicon.ico`, `public/favicon.svg`, `public/apple-touch-icon.png`, logo Laravel) : les remplacer par une icône du projet, ou les relever avec leur licence dans `THIRD_PARTY_NOTICES.md` | `100` | avant l'ouverture publique (J2) |
+| **E11-8** — le job `artifacts` est livré scindé en un job `build` en lecture seule puis un job `artifacts`, seul détenteur du jeton d'écriture. La retenir, et amender alors `100` § 2.5 | `100` § 2.5 | livré ; à ratifier |
+
+Les gestes du porteur relevés par ce report (nom réel dans `LICENSE`, logo TMDB, base de dev, vérifications au navigateur) sont au § 3, lignes 8 à 11.
+
+L'ordre d'exécution relève aussi des **correctifs de dépendances** (I-1 à I-13, annexe § A.3). Ils sont déjà appliqués dans l'ordre, mais pas encore reportés dans les specs propriétaires. **I-12** est appliqué depuis le 24/09 : `final_rank` élargi dans la migration de création (étape 25, accord du porteur ; `10` § 13.2, n° 47). Attendent encore l'accord du porteur : **I-13** (drainage livré en deux déploiements) et la **règle de branche pendant la curation** (§ A.2) — amendé le 25/09.
 
 Deux écarts documentaires restent à corriger :
 
@@ -551,7 +584,7 @@ Ensuite, à chaque session : **« Implémente l'étape suivante de l'ordre des l
 | I-9 | La garde d'instantané des `catalog:import*` lancés à la main n'a pas de lot | La rattacher à L20-16, avec L100-6 pour prérequis |
 | I-10 | `translate-choice.test.ts` exige la parité de `translateChoice` | Correctif rattaché à L100-3 (+0,5 à 1 h) |
 | I-11 | Des dépendances sont exprimées par contrat, sans identifiant de lot | Écrire les identifiants dans les tableaux (L30-5, L70-1, L80-1, L80-4, L100-7, L100-9, L40-1 à L40-6, etc.) |
-| I-12 | La mise en service précède L80-4 : la voie additive s'imposerait pour `final_rank` | Option : élargir dans la migration de création avant la mise en service (étape 25), **accord du porteur** |
+| I-12 | La mise en service précède L80-4 : la voie additive s'imposerait pour `final_rank` | Option : élargir dans la migration de création avant la mise en service (étape 25), **accord du porteur** — appliqué le 24/09 (accord du porteur, migration de création) |
 | I-13 | Le hook de L100-5 s'arrêterait à l'étape 3 lors du premier déploiement du drainage | Livrer L100-5 en deux déploiements (d'abord le drapeau et les commandes, puis les étapes 3 et 12), **accord du porteur** ; variante : arrêt attendu puis relance |
 
 L'ordre a été vérifié mécaniquement : chacune des 134 étapes vient après toutes ses dépendances directes, et aucun cycle ne subsiste une fois L50-2 scindé. La somme des tailles vaut 404,5 à 581,5 h, soit le total brut de `00` § Jalons.

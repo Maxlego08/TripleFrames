@@ -106,6 +106,7 @@ Toutes les bornes et tous les défauts de la colonne « Défaut » viennent de `
 `App\Settings\PlatformLimits` [modifié] reste `final readonly` à accesseurs statiques.
 - **Aucun accesseur n'est paramétré par un `User`, un plan ou un siège** : ce sont des constantes d'instance, jamais résolues par compte (décision 2, neutralité de plan).
 - **Chaque accesseur statique applique la garde de bornes du constructeur**, en déléguant à une instance construite par `fromConfig()`, mémoïsée **dans le conteneur** (`app()->scoped(PlatformLimits::class, …)`) et jamais dans une propriété statique de classe : une propriété statique survivrait d'un test à l'autre dans le même processus Pest, et un test qui pose `config()->set()` lirait la valeur mémoïsée par un test précédent. Une configuration hors bornes ne contourne ainsi la garde sur aucun chemin. Ce n'est pas le cas aujourd'hui (l.201-204).
+- **Tests.** Tout test qui change `game.platform.*` en cours de test passe par l'aide `platformLimitsConfigure()` de `tests/Pest.php`, qui oublie l'instance du conteneur (et celle d'`EngineConstants`, dont la garde lit la marge de tirage), jamais par un `config()->set()` seul : une fois l'instance `scoped` résolue, ce dernier est ignoré en silence. L'aide vit dans `tests/Pest.php` et non dans `PlatformLimitsTest`, pour qu'un fichier de test ultérieur joué seul la trouve — amendé le 25/09 (E9-8).
 
 | Famille | Accesseur | Défaut | Bornes | Surcharge |
 |---|---|---|---|---|
@@ -118,7 +119,7 @@ Toutes les bornes et tous les défauts de la colonne « Défaut » viennent de `
 | Règle figée sur `game` au lancement | `tierGraceMs()` | 300 | `2 × tierGraceMs() < MIN_TIER_DURATION × 1000` | **jamais** |
 | Règle figée sur `game` au lancement | `preloadLeadMs()` | 2000 | `[MIN_PRELOAD_LEAD_MS, MAX_PRELOAD_LEAD_MS]` = [1500, 2500] | **jamais** |
 | Règle non persistée | `speedBonusMaxPercent(int $framesPerRound)` | 50, 50, 33, 25 pour N = 2 à 5 | N dans les bornes, sinon `InvalidArgumentException`, **jamais d'écrêtage** | **jamais** |
-| Tirage et mémoire (valeurs déclarées par `30`) | `drawSubstituteMargin()` | 3 | `[0, MAX_DRAW_SUBSTITUTE_MARGIN]`, où `MAX_DRAW_SUBSTITUTE_MARGIN = 255 − RoomSettingsBounds::MAX_ROUNDS_COUNT` (225 aux bornes actuelles) : `round.sequence_index` est un `unsignedTinyInteger` (10 § 7.4), et une marge au-delà ferait échouer `MaterializeDraw` sous MySQL strict, donc tout lancement, sur un catalogue de plus de 255 œuvres (borne signalée par 30 § 1.1) | `game.platform.draw_substitute_margin` |
+| Tirage et mémoire (valeurs déclarées par `30`) | `drawSubstituteMargin()` | 3 | `[0, min(MAX_DRAW_SUBSTITUTE_MARGIN, MAX_DRAW_SUBSTITUTE_MARGIN_UNDER_PAUSE)]`, une seule garde sous la plus basse des deux bornes, pour que le message d'une marge fautive annonce la borne qui gouverne (150 aux défauts) — amendé le 25/09 (E10-2, E10-8). `MAX_DRAW_SUBSTITUTE_MARGIN = MAX_ROUND_SEQUENCE_INDEX − RoomSettingsBounds::MAX_ROUNDS_COUNT` (225 aux bornes actuelles) : `round.sequence_index` est un `unsignedTinyInteger` (10 § 7.4), et une marge au-delà ferait échouer `MaterializeDraw` sous MySQL strict, donc tout lancement, sur un catalogue de plus de 255 œuvres (borne signalée par 30 § 1.1). `MAX_DRAW_SUBSTITUTE_MARGIN_UNDER_PAUSE = ⌊EngineConstants::DEFAULT_PAUSE_TIMEOUT_MS ÷ EngineConstants::DEFAULT_LAUNCH_COUNTDOWN_MS⌋ − RoomSettingsBounds::MAX_ROUNDS_COUNT` (150 aux défauts) : borne de fait sous la garde de clôture après pause du moteur (60 § 19.1), lue aux **défauts** du moteur et non à sa configuration, puisque la garde du moteur lit elle-même cette marge ; une surcharge du moteur reste jugée par sa propre garde | `game.platform.draw_substitute_margin` |
 | Tirage et mémoire | `roomMemoryWindowDays()` | 90 | ≥ 1 | `game.platform.room_memory_window_days` |
 | Tirage et mémoire | `roomMemoryWindowRounds()` | 500 | ≥ 1 | `game.platform.room_memory_window_rounds` |
 | Tirage et mémoire | `themeSelectorMinPool()` | 150 | ≥ 0 | `game.platform.theme_selector_min_pool` |
@@ -139,12 +140,21 @@ Toutes les bornes et tous les défauts de la colonne « Défaut » viennent de `
 - Pourquoi : une surcharge par configuration changerait le palier retenu, la fenêtre de service et donc le score, sans qu'aucune version de règle ne le trace.
 - Cet arbitrage précise la ligne « surchargeable » de la feuille de contrats pour ces deux valeurs. Leur domicile et leur gel sur `game` restent inchangés.
 
+**Noms retenus par L50-1 là où le contrat C0 se tait** — amendé le 25/09 (E9-5, E10-2, E21-6). Le contrat ne nomme que les accesseurs, les `DEFAULT_*`, `MAX_DRAW_SUBSTITUTE_MARGIN`, `MAX_LOBBY_BROADCAST_DEBOUNCE_MS`, `SPEED_BONUS_MAX_PERCENT_CAP` et `FULL_PERCENT`. Le code livré ajoute :
+- `MAX_ROUND_SEQUENCE_INDEX = 255`, fait de schéma (`round.sequence_index`, 10 § 7.4) dont dérive `MAX_DRAW_SUBSTITUTE_MARGIN` ;
+- `MAX_DRAW_SUBSTITUTE_MARGIN_UNDER_PAUSE` (public, posé par L60-1), **constante et non méthode** : la réflexion de `PlatformLimitsTest` compte toute méthode statique sans argument rendant un `int` comme un accesseur configurable ; `intdiv()` n'étant pas admis dans une expression constante, la division entière s'y écrit par le reste ;
+- `MIN_FRAME_CROP_MAX_WIDTH_PERCENT` et `MAX_FRAME_CROP_MAX_WIDTH_PERCENT` (70, 90), `MIN_FRAME_CROP_MIN_WIDTH_PX` et `MAX_FRAME_CROP_MIN_WIDTH_PX` (320, 1280), `FRAME_CROP_WIDTH_MULTIPLE_PX` (16). Cette dernière redit `FrameGeometry::ASPECT_WIDTH` de C9, égalité assertée par `CropRectangleTest` ; le prochain lot qui retouche `PlatformLimits` peut faire lire l'une par l'autre ;
+- les bornes basses « ≥ 1 » et « ≥ 0 » en constantes privées ;
+- `PlatformLimits::current(): self`, l'instance du conteneur, qui sert `toArray()` en prop de page et les signatures de C9 qui reçoivent un `PlatformLimits $limits`.
+
+Le constructeur prend ses quinze arguments dans l'ordre du tableau ci-dessus, `speedBonusMaxPercent` exclu.
+
 **`config/game.php` [nouveau].**
 - **Section `platform`**, lue **exclusivement** par `PlatformLimits`. Elle compte **treize** clés : `saved_configs_per_user`, `room_seats`, `avatar_presets`, `history_window_months`, `success_rate_min_rounds`, `frame_upload_max_kilobytes`, `draw_substitute_margin`, `room_memory_window_days`, `room_memory_window_rounds`, `theme_selector_min_pool`, `lobby_broadcast_debounce_ms`, `frame_crop_max_width_percent` et `frame_crop_min_width_px`.
   - Chaque valeur vaut `PlatformLimits::DEFAULT_*`, sans `env()` : la constante reste la source unique.
   - **Aucune clé `speed_bonus_*`, `tier_grace_ms` ni `preload_lead_ms`.**
   - Le constructeur de `PlatformLimits` porte toujours les **quinze** valeurs sans argument du tableau : les deux constantes non surchargeables y entrent par leur constante, jamais par la configuration.
-- **Section `engine`** : propriété de `60` (`EngineConstants`, contrat C7 § 5). `50` ne la lit pas. Le premier lot qui crée le fichier pose les deux sections, telles que les contrats C0 et C7 les décrivent.
+- **Section `engine`** : propriété de `60` (`EngineConstants`, contrat C7 § 5). `50` ne la lit pas. L50-1, premier lot à créer le fichier, l'a posée **vide** (`'engine' => []`, avec un commentaire qui renvoie à `EngineConstants`) ; L60-1 l'a remplie de ses onze clés, chacune à sa constante `EngineConstants::DEFAULT_*`, sans `env()`. Écrire les onze valeurs en littéraux avant `EngineConstants` aurait créé des clés sans lecteur et une seconde source de vérité — amendé le 25/09 (E9-1).
 - **Section `room`** [nouvelle, propriété de `50`] : les deux limiteurs d'entrée du § 17.3, lus exclusivement par `App\Support\Room\RoomRateLimits`.
 - **Aucune section `operations`** : la borne et le TTL du drainage vivent dans `config/deploy.php` (contrat C18-bis).
 
@@ -265,12 +275,18 @@ Les clés de `byFramesPerRound` et de `speedBonusMaxPercent` sont des chaînes d
 
 ### 2.7 Garde-fous testés
 
-Chacun a un test nommé (lot L50-1) :
+Chacun est prouvé par un test (lot L50-1, sauf le sixième) :
 - `MIN_REVEAL_DURATION × 1000 > MAX_PRELOAD_LEAD_MS` ;
 - `2 × tierGraceMs() < MIN_TIER_DURATION × 1000` ;
 - `MIN_CAPACITY ≥ MIN_CONNECTED_PLAYERS_TO_LAUNCH` ;
 - `roomSeats() ≥ MIN_CAPACITY` ;
-- `roomSeats() ≤ avatarPresets()` (exigence de `40`, contrat C5 I5.7).
+- `roomSeats() ≤ avatarPresets()` (exigence de `40`, contrat C5 I5.7) ;
+- `drawSubstituteMargin() ≤ MAX_DRAW_SUBSTITUTE_MARGIN_UNDER_PAUSE`, soit `⌊pauseTimeoutMs ÷ launchCountdownMs⌋ − MAX_ROUNDS_COUNT` aux défauts du moteur (60 § 19.1, § 2.3) — amendé le 25/09 (E10-2).
+
+Correspondance avec les tests livrés — amendé le 25/09 (E9-2, E9-8, E10-2) :
+- les garde-fous 3 à 5 n'ont pas chacun leur intitulé : « n'offre jamais moins d'avatars prédéfinis que de sièges » prouve la chaîne entière `MIN_CONNECTED_PLAYERS_TO_LAUNCH ≤ MIN_CAPACITY ≤ roomSeats() ≤ avatarPresets()`, constructeur et configuration compris ; aucun intitulé n'est ajouté à la liste de L50-1 ;
+- ce test et « garde preloadLeadMs dans [1500, 2500]… » acceptent aussi leurs bornes fermées (`MIN_PRELOAD_LEAD_MS`, `MAX_PRELOAD_LEAD_MS`, `roomSeats = MIN_CAPACITY`, `roomSeats = DEFAULT_AVATAR_PRESETS`), pour qu'une garde rendue exclusive échoue ;
+- le sixième est posé au constructeur de `PlatformLimits` par L60-1, faute d'`EngineConstants` en L50-1. Il est prouvé par la borne haute de « refuse une marge, une fenêtre, un seuil ou un plafond de recadrage hors bornes » (plus grande marge admise exactement `min(225, 150)`, donc jamais plus sévère que nécessaire) et par « une marge de tirage admise par PlatformLimits ne fait jamais échouer la garde de pauseTimeoutMs aux défauts » d'`EngineConstantsTest` (60 § 20).
 
 **Règle 3.** Aucune charge de ce chapitre ne porte de film, de graine ni d'identifiant interne : les thèmes voyagent par clé, le salon par code, les sièges par `public_id`.
 
@@ -1083,7 +1099,7 @@ D17 du 23/09 faisait des retardataires la troisième variable d'ajustement du J1
 | **Clôture de partie** | 15 min sans joueur connecté (`game.paused_at`) | `60` |
 | **Archivage anticipé du lobby** | lobby jamais lancé (`launched_at` NULL), `last_activity_at < now − RoomExpiry::LOBBY_IDLE_MINUTES` (2 h), périmètre `stale_lobby` | `50`, seul exécutant du périmètre, dont il écrit la ligne `purge_run` (§ 16.2) ; `100` le surveille ; **archivage forcé, jamais suppression** (E10-30) |
 | **Archivage du salon** | `last_activity_at < now − RoomExpiry::ROOM_IDLE_MINUTES` (24 h) | `50` |
-| Filet `stale_room` | 48 h, pour un job d'archivage qui n'a jamais tourné | purge de `10` / `100` |
+| Filet `stale_room` | 48 h (`RetentionWindows::STALE_ROOM_HOURS`, déjà livrée par `100` et lue par la sonde n° 2 — amendé le 25/09, E24-7), pour un job d'archivage qui n'a jamais tourné | purge de `10` / `100`, gestionnaire livré après L50-8 |
 
 `App\Support\Room\RoomExpiry` [nouveau] porte :
 - `LOBBY_IDLE_MINUTES = 120` et `ROOM_IDLE_MINUTES = 1440`, valeurs de 10 § 11.1 ;
@@ -1162,7 +1178,7 @@ Elle reste `view`, `update` et `delete` **par propriété seule**, sans clause d
 | `game-read` / `game-write` | contrat C7 | contrat C7 | GET du salon / écritures du salon |
 
 - Ces limiteurs sont déclarés dans `FortifyServiceProvider::configureRateLimiting()`.
-- `App\Support\Room\RoomRateLimits` [nouveau] suit le patron de `PlatformLimits` : constantes `DEFAULT_*`, accesseurs statiques, garde ≥ 1.
+- `App\Support\Room\RoomRateLimits` [nouveau] suit le patron de `PlatformLimits` : constantes `DEFAULT_*`, accesseurs statiques, garde ≥ 1. Il n'a **pas** d'instance mémoïsée : ses deux accesseurs lisent et gardent la configuration à chaque appel, ce qui tient la garde sur tout chemin sans liaison de conteneur. Preuve : `tests/Feature/Room/RoomRateLimitsTest.php` (L50-1) — amendé le 25/09 (E9-6).
 - Ce ne sont **ni** des limites de confort **ni** des valeurs de jeu, mais des gardes anti-abus : elles ne sont jamais résolues par compte.
 - L'énumération des codes par GET se heurte à `game-read`, face à un espace de 32⁶ codes.
 
@@ -1511,9 +1527,10 @@ Chaque estimation inclut la barre « terminé » : tests verts, textes FR et EN,
 ### L50-1 — Socle des réglages et des limites (J1, 4–6 h)
 
 **Fichiers :**
-- `config/game.php` [nouveau] : sections `platform` (treize clés), `engine` (contrat C7 § 5 et C8, si `60` ne l'a pas déjà créée) et `room` (deux clés) ;
-- `app/Settings/PlatformLimits.php` [modifié] : `speedBonusMaxPercent()`, constantes (dont `MAX_DRAW_SUBSTITUTE_MARGIN`), familles, gardes par accesseur, bornes hautes de `historyWindowMonths()` et `frameUploadMaxKilobytes()`, `toArray()` ;
+- `config/game.php` [nouveau] : sections `platform` (treize clés), `engine` (posée vide, remplie par L60-1, § 2.3 — amendé le 25/09, E9-1) et `room` (deux clés) ;
+- `app/Settings/PlatformLimits.php` [modifié] : `speedBonusMaxPercent()`, constantes (dont `MAX_DRAW_SUBSTITUTE_MARGIN` et les noms retenus du § 2.3), `current()`, familles, gardes par accesseur, bornes hautes de `historyWindowMonths()` et `frameUploadMaxKilobytes()`, `toArray()` ;
 - `app/Providers/AppServiceProvider.php` [modifié] : `scoped(PlatformLimits::class, …)` (§ 2.3) ;
+- `tests/Pest.php` [modifié] : aide `platformLimitsConfigure()` (§ 2.3) — amendé le 25/09 (E9-8) ;
 - `app/Settings/RoomSettingsBounds.php` [modifié] : `MIN_CONNECTED_PLAYERS_TO_LAUNCH`, `toClient()`, docblock ;
 - `app/Settings/RoomSettings.php` [modifié] : quatre `CHANGE_*`, docblocks (dont celui de `VERSION`, § 2.1) ;
 - `app/Settings/RoomSettingsEditor.php` [nouveau] : constantes `SIMPLE_KEYS`, `ADVANCED_KEYS` et `ADVANCED_TAB_AVAILABLE` seulement (§ 3.1), pour que le test des clés postables de `30` (L30-3) ne dépende que de ce lot ;
@@ -1522,7 +1539,7 @@ Chaque estimation inclut la barre « terminé » : tests verts, textes FR et EN,
 
 **Tests :**
 - `tests/Feature/Room/PlatformLimitsTest.php` :
-  - « fixe speedBonusMaxPercent à 50, 50, 33 et 25 pour N = 2 à 5 sous la version de score 1 »
+  - « fixe speedBonusMaxPercent à 50, 50, 33 et 25 pour N = 2 à 5 sous la version de score 1 » (la version est lue dans `GameFactory::SCORING_VERSION`, seul domicile existant, jusqu'à ce que L80-1 la remplace par `ScoringRules::VERSION` dans ce test — amendé le 25/09, E9-3)
   - « refuse un N hors bornes pour speedBonusMaxPercent au lieu de l'écrêter »
   - « ignore toute configuration de B_max »
   - « ignore toute configuration de tier_grace_ms et de preload_lead_ms »
@@ -1530,8 +1547,8 @@ Chaque estimation inclut la barre « terminé » : tests verts, textes FR et EN,
   - « déclare une clé game.platform par accesseur configurable, et réciproquement »
   - « garde preloadLeadMs dans [1500, 2500], sous la révélation minimale » (le nom de la feuille disait « écrête » ; il n'y a plus rien à écrêter, § 2.3)
   - « garde deux tier_grace_ms sous la durée minimale de palier »
-  - « n'offre jamais moins d'avatars prédéfinis que de sièges »
-  - « refuse une marge, une fenêtre, un seuil ou un plafond de recadrage hors bornes », borne haute `MAX_DRAW_SUBSTITUTE_MARGIN` de la marge comprise
+  - « n'offre jamais moins d'avatars prédéfinis que de sièges » (garde-fous 3 à 5 du § 2.7, bornes fermées acceptées — amendé le 25/09, E9-2 et E9-8)
+  - « refuse une marge, une fenêtre, un seuil ou un plafond de recadrage hors bornes », borne haute de la marge comprise : `min(MAX_DRAW_SUBSTITUTE_MARGIN, MAX_DRAW_SUBSTITUTE_MARGIN_UNDER_PAUSE)` acceptée, un de plus refusé, depuis que L60-1 a posé le sixième garde-fou (§ 2.7) — amendé le 25/09 (E10-2)
   - « refuse une fenêtre d'historique au-delà du plafond de douze mois »
   - « refuse un plafond de téléversement au-delà de sa valeur par défaut »
   - « un accesseur statique refuse une configuration hors bornes »
@@ -1540,9 +1557,10 @@ Chaque estimation inclut la barre « terminé » : tests verts, textes FR et EN,
   - « déclare un défaut pour chacun des seize champs dans l'ordre de FIELDS »
   - « refuse les clés graceMs, tierGraceMs, preloadLeadMs, speedBonusMaxPercent et speedBonusMaxFraction »
   - « produit une charge utile dont les clés sont exactement FIELDS, en camelCase et dans l'ordre »
-  - « garde VERSION à 1 tant que FIELDS est inchangé »
+  - « garde VERSION à 1 tant que FIELDS est inchangé » (écrit à la lettre, sans instantané des bornes : points restés ouverts, n° 8 — amendé le 25/09, E9-7)
   - « expose au client les bornes de chaque N, sans chaîne et en entiers »
 - `tests/Feature/Room/PresetValidityTest.php` : « construit chaque preset livré par le chemin d'entrée de l'hôte sans erreur » (parcourt `SettingPresetKey::cases()`)
+- `tests/Feature/Room/RoomRateLimitsTest.php` [ajouté, § 17.3] : « déclare une clé game.room par débit d'entrée, et réciproquement », « refuse un débit d'entrée nul ou négatif » — amendé le 25/09 (E9-6)
 - `RoomSettingsMatrixTest` (« refuse exactement les champs déclarés pour chaque combinaison aux bornes », « lève exactement les avertissements déclarés pour chaque combinaison acceptée ») n'est **pas** dans ce lot : il est écrit par L100-3 sur la règle d'interaction du § 4.1.
 
 ### L50-2 — Éditeur Simple, écriture unique, presets (serveur) (J1, 6–8 h)
@@ -1733,7 +1751,7 @@ Le prédicat de fin anticipée lui-même est prouvé par `EarlyEndTest` de `60` 
 **Fichiers :**
 - `app/Actions/Room/LaunchGame.php` et `app/Actions/Game/OpenGame.php` [nouveaux] ;
 - `app/ValueObjects/Room/LaunchOutcome.php` et `app/Enums/RoomRefusal.php` [nouveaux] ;
-- `database/factories/GameFactory.php` [modifié : constantes de version supprimées] ;
+- `database/factories/GameFactory.php` [modifié : constantes de version supprimées ; le test « fixe speedBonusMaxPercent… » de `PlatformLimitsTest` lit alors `ScoringRules::VERSION`, bascule attribuée à L80-1 — amendé le 25/09, E9-3] ;
 - `app/Http/Controllers/Room/LaunchController.php` [nouveau], échec technique compris (§ 12.5) ;
 - `RoomPolicy` [complété : `launch`, `advanceRound`] ;
 - `lang` : `room.refusal.*`, `room.errors.launch_failed`.
@@ -1768,7 +1786,8 @@ Le prédicat de fin anticipée lui-même est prouvé par `EarlyEndTest` de `60` 
 - `app/Http/Controllers/Room/ReplayController.php` [nouveau] ;
 - `RoomPolicy` [complété : `replay`] ;
 - `resources/js/components/room/replay-button.tsx` [nouveau] ;
-- `lang` : `room.replay.*`.
+- `lang` : `room.replay.*` ;
+- `tests/Concurrency/.gitkeep` [supprimé] : posé par L100-1 pour que la suite `Concurrency` ait un répertoire, il se retire dans le commit du premier test de `tests/Concurrency`, `LaunchConcurrencyTest` si aucun lot antérieur n'en a écrit — amendé le 25/09 (E6-4).
 
 **Tests :**
 - `tests/Feature/Room/ReplayRoomTest.php` :
@@ -1809,6 +1828,11 @@ Le prédicat de fin anticipée lui-même est prouvé par `EarlyEndTest` de `60` 
   - « émet room.archived après validation »
   - « affiche la page de salon expiré en 410 pour un lien archivé »
   - « balaie sur la file default et jamais sur la file game »
+
+**Ce qui attend ce lot, côté `100`** — amendé le 25/09 (E23-1, E23-2, E24-4, E24-7, E24-9). La purge de L100-8 est livrée sur les seuls périmètres sans jeu ; trois pièces de `100` n'attendent que `ArchiveRoom` et le balayage de ce lot, et suivent ce lot sans en faire partie :
+- le gestionnaire `stale_room`, qui implémente `PurgeHandler` (contrat étendu par L100-8 : `nextBatch()`, `purge()`, `connection()`), entre dans `PurgeHandlers::CLASSES` et dans `PurgeScope::implemented()`, lit la fenêtre dans `RetentionWindows::STALE_ROOM_HOURS` (déjà livrée) et appelle `ArchiveRoom`, unique chemin d'archivage (§ 16.2) ;
+- son test de `RetentionPurgeTest`, « archive un salon oublié depuis 48 h par l'action d'archivage de 50, jamais par suppression », et le jeu de lignes du périmètre dans `tests/Support/Retention/RetentionRows.php`, sans lequel `PurgePerimeterTest` échoue dès que `stale_room` entre dans `implemented()` ;
+- la vérification `stale_lobby` de la sonde `purge` (L100-7), qui lit la ligne `purge_run` que ce balayage écrit à chaque passage (§ 16.2).
 
 ### L50-9 — Retardataires (J1, 3–5 h ; lot J1 ordinaire, D35 du 23/09 — amendé le 23/09)
 
@@ -1922,7 +1946,7 @@ La ligne « salon onglet Simple et bornes croisées serveur 12 h » de 00 § Jal
 5. **Amendements non consolidés** listés plus haut : 00 l.135, E10-27, `CLAUDE.md` §8, 10 § 6.1 l.632 (`ValidRoomSettings`), 10 § 6.1 (resserrement de borne et `VERSION`).
 6. **Exécutant unique de `stale_lobby`** : le balayage de `50`, qui écrit sa ligne `purge_run` à chaque passage, même à zéro (§ 16.2) ; `RetentionPurger` ne l'exécute jamais et `PurgeScope::implemented()` ne le contient pas (100 § 14). Précision « même à zéro » demandée par `100`, reprise ici ; à relire ensemble à la fusion.
 7. **Nom de test renommé.** C0 § 7 nomme « écrête preloadLeadMs dans [1500, 2500], sous la révélation minimale ». `preloadLeadMs` n'étant plus lu en configuration (arbitrage du rédacteur en chef du 23/09, § 2.3), il n'y a plus rien à écrêter, et L50-1 nomme le test « garde preloadLeadMs dans [1500, 2500], sous la révélation minimale ». À valider par le porteur.
-8. **Seconde clause de la règle 4 (§ 2.1)** : un resserrement de borne de `RoomSettingsBounds` incrémente `VERSION`. Elle rend faux, au premier resserrement, le test de C0 § 7 « garde VERSION à 1 tant que FIELDS est inchangé », repris à la lettre en L50-1. Proposition : renommer le test « garde VERSION à 1 tant que FIELDS et les bornes de RoomSettingsBounds sont inchangés », avec un instantané des bornes dans le test.
+8. **Seconde clause de la règle 4 (§ 2.1)** : un resserrement de borne de `RoomSettingsBounds` incrémente `VERSION`. Elle rend faux, au premier resserrement, le test de C0 § 7 « garde VERSION à 1 tant que FIELDS est inchangé », repris à la lettre en L50-1. Proposition : renommer le test « garde VERSION à 1 tant que FIELDS et les bornes de RoomSettingsBounds sont inchangés », avec un instantané des bornes dans le test. L50-1 a livré le test à la lettre, sans instantané : la proposition reste à valider par le porteur — amendé le 25/09 (E9-7).
 9. **Forme du rapport de changements** (§ 2.6) : `normalize()` peut rapporter `dropped` sous la clé d'un champ retiré par une version ultérieure, hors de `RoomSettingsFieldKey`. Faut-il élargir la forme `Record<RoomSettingsFieldKey, RoomSettingsChangeCode>` du contrat C0 § 3.4 ?
 10. **Placeholders définis clé par clé** pour `room.pool.remedy.*` (`:count` partout, `:value` pour `lower_frames_per_round` et `reduce_rounds_count` seulement) et pour `room.warnings.*` (`:seconds` pour `short_reveal` et `long_round` seulement), écart de forme à C0 § 2, qui donne les mêmes placeholders à toute la famille (§ 9.2, § 20.2).
 11. **Délai de `BroadcastLobbyState`** : la lettre du contrat C7 § 2.5, `delay(PlatformLimits::lobbyBroadcastDebounceMs())`, programmerait la diffusion en **secondes**. `50` dispatche avec un instant, comme 60 § 11.2 (écart (n) de 60 § 22 bis), et l'arrondit à la seconde supérieure (§ 8.3) : la fenêtre effective n'est jamais plus courte que `lobbyBroadcastDebounceMs()`, là où 60 § 11.2 décrit une fenêtre de 0 à 1 s sans cet arrondi.
@@ -1931,3 +1955,6 @@ La ligne « salon onglet Simple et bornes croisées serveur 12 h » de 00 § Jal
 14. **Règle du retardataire citée par `60` : alignée.** 60 § 13.7 résumait l'ancienne règle de ce document (« par `sequence_index` croissant, remplaçantes exclues »), alors que 60 § 1.2 joue les manches par `round_number`. La règle arrêtée ici (§ 15.2) suit l'ordre de jeu : `round_number` croissant, remplaçante comprise tant qu'elle n'a pas démarré. 60 § 13.7 est aligné : il renvoie à la règle du § 15.2 (`round_number` croissant, remplaçante comprise tant qu'elle n'a pas démarré) — amendé le 23/09.
 15. **Remède « nouveau salon » et promesse « débloque à lui seul ».** 30 § 4.3 compte `open_new_room` aux réglages courants sans la non-répétition, alors que le geste crée un salon aux réglages par défaut (§ 6.1). Le texte le dit désormais (« avec ces réglages », § 20.3), mais la promesse « chaque remède débloque à lui seul » ne vaut pour ce remède qu'une fois les réglages reportés à la main dans le nouveau salon ; depuis le preset `fast` (N = 2, M = 8, § 5.1), le nouveau salon naît à N = 3 et M = 10 au réglage par défaut, et peut s'y bloquer sur `framesPerRound` ou `roundsCount` alors que `:count` promettait assez de films. L'alternative, créer le nouveau salon avec les réglages courants, relève du produit : à trancher par le porteur.
 16. **Import de `RoomSettingsState` par le fil de `60`.** `types/room-settings.ts` naît en L50-2 (section « Lots ») ; 60 § 11.4 l'importe dans `types/game-wire.ts`, que L60-2 crée, alors que L50-2 dépend de L60-2 (`game-write`). À `60` de poser cet import au plus tôt dans le lot qui type `settings.changed` et `room.replayed` pour le magasin (L60-9), qui dépend alors de L50-2.
+17. **Salon à version de réglages périmée après un resserrement de borne** (E36-1, signalé au porteur le 24/09 par L30-3). Le lobby calcule le vivier sur les réglages **bruts** du salon (`RoomSettingsPresenter::state()`, § 2.6 ; grisage des presets ; `BroadcastLobbyState`), et seule l'étape L5 du lancement normalise (§ 12.2). `PoolReporter` prend désormais `M` tel quel, pour que le rapport se calcule sur un `M` hors des nouvelles bornes. Deux questions restent au porteur, non tranchées ici :
+    - la garde de `N` de `PoolScope` (L30-2) lève hors bornes : un resserrement des bornes de `N` ferait donc échouer `state()` et chaque diffusion du lobby de tout salon ouvert pendant le déploiement ;
+    - pour un `M` périmé au-dessus d'une nouvelle `MAX_ROUNDS_COUNT` et un vivier compris entre les deux, le remède `reduce_rounds_count` porte une valeur que l'éditeur refuserait (30 § 4.3 fixe `value = count` sans plafond), jusqu'à la normalisation du lancement.
