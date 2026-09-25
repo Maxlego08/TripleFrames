@@ -147,6 +147,8 @@ const WATCHED = [
     'resources/js/layouts/app-layout.tsx',
     'resources/js/layouts/auth-layout.tsx',
     'resources/js/components/app-sidebar.tsx',
+    // L40-6 (spec 40 § 7.4) : réexporte `types/player.ts`.
+    'resources/js/types/index.ts',
 ];
 
 /**
@@ -221,7 +223,6 @@ const EXEMPT = [
     'resources/js/pages/settings/profile.tsx',
     'resources/js/pages/settings/security.tsx',
     'resources/js/pages/welcome.tsx',
-    'resources/js/types/index.ts',
     'resources/js/types/navigation.ts',
     'resources/js/types/ui.ts',
     'resources/js/types/vite-env.d.ts',

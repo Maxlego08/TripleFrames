@@ -6,6 +6,7 @@ use App\Enums\Locale;
 use App\Settings\PlatformLimits;
 use App\Support\I18n\TranslationDomains;
 use Illuminate\Support\Facades\Validator;
+use Tests\Support\I18n\FrontSource;
 use Tests\Support\Identity\NicknameFormRequest;
 
 /*
@@ -21,6 +22,10 @@ use Tests\Support\Identity\NicknameFormRequest;
 | 256 px et 20 Ko sont des exigences de FICHIER (C5 § 5), vérifiées ici et
 | jamais lues à l'exécution. La garde « jamais moins de prédéfinis que de
 | sièges » vit dans `PlatformLimitsTest` (C0, R-04), pas ici.
+|
+| Ajout de L40-6 : le miroir client du catalogue (`AvatarPresetKey` de
+| `types/player.ts`, tables de `lib/game/avatar-keys.ts`) est lu sur la
+| source — aucun DOM au jalon 1 (C18 § 2.4) —, `tsc` garantissant le reste.
 |
 */
 
@@ -275,4 +280,53 @@ it("résout chaque clé alt d'AvatarRef dans le domaine common", function () {
     expect(AvatarRef::preset(AvatarPresetCatalog::keys()[0], 'AB')->altKey)->toBe(AvatarRef::ALT_KEY_PRESET)
         ->and(AvatarRef::provider('copie.webp', 'AB')->altKey)->toBe(AvatarRef::ALT_KEY_PROVIDER)
         ->and(AvatarRef::initials('AB')->altKey)->toBe(AvatarRef::ALT_KEY_INITIALS);
+});
+
+it("couvre côté client exactement les clés du catalogue d'avatars", function () {
+    // L'union `AvatarPresetKey` de `types/player.ts` (spec 40 § 7.4), lue
+    // sur la source sans ses commentaires : c'est elle que `tsc` impose à
+    // `AVATAR_PRESET_LABEL_KEYS`, donc elle qui doit égaler le catalogue.
+    $types = FrontSource::withoutComments((string) file_get_contents(resource_path('js/types/player.ts')));
+
+    expect(preg_match('/export type AvatarPresetKey\s*=([^;]+);/', $types, $union))->toBe(1);
+
+    preg_match_all("/'(preset-\d{2})'/", $union[1], $literals);
+
+    $client = $literals[1];
+    $server = AvatarPresetCatalog::keys();
+
+    sort($client);
+    sort($server);
+
+    // Liste triée SANS dédoublonnage : un littéral répété échoue aussi.
+    expect($client)->toBe($server);
+
+    // `tsc` garantit une ligne par clé dans la table des libellés, pas que
+    // chaque ligne nomme SA clé : `preset-01` ne doit jamais afficher le
+    // libellé de `preset-02`. Même lecture, sur `lib/game/avatar-keys.ts`.
+    $keys = FrontSource::withoutComments((string) file_get_contents(resource_path('js/lib/game/avatar-keys.ts')));
+
+    preg_match_all("/'(preset-\d{2})':\s*'([^']+)'/", $keys, $pairs, PREG_SET_ORDER);
+
+    $labels = [];
+
+    foreach ($pairs as [, $key, $labelKey]) {
+        $labels[$key] = $labelKey;
+    }
+
+    expect($pairs)->toHaveCount(count($server))
+        ->and(array_keys($labels))->toBe(AvatarPresetCatalog::keys());
+
+    foreach (AvatarPresetCatalog::keys() as $key) {
+        expect($labels[$key])->toBe(AvatarPresetCatalog::labelKey($key));
+    }
+
+    // La table close des clés d'`alt` est celle d'`AvatarRef`, ni plus ni
+    // moins, et le repli est la clé des initiales.
+    preg_match('/const AVATAR_ALT_KEYS = \[([^\]]+)\]/', $keys, $altTable);
+    preg_match_all("/'([^']+)'/", $altTable[1] ?? '', $altKeys);
+    preg_match("/const AVATAR_ALT_FALLBACK_KEY: TranslationKey = '([^']+)'/", $keys, $fallback);
+
+    expect($altKeys[1])->toBe([AvatarRef::ALT_KEY_PRESET, AvatarRef::ALT_KEY_PROVIDER, AvatarRef::ALT_KEY_INITIALS])
+        ->and($fallback[1] ?? null)->toBe(AvatarRef::ALT_KEY_INITIALS);
 });
