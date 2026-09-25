@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="fr">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>TripleFrames — Comparateur de fonds</title>
+        <link rel="stylesheet" href="backgrounds.css" />
+    </head>
+    <body class="background-lab">
+        <aside class="background-lab__controls">
+            <div>
+                <p class="background-lab__label">Laboratoire visuel</p>
+                <h1>Choisis le décor</h1>
+                <p class="background-lab__intro">
+                    Même interface, cinq atmosphères. Clique sur une proposition
+                    pour la voir en grand.
+                </p>
+            </div>
+
+            <nav class="background-lab__options" aria-label="Variantes de fond">
+                <button class="background-option" type="button" data-bg="party">
+                    <span class="background-option__swatch background-option__swatch--party" aria-hidden="true"></span>
+                    <span><strong>Party dots</strong><small>Énergique et polyvalent</small></span>
+                </button>
+                <button class="background-option" type="button" data-bg="spotlight">
+                    <span class="background-option__swatch background-option__swatch--spotlight" aria-hidden="true"></span>
+                    <span><strong>Projecteur</strong><small>Cinéma et spectaculaire</small></span>
+                </button>
+                <button class="background-option" type="button" data-bg="frames">
+                    <span class="background-option__swatch background-option__swatch--frames" aria-hidden="true"></span>
+                    <span><strong>Mur de cadres</strong><small>Le plus lié au concept</small></span>
+                </button>
+                <button class="background-option background-option--active" type="button" data-bg="curtain">
+                    <span class="background-option__swatch background-option__swatch--curtain" aria-hidden="true"></span>
+                    <span><strong>Rideau pop</strong><small>Plateau télé festif</small></span>
+                </button>
+                <button class="background-option" type="button" data-bg="arcade">
+                    <span class="background-option__swatch background-option__swatch--arcade" aria-hidden="true"></span>
+                    <span><strong>Grille arcade</strong><small>Nocturne et compétitif</small></span>
+                </button>
+            </nav>
+
+            <a class="background-lab__open-link" id="open-link" href="index.html?bg=curtain" target="_blank">
+                Ouvrir la version en plein écran
+            </a>
+        </aside>
+
+        <main class="background-lab__preview">
+            <div class="preview-browser">
+                <div class="preview-browser__bar" aria-hidden="true">
+                    <span></span><span></span><span></span>
+                    <p id="variant-name">Rideau pop</p>
+                </div>
+                <iframe
+                    class="preview-browser__frame"
+                    id="preview-frame"
+                    title="Aperçu de la variante Rideau pop"
+                    src="index.html?bg=curtain"
+                ></iframe>
+            </div>
+        </main>
+
+        <script src="backgrounds.js"></script>
+    </body>
+</html>

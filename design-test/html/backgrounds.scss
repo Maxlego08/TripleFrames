@@ -1,0 +1,224 @@
+@use 'scss/tokens' as *;
+@use 'scss/mixins' as *;
+
+* {
+    box-sizing: border-box;
+}
+
+.background-lab {
+    display: grid;
+    grid-template-columns: 19rem minmax(0, 1fr);
+    min-width: 70rem;
+    min-height: 100vh;
+    margin: 0;
+    background: $color-ink;
+    color: $color-ink;
+    font-family: $font-body;
+
+    &__controls {
+        display: flex;
+        flex-direction: column;
+        gap: 1.5rem;
+        padding: 2rem 1.5rem;
+        border-right: $line-width solid $color-ink;
+        background: $color-paper;
+    }
+
+    &__label {
+        width: fit-content;
+        margin: 0 0 0.6rem;
+        padding: 0.25rem 0.55rem;
+        border: 0.125rem solid $color-ink;
+        border-radius: 999rem;
+        background: $color-yellow;
+        font-size: 0.75rem;
+        font-weight: 900;
+    }
+
+    &__intro {
+        margin: 0;
+        font-size: 0.9rem;
+        line-height: 1.45;
+    }
+
+    &__options {
+        display: grid;
+        gap: 0.65rem;
+    }
+
+    &__open-link {
+        @include hard-shadow(0.25rem);
+        margin-top: auto;
+        padding: 0.8rem;
+        border: 0.125rem solid $color-ink;
+        border-radius: 0.75rem;
+        background: $color-coral;
+        color: inherit;
+        font-size: 0.85rem;
+        font-weight: 900;
+        text-align: center;
+        text-decoration: none;
+    }
+
+    &__preview {
+        display: grid;
+        min-width: 0;
+        padding: 1.5rem;
+        place-items: center;
+        background:
+            radial-gradient(circle at 20% 20%, oklch(0.81 0.13 195 / 20%), transparent 25%),
+            radial-gradient(circle at 80% 80%, oklch(0.7 0.2 25 / 20%), transparent 22%),
+            $color-ink;
+    }
+
+    h1 {
+        margin: 0 0 0.7rem;
+        font-family: $font-display;
+        font-size: 2.2rem;
+        line-height: 0.95;
+        letter-spacing: -0.05em;
+    }
+}
+
+.background-option {
+    display: grid;
+    grid-template-columns: 3.25rem 1fr;
+    align-items: center;
+    gap: 0.8rem;
+    width: 100%;
+    min-height: 4.2rem;
+    padding: 0.55rem;
+    border: 0.125rem solid transparent;
+    border-radius: 0.9rem;
+    background: transparent;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+
+    &:hover,
+    &--active {
+        @include hard-shadow(0.25rem);
+        border-color: $color-ink;
+        background: $color-white;
+    }
+
+    strong,
+    small {
+        display: block;
+    }
+
+    strong {
+        margin-bottom: 0.1rem;
+        font-size: 0.92rem;
+    }
+
+    small {
+        color: $color-muted;
+        font-size: 0.72rem;
+    }
+
+    &__swatch {
+        width: 3.25rem;
+        height: 3rem;
+        border: 0.125rem solid $color-ink;
+        border-radius: 0.7rem;
+
+        &--party {
+            background:
+                radial-gradient(circle, oklch(0.55 0.14 295) 0 12%, transparent 13%) 0 0 / 0.75rem 0.75rem,
+                $color-violet;
+        }
+
+        &--spotlight {
+            background: conic-gradient(
+                from 155deg at 50% 0,
+                $color-violet-dark,
+                $color-yellow,
+                $color-violet,
+                $color-cyan,
+                $color-violet-dark
+            );
+        }
+
+        &--frames {
+            background:
+                linear-gradient(90deg, oklch(0.81 0.13 195 / 33%) 0.125rem, transparent 0.125rem),
+                linear-gradient(oklch(0.88 0.16 89 / 33%) 0.125rem, transparent 0.125rem),
+                oklch(0.36 0.13 295);
+            background-size: 1.1rem 0.8rem;
+        }
+
+        &--curtain {
+            background: repeating-linear-gradient(
+                90deg,
+                $color-violet 0 0.65rem,
+                $color-coral 0.65rem 1rem,
+                oklch(0.44 0.15 295) 1rem 1.5rem
+            );
+        }
+
+        &--arcade {
+            background:
+                linear-gradient(oklch(0.81 0.13 195 / 20%) 0.0625rem, transparent 0.0625rem),
+                linear-gradient(90deg, oklch(0.81 0.13 195 / 20%) 0.0625rem, transparent 0.0625rem),
+                $color-ink;
+            background-size: 0.7rem 0.7rem;
+        }
+    }
+}
+
+.preview-browser {
+    width: min(100%, 92rem);
+    height: min(calc(100vh - 3rem), 51.75rem);
+    overflow: hidden;
+    border: $line-width solid $color-night;
+    border-radius: 1rem;
+    background: $color-paper;
+    box-shadow: 0.75rem 0.75rem 0 $color-night;
+
+    &__bar {
+        display: flex;
+        height: 2.5rem;
+        align-items: center;
+        gap: 0.45rem;
+        padding: 0 0.8rem;
+        border-bottom: $line-width solid $color-ink;
+        background: $color-yellow;
+
+        span {
+            width: 0.7rem;
+            height: 0.7rem;
+            border: 0.125rem solid $color-ink;
+            border-radius: 50%;
+            background: $color-coral;
+
+            &:nth-child(2) {
+                background: $color-cyan;
+            }
+
+            &:nth-child(3) {
+                background: $color-paper;
+            }
+        }
+
+        p {
+            margin: 0 auto;
+            padding-right: 3rem;
+            font-size: 0.8rem;
+            font-weight: 900;
+        }
+    }
+
+    &__frame {
+        display: block;
+        width: 100%;
+        height: calc(100% - 2.5rem);
+        border: 0;
+        background: $color-paper;
+    }
+}
+
+button:focus-visible,
+a:focus-visible {
+    @include focus-ring;
+}
