@@ -37,6 +37,7 @@ use App\Models\RoundPlayer;
 use App\Models\RoundTier;
 use App\Settings\EngineConstants;
 use App\Support\Answers\ChoicesPresenter;
+use App\Support\Game\RevealMovieBuilder;
 use App\Support\Game\SeatViewPresenter;
 use App\Support\Realtime\WireTime;
 use App\Support\Room\RoomSettingsPresenter;
@@ -56,8 +57,8 @@ use Tests\Support\Scoring\ScoringFixtures;
  * Les blocs dont le producteur existe déjà viennent de lui :
  * `SeatViewPresenter` (C7, sur `PlayerIdentity` de C5),
  * `TierWindow::fromRoundTier()` et `Scoreboard` (C13),
- * `ChoicesPresenter` (C11), `RoomSettingsPresenter` (C0). Les autres —
- * `RevealMovie` (L60-6), `Podium` (L80-5), l'URL signée d'image (L60-8) — sont
+ * `ChoicesPresenter` (C11), `RoomSettingsPresenter` (C0), `RevealMovieBuilder`
+ * (L60-6). Les autres — `Podium` (L80-5), l'URL signée d'image (L60-8) — sont
  * composés à la main à la forme de leur type client, en attendant leur lot.
  */
 final class WireFixtures
@@ -257,26 +258,15 @@ final class WireFixtures
     }
 
     /**
-     * `RevealMovie` à la forme de son type client, en attendant
-     * `RevealMovieBuilder` (L60-6) : le titre original pour chaque locale.
+     * `RevealMovie` par son seul constructeur ({@see RevealMovieBuilder},
+     * L60-6) : titres de toutes les locales activées par la chaîne de repli,
+     * chacun avec le `lang` de la locale atteinte.
      *
      * @return array<string, mixed>
      */
     public static function revealMovie(Movie $movie): array
     {
-        $titles = [];
-
-        foreach (Locale::cases() as $locale) {
-            $titles[$locale->value] = ['text' => $movie->title_original, 'lang' => $movie->original_language];
-        }
-
-        return [
-            'titles' => $titles,
-            'originalTitle' => $movie->title_original,
-            'originalTitleLatin' => $movie->title_original_latin,
-            'originalLanguage' => $movie->original_language,
-            'year' => $movie->release_year,
-        ];
+        return RevealMovieBuilder::build($movie);
     }
 
     /**

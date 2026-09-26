@@ -10,6 +10,7 @@ use App\Models\Guess;
 use App\Models\Player;
 use App\Models\Round;
 use App\Models\RoundPlayer;
+use App\Support\Game\RevealMovieBuilder;
 use App\ValueObjects\Scoring\PlayerTally;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
@@ -60,14 +61,17 @@ use stdClass;
  * classement : le client les lit dans les sièges de 60 (identité gelée).
  *
  * Formes des charges : contrat C13 § 3, miroirs client dans
- * `resources/js/types/scoring.ts`.
+ * `resources/js/types/scoring.ts`. Le paquet de titres du récapitulatif
+ * (`TitlePacket = RevealMovie`, R-24) n'est pas redéclaré ici : sa forme est
+ * celle de son seul constructeur, {@see RevealMovieBuilder}.
+ *
+ * @phpstan-import-type RevealMoviePayload from RevealMovieBuilder as TitlePacketPayload
  *
  * @phpstan-type SeatOutcomePayload 'playing'|'left'|'kicked'
  * @phpstan-type LeaderboardRowPayload array{publicId: string, rank: int|null, rankShared: bool, score: int, correctAnswers: int, roundsPlayed: int, totalAnswerTimeMs: int, roundDelta: int, status: SeatOutcomePayload, firstRoundNumber: int|null}
  * @phpstan-type LeaderboardPayload array{scoreless: bool, roundNumber: int|null, rows: list<LeaderboardRowPayload>}
  * @phpstan-type RoundFinderPayload array{publicId: string, lockRank: int, tierIndex: int, answeredAtMs: int, pointsTier: int, pointsBonus: int, pointsTotal: int}
  * @phpstan-type SeatScorePayload array{ownScore: int}
- * @phpstan-type TitlePacketPayload array{titles: array<string, array{text: string, lang: string}>, originalTitle: string, originalTitleLatin: string|null, originalLanguage: string, year: int|null}
  * @phpstan-type PodiumStandingPayload array{publicId: string, nickname: string|null, masked: bool, avatar: array{kind: string|null, url: string|null, altKey: string, initials: string}, status: SeatOutcomePayload, firstRoundNumber: int|null, rank: int|null, rankShared: bool, finalScore: int, correctAnswers: int, roundsPlayed: int, totalAnswerTimeMs: int}
  * @phpstan-type RecapEntryPayload array{roundNumber: int, outcome: 'completed'|'cancelled', titles: TitlePacketPayload|null, foundCount: int, finders: list<RoundFinderPayload>}
  * @phpstan-type PodiumHighlightsPayload array{bestAnswer: array{publicId: string, roundNumber: int, tierIndex: int, answeredAtMs: int, pointsTotal: int}|null, fastestFind: array{publicId: string, roundNumber: int, answeredAtMs: int}|null, unfoundRoundNumbers: list<int>}

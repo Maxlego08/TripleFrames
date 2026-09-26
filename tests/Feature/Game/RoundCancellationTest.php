@@ -8,8 +8,10 @@ use App\Enums\RoundIncidentReason;
 use App\Enums\RoundStatus;
 use App\Events\Game\GameFinalized;
 use App\Jobs\Game\AdvanceRound;
+use App\Models\Frame;
 use App\Models\Game;
 use App\Models\Round;
+use App\Models\RoundPlayer;
 use App\Settings\EngineConstants;
 use App\Support\Game\RoundStep;
 use App\Support\Realtime\WireTime;
@@ -25,18 +27,20 @@ use Tests\Support\Realtime\RecordingBroadcaster;
 
 /*
 |--------------------------------------------------------------------------
-| Annulation d'une manche — spec 60 § 15.2, lot L60-5
+| Annulation d'une manche — spec 60 § 15.2, lots L60-5 et L60-6
 |--------------------------------------------------------------------------
 |
 | `CancelRound` : la manche passe `cancelled` sans aucun point, puis la suite
 | est programmée dans la même transaction — le remplaçant de la réserve
 | (`ReplacementRoundChooser`, contrat C3), numéroté comme la manche annulée ;
 | à défaut, la manche suivante à jouer ; à défaut, le gel à l'instant de
-| l'annulation (`FinalizeGame`, contrat C13). Les intitulés de ce lot portent
-| sur ces trois issues ; les autres (60 § 20 : frame devenue non servable à
-| l'ouverture, annulation décidée pendant une révélation, QCM Facile non
-| composable, aucun point) arrivent avec `OpenTier`, `RevealRound` (L60-6) et
-| la composition du QCM à l'ouverture (L60-11).
+| l'annulation (`FinalizeGame`, contrat C13). Les intitulés de L60-5 portent
+| sur ces trois issues ; ceux de L60-6, sur la frame devenue non servable à
+| l'ouverture (`OpenTier`, jamais de seconde substitution) et sur
+| l'annulation sans manche restante décidée pendant une révélation (garde
+| « aucune manche en revealing » avant le gel, `EndReveal` gelant à la fin
+| de la révélation) ; les autres (QCM Facile non composable, aucun point)
+| arrivent avec la composition du QCM à l'ouverture (L60-11).
 |
 | Parties matérialisées par l'action réelle sur un tirage construit à la
 | main (`EngineFixtures`), vraies variantes à fichier réel. Horloge figée.
@@ -232,6 +236,124 @@ test('sans manche restante, l\'annulation gèle la partie à l\'instant de l\'an
         ->and($game->status)->toBe(GameStatus::Completed)
         ->and($game->ended_at?->equalTo($this->now))->toBeTrue()
         ->and($game->ended_at?->equalTo($last->cancelled_at))->toBeTrue()
+        ->and($game->rounds_completed)->toBe($game->rounds_count - 1);
+
+    Event::assertDispatched(GameFinalized::class, 1);
+});
+
+test('une frame devenue non servable entre la frappe et l\'ouverture annule la manche avec frame_unavailable sans seconde substitution', function (): void {
+    Queue::fake([AdvanceRound::class]);
+    $recorder = RecordingBroadcaster::install();
+
+    $game = EngineFixtures::game(EngineFixtures::settings());
+    EngineFixtures::seat($game);
+    $movies = EngineFixtures::materialize($game, reserve: 1);
+    $round = EngineFixtures::round($game, 1);
+    $level = FrameLevelCoverage::nominal($game->frames_per_round)[0];
+
+    // Frappé à la programmation sur la variante tirée…
+    EngineFixtures::schedule($round, $this->now->addSeconds(5));
+
+    $minted = EngineFixtures::tier($round, 1)->only(['serve_token', 'served_frame_id', 'substitution_reason']);
+    $drawn = EngineFixtures::variant($movies[0], $level);
+
+    expect($minted['served_frame_id'])->toBe($drawn->id);
+
+    // …qui est suspendue avant T₁, alors qu'une autre variante servable du
+    // même niveau existe : la frappe l'aurait substituée, l'ouverture ne le
+    // fait jamais (C8 § 4.3).
+    Frame::factory()->for($movies[0])->level($level)->published()->create();
+    $drawn->forceFill(['availability' => ContentAvailability::Suspended])->save();
+    $recorder->sent = [];
+
+    $t1 = EngineFixtures::opensAt($round, 1);
+    $first = EngineFixtures::openTier($round, 1);
+    $round->refresh();
+
+    expect($round->status)->toBe(RoundStatus::Cancelled)
+        ->and($round->cancel_reason)->toBe(RoundIncidentReason::FrameUnavailable)
+        ->and($round->cancelled_at?->equalTo($t1))->toBeTrue()
+        // Aucune seconde substitution : le palier reste tel que frappé, et
+        // n'est jamais marqué servi.
+        ->and($first->only(array_keys($minted)))->toEqual($minted)
+        ->and($first->served_at)->toBeNull()
+        ->and(RoundPlayer::query()->where('round_id', $round->id)->count())->toBe(0);
+
+    // Le remplaçant de la réserve prend son numéro, au bout du décompte.
+    $replacement = EngineFixtures::round($game, $game->rounds_count + 1);
+
+    expect($replacement->round_number)->toBe(1)
+        ->and($replacement->started_at?->equalTo($t1->addMilliseconds(EngineConstants::launchCountdownMs())))->toBeTrue();
+
+    expect(array_column($recorder->sent, 'event'))->toBe(['round.cancelled', 'round.scheduled']);
+});
+
+test('une annulation sans manche restante décidée pendant une révélation laisse la révélation aller à son terme', function (): void {
+    Queue::fake([AdvanceRound::class]);
+    Event::fake([GameFinalized::class]);
+    $recorder = RecordingBroadcaster::install();
+
+    $game = EngineFixtures::game(EngineFixtures::settings());
+    EngineFixtures::seat($game);
+    $movies = EngineFixtures::materialize($game);
+    $levels = FrameLevelCoverage::nominal($game->frames_per_round);
+
+    // La dernière manche n'aura aucune variante servable à son palier 1 : sa
+    // frappe, à la programmation par `RevealRound` de l'avant-dernière,
+    // l'annulera — et aucune réserve ne la remplace.
+    $last = EngineFixtures::round($game, $game->rounds_count);
+    EngineFixtures::variant($movies[$game->rounds_count - 1], $levels[0])
+        ->forceFill(['availability' => ContentAvailability::Withdrawn])
+        ->save();
+
+    $first = EngineFixtures::round($game, 1);
+    EngineFixtures::schedule($first, $this->now->addSeconds(5));
+
+    foreach (range(1, $game->rounds_count - 2) as $sequenceIndex) {
+        EngineFixtures::play(EngineFixtures::round($game, $sequenceIndex));
+    }
+
+    $penultimate = EngineFixtures::round($game, $game->rounds_count - 1);
+
+    foreach (range(1, $game->frames_per_round) as $tierIndex) {
+        EngineFixtures::openTier($penultimate, $tierIndex);
+    }
+
+    EngineFixtures::close($penultimate);
+    $recorder->sent = [];
+
+    EngineFixtures::reveal($penultimate);
+
+    $penultimate->refresh();
+    $last->refresh();
+    $game->refresh();
+
+    // Annulée pendant la révélation, sans manche restante : la partie n'est
+    // PAS gelée à l'instant de l'annulation, la révélation continue.
+    expect($last->status)->toBe(RoundStatus::Cancelled)
+        ->and($last->cancel_reason)->toBe(RoundIncidentReason::NoVariantAvailable)
+        ->and($penultimate->status)->toBe(RoundStatus::Revealing)
+        ->and($game->status)->toBe(GameStatus::Running)
+        ->and($game->ended_at)->toBeNull();
+
+    Event::assertNotDispatched(GameFinalized::class);
+
+    // Sur le fil : les titres, puis l'annulation — ni programmation, ni fin.
+    expect(array_column($recorder->sent, 'event'))->toBe(['round.revealed', 'round.cancelled'])
+        ->and($recorder->sent[0]['payload']['images'])->toHaveCount($game->frames_per_round);
+
+    // La révélation va à son terme : `EndReveal`, ne trouvant aucune manche
+    // à jouer, gèle à `reveal_ends_at` de la manche révélée — l'instant
+    // théorique, même exécutée en retard (règle 1, § 1.1).
+    $revealEndsAt = $penultimate->reveal_ends_at ?? throw new LogicException('Manche révélée sans fin de révélation.');
+
+    EngineFixtures::endReveal($penultimate, $revealEndsAt->addMilliseconds(2_700));
+
+    $game->refresh();
+
+    expect($penultimate->refresh()->status)->toBe(RoundStatus::Completed)
+        ->and($game->status)->toBe(GameStatus::Completed)
+        ->and($game->ended_at?->equalTo($revealEndsAt))->toBeTrue()
         ->and($game->rounds_completed)->toBe($game->rounds_count - 1);
 
     Event::assertDispatched(GameFinalized::class, 1);

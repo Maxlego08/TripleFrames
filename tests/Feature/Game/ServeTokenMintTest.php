@@ -1,10 +1,12 @@
 <?php
 
+use App\Actions\Game\CancelRound;
 use App\Actions\Game\MintTierServeToken;
 use App\Actions\Game\ScheduleRound;
 use App\Enums\ContentAvailability;
 use App\Enums\FrameLevel;
 use App\Enums\FrameProcessingState;
+use App\Enums\Locale;
 use App\Enums\RoundIncidentReason;
 use App\Enums\RoundStatus;
 use App\Jobs\Game\AdvanceRound;
@@ -12,10 +14,14 @@ use App\Models\Frame;
 use App\Models\Game;
 use App\Models\Movie;
 use App\Models\Round;
+use App\Models\RoundPlayer;
 use App\Models\RoundTier;
+use App\Models\SeenFrame;
 use App\Settings\EngineConstants;
 use App\Support\Frames\FrameStoragePrefix;
 use App\Support\Game\RoundStep;
+use App\Support\Game\ServeUrl;
+use App\Support\Identity\PlayerToken;
 use App\Support\Realtime\ChannelNames;
 use App\Support\Realtime\WireTime;
 use App\ValueObjects\Catalog\FrameLevelCoverage;
@@ -31,10 +37,11 @@ use Illuminate\Support\Facades\URL;
 use Tests\Support\Draw\PoolFixtures;
 use Tests\Support\Game\EngineFixtures;
 use Tests\Support\Realtime\RecordingBroadcaster;
+use Tests\Support\Room\LobbyWrites;
 
 /*
 |--------------------------------------------------------------------------
-| Frappe du jeton d'image — spec 60 § 6.1-6.2, contrat C8 § 4.1-4.2 (lot L60-5)
+| Frappe et ouverture — spec 60 § 6.1-6.3, contrat C8 § 4.1-4.3 (lots L60-5, L60-6)
 |--------------------------------------------------------------------------
 |
 | `MintTierServeToken` est la seule écrivaine de `serve_token`,
@@ -150,18 +157,6 @@ test('le jeton du palier 1 est frappé à la programmation, celui du palier i à
         ->and($first->served_at)->toBeNull()
         ->and(RoundTier::query()->whereNotNull('serve_token')->pluck('id')->all())->toBe([$first->id]);
 
-    // Un cran à l'avance : la frappe du palier i ne frappe que lui. Son
-    // appel par `OpenTier(i−1)`, à l'ouverture du palier précédent, arrive
-    // avec `OpenTier` (L60-6).
-    foreach (range(2, $game->frames_per_round) as $tierIndex) {
-        $minted = mintTier($round, $tierIndex, $this->now);
-
-        expect($minted->serve_token)->toMatch('/^[0-9a-f]{32}$/')
-            ->and($minted->served_frame_id)->toBe($minted->frame_id)
-            ->and($minted->served_at)->toBeNull()
-            ->and(RoundTier::query()->where('round_id', $round->id)->whereNotNull('serve_token')->count())->toBe($tierIndex);
-    }
-
     // Après commit : le job de frontière `OpenTier(1)` sur la file `game`,
     // délai exprimé en INSTANT, jamais en entier (§ 4.2).
     Queue::assertPushedOn('game', AdvanceRound::class, function (AdvanceRound $job) use ($game, $round, $startsAt): bool {
@@ -240,6 +235,31 @@ test('le jeton du palier 1 est frappé à la programmation, celui du palier i à
         ->and($recorder->sent)->toBe([]);
 
     Queue::assertPushed(AdvanceRound::class, 2);
+
+    // Un cran à l'avance (lot L60-6) : l'ouverture du palier i−1 frappe le
+    // palier i, et lui seul — le palier que `tier.opened.next` annonce ; le
+    // dernier palier ne frappe plus rien.
+    foreach (range(1, $game->frames_per_round) as $opened) {
+        EngineFixtures::openTier($round, $opened);
+
+        $minted = min($opened + 1, $game->frames_per_round);
+
+        expect(RoundTier::query()->where('round_id', $round->id)->whereNotNull('serve_token')->orderBy('tier_index')->pluck('tier_index')->all())
+            ->toBe(range(1, $minted));
+
+        if ($opened < $game->frames_per_round) {
+            $next = EngineFixtures::tier($round, $opened + 1);
+
+            expect($next->serve_token)->toMatch('/^[0-9a-f]{32}$/')
+                ->and($next->served_frame_id)->toBe($next->frame_id)
+                ->and($next->served_at)->toBeNull();
+
+            $opening = collect($recorder->sent)->last(static fn (array $sent): bool => $sent['event'] === 'tier.opened');
+
+            expect($opening['payload']['tierIndex'] ?? null)->toBe($opened)
+                ->and(parse_url((string) ($opening['payload']['next']['url'] ?? ''), PHP_URL_PATH))->toBe('/f/'.$next->serve_token);
+        }
+    }
 });
 
 test('la frappe est idempotente', function (): void {
@@ -456,4 +476,268 @@ test('deux manches distinctes portant la même frame produisent deux serve_token
     }
 
     expect(array_unique($tokens))->toHaveCount(3);
+});
+
+/**
+ * Une partie matérialisée, un siège présent, la manche 1 programmée à
+ * `now + 5 s` — à une fraction de seconde, pour que les instants théoriques
+ * portent des millisecondes.
+ *
+ * @return array{Game, Round}
+ */
+function mintScheduled(bool $solo = false, int $reserve = 0): array
+{
+    $game = EngineFixtures::game(EngineFixtures::settings(), solo: $solo);
+    EngineFixtures::seat($game);
+    EngineFixtures::materialize($game, $reserve);
+    $round = EngineFixtures::round($game, 1);
+
+    EngineFixtures::schedule($round, Date::now()->toImmutable()->addMilliseconds(5_137));
+
+    return [$game, $round->refresh()];
+}
+
+/**
+ * Les lignes `seen_frame`, `frame_id => last_seen_at` à la seconde.
+ *
+ * @return array<int, string>
+ */
+function mintSeenFrames(): array
+{
+    return SeenFrame::query()->orderBy('frame_id')->get()
+        ->mapWithKeys(static fn (SeenFrame $seen): array => [$seen->frame_id => $seen->last_seen_at->format('Y-m-d H:i:s')])
+        ->all();
+}
+
+test('served_at vaut l\'instant théorique même quand le job est en retard', function (): void {
+    Queue::fake([AdvanceRound::class]);
+    $recorder = RecordingBroadcaster::install();
+
+    [$game, $round] = mintScheduled();
+    $recorder->sent = [];
+
+    // Chaque ouverture s'exécute en retard, d'un retard différent : l'instant
+    // écrit est toujours `Tᵢ = started_at + starts_at_offset_ms`, à la
+    // milliseconde, jamais l'heure d'exécution.
+    foreach (range(1, $game->frames_per_round) as $tierIndex) {
+        $opensAt = EngineFixtures::opensAt($round, $tierIndex);
+        $late = $opensAt->addMilliseconds(2_700 + 113 * $tierIndex);
+
+        $opened = EngineFixtures::openTier($round, $tierIndex, $late);
+
+        expect($opened->served_at?->format('Y-m-d H:i:s.v'))->toBe($opensAt->format('Y-m-d H:i:s.v'))
+            ->and($opened->served_at?->format('Y-m-d H:i:s.v'))->not->toBe($late->format('Y-m-d H:i:s.v'));
+
+        // La diffusion part en retard (son `serverNow`), mais annonce l'instant
+        // théorique ; la mémoire du salon aussi.
+        $sent = collect($recorder->sent)->last();
+
+        expect($sent['event'] ?? null)->toBe('tier.opened')
+            ->and($sent['payload']['opensAt'] ?? null)->toBe(WireTime::iso($opensAt))
+            ->and($sent['payload']['serverNow'] ?? null)->toBe(WireTime::iso($late))
+            ->and(mintSeenFrames()[(int) $opened->served_frame_id] ?? null)->toBe($opensAt->format('Y-m-d H:i:s'));
+
+        // Rejouée plus tard encore, l'ouverture ne réécrit rien.
+        EngineFixtures::openTier($round, $tierIndex, $late->addSeconds(4));
+
+        expect(EngineFixtures::tier($round, $tierIndex)->served_at?->equalTo($opensAt))->toBeTrue();
+    }
+
+    expect(array_column($recorder->sent, 'event'))->toBe(array_fill(0, $game->frames_per_round, 'tier.opened'));
+});
+
+test('après N requêtes d\'image anticipées et aucune frontière franchie, served_at est nul et seen_frame est vide', function (): void {
+    // Le siège présente son `player_token` comme le navigateur : c'est la
+    // requête que le prédicat de service autorisera (C8 § 2, membre de la
+    // manche), celle que vise la règle (10 § 7.4).
+    $token = PlayerToken::mint(Locale::French);
+    $game = EngineFixtures::game(EngineFixtures::settings());
+    EngineFixtures::seat($game, ['player_token_hash' => $token->hash()]);
+    EngineFixtures::materialize($game);
+    $round = EngineFixtures::round($game, 1);
+    EngineFixtures::schedule($round, Date::now()->toImmutable()->addMilliseconds(5_137));
+
+    $first = EngineFixtures::tier($round, 1);
+    $t1 = EngineFixtures::opensAt($round, 1);
+    $windowOpens = $first->servingOpensAt($game->preload_lead_ms) ?? throw new LogicException('Palier 1 sans origine de temps.');
+    $url = ServeUrl::for($first);
+
+    LobbyWrites::actAs($this, $token);
+
+    // N requêtes du palier 1 dans SA fenêtre de préchargement
+    // `[T₁ − preload_lead_ms, T₁)`, bords compris, sans qu'aucune frontière
+    // soit franchie : la première requête d'image d'un palier arrive
+    // jusqu'à `preload_lead_ms` avant son ouverture (10 § 7.4). Servie (200)
+    // une fois le prédicat branché (L60-8), refusée (404) d'ici là par la
+    // route fermée : dans les deux cas elle est en lecture seule et n'ouvre
+    // rien.
+    foreach (range(1, $game->frames_per_round) as $request) {
+        Date::setTestNow($windowOpens->addMilliseconds(intdiv(
+            ($request - 1) * ($game->preload_lead_ms - 1),
+            $game->frames_per_round - 1,
+        )));
+
+        expect($this->get($url)->baseResponse->getStatusCode())->toBeIn([200, 404]);
+    }
+
+    expect(Date::now()->equalTo($t1->subMillisecond()))->toBeTrue();
+
+    // Aucune frontière franchie : même l'ouverture appelée une milliseconde
+    // avant T₁ n'écrit rien, et le palier 2 n'est pas frappé.
+    EngineFixtures::openTier($round, 1, $t1->subMillisecond());
+
+    expect(RoundTier::query()->where('round_id', $round->id)->whereNotNull('serve_token')->pluck('tier_index')->all())->toBe([1])
+        ->and(RoundTier::query()->where('round_id', $round->id)->whereNotNull('served_at')->count())->toBe(0)
+        ->and(SeenFrame::query()->count())->toBe(0)
+        ->and($round->refresh()->status)->toBe(RoundStatus::Pending)
+        ->and(RoundPlayer::query()->where('round_id', $round->id)->count())->toBe(0);
+});
+
+test('seen_frame est écrit sur served_frame_id à l\'ouverture, jamais à la frappe, jamais en solo', function (): void {
+    $game = EngineFixtures::game(EngineFixtures::settings());
+    EngineFixtures::seat($game);
+    $movies = EngineFixtures::materialize($game);
+    $round = EngineFixtures::round($game, 1);
+    $levels = FrameLevelCoverage::nominal($game->frames_per_round);
+
+    // Le palier 2 sera substitué à sa frappe : la variante tirée est
+    // suspendue, une autre variante publiée du même niveau la remplacera.
+    $drawn = EngineFixtures::variant($movies[0], $levels[1]);
+    $substitute = Frame::factory()->for($movies[0])->level($levels[1])->published()->create();
+    $drawn->forceFill(['availability' => ContentAvailability::Suspended])->save();
+
+    // Le palier 3 a déjà été vu par le salon, il y a longtemps.
+    $third = EngineFixtures::variant($movies[0], $levels[2]);
+    $longAgo = Date::now()->toImmutable()->subDays(40);
+    SeenFrame::query()->create(['room_id' => $game->room_id, 'frame_id' => $third->id, 'last_seen_at' => $longAgo]);
+
+    // À la frappe du palier 1 (programmation) : rien.
+    EngineFixtures::schedule($round, Date::now()->toImmutable()->addSeconds(5));
+
+    expect(mintSeenFrames())->toBe([$third->id => $longAgo->format('Y-m-d H:i:s')]);
+
+    // À l'ouverture du palier 1 : sa variante, à T₁ ; le palier 2, frappé
+    // (et substitué) dans la même transition, n'est pas encore vu.
+    EngineFixtures::openTier($round, 1);
+    $first = EngineFixtures::tier($round, 1);
+    $second = EngineFixtures::tier($round, 2);
+
+    expect($second->served_frame_id)->toBe($substitute->id)
+        ->and($second->substitution_reason)->toBe(RoundIncidentReason::FrameUnavailable)
+        ->and(array_keys(mintSeenFrames()))->toEqualCanonicalizing([$first->served_frame_id, $third->id])
+        ->and(mintSeenFrames()[(int) $first->served_frame_id])->toBe(EngineFixtures::opensAt($round, 1)->format('Y-m-d H:i:s'));
+
+    // À l'ouverture du palier 2 : la variante SERVIE, jamais celle du tirage.
+    EngineFixtures::openTier($round, 2);
+
+    expect(mintSeenFrames())->toHaveKey($substitute->id)
+        ->and(mintSeenFrames())->not->toHaveKey($drawn->id)
+        ->and(mintSeenFrames()[$substitute->id])->toBe(EngineFixtures::opensAt($round, 2)->format('Y-m-d H:i:s'));
+
+    // À l'ouverture du palier 3 : la ligne existante est mise à jour, jamais
+    // doublée (`seen_frame_room_frame_uq`).
+    EngineFixtures::openTier($round, 3);
+
+    expect(SeenFrame::query()->where('frame_id', $third->id)->count())->toBe(1)
+        ->and(mintSeenFrames()[$third->id])->toBe(EngineFixtures::opensAt($round, 3)->format('Y-m-d H:i:s'))
+        ->and(SeenFrame::query()->count())->toBe(3)
+        ->and(SeenFrame::query()->distinct()->pluck('room_id')->all())->toBe([$game->room_id]);
+
+    // En solo : les mêmes ouvertures, aucune mémoire de salon (barrière 3).
+    SeenFrame::query()->delete();
+    [$solo, $soloRound] = mintScheduled(solo: true);
+
+    foreach (range(1, $solo->frames_per_round) as $tierIndex) {
+        expect(EngineFixtures::openTier($soloRound, $tierIndex)->served_at)->not->toBeNull();
+    }
+
+    expect(SeenFrame::query()->count())->toBe(0);
+});
+
+test('un palier dont l\'ouverture suit une fin anticipée ou une annulation n\'écrit ni served_at ni seen_frame', function (): void {
+    Queue::fake([AdvanceRound::class]);
+    $recorder = RecordingBroadcaster::install();
+
+    // 1. Fin anticipée entre T₁ et T₂, puis à T₂ exactement : le palier 2
+    // ne s'ouvre jamais (`Tᵢ ≥ ended_at`).
+    foreach (['avant T₂' => 1_900, 'à T₂' => 0] as $label => $beforeT2) {
+        [$game, $round] = mintScheduled();
+        EngineFixtures::openTier($round, 1);
+        $seen = mintSeenFrames();
+        $t2 = EngineFixtures::opensAt($round, 2);
+
+        EngineFixtures::close($round, $t2->subMilliseconds($beforeT2));
+        $recorder->sent = [];
+
+        $second = EngineFixtures::openTier($round, 2, $t2->addMillisecond());
+
+        expect($second->served_at)->toBeNull($label)
+            ->and(mintSeenFrames())->toBe($seen, $label)
+            // Ni frappe du palier 3, ni diffusion, ni frontière suivante.
+            ->and(EngineFixtures::tier($round, 3)->serve_token)->toBeNull($label)
+            ->and($recorder->sent)->toBe([], $label)
+            ->and($round->refresh()->status)->toBe(RoundStatus::Running, $label);
+
+        Queue::assertNotPushed(AdvanceRound::class, static fn (AdvanceRound $job): bool => $job->roundId === $round->id
+            && $job->step === RoundStep::OpenTier
+            && $job->tierIndex === 3);
+    }
+
+    // 2. Annulation entre T₁ et T₂ : le palier 2 ne s'ouvre jamais.
+    [$game, $round] = mintScheduled(reserve: 1);
+    EngineFixtures::openTier($round, 1);
+    $seen = mintSeenFrames();
+    $t2 = EngineFixtures::opensAt($round, 2);
+
+    DB::transaction(static fn () => app(CancelRound::class)->handle($round, RoundIncidentReason::FrameUnavailable, $t2->subSecond()));
+    $recorder->sent = [];
+
+    $second = EngineFixtures::openTier($round, 2, $t2);
+
+    expect($round->refresh()->status)->toBe(RoundStatus::Cancelled)
+        ->and($second->served_at)->toBeNull()
+        ->and(mintSeenFrames())->toBe($seen)
+        ->and(EngineFixtures::tier($round, 3)->serve_token)->toBeNull()
+        ->and($recorder->sent)->toBe([]);
+});
+
+test('un palier dont l\'ouverture annule la manche n\'est jamais marqué servi', function (): void {
+    Queue::fake([AdvanceRound::class]);
+    $recorder = RecordingBroadcaster::install();
+
+    // 1. La frame frappée n'est plus servable à T₁ : annulation
+    // `frame_unavailable` avant toute écriture de l'ouverture.
+    [$game, $round] = mintScheduled(reserve: 1);
+    Frame::query()->findOrFail(EngineFixtures::tier($round, 1)->served_frame_id)
+        ->forceFill(['availability' => ContentAvailability::Unpublished])
+        ->save();
+    $recorder->sent = [];
+
+    $first = EngineFixtures::openTier($round, 1);
+
+    expect($round->refresh()->status)->toBe(RoundStatus::Cancelled)
+        ->and($round->cancel_reason)->toBe(RoundIncidentReason::FrameUnavailable)
+        ->and($first->served_at)->toBeNull()
+        ->and(SeenFrame::query()->count())->toBe(0)
+        ->and(RoundPlayer::query()->where('round_id', $round->id)->count())->toBe(0)
+        ->and(EngineFixtures::tier($round, 2)->serve_token)->toBeNull()
+        ->and(array_column($recorder->sent, 'event'))->not->toContain('tier.opened');
+
+    // 2. La frappe du palier suivant, faute de variante, annule la manche à
+    // l'ouverture du palier 1 : le palier 1 n'est pas marqué servi.
+    [$game, $round] = mintScheduled(reserve: 1);
+    $second = EngineFixtures::tier($round, 2);
+    Frame::query()->findOrFail($second->frame_id)->forceFill(['availability' => ContentAvailability::Withdrawn])->save();
+    $recorder->sent = [];
+
+    $first = EngineFixtures::openTier($round, 1);
+
+    expect($round->refresh()->status)->toBe(RoundStatus::Cancelled)
+        ->and($round->cancel_reason)->toBe(RoundIncidentReason::NoVariantAvailable)
+        ->and($first->served_at)->toBeNull()
+        ->and(EngineFixtures::tier($round, 2)->serve_token)->toBeNull()
+        ->and(SeenFrame::query()->count())->toBe(0)
+        ->and(array_column($recorder->sent, 'event'))->toBe(['round.cancelled', 'round.scheduled']);
+
+    Queue::assertNotPushed(AdvanceRound::class, static fn (AdvanceRound $job): bool => $job->roundId === $round->id && $job->tierIndex === 2);
 });

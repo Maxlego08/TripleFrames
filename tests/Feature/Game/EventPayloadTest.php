@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\Locale;
+use App\Enums\RoundStatus;
 use App\Events\Game\GameEnded;
 use App\Events\Game\GameLaunched;
 use App\Events\Game\GamePaused;
@@ -23,8 +24,12 @@ use App\Events\Game\SeatUpdated;
 use App\Events\Game\SettingsChanged;
 use App\Events\Game\TierOpened;
 use App\Http\Middleware\EnsureActiveSeat;
+use App\Jobs\Game\AdvanceRound;
+use App\Models\Alias;
 use App\Models\Frame;
 use App\Models\Game;
+use App\Models\Movie;
+use App\Models\MovieTitle;
 use App\Models\Player;
 use App\Models\Room;
 use App\Models\Round;
@@ -47,7 +52,10 @@ use Illuminate\Contracts\Events\ShouldDispatchAfterCommit;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Exceptions;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
+use Tests\Support\Draw\PoolFixtures;
+use Tests\Support\Game\EngineFixtures;
 use Tests\Support\Realtime\RecordingBroadcaster;
 use Tests\Support\Realtime\RecordingJob;
 use Tests\Support\Realtime\WireFixtures;
@@ -55,7 +63,7 @@ use Tests\Support\Realtime\WireScene;
 
 /*
 |--------------------------------------------------------------------------
-| Contrat d'événements — spec 60 § 11, contrat C7 § 2.3 et § 3 (lot L60-3)
+| Contrat d'événements — spec 60 § 11, contrat C7 § 2.3 et § 3 (lots L60-3, L60-6)
 |--------------------------------------------------------------------------
 |
 | Les dix-neuf événements de la liste close, émis par la chaîne réelle du
@@ -64,8 +72,11 @@ use Tests\Support\Realtime\WireScene;
 | enregistreur, avec des charges de la forme que leurs émetteurs produiront
 | (`WireFixtures`). Les intitulés de ce lot portent sur le transport :
 | enveloppe, identifiants internes, liste close, transaction annulée,
-| diffusion en échec. Les autres intitulés du fichier (60 § 20) arrivent avec
-| leurs émetteurs (L60-6, L60-7, L60-11) ; « ni aucun paquet » s'éprouve sur
+| diffusion en échec. Ceux de L60-6 portent sur les émetteurs de clôture et
+| de révélation (`CloseRound`, `RevealRound`, par les transitions réelles) :
+| instants de clôture et de titres, `lang` de chaque titre. Les autres
+| intitulés du fichier (60 § 20) arrivent avec leurs émetteurs (L60-7,
+| L60-11) ; « ni aucun paquet » s'éprouve sur
 | `GameStatePacket` : branche sans partie dès L60-4 (lobby et solo, par
 | `room.state` et par le constructeur), branche de partie en L60-12
 | (passation obligatoire, E83-3).
@@ -618,4 +629,217 @@ it('les bases refusent une partie solo, un siège sans salon et une charge hors 
 
     expect(array_keys($locked->payload()))->toBe(['sequenceIndex', 'publicId', 'lockRank'])
         ->and($changed->payload())->toBe(['hostPublicId' => $scene->host->public_id, 'previousHostPublicId' => null]);
+});
+
+/**
+ * Une partie multijoueur au siège présent, sa manche 1 programmée puis
+ * ouverte jusqu'à son palier `$openTiers` (le dernier par défaut), par les
+ * transitions réelles (L60-6). `$movie` prépare le film de la manche avant la
+ * programmation.
+ *
+ * @param  (Closure(Movie): void)|null  $movie
+ * @return array{Game, Round}
+ */
+function eventPayloadOpenedRound(?Closure $movie = null, ?int $openTiers = null): array
+{
+    $game = EngineFixtures::game(EngineFixtures::settings());
+    EngineFixtures::seat($game);
+    $movies = EngineFixtures::materialize($game);
+
+    if ($movie instanceof Closure) {
+        $movie($movies[0]);
+    }
+
+    $round = EngineFixtures::round($game, 1);
+    EngineFixtures::schedule($round, Date::now()->toImmutable()->addMilliseconds(5_381));
+
+    foreach (range(1, $openTiers ?? $game->frames_per_round) as $tierIndex) {
+        EngineFixtures::openTier($round, $tierIndex);
+    }
+
+    return [$game, $round->refresh()];
+}
+
+/**
+ * Les chaînes qui désignent le film, telles que le fil les écrirait (JSON,
+ * Unicode échappé) : titre original, translittération, titres de toute
+ * locale et alias.
+ *
+ * @return list<string>
+ */
+function eventPayloadTitleStrings(Movie $movie): array
+{
+    $strings = [$movie->title_original, $movie->title_original_latin];
+
+    foreach (MovieTitle::query()->where('movie_id', $movie->id)->pluck('title') as $title) {
+        $strings[] = $title;
+    }
+
+    foreach (Alias::query()->where('movie_id', $movie->id)->pluck('alias') as $alias) {
+        $strings[] = $alias;
+    }
+
+    return array_values(array_map(
+        static fn (string $title): string => substr(json_encode($title, JSON_THROW_ON_ERROR), 1, -1),
+        array_filter($strings, static fn (mixed $title): bool => is_string($title) && $title !== ''),
+    ));
+}
+
+it('la clôture est émise à ended_at et les titres à ended_at + tier_grace_ms', function (): void {
+    PoolFixtures::fakeFramesDisk();
+    Queue::fake([AdvanceRound::class]);
+    Date::setTestNow(CarbonImmutable::parse('2026-09-26 14:00:00.250'));
+    $recorder = RecordingBroadcaster::install();
+
+    // À `D` comme en fin anticipée : `round.closed` part à l'instant de
+    // clôture écrit, `round.revealed` à `ended_at + tier_grace_ms`, jamais
+    // avant, et rien de ce qui précède ne nomme le film.
+    foreach (['à D' => null, 'fin anticipée' => 3_417] as $label => $afterT1) {
+        $recorder->sent = [];
+        [$game, $round] = eventPayloadOpenedRound(openTiers: $afterT1 === null ? null : 1);
+        $movie = Movie::query()->findOrFail($round->movie_id);
+        $titles = eventPayloadTitleStrings($movie);
+
+        $endedAt = $afterT1 === null
+            ? EngineFixtures::durationEnd($round)
+            : EngineFixtures::opensAt($round, 1)->addMilliseconds($afterT1);
+        $revealStartsAt = $endedAt->addMilliseconds($game->tier_grace_ms);
+        $revealEndsAt = $revealStartsAt->addSeconds($game->settings_snapshot->revealDuration);
+
+        EngineFixtures::close($round, $endedAt);
+
+        $closed = collect($recorder->sent)->last();
+
+        expect($closed['event'] ?? null)->toBe('round.closed', $label)
+            ->and($closed['payload'])->toMatchArray([
+                'serverNow' => WireTime::iso($endedAt),
+                'sequenceIndex' => 1,
+                'roundNumber' => 1,
+                'endedAt' => WireTime::iso($endedAt),
+                'revealStartsAt' => WireTime::iso($revealStartsAt),
+                'revealEndsAt' => WireTime::iso($revealEndsAt),
+            ])
+            // Close, la manche reste `running` : la grâce finale court.
+            ->and($round->refresh()->status)->toBe(RoundStatus::Running, $label);
+
+        // Une milliseconde avant `ended_at + tier_grace_ms` : aucun titre.
+        EngineFixtures::reveal($round, $revealStartsAt->subMillisecond());
+
+        expect(collect($recorder->sent)->last()['event'] ?? null)->toBe('round.closed', $label)
+            ->and($round->refresh()->status)->toBe(RoundStatus::Running, $label);
+
+        EngineFixtures::reveal($round);
+
+        // Les titres, puis la programmation de la manche suivante (§ 9.4).
+        expect(array_slice(array_column($recorder->sent, 'event'), -2))->toBe(['round.revealed', 'round.scheduled'], $label);
+
+        $revealed = collect($recorder->sent)->firstWhere('event', 'round.revealed');
+
+        expect($revealed['event'] ?? null)->toBe('round.revealed', $label)
+            ->and($revealed['payload']['serverNow'])->toBe(WireTime::iso($revealStartsAt), $label)
+            ->and($revealed['payload']['revealEndsAt'])->toBe(WireTime::iso($revealEndsAt), $label)
+            ->and($revealed['payload']['movie']['originalTitle'])->toBe($movie->title_original, $label)
+            ->and($round->refresh()->status)->toBe(RoundStatus::Revealing, $label);
+
+        // Tout ce qui est parti avant `revealStartsAt` — programmation,
+        // ouvertures, clôture — ne porte aucun titre du film.
+        $before = array_values(array_filter(
+            $recorder->sent,
+            static fn (array $sent): bool => $sent['payload']['serverNow'] < WireTime::iso($revealStartsAt),
+        ));
+
+        expect(array_column($before, 'event'))->toContain('round.closed');
+
+        foreach ($before as $sent) {
+            foreach ($titles as $title) {
+                expect($sent['json'])->not->toContain($title, "[{$label}] {$sent['event']} porte un titre.");
+            }
+        }
+
+        // La fin anticipée n'a ouvert que le palier 1 : la révélation n'en
+        // remontre pas d'autre (D14 du 23/09).
+        expect($revealed['payload']['images'])->toHaveCount($afterT1 === null ? $game->frames_per_round : 1, $label)
+            ->and(array_column($revealed['payload']['images'], 'tierIndex'))
+            ->toBe($afterT1 === null ? range(1, $game->frames_per_round) : [1], $label);
+    }
+});
+
+it("chaque titre de la révélation porte l'attribut lang de la locale atteinte", function (): void {
+    PoolFixtures::fakeFramesDisk();
+    Queue::fake([AdvanceRound::class]);
+    Date::setTestNow(CarbonImmutable::parse('2026-09-26 14:00:00.250'));
+    $recorder = RecordingBroadcaster::install();
+
+    /**
+     * Le film de la manche, remis à un état de titres donné.
+     *
+     * @param  array<string, string>  $titles  locale de catalogue → titre
+     */
+    $movieWith = static function (array $titles, string $original, ?string $latin, string $language): Closure {
+        return static function (Movie $movie) use ($titles, $original, $latin, $language): void {
+            MovieTitle::query()->where('movie_id', $movie->id)->delete();
+
+            foreach ($titles as $locale => $title) {
+                MovieTitle::factory()->for($movie)->forLocale($locale)->titled($title)->create();
+            }
+
+            $movie->forceFill([
+                'title_original' => $original,
+                'title_original_latin' => $latin,
+                'original_language' => $language,
+            ])->save();
+        };
+    };
+
+    $spirited = '千と千尋の神隠し';
+    $latin = 'Sen to Chihiro no Kamikakushi';
+
+    // Scénario → [film, titres attendus par locale d'interface : texte, lang].
+    $scenarios = [
+        'les deux locales' => [
+            $movieWith(['en' => 'Spirited Away', 'fr' => 'Le Voyage de Chihiro'], $spirited, $latin, 'ja'),
+            ['en' => ['Spirited Away', 'en'], 'fr' => ['Le Voyage de Chihiro', 'fr']],
+        ],
+        'une seule locale activée' => [
+            $movieWith(['fr' => 'Le Voyage de Chihiro', 'ja' => $spirited], $spirited, $latin, 'ja'),
+            ['en' => ['Le Voyage de Chihiro', 'fr'], 'fr' => ['Le Voyage de Chihiro', 'fr']],
+        ],
+        'titre original translittéré' => [
+            $movieWith(['ja' => $spirited], $spirited, $latin, 'ja'),
+            ['en' => [$latin, 'ja-Latn'], 'fr' => [$latin, 'ja-Latn']],
+        ],
+        'titre original sans translittération' => [
+            $movieWith([], $spirited, null, 'ja'),
+            ['en' => [$spirited, 'ja'], 'fr' => [$spirited, 'ja']],
+        ],
+        'titre original latin' => [
+            $movieWith([], 'Amélie', 'Amelie', 'fr'),
+            ['en' => ['Amélie', 'fr'], 'fr' => ['Amélie', 'fr']],
+        ],
+    ];
+
+    foreach ($scenarios as $label => [$prepare, $expected]) {
+        [, $round] = eventPayloadOpenedRound($prepare);
+        $movie = Movie::query()->findOrFail($round->movie_id);
+
+        EngineFixtures::close($round);
+        $recorder->sent = [];
+        EngineFixtures::reveal($round);
+
+        $revealed = collect($recorder->sent)->firstWhere('event', 'round.revealed');
+        $packet = $revealed['payload']['movie'] ?? null;
+
+        expect($packet)->toBe([
+            'titles' => array_map(
+                static fn (array $title): array => ['text' => $title[0], 'lang' => $title[1]],
+                $expected,
+            ),
+            'originalTitle' => $movie->title_original,
+            'originalTitleLatin' => $movie->title_original_latin,
+            'originalLanguage' => $movie->original_language,
+            'year' => $movie->release_year,
+        ], $label)
+            // Une entrée par locale activée, dans l'ordre du registre.
+            ->and(array_keys($packet['titles'] ?? []))->toBe(array_map(static fn (Locale $locale): string => $locale->value, Locale::cases()), $label);
+    }
 });

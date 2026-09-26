@@ -42,19 +42,22 @@ use LogicException;
  * 3. **réserve épuisée** : la partie continue avec une manche de moins — la
  *    manche suivante à jouer (numérotée, `pending`, plus petit
  *    `round_number`, § 1.2) est programmée au même instant, comme un
- *    remplaçant ; **aucune ne reste** : `FinalizeGame::handle($game,
- *    GameStatus::Completed, $now)`, l'instant de l'annulation, dans la même
- *    transaction, `game` pris d'abord ;
+ *    remplaçant ; **aucune ne reste** et **aucune manche de la partie n'est
+ *    en `revealing`** : `FinalizeGame::handle($game, GameStatus::Completed,
+ *    $now)`, l'instant de l'annulation, dans la même transaction, `game` pris
+ *    d'abord — si une manche est en révélation, rien : `EndReveal` gèle à sa
+ *    fin ;
  * 4. après commit : `round.cancelled` `{ sequenceIndex, roundNumber }` — ni
  *    motif, ni titre — **en multijoueur seulement** (§ 11.2), toujours avant
  *    le `round.scheduled` du remplaçant et le `game.ended` d'un gel
  *    ({@see self::markCancelled()}).
  *
- * **Garde « aucune manche en révélation » avant le gel** (§ 15.2, étape 3) :
- * posée par L60-6 avec `RevealRound`, seul chemin qui programme une manche
- * — donc peut en voir annuler une — pendant la révélation d'une autre. Avant
- * lui, aucune manche d'une partie n'est jamais `revealing` quand celle-ci
- * s'annule.
+ * **Garde « aucune manche en révélation » avant le gel** (§ 15.2, étape 3,
+ * lot L60-6) : `RevealRound(k)` programme `k+1` dès le début de la
+ * révélation de `k`, et la frappe du palier 1 de `k+1` peut l'annuler
+ * (`no_variant_available`) ; sans manche restante, geler à l'instant de
+ * l'annulation couperait la révélation de `k`. Le gel est laissé à
+ * `EndReveal(k)`, à `reveal_ends_at(k)` (§ 9.6, § 14.5).
  *
  * **Idempotente** : une manche déjà annulée n'est ni relue, ni remplacée, ni
  * rediffusée. Une annulation programme toujours la suite dans sa propre
@@ -100,6 +103,17 @@ final readonly class CancelRound
             if ($next instanceof Round) {
                 app(ScheduleRound::class)->handle($next, $startsAt);
 
+                return;
+            }
+
+            // Garde « aucune manche en révélation » (§ 15.2, étape 3) : la
+            // frappe du palier 1 de k+1, appelée par `RevealRound(k)`, peut
+            // annuler k+1 pendant la révélation de k. Geler ici couperait
+            // cette révélation — `FinalizeGame` la passerait d'office en
+            // `completed`, refuserait ses URL et ferait partir `game.ended`
+            // aussitôt. `EndReveal(k)`, ne trouvant aucune manche à jouer,
+            // gèle à `reveal_ends_at(k)`.
+            if (self::revealing($game)) {
                 return;
             }
 
@@ -193,15 +207,25 @@ final readonly class CancelRound
     {
         $candidate = Round::query()
             ->where('game_id', $game->id)
-            ->where('status', RoundStatus::Pending->value)
-            ->whereNotNull('round_number')
-            ->orderBy('round_number')
-            ->orderBy('sequence_index')
+            ->toPlay()
             ->first();
 
         return $candidate instanceof Round
             ? Round::query()->whereKey($candidate->id)->lockForUpdate()->firstOrFail()
             : null;
+    }
+
+    /**
+     * Vrai si une manche de la partie est en révélation — relue sous le
+     * verrou `game`, que tout écrivain de `revealing` tient (`RevealRound`,
+     * `EndReveal`, `FinalizeGame`).
+     */
+    private static function revealing(Game $game): bool
+    {
+        return Round::query()
+            ->where('game_id', $game->id)
+            ->where('status', RoundStatus::Revealing->value)
+            ->exists();
     }
 
     /**

@@ -167,6 +167,28 @@ class Round extends Model
     }
 
     /**
+     * Les manches **à jouer**, dans l'ordre de jeu (spec 60 § 1.2, 50 § 15.2) :
+     * `pending` et **numérotées** (`round_number` non nul), par `round_number`
+     * puis `sequence_index` croissants. La première est la « manche suivante
+     * à jouer » ; une manche de réserve (sans numéro, E10-45) n'en fait
+     * jamais partie tant qu'elle ne remplace rien.
+     *
+     * Lue par l'enchaînement (`RevealRound`), la fin de révélation
+     * (`EndReveal`) et l'annulation (`CancelRound`), sous le verrou `game` :
+     * une seule définition de l'ordre de jeu.
+     *
+     * @param  Builder<Round>  $query
+     */
+    #[Scope]
+    protected function toPlay(Builder $query): void
+    {
+        $query->where('status', RoundStatus::Pending->value)
+            ->whereNotNull('round_number')
+            ->orderBy('round_number')
+            ->orderBy('sequence_index');
+    }
+
+    /**
      * Le prédicat de fin anticipée du § 7.7, en toutes lettres.
      *
      * **Participants** = les lignes `round_player` de cette manche dont le
