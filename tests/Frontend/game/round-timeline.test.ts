@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vite-plus/test';
 import {
     announcementThresholds,
     currentTier,
+    tierValueAt,
     toLiveTimeline,
 } from '@/lib/game/round-timeline';
 import type { LiveRoundTimeline } from '@/lib/game/round-timeline';
@@ -10,8 +11,9 @@ import type { TierWindow } from '@/types/scoring';
 
 /*
  * Chronologie cliente d'une manche (spec 90 § 7.3, contrat C16 § 2.6 et
- * § 4) : seule implémentation client du palier courant (D29, R-35) et des
- * seuils d'annonce relatifs à `D`.
+ * § 4) : seule implémentation client du palier courant et de sa valeur
+ * affichée (D29, R-35 ; `tierValueAt`, fonction de 80 § 14, lot L80-6) et
+ * des seuils d'annonce relatifs à `D`.
  *
  * Module pur, aucun DOM (C18 § 2.4) : l'instant serveur est passé en
  * millisecondes depuis l'époque Unix, comme le rend `serverNow()`.
@@ -211,5 +213,79 @@ describe('chronologie cliente', () => {
             { id: 'last_quarter', atMs: 7_500, kind: 'last_quarter' },
             { id: 'last_tenth', atMs: 9_000, kind: 'last_tenth' },
         ]);
+    });
+
+    it('tierValueAt rend la valeur entière du palier courant, sans grâce ni bonus', () => {
+        // Réglage par défaut (spec 90 § 7.3) : 300, 200 puis 100.
+        const timeline = defaultTimeline();
+        const valueAt = (elapsedMs: number): number | null =>
+            tierValueAt(timeline.tiers, elapsedMs);
+
+        // Sans bonus : à t = 0, la valeur du palier seule (le serveur y
+        // créditerait 300 + 150), identique jusqu'à la dernière milliseconde
+        // de la fenêtre — aucune valeur dégressive.
+        expect(valueAt(0)).toBe(300);
+        expect(valueAt(1)).toBe(300);
+        expect(valueAt(9_999)).toBe(300);
+
+        // Sans grâce : la bascule a lieu à Tᵢ exactement, alors que le
+        // serveur crédite encore le palier précédent pendant tier_grace_ms.
+        expect(valueAt(10_000)).toBe(200);
+        expect(valueAt(10_001)).toBe(200);
+        expect(valueAt(19_999)).toBe(200);
+        expect(valueAt(20_000)).toBe(100);
+        expect(valueAt(29_999)).toBe(100);
+
+        // Hors de [0, D) : null, jamais 0 ni la valeur d'un palier voisin.
+        expect(valueAt(-1)).toBeNull();
+        expect(valueAt(30_000)).toBeNull();
+        expect(valueAt(38_000)).toBeNull();
+        expect(valueAt(Number.NaN)).toBeNull();
+        expect(tierValueAt([], 0)).toBeNull();
+
+        // Même instant de bascule que l'image : à tout instant serveur, la
+        // valeur est celle du palier de currentTier(), ou null avec lui.
+        for (let elapsedMs = -1_000; elapsedMs <= 31_000; elapsedMs += 250) {
+            for (const nudgeMs of [-1, 0, 1]) {
+                const serverNowMs = STARTS_AT_MS + elapsedMs + nudgeMs;
+                const value = tierValueAt(
+                    timeline.tiers,
+                    serverNowMs - timeline.startedAtMs,
+                );
+
+                expect(value).toBe(
+                    currentTier(timeline, serverNowMs)?.points ?? null,
+                );
+                expect(value === null || Number.isInteger(value)).toBe(true);
+            }
+        }
+
+        // Barème personnalisé (onglet Avancé) à N = 5, durées inégales et
+        // paliers reçus dans le désordre : un palier à 0 rend 0, pas null ;
+        // l'ordre ne vient que des décalages.
+        const custom = tiersOf(
+            [5_000, 7_000, 6_000, 5_000, 12_000],
+            [0, 1_000, 0, 250, 0],
+        ).toReversed();
+
+        expect(tierValueAt(custom, 0)).toBe(0);
+        expect(tierValueAt(custom, 4_999)).toBe(0);
+        expect(tierValueAt(custom, 5_000)).toBe(1_000);
+        expect(tierValueAt(custom, 11_999)).toBe(1_000);
+        expect(tierValueAt(custom, 12_000)).toBe(0);
+        expect(tierValueAt(custom, 18_000)).toBe(250);
+        expect(tierValueAt(custom, 23_000)).toBe(0);
+        expect(tierValueAt(custom, 34_999)).toBe(0);
+        expect(tierValueAt(custom, 35_000)).toBeNull();
+
+        // La clôture ne change pas la valeur d'un instant : la masquer
+        // revient au sélecteur de 60 (`visibleTierValue()`), jamais ici.
+        const closed = toLiveTimeline(
+            '3f9a0c1d2e4b5a69',
+            roundOf(tiersOf([10_000, 10_000, 10_000], [300, 200, 100])),
+            true,
+        );
+
+        expect(tierValueAt(closed.tiers, 12_000)).toBe(200);
     });
 });

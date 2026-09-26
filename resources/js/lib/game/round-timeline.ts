@@ -31,8 +31,9 @@ import type { TierWindow } from '@/types/scoring';
  * Le serveur seul retient le palier d'une réponse, à son instant de
  * réception, grâce comprise (C13 § 4.1).
  *
- * `tierValueAt(tiers, elapsedMs)`, fonction de 80 (C13, D29), s'écrit dans ce
- * même module, avec son test, par le lot L80-6.
+ * `tierValueAt(tiers, elapsedMs)` est la fonction de 80 (C13 § 2.4, 80 § 14,
+ * D29 du 23/09), écrite ici par le lot L80-6 sur la même fenêtre que
+ * `currentTier()` : la valeur affichée et l'image basculent au même instant.
  */
 
 /** La chronologie d'une manche telle que l'écran la lit (C16 § 2.6). */
@@ -144,6 +145,38 @@ export function currentTier(
     }
 
     return windowContaining(t.tiers, elapsedMs);
+}
+
+/**
+ * La valeur **entière** du palier courant, **sans bonus** (D29 du 23/09,
+ * 80 § 14) : `points` du palier dont la fenêtre semi-ouverte
+ * `[startsAtOffsetMs, startsAtOffsetMs + durationMs)` contient `elapsedMs`,
+ * `null` hors de `[0, D)`. Un palier à 0 rend `0`, jamais `null` : `null` ne
+ * veut dire que « hors manche ».
+ *
+ * - `tiers` vient de `RoundTimeline.tiers` (C7), soit `round_tier` : un
+ *   réglage public figé au lancement, qui ne révèle rien (C16 § 3). L'ordre
+ *   reçu est indifférent, seuls comptent les décalages.
+ * - `elapsedMs` = `serverNow() − startedAtMs`, sur l'horloge resynchronisée
+ *   de 60, **jamais** l'arrivée d'un événement de frontière, qui peut être en
+ *   retard (le job diffuse la frontière, il ne la décide pas).
+ * - Elle **ignore la grâce et le bonus**. C'est un affichage indicatif, le
+ *   serveur décide (règle 1, C7 § 4.1). Écarts connus, à ne pas corriger
+ *   (80 § 14) : dans les `tier_grace_ms` qui suivent une frontière, l'écran
+ *   montre déjà le palier suivant quand le serveur crédite le précédent,
+ *   mieux payé ; un clic envoyé juste avant une frontière et reçu plus de
+ *   `tier_grace_ms` après elle est crédité au palier suivant ; le bonus,
+ *   jamais affiché, s'ajoute toujours.
+ *
+ * Rendu par 60 : `tChoice('game.round.tier_value', points, { points:
+ * fmt(points) })`, `fmt` = `Intl.NumberFormat(locale)` (C15, C16) ; masqué
+ * à la clôture par le sélecteur `visibleTierValue()` de 60, pas ici.
+ */
+export function tierValueAt(
+    tiers: readonly TierWindow[],
+    elapsedMs: number,
+): number | null {
+    return windowContaining(tiers, elapsedMs)?.points ?? null;
 }
 
 /**

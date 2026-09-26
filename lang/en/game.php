@@ -39,4 +39,82 @@ return [
         'seat_superseded' => 'This tab is no longer in control: you are playing in another tab. Reload the page to take over here.',
     ],
 
+    // Spec 80 § 15 (lot L80-6) : valeur du palier, score, classement, podium,
+    // récapitulatif et aide du barème. Données, jamais phrases : le client
+    // formate les nombres et les durées, et insère `:title` dans un fragment
+    // portant son attribut `lang`, jamais en texte brut.
+
+    'round' => [
+        'tier_value' => ':points point at stake|:points points at stake',
+    ],
+
+    'score' => [
+        'points' => ':count point|:count points',
+        'bonus' => 'including :points speed bonus',
+        'gained' => 'Earned: :points',
+        'total' => 'Total: :points',
+    ],
+
+    'leaderboard' => [
+        'title' => 'Standings',
+        'rank_shared' => 'tied',
+        'unranked' => 'Unranked',
+        'column' => [
+            'rank' => 'Rank',
+            'player' => 'Player',
+            'score' => 'Points',
+            'correct_answers' => 'Correct answers',
+            'answer_time' => 'Total time',
+            'round_delta' => 'This round',
+        ],
+        'status' => [
+            'left' => 'Left the game',
+            'kicked' => 'Removed by the host',
+        ],
+        // Catégorie de `Intl.PluralRules(locale, { type: 'ordinal' })` ; le
+        // suffixe est séparé de `:rank` par U+2060 (WORD JOINER), invisible
+        // et insécable, pour que `:rank` reste un paramètre (80 § 15.1).
+        'ordinal' => [
+            'one' => ":rank\u{2060}st",
+            'two' => ":rank\u{2060}nd",
+            'few' => ":rank\u{2060}rd",
+            'other' => ":rank\u{2060}th",
+        ],
+        'correct_answers' => ':count correct answer|:count correct answers',
+        'late_joiner' => 'Joined at round :round',
+        'answer_time' => 'Total time: :duration',
+        'round_delta' => '+:points this round',
+    ],
+
+    'podium' => [
+        'title' => 'Final standings',
+        'completed' => 'Game over · :m rounds',
+        'interrupted' => 'Game interrupted at round :k of :m',
+        'rounds_played' => ':count round played|:count rounds played',
+        'highlights' => [
+            'best_answer' => 'Best answer: :nickname, “:title” (+:points)',
+            'fastest_find' => 'Fastest find: “:title”, by :nickname in :duration',
+            'none' => 'No correct answer in this game',
+            'unfound' => ':count film nobody found|:count films nobody found',
+        ],
+    ],
+
+    'recap' => [
+        'title' => 'Films recap',
+        'round' => 'Round :number',
+        'cancelled' => 'Round cancelled',
+        'nobody' => 'Nobody found it',
+        'found_by' => 'Found by :count player|Found by :count players',
+    ],
+
+    'help' => [
+        'scoring' => [
+            'tier_values' => 'Each image is worth points; with the default scoring, the first, most cryptic one pays the most. What counts is the image on screen when the server receives your answer.',
+            'speed_bonus' => 'Speed bonus: up to :percent% of the image’s value, shrinking until the next image. With the default scoring, waiting for the next image never pays more; at best the same.',
+            'tie_break' => 'On equal scores: most correct answers, then shortest total time, then most finds on the earliest images. Otherwise the place is shared, never drawn at random.',
+            'no_penalty' => 'A wrong answer costs no points.',
+            'cancelled_round' => 'A round cancelled after an incident does not count: no points, no round played.',
+        ],
+    ],
+
 ];
