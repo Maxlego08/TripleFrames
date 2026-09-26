@@ -532,7 +532,7 @@ Ensuite, à chaque session : **« Implémente l'étape suivante de l'ordre des l
 101. L50-3b — création, entrée, prise de siège → 15, 16, 63, 65, 66, 67, 68, 69, 81, 83, 100 — ✅ livrée le 27/09
 102. L50-7a — lancement, garde de drainage → 10, 37, 71, 79, 83, 86, 90, 97, 101 — ✅ livrée le 27/09
 103. L100-14 — bout en bout : partie de 10 manches sur le catalogue de démonstration → 90, 102 — ✅ livrée le 27/09
-104. L70-5 — soumission texte, fenêtre, refus à travail constant → 65, 73, 76, 81, 85, 93, 102
+104. L70-5 — soumission texte, fenêtre, refus à travail constant → 65, 73, 76, 81, 85, 93, 102 — ✅ livrée le 27/09
 105. L70-14 — limiteur `answer`, ordre des middlewares → 85, 104
 106. L70-6 — transaction de verrouillage → 79, 93, 104
 107. L70-9 — clic QCM, `SeatInputView` → 78, 106

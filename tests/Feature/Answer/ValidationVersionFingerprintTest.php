@@ -1,15 +1,27 @@
 <?php
 
+use App\Actions\Room\LaunchGame;
+use App\Enums\Locale;
+use App\Jobs\Game\AdvanceRound;
 use App\Models\Game;
+use App\Models\Player;
+use App\Settings\PlatformLimits;
+use App\Settings\RoomSettings;
+use App\Settings\RoomSettingsBounds;
 use App\Support\Answers\AnswerRules;
 use App\Support\Catalog\AnswerKeyNormalizer;
+use App\Support\Identity\PlayerToken;
 use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Queue;
 use Tests\Support\Answers\AnswerRuleFixtures;
+use Tests\Support\Draw\PoolFixtures;
+use Tests\Support\Room\LobbyWrites;
 
 /*
 |--------------------------------------------------------------------------
-| Version de la règle de validation — spec 70 § 12, contrat C12, lot L70-1
+| Version de la règle de validation — spec 70 § 12, contrat C12, lots L70-1 et L70-5
 |--------------------------------------------------------------------------
 |
 | `game.validation_version` dit sous quelle règle une distance a été
@@ -97,4 +109,50 @@ it('seules l\'empreinte et les fixtures de la version courante sont exécutées'
 
 it('la fabrique de partie écrit la version courante de la règle', function (): void {
     expect(Game::factory()->make()->validation_version)->toBe(AnswerRules::VERSION);
+});
+
+it('game.validation_version est écrite depuis AnswerRules::VERSION au lancement', function (): void {
+    PoolFixtures::fakeFramesDisk();
+    Queue::fake([AdvanceRound::class]);
+
+    // Un vrai lancement, par l'action du salon : l'hôte, un invité, un vivier
+    // qui remplit juste le tirage.
+    $settings = RoomSettings::fromInput(['roundsCount' => RoomSettingsBounds::MIN_ROUNDS_COUNT]);
+    [$room, $host] = LobbyWrites::hostedRoom(PlayerToken::mint(Locale::French), $settings);
+    Player::factory()->for($room)->create();
+    PoolFixtures::movies($settings->roundsCount + PlatformLimits::drawSubstituteMargin());
+
+    $outcome = app(LaunchGame::class)->handle($room, $host);
+
+    expect($outcome->isLaunched())->toBeTrue()
+        ->and($outcome->game)->toBeInstanceOf(Game::class);
+
+    $gameId = $outcome->game?->id;
+
+    // La colonne telle que la base la porte, sans cast.
+    expect(DB::table('game')->where('id', $gameId)->value('validation_version'))->toEqual(AnswerRules::VERSION);
+
+    // Et son seul écrivain applicatif est `OpenGame`, qui la lit sur
+    // `AnswerRules::VERSION`, jamais sur un littéral : au passage à la
+    // version 2, toute partie lancée l'écrira sans autre changement.
+    $writers = [];
+
+    foreach (File::allFiles(app_path()) as $file) {
+        $source = $file->getContents();
+        $relative = str_replace(DIRECTORY_SEPARATOR, '/', $file->getRelativePathname());
+
+        preg_match_all("/'validation_version'\s*=>\s*([^,\n]+)/", $source, $pairs);
+        preg_match_all('/->validation_version\s*=(?!=)\s*([^;\n]+)/', $source, $assignments);
+
+        foreach ([...$pairs[1], ...$assignments[1]] as $value) {
+            // La déclaration de cast du modèle n'écrit rien.
+            if ($relative === 'Models/Game.php' && trim($value) === "'integer'") {
+                continue;
+            }
+
+            $writers[] = $relative.' : '.trim($value);
+        }
+    }
+
+    expect($writers)->toBe(['Actions/Game/OpenGame.php : AnswerRules::VERSION']);
 });

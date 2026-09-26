@@ -252,10 +252,12 @@ return [
     'attributes' => [
         'advanced' => 'onglet avancé',
         'allowLateJoin' => 'entrée en cours de partie',
+        'answer' => 'réponse',
         'attemptsPerRound' => 'tentatives par manche',
         'attemptsPerSecond' => 'tentatives par seconde',
         'avatar' => 'avatar',
         'capacity' => 'nombre de sièges',
+        'choice' => 'proposition',
         'code' => 'code d’authentification',
         'current_password' => 'mot de passe actuel',
         'disconnectGraceSeconds' => 'délai de grâce à la déconnexion',

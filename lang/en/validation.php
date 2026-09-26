@@ -260,10 +260,12 @@ return [
     'attributes' => [
         'advanced' => 'advanced tab',
         'allowLateJoin' => 'late join',
+        'answer' => 'answer',
         'attemptsPerRound' => 'attempts per round',
         'attemptsPerSecond' => 'attempts per second',
         'avatar' => 'avatar',
         'capacity' => 'seats',
+        'choice' => 'choice',
         'code' => 'authentication code',
         'current_password' => 'current password',
         'disconnectGraceSeconds' => 'disconnection grace period',

@@ -47,6 +47,26 @@ return [
         'seat_superseded' => 'This tab is no longer in control: you are playing in another tab. Reload the page to take over here.',
     ],
 
+    // Spec 70 § 17 (lot L70-5) : la saisie en texte libre. `rejected`,
+    // `attempts_left` et les messages d’état sont rendus par le client à
+    // partir des données de la réponse ; `closed` et `too_fast` sont résolus
+    // par le serveur, dans la langue de la requête. Aucun texte de refus ne
+    // suggère la proximité (décision 13) : jamais « almost », jamais « not
+    // quite ».
+    'answer' => [
+        'label' => 'Your answer',
+        'placeholder' => 'Film title',
+        'submit' => 'Submit',
+        'rejected' => 'That’s not it.',
+        'attempts_left' => '{0} No attempts left|{1} :count attempt left|[2,*] :count attempts left',
+        'too_fast' => 'One attempt at a time.',
+        'closed' => 'Answers are closed for this round.',
+        'unreadable' => 'Type at least one letter or digit.',
+        'exhausted' => 'You have used all your attempts for this round.',
+        'text_exhausted' => 'No free-text attempts left: the choices will appear with the last frame.',
+        'locked' => 'Found it!',
+    ],
+
     // Spec 80 § 15 (lot L80-6) : valeur du palier, score, classement, podium,
     // récapitulatif et aide du barème. Données, jamais phrases : le client
     // formate les nombres et les durées, et insère `:title` dans un fragment

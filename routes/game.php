@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Game\AnswerController;
 use App\Http\Controllers\Game\ClockController;
 use App\Http\Controllers\Game\FrameServeController;
 use App\Http\Controllers\Game\RoomStateController;
@@ -137,3 +138,17 @@ Route::middleware(['seat.active', 'throttle:game-write'])->group(function (): vo
     Route::post('r/{room}/launch', [LaunchController::class, 'store'])
         ->name('room.launch');
 });
+
+// Soumission d'une réponse en texte libre (spec 70 § 7.1, contrat C10 § 2) :
+// le siège est adressé par son `public_id`, même route en salon et en solo,
+// et le `public_id` ne donne aucun droit — `seat.active` exige que le jeton
+// courant tienne ce siège et que `X-Seat-Token` soit l'onglet actif, puis met
+// en mémoire le siège et sa partie courante, AVANT la liaison implicite. JSON
+// à destinataire unique, aucune page rendue : aucun domaine de traduction.
+//
+// Le limiteur `throttle:answer` (clé sur le siège résolu, 70 § 8) rejoint
+// cette pile avec son limiteur nommé, au lot L70-14 : déclaré sans lui,
+// `ThrottleRequests` lèverait `MissingRateLimiterException` à chaque requête.
+Route::post('seat/{player:public_id}/answer', [AnswerController::class, 'store'])
+    ->name('round.answer.store')
+    ->middleware('seat.active');
