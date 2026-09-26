@@ -6,15 +6,6 @@ Ouvrir `index.html` directement dans un navigateur.
 - État connecté : `index.html?connected=1`
 - Connexion : `login.html`
 - Inscription : `register.html`
-- Comparateur des cinq fonds : `backgrounds.html`
-
-Variantes directes :
-
-- `index.html?bg=party`
-- `index.html?bg=spotlight`
-- `index.html?bg=frames`
-- `index.html?bg=curtain`
-- `index.html?bg=arcade`
 
 Le formulaire de participation valide le pseudo et le code localement. Les
 actions affichent des retours de démonstration ; elles ne sont pas branchées au
@@ -31,10 +22,9 @@ Les sources sont écrites en SCSS avec une convention BEM et une palette OKLCH :
 
 - `styles.scss` → `styles.css`
 - `auth.scss` → `auth.css`
-- `backgrounds.scss` → `backgrounds.css`
 - `scss/_tokens.scss` et `scss/_mixins.scss` sont partagés
 - `brand-logo.svg` est la source unique du logo et du favicon
 
 Compilation :
 
-`npx sass styles.scss:styles.css auth.scss:auth.css backgrounds.scss:backgrounds.css --no-source-map`
+`npx sass styles.scss:styles.css auth.scss:auth.css --no-source-map`

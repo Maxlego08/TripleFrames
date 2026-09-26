@@ -166,69 +166,12 @@ body[data-authenticated='true'] {
     min-height: calc(100svh - 5rem);
     overflow: hidden;
     padding: clamp(2.75rem, 6vw, 5.5rem) 1rem clamp(4rem, 8vw, 7rem);
-    background:
-        radial-gradient(circle at 15% 20%, oklch(1 0 0 / 8%) 0 0.25rem, transparent 0.3rem),
-        radial-gradient(circle at 80% 70%, oklch(1 0 0 / 7%) 0 0.2rem, transparent 0.25rem),
-        $color-violet;
-    background-size: 2rem 2rem, 2.5rem 2.5rem, auto;
-}
-
-body[data-background='party'] .home-stage {
-    background:
-        radial-gradient(circle at 15% 20%, oklch(1 0 0 / 8%) 0 0.25rem, transparent 0.3rem),
-        radial-gradient(circle at 80% 70%, oklch(1 0 0 / 7%) 0 0.2rem, transparent 0.25rem),
-        $color-violet;
-    background-size: 2rem 2rem, 2.5rem 2.5rem, auto;
-}
-
-body[data-background='spotlight'] .home-stage {
-    background:
-        conic-gradient(
-            from 151deg at 50% -18%,
-            transparent 0 16deg,
-            oklch(0.88 0.16 89 / 20%) 16deg 29deg,
-            transparent 29deg 43deg,
-            oklch(0.81 0.13 195 / 16%) 43deg 56deg,
-            transparent 56deg 360deg
-        ),
-        radial-gradient(
-            circle at 50% 42%,
-            oklch(0.48 0.14 295) 0 12%,
-            oklch(0.34 0.13 295) 46%,
-            oklch(0.25 0.09 295) 100%
-        );
-}
-
-body[data-background='frames'] .home-stage {
-    background-color: oklch(0.36 0.13 295);
-    background-image:
-        linear-gradient(90deg, oklch(0.86 0.08 296 / 14%) 0.1875rem, transparent 0.1875rem),
-        linear-gradient(oklch(0.86 0.08 296 / 14%) 0.1875rem, transparent 0.1875rem),
-        linear-gradient(90deg, transparent 72%, oklch(0.81 0.13 195 / 18%) 72% 77%, transparent 77%),
-        linear-gradient(transparent 66%, oklch(0.88 0.16 89 / 14%) 66% 72%, transparent 72%);
-    background-position: 0 0, 0 0, 1.5rem 1rem, 1.5rem 1rem;
-    background-size: 9rem 6rem;
-}
-
-body[data-background='curtain'] .home-stage {
-    background:
-        radial-gradient(circle at 50% -15%, oklch(0.88 0.16 89 / 28%) 0 8rem, transparent 8.15rem),
-        repeating-linear-gradient(
-            90deg,
-            $color-violet 0 5.5rem,
-            oklch(0.44 0.15 295) 5.5rem 9rem,
-            oklch(0.34 0.14 295) 9rem 13rem
-        );
-}
-
-body[data-background='arcade'] .home-stage {
-    background-color: $color-ink;
-    background-image:
-        linear-gradient(oklch(0.81 0.13 195 / 11%) 0.125rem, transparent 0.125rem),
-        linear-gradient(90deg, oklch(0.81 0.13 195 / 11%) 0.125rem, transparent 0.125rem),
-        radial-gradient(circle at 50% 48%, $color-violet 0, $color-ink 68%);
-    background-position: center;
-    background-size: 3rem 3rem, 3rem 3rem, auto;
+    background: repeating-linear-gradient(
+        90deg,
+        $color-violet 0 5.5rem,
+        oklch(0.44 0.15 295) 5.5rem 9rem,
+        oklch(0.34 0.14 295) 9rem 13rem
+    );
 }
 
 .hero {
@@ -313,6 +256,10 @@ h1 {
             font-size: clamp(1.45rem, 3vw, 2rem);
             letter-spacing: -0.045em;
         }
+    }
+
+    &__mobile-intro {
+        display: none;
     }
 }
 
@@ -702,7 +649,7 @@ input:focus-visible {
     }
 
     .home-stage {
-        padding: 2.1rem 0.75rem 4rem;
+        padding: 1.4rem 0.75rem 4rem;
     }
 
     .hero {
@@ -714,10 +661,7 @@ input:focus-visible {
         }
 
         &__content {
-            display: flex;
-            align-items: flex-start;
-            gap: 1.4rem;
-            padding: 2rem 1.25rem 1rem;
+            display: none;
         }
 
         &__logo {
@@ -730,9 +674,23 @@ input:focus-visible {
     }
 
     .join-card {
-        margin: 0.8rem;
-        padding: 1.25rem;
+        order: 1;
+        margin: 0.65rem;
+        padding: 1.2rem;
         box-shadow: 0.3125rem 0.3125rem 0 $color-coral;
+
+        &__heading {
+            margin-bottom: 0.45rem;
+        }
+
+        &__mobile-intro {
+            display: block;
+            max-width: 32rem;
+            margin: 0 0 1.1rem;
+            color: $color-muted;
+            font-size: 0.88rem;
+            line-height: 1.4;
+        }
     }
 
     .create-game {

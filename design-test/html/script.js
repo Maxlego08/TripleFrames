@@ -72,15 +72,3 @@ document.querySelector('#create-game').addEventListener('click', () => {
 
 const params = new URLSearchParams(window.location.search);
 document.body.dataset.authenticated = params.get('connected') === '1' ? 'true' : 'false';
-
-const backgroundVariants = new Set([
-    'party',
-    'spotlight',
-    'frames',
-    'curtain',
-    'arcade',
-]);
-const requestedBackground = params.get('bg') ?? 'curtain';
-document.body.dataset.background = backgroundVariants.has(requestedBackground)
-    ? requestedBackground
-    : 'curtain';
