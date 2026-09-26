@@ -8,6 +8,7 @@ use App\Models\Player;
 use App\Models\Room;
 use App\Settings\RoomSettings;
 use App\Settings\RoomSettingsBounds;
+use App\Support\Room\RoomCode;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Validation\ValidationException;
 
@@ -38,24 +39,19 @@ use Illuminate\Validation\ValidationException;
 class RoomFactory extends Factory
 {
     /**
-     * Alphabet non ambigu du `room_code` (§ 6.2) : ni `I`, ni `O`, ni `0`, ni `1`,
-     * qu'un joueur recopie de travers depuis un écran partagé.
-     */
-    public const string CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-
-    /** Longueur du code court, fixée par `char(6)`. */
-    public const int CODE_LENGTH = 6;
-
-    /**
      * Define the model's default state.
      *
      * Un salon de lobby, jamais lancé, code actif, hôte non encore désigné.
+     *
+     * Le code vient de {@see RoomCode::generate()}, seul générateur (spec 50
+     * § 6.3) : la fabrique en est lectrice, et hérite de sa garantie — un code
+     * absent de `room_code_active`, au prix d'une lecture de clé.
      *
      * @return array<string, mixed>
      */
     public function definition(): array
     {
-        $code = self::code();
+        $code = RoomCode::generate();
 
         return array_merge([
             'room_code' => $code,
@@ -153,22 +149,5 @@ class RoomFactory extends Factory
             'settings' => $settings,
             'settings_version' => $settings->sourceVersion,
         ];
-    }
-
-    /**
-     * Code court tiré sur l'alphabet non ambigu, puis replié par le normaliseur du
-     * modèle : la portabilité vient de la donnée, jamais d'une collation (§ 1.4).
-     */
-    private static function code(): string
-    {
-        $alphabet = self::CODE_ALPHABET;
-        $last = strlen($alphabet) - 1;
-        $code = '';
-
-        for ($index = 0; $index < self::CODE_LENGTH; $index++) {
-            $code .= $alphabet[random_int(0, $last)];
-        }
-
-        return Room::normalizeCode($code);
     }
 }

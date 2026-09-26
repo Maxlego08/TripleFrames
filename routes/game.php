@@ -5,6 +5,7 @@ use App\Http\Controllers\Game\FrameServeController;
 use App\Http\Controllers\Game\RoomStateController;
 use App\Http\Controllers\Room\RoomPresetController;
 use App\Http\Controllers\Room\RoomSettingsController;
+use App\Support\Room\RoomCode;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
 use Illuminate\Session\Middleware\StartSession;
@@ -35,6 +36,14 @@ use Illuminate\View\Middleware\ShareErrorsFromSession;
 | `TranslationDomainDeclarationTest`).
 |
 */
+
+// Motif TOLÉRANT de `{room}` (spec 50 § 6.3), posé AVANT toute route qui
+// porte `{room}` : `Route::pattern()` ne s'applique qu'aux routes déclarées
+// après lui. Casse, espaces et tirets d'un lien saisi à la main passent le
+// routeur ; `Room::resolveRouteBinding()` normalise, contrôle la forme et
+// répond 404 sans requête à un code mal formé. Un motif strict tiré de
+// l'alphabet renverrait 404 avant la liaison, contre `RoomCode::normalize()`.
+Route::pattern('room', RoomCode::ROUTE_PATTERN);
 
 Route::get('clock', [ClockController::class, 'show'])
     ->name('clock.show')

@@ -7,7 +7,7 @@ use App\Models\GamePlayer;
 use App\Models\Player;
 use App\Models\User;
 use App\Support\Identity\PlayerIdentity;
-use Database\Factories\PlayerFactory;
+use App\Support\Room\SeatPublicId;
 
 /*
 |--------------------------------------------------------------------------
@@ -215,8 +215,8 @@ it("ne laisse jamais fuiter le pseudo ni ses initiales d'un siège masqué", fun
     // `public_id`, et ni l'URL ni la clé d'`alt` ne portent de capitale. Leur
     // absence de la charge prouve donc qu'elles n'y sont nulle part, sans
     // dépendre du hasard du `public_id`.
-    expect(PlayerFactory::PUBLIC_ID_ALPHABET)->not->toContain('U')
-        ->and(PlayerFactory::PUBLIC_ID_ALPHABET)->not->toContain('O');
+    expect(SeatPublicId::ALPHABET)->not->toContain('U')
+        ->and(SeatPublicId::ALPHABET)->not->toContain('O');
 
     $seat = Player::factory()->withNickname('Ursula Oliveira')->create([
         'avatar_kind' => AvatarKind::Preset,

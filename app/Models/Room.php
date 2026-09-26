@@ -6,6 +6,7 @@ use App\Casts\RoomSettingsCast;
 use App\Enums\InputDifficulty;
 use App\Enums\RoomStatus;
 use App\Settings\RoomSettings;
+use App\Support\Room\RoomCode;
 use Carbon\CarbonImmutable;
 use Database\Factories\RoomFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -80,10 +81,13 @@ class Room extends Model
      * écriture et toute requête** : MySQL est insensible à la casse, SQLite en
      * BINARY ne l'est pas, et la portabilité vient de la donnée repliée, jamais
      * d'une collation déclarée (§ 1.4).
+     *
+     * Délègue à {@see RoomCode::normalize()} (spec 50 § 6.3), seule règle de
+     * normalisation du code : majuscules, espaces et tirets retirés.
      */
     public static function normalizeCode(string $code): string
     {
-        return strtoupper(trim($code));
+        return RoomCode::normalize($code);
     }
 
     /**
@@ -94,6 +98,10 @@ class Room extends Model
      * créneau `room_code_active` est mis à NULL à l'archivage, ce qui recycle le
      * code sans index partiel — donc plusieurs salons archivés peuvent partager un
      * code, et c'est le plus récemment archivé qui répond.
+     *
+     * Le motif de route est tolérant (`RoomCode::ROUTE_PATTERN`) : la saisie est
+     * d'abord normalisée, puis sa forme contrôlée ; un code mal formé répond 404
+     * **sans aucune requête** (spec 50 § 6.3).
      *
      * @param  mixed  $value
      * @param  string|null  $field
@@ -111,6 +119,10 @@ class Room extends Model
         }
 
         $code = self::normalizeCode((string) $value);
+
+        if (! RoomCode::isWellFormed($code)) {
+            return null;
+        }
 
         return static::query()
             ->where('room_code_active', $code)

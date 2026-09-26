@@ -10,6 +10,7 @@ use App\Models\Player;
 use App\Models\Room;
 use App\Models\User;
 use App\Support\Identity\NicknameNormalizer;
+use App\Support\Room\SeatPublicId;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Str;
@@ -43,12 +44,6 @@ use Illuminate\Support\Str;
  */
 class PlayerFactory extends Factory
 {
-    /** Alphabet base32 de `public_id` — identité publique, jamais dérivée de l'id (§ 1.1). */
-    public const string PUBLIC_ID_ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
-
-    /** Longueur de `public_id`, fixée par `char(12)`. */
-    public const int PUBLIC_ID_LENGTH = 12;
-
     /**
      * Prénoms de fabrique, volontairement accentués : c'est le pliage de
      * `nickname_normalized` qui est mis à l'épreuve, pas le hasard de Faker.
@@ -75,7 +70,7 @@ class PlayerFactory extends Factory
         $nickname = self::nickname();
 
         return [
-            'public_id' => self::publicId(),
+            'public_id' => SeatPublicId::generate(),
             'room_id' => Room::factory(),
             'user_id' => null,
             'nickname' => $nickname,
@@ -227,22 +222,6 @@ class PlayerFactory extends Factory
         $name = self::NICKNAMES[self::$seatSequence % count(self::NICKNAMES)];
 
         return mb_substr($name.(++self::$seatSequence), 0, NicknameNormalizer::MAX_LENGTH);
-    }
-
-    /**
-     * Identité publique d'un siège : base32 aléatoire, **jamais dérivée de l'id**.
-     */
-    private static function publicId(): string
-    {
-        $alphabet = self::PUBLIC_ID_ALPHABET;
-        $last = strlen($alphabet) - 1;
-        $id = '';
-
-        for ($index = 0; $index < self::PUBLIC_ID_LENGTH; $index++) {
-            $id .= $alphabet[random_int(0, $last)];
-        }
-
-        return $id;
     }
 
     /**

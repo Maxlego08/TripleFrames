@@ -13,8 +13,8 @@ use App\Support\Identity\NicknameNormalizer;
 use App\Support\Identity\PlayerToken;
 use App\Support\Identity\PlayerTokenCookie;
 use App\Support\Identity\PlayerTokenManager;
+use App\Support\Room\SeatPublicId;
 use Carbon\CarbonImmutable;
-use Database\Factories\PlayerFactory;
 use Illuminate\Cookie\CookieValuePrefix;
 use Illuminate\Encryption\Encrypter;
 use Illuminate\Foundation\Http\Events\RequestHandled;
@@ -127,7 +127,7 @@ function playerTokenRoutes(): void
 
             $seat = new Player;
             $seat->forceFill([
-                'public_id' => playerTokenPublicId(),
+                'public_id' => SeatPublicId::generate(),
                 'room_id' => $locked->id,
                 'nickname' => $nickname,
                 'nickname_normalized' => $normalized,
@@ -240,18 +240,6 @@ function playerTokenSeatUri(Room $room): string
 function playerTokenSuggestUri(Room $room): string
 {
     return playerTokenPrefix().'/rooms/'.$room->room_code.'/suggest';
-}
-
-function playerTokenPublicId(): string
-{
-    $alphabet = PlayerFactory::PUBLIC_ID_ALPHABET;
-    $id = '';
-
-    for ($index = 0; $index < PlayerFactory::PUBLIC_ID_LENGTH; $index++) {
-        $id .= $alphabet[random_int(0, strlen($alphabet) - 1)];
-    }
-
-    return $id;
 }
 
 /** Les `Set-Cookie` `player_token` d'une réponse. */

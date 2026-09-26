@@ -528,7 +528,7 @@ Ensuite, à chaque session : **« Implémente l'étape suivante de l'ordre des l
 97. L100-5 — drainage (D32), étapes 3 et 12 du hook → 11, 20, 96 — ✅ livrée le 27/09
 98. L90-3b — bandeau de maintenance → 15, 97 — ✅ livrée le 27/09
 99. L90-7 — coquille de jeu, forçage sombre, aide → 39, 98 — ✅ livrée le 27/09
-100. L50-3a — code de salon, identifiant public de siège → 8, 12, 86
+100. L50-3a — code de salon, identifiant public de siège → 8, 12, 86 — ✅ livrée le 27/09
 101. L50-3b — création, entrée, prise de siège → 15, 16, 63, 65, 66, 67, 68, 69, 81, 83, 100
 102. L50-7a — lancement, garde de drainage → 10, 37, 71, 79, 83, 86, 90, 97, 101
 103. L100-14 — bout en bout : partie de 10 manches sur le catalogue de démonstration → 90, 102
