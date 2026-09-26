@@ -13,6 +13,8 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Spinner } from '@/components/ui/spinner';
 import { useTranslations } from '@/hooks/use-translations';
+import { announce } from '@/lib/game/announcer';
+import { translate } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { update } from '@/routes/locale';
 
@@ -24,19 +26,37 @@ type Props = {
 };
 
 /**
- * Sélecteur de langue réutilisable, branché sur aucun écran pour l'instant.
+ * Sélecteur de langue (spec 90 § 8), monté par l'en-tête public avec libellé
+ * visible et par la ligne basse de `GameLayout` en icône seule.
  *
+ * Motif ARIA *menu button* : déclencheur nommé `common.language.current`,
+ * options `menuitemradio` dans un groupe étiqueté `common.language.label`.
  * Chaque langue s'affiche **dans sa propre langue** et porte son propre
  * `lang` : un joueur qui ne lit pas l'interface courante doit pouvoir
  * retrouver la sienne, et un lecteur d'écran doit prononcer « Français » en
- * français.
+ * français. `Échap` referme le menu sans changer de langue (Radix).
  *
  * Le changement est une visite partielle : `preserveState` garantit que le
  * composant de page **n'est pas remonté** — ni la souscription Echo, ni
  * l'état de manche, ni le chronomètre client ne sont touchés (règle 1). Le
  * serveur seul persiste la préférence ; le client n'applique jamais un
- * dictionnaire qu'il n'a pas reçu, et affiche un état d'attente pendant
- * l'unique aller-retour.
+ * dictionnaire qu'il n'a pas reçu.
+ *
+ * États (spec 90 § 8) :
+ * - **aller-retour en cours** : le déclencheur porte `aria-busy`, les options
+ *   sont désactivées et le `Spinner` est neutralisé — son `role="status"` et
+ *   son nom « Loading » générés, en dur et en anglais, feraient une seconde
+ *   région vivante sur une page de jeu (C16 § 4). Le déclencheur n'est pas
+ *   désactivé : le menu referme en lui rendant le focus, qu'un bouton
+ *   désactivé perdrait ;
+ * - **changement reçu** : `common.language.changed` est annoncé par
+ *   `announce()`, une fois le dictionnaire reçu, dans la NOUVELLE langue —
+ *   la seule région qui parle, `GameAnnouncer`, est montée par `GameLayout`
+ *   et par `PublicLayout`.
+ *
+ * Mouvement réduit : `motion-reduce:animate-none` sur le `Spinner`, et
+ * `motion-reduce:animate-none!` sur le menu, l'important étant requis contre
+ * `data-[state=open]:animate-in` du composant généré.
  */
 export default function LanguageSwitcher({
     className,
@@ -61,6 +81,24 @@ export default function LanguageSwitcher({
                 preserveScroll: true,
                 only: ['locale', 'translations'],
                 onStart: () => setPending(true),
+                onSuccess: (page) => {
+                    const {
+                        locale: next,
+                        locales: options,
+                        translations,
+                    } = page.props;
+                    const option = options.find(
+                        (candidate) => candidate.value === next,
+                    );
+
+                    announce(
+                        translate(
+                            { locale: next, messages: translations },
+                            'common.language.changed',
+                            { language: option?.label ?? next },
+                        ),
+                    );
+                },
                 onFinish: () => setPending(false),
             },
         );
@@ -72,14 +110,19 @@ export default function LanguageSwitcher({
                 <Button
                     variant="ghost"
                     size="sm"
-                    disabled={pending}
+                    aria-busy={pending}
                     className={cn('gap-2', className)}
                     aria-label={t('common.language.current', {
                         language: current?.label ?? locale,
                     })}
                 >
                     {pending ? (
-                        <Spinner aria-label={t('common.state.loading')} />
+                        <Spinner
+                            aria-hidden="true"
+                            role="presentation"
+                            aria-label={undefined}
+                            className="motion-reduce:animate-none"
+                        />
                     ) : (
                         <Languages aria-hidden="true" className="size-4" />
                     )}
@@ -91,7 +134,10 @@ export default function LanguageSwitcher({
                 </Button>
             </DropdownMenuTrigger>
 
-            <DropdownMenuContent align={align} className="min-w-40">
+            <DropdownMenuContent
+                align={align}
+                className="min-w-40 motion-reduce:animate-none!"
+            >
                 <DropdownMenuLabel>
                     {t('common.language.label')}
                 </DropdownMenuLabel>

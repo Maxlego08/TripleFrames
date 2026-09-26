@@ -37,7 +37,10 @@ use LogicException;
  *
  * `HandleInertiaRequests::share()` sérialise ce modèle ENTIER sur toutes les pages,
  * écran de jeu compris : `#[Hidden]` est ici une règle de SÉCURITÉ, et toute
- * colonne ajoutée à `users` fuite par défaut.
+ * colonne ajoutée à `users` fuite par défaut. Aucun SSR en v1
+ * (`config/inertia.php`, `ssr.enabled` faux ; spec 90 § 2.2, `10` § 1.7) : le
+ * risque ne tient pas à un rendu serveur, mais à cette seule sérialisation, que
+ * `data-page` écrit de toute façon dans le HTML de chaque page.
  *
  * **Nom réel** (D12 du 23/09) : `real_name`, distinct du pseudo de compte
  * `name`, est ce que figent `frame_review.reviewer_name` et

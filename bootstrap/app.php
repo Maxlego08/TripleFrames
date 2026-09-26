@@ -7,6 +7,7 @@ use App\Http\Middleware\EnsurePrivilegedTwoFactor;
 use App\Http\Middleware\EnsureProbeToken;
 use App\Http\Middleware\EnsureUserHasRole;
 use App\Http\Middleware\ForceAdminLocale;
+use App\Http\Middleware\ForceGameAppearance;
 use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\RobotsDirectives;
@@ -69,9 +70,12 @@ return Application::configure(basePath: dirname(__DIR__))
         // `users.locale` le supplante toujours.
         $middleware->encryptCookies(except: ['appearance', 'sidebar_state', 'locale']);
 
-        // Aucun alias de forçage d'apparence pour le back-office : il suit la
-        // préférence du visiteur (D8 du 23/09, spec 90 § 2.2). Le seul forçage
-        // prévu est celui des pages `game/*`, en sombre.
+        // `game.appearance` force le sombre des pages `game/*`, et d'elles
+        // seules (spec 90 § 2.2) : il sera posé (L50-4, L50-8, L60-16) sur le
+        // groupe de `routes/game.php` qui les rendra, jamais sur une route qui
+        // rend une autre page ; aucune route ne le porte encore. Aucun forçage
+        // pour le back-office : il suit la préférence du visiteur (D8 du
+        // 23/09).
         //
         // `accounts.switches` ferme l'inscription et les passkeys hors `local`
         // et `testing` (spec 40 § 8.2) : posé sur le groupe de Fortify par
@@ -84,6 +88,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'accounts.switches' => EnforceAccountSwitches::class,
             'admin.2fa' => EnsurePrivilegedTwoFactor::class,
             'admin.locale' => ForceAdminLocale::class,
+            'game.appearance' => ForceGameAppearance::class,
             'role' => EnsureUserHasRole::class,
             'seat.active' => EnsureActiveSeat::class,
             'translations' => SelectTranslationDomains::class,

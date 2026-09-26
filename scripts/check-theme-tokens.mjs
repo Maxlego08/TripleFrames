@@ -149,6 +149,8 @@ const WATCHED = [
     'resources/js/components/app-sidebar.tsx',
     // L40-6 (spec 40 § 7.4) : réexporte `types/player.ts`.
     'resources/js/types/index.ts',
+    // L90-7 (spec 90 § 2.3, § 9.3) : `GameLayoutProps`.
+    'resources/js/types/ui.ts',
 ];
 
 /**
@@ -224,7 +226,6 @@ const EXEMPT = [
     'resources/js/pages/settings/security.tsx',
     'resources/js/pages/welcome.tsx',
     'resources/js/types/navigation.ts',
-    'resources/js/types/ui.ts',
     'resources/js/types/vite-env.d.ts',
 ];
 

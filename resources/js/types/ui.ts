@@ -22,6 +22,16 @@ export type AdminLayoutProps = {
     breadcrumbs?: BreadcrumbItem[];
 };
 
+/**
+ * Props de `GameLayout`, coquille plein écran des pages `game/*` (spec 90
+ * § 2.3, contrat C16 § 2.3) : la page seule. La coquille ne reçoit ni titre,
+ * ni fil d'Ariane, ni en-tête — l'écran appartient à l'image, au chrono et à
+ * la saisie.
+ */
+export type GameLayoutProps = {
+    children: ReactNode;
+};
+
 export type FlashToast = {
     type: 'success' | 'info' | 'warning' | 'error';
     message: string;

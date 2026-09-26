@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { GameAnnouncer } from '@/components/game/game-announcer';
 import { MaintenanceBanner } from '@/components/public/maintenance-banner';
 import { PublicHeader } from '@/components/public/public-header';
 import { SiteFooter } from '@/components/public/site-footer';
@@ -14,14 +15,17 @@ const MAIN_ID = 'public-main';
  * l'apparence du visiteur : seules les pages `game/*` sont forcées en sombre.
  *
  * De haut en bas : le lien d'évitement (première cible de tabulation), l'en-
- * tête, le bandeau de maintenance (L90-3b, rendu seulement pendant un
- * drainage, § 3.3), le contenu, le pied de page complet. L'annonceur, pour
- * l'annonce de changement de langue, rejoint la coquille avec L90-7.
+ * tête, le bandeau de maintenance (rendu seulement pendant un drainage,
+ * § 3.3), le contenu, le pied de page complet, l'annonceur — pour la seule
+ * annonce du changement de langue du sélecteur de l'en-tête (`common.language.
+ * changed`, § 7.4) — et le `Toaster`.
  *
  * `<Toaster />` est monté ICI et non plus dans `app.tsx` (spec 90 § 2.3) : la
  * section que rend sonner est une région `aria-live` toujours présente, même
  * vide, et une page de jeu ne doit en compter qu'une, son annonceur. Chaque
- * coquille hors jeu monte donc le sien ; `GameLayout`, jamais.
+ * coquille hors jeu monte donc le sien ; `GameLayout`, jamais. Hors jeu,
+ * l'annonceur et la section du `Toaster` coexistent : l'invariant d'une seule
+ * région vivante ne vise que les pages de jeu (C16 § 4).
  */
 export default function PublicLayout({ children }: { children: ReactNode }) {
     const { t } = useTranslations();
@@ -48,6 +52,8 @@ export default function PublicLayout({ children }: { children: ReactNode }) {
             </main>
 
             <SiteFooter variant="full" />
+
+            <GameAnnouncer />
 
             <Toaster />
         </div>

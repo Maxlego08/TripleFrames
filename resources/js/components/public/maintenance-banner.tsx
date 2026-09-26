@@ -9,8 +9,9 @@ import { useTranslations } from '@/hooks/use-translations';
  * Lit la prop partagée `maintenance: boolean` (`DeployDrain::isDraining()`,
  * vraie dans les deux phases du drainage) et, si elle est vraie, rend le seul
  * texte `common.maintenance.banner` ; sinon, rien. Monté par `PublicLayout`,
- * sous l'en-tête ; `GameLayout` le montera en tête de coquille avec L90-7. Il
- * couvre ainsi tout écran où un lancement peut être demandé.
+ * sous l'en-tête, et par `GameLayout`, en tête de coquille : il couvre ainsi
+ * tout écran où un lancement peut être demandé (création, solo, lobby,
+ * « Rejouer »).
  *
  * - **Ni heure, ni phase, ni nombre de parties** : la prop est un booléen et
  *   rien d'autre (C18-bis § 3) ; une heure affichée serait une promesse que le

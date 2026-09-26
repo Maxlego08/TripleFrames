@@ -108,7 +108,16 @@ return [
         'found_by' => 'Trouvé par :count joueur|Trouvé par :count joueurs',
     ],
 
+    // Écran d'aide (spec 90 § 7.7) : `title`, `description` et `open` de 90 ;
+    // `prefix`, règle du préfixe et du sous-titre, de 70 (§ 17) ; `scoring`,
+    // nœud du barème, de 80. L'aide ne parle jamais du salon, du tirage ni de
+    // films « jouables » : l'ambiguïté se mesure sur le catalogue publié
+    // entier (90 § 7.7).
     'help' => [
+        'title' => 'Réponses et points',
+        'description' => 'Ce qui est accepté comme réponse, et comment les points sont comptés.',
+        'open' => 'Aide',
+        'prefix' => 'Quand le site compte plusieurs films d’une même saga, le titre de la saga seul, ou un sous-titre partagé, ne suffit pas.',
         'scoring' => [
             'tier_values' => 'Chaque image vaut des points ; avec le barème par défaut, la première, la plus cryptique, rapporte le plus. C’est l’image affichée à l’instant où le serveur reçoit votre réponse qui compte.',
             'speed_bonus' => 'Bonus de rapidité : jusqu’à :percent % de la valeur de l’image, dégressif jusqu’à l’image suivante. Avec le barème par défaut, attendre l’image suivante ne rapporte jamais plus ; au mieux autant.',

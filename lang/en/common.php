@@ -92,8 +92,12 @@ return [
         ],
     ],
 
+    // Sélecteur de langue (spec 90 § 8). `changed` est annoncé par
+    // l'annonceur une fois le dictionnaire reçu, donc dans la NOUVELLE langue ;
+    // `:language` est le libellé natif de la langue choisie.
     'language' => [
         'change' => 'Change language',
+        'changed' => 'Language changed to :language.',
         'current' => 'Current language: :language',
         'label' => 'Language',
     ],

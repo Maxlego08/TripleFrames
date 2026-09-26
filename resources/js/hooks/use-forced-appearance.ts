@@ -16,13 +16,15 @@ import {
  * forçage passe par les **tokens de thème** — ce hook ne fait que poser (ou
  * retirer) la classe `dark` sur `<html>`, il n'écrit pas une seule couleur.
  *
- * Le forçage se fait en trois moitiés. La moitié serveur — un middleware de
- * route, posé sur le groupe qui rend les pages `game/*` — partagera
+ * Le forçage se fait en trois moitiés. La moitié serveur,
+ * `App\Http\Middleware\ForceGameAppearance` (alias `game.appearance`, qui
+ * sera posé par L50-4, L50-8 et L60-16 sur le groupe de `routes/game.php`
+ * qui rendra les pages `game/*`), partage
  * `appearance = 'dark'` ET le drapeau `appearanceForced`, dont Blade tire
  * l'attribut `data-appearance-forced` sur `<html>`. C'est cet attribut, et non
  * ce hook, qui supprime le clignotement au premier chargement :
  * `initializeTheme()` le lit et n'applique pas la préférence stockée
- * par-dessus.
+ * par-dessus. Aucun SSR en v1 : il n'existe pas d'autre moitié serveur.
  *
  * Ce hook reste nécessaire pour la seconde entrée, celle que Blade ne voit
  * jamais : une navigation Inertia depuis une page hors jeu ne recharge pas le

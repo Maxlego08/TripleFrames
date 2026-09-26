@@ -4,6 +4,7 @@ import { initializeTheme } from '@/hooks/use-appearance';
 import AdminLayout from '@/layouts/admin/admin-layout';
 import AppLayout from '@/layouts/app-layout';
 import AuthLayout from '@/layouts/auth-layout';
+import GameLayout from '@/layouts/game/game-layout';
 import PublicLayout from '@/layouts/public/public-layout';
 import SettingsLayout from '@/layouts/settings/layout';
 
@@ -25,6 +26,13 @@ void createInertiaApp({
             case name === 'error':
             case name.startsWith('legal/'):
                 return PublicLayout;
+            // Toute page `game/*`, et elle seule, est plein écran et forcée en
+            // sombre (spec 90 § 2.1, § 2.2) : lobby, salon expiré, solo. Le
+            // salon est UNE page du lobby au podium : manche, révélation et
+            // podium en sont des états, jamais des pages, pour qu'aucune
+            // visite ne démonte souscription, horloge ni annonceur.
+            case name.startsWith('game/'):
+                return GameLayout;
             // Le back-office a sa propre coquille : il n'hérite pas de la
             // barre latérale joueur. Son thème n'est pas forcé : il suit
             // l'apparence du visiteur (D8 du 23/09, spec 90 § 2.2).

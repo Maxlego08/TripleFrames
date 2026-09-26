@@ -115,7 +115,16 @@ return [
         'found_by' => 'Found by :count player|Found by :count players',
     ],
 
+    // Écran d'aide (spec 90 § 7.7) : `title`, `description` et `open` de 90 ;
+    // `prefix`, règle du préfixe et du sous-titre, de 70 (§ 17) ; `scoring`,
+    // nœud du barème, de 80. L'aide ne parle jamais du salon, du tirage ni de
+    // films « jouables » : l'ambiguïté se mesure sur le catalogue publié
+    // entier (90 § 7.7).
     'help' => [
+        'title' => 'Answers and points',
+        'description' => 'What counts as an answer, and how points are scored.',
+        'open' => 'Help',
+        'prefix' => 'When the site has several movies from the same saga, the saga title alone, or a shared subtitle, is not enough.',
         'scoring' => [
             'tier_values' => 'Each image is worth points; with the default scoring, the first, most cryptic one pays the most. What counts is the image on screen when the server receives your answer.',
             'speed_bonus' => 'Speed bonus: up to :percent% of the image’s value, shrinking until the next image. With the default scoring, waiting for the next image never pays more; at best the same.',
