@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Enums\Locale;
+use App\Support\Deploy\DeployDrain;
 use App\Support\Frames\FrameGeometry;
 use App\Support\I18n\LangVersion;
 use App\Support\I18n\TranslationDomains;
@@ -90,6 +91,15 @@ class HandleInertiaRequests extends Middleware
             // Closure : un rechargement partiel qui ne la demande pas ne la
             // calcule pas.
             'realtime' => fn (): array => RealtimeClientConfig::toArray(),
+
+            // Drapeau de drainage de déploiement (spec 100 § 11.3, contrat
+            // C18-bis) : un BOOLÉEN, vrai dans les deux phases, et rien
+            // d'autre — ni heure, ni phase, ni compte de parties. Le bandeau
+            // de 90 l'affiche à la réponse Inertia suivante ; aucune diffusion
+            // Reverb au J1, et le refus de lancement reste la seule garantie.
+            // Closure : lu au rendu, jamais sur un rechargement partiel qui ne
+            // le demande pas.
+            'maintenance' => fn (): bool => app(DeployDrain::class)->isDraining(),
 
             // Les trois props d'i18n sont des closures : `share()` est appelée
             // à l'entrée du middleware Inertia, donc AVANT les middlewares de

@@ -2197,6 +2197,32 @@ return [
             'already_suspended' => 'La purge de rétention est déjà suspendue : rien n’a été modifié.',
             'not_suspended' => 'La purge de rétention n’est pas suspendue : rien n’a été modifié.',
         ],
+
+        /*
+        | Drainage de déploiement (spec 100 § 11.3, contrat C18-bis). Lu par le
+        | porteur en SSH et dans la sortie du hook. `:until` est un instant
+        | ISO-8601 UTC ; `:phase` est rendue par `phase.*`, jamais par la
+        | valeur brute de l'enum ; `:option` nomme l'option ou la variable
+        | d'environnement fautive, un identifiant et non un mot.
+        */
+        'deploy' => [
+            'started' => 'Drainage commencé : aucune nouvelle partie ne peut plus être lancée. Attente de la fin des parties en cours.',
+            'waiting' => 'Parties encore en cours : :count. Relevé suivant dans quelques secondes.',
+            'window_open' => 'Fenêtre libre ouverte jusqu’à :until : aucune partie en cours. Vérifiez deploy:guard, puis cliquez « Déployer » dans Plesk.',
+            'abandoned' => 'Drainage abandonné : l’échéance est passée sans fenêtre libre, ou le drapeau a été levé ailleurs. Aucune fenêtre libre n’est ouverte : ne déployez pas, et relancez deploy:drain le moment venu.',
+            'already_running' => 'Un drainage existe déjà (phase : :phase, échéance :until) : rien n’a été modifié. Attendez son issue, ou levez-le par deploy:release.',
+            'guard_ok' => 'Garde franchie : fenêtre libre ouverte et aucune partie en cours.',
+            'guard_games_in_progress' => 'Garde refusée : parties en cours : :count. Rien ne doit être migré ni redémarré ; relancez deploy:drain jusqu’à la fenêtre libre.',
+            'guard_no_window' => 'Garde refusée : aucune fenêtre libre ouverte. Lancez deploy:drain jusqu’à la fenêtre libre, puis relancez le déploiement.',
+            'released' => 'Drapeau de drainage levé : les lancements sont de nouveau permis.',
+            'nothing_to_release' => 'Aucun drapeau de drainage : rien à lever.',
+            'invalid_minutes' => 'Durée refusée pour :option : un nombre entier de minutes, au moins 1, est attendu. Rien n’a été modifié.',
+
+            'phase' => [
+                'draining' => 'drainage',
+                'window' => 'fenêtre libre',
+            ],
+        ],
     ],
 
     /*

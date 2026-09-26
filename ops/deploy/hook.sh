@@ -8,9 +8,23 @@
 # (déploiement non atomique assumé, D31 du 23/09). Remède écrit au § 11.5.
 #
 # Ordre NORMATIF en douze étapes, prouvé par tests/Feature/Deploy/DeployHookTest.php.
-# Livré SANS drainage tant que le moteur de jeu n'existe pas (D37 du 23/09) :
-# les étapes 3 (deploy:guard) et 12 (deploy:release) sont ajoutées par le lot
-# L100-5, au plus tard dans le déploiement qui porte le moteur en production.
+# Livré SANS drainage tant que le moteur de jeu n'existe pas (D37 du 23/09).
+# Les étapes 3 (deploy:guard) et 12 (deploy:release) sont PRÊTES, à leur place,
+# sur les deux lignes « # drain: » ci-dessous, et restent INACTIVES : c'est la
+# transition I-13, en deux déploiements (accord du porteur du 24/09).
+#
+#   1. Premier déploiement : il porte le moteur, le drapeau de drainage et les
+#      commandes deploy:drain, deploy:guard et deploy:release, avec ce hook
+#      SANS les étapes 3 et 12. Avant lui, aucune partie ne peut exister en
+#      production : aucun drainage n'est nécessaire. Active, l'étape 3
+#      arrêterait ce déploiement lui-même, faute de fenêtre libre : aucun
+#      deploy:drain n'a pu tourner avant, la commande n'existant pas encore
+#      sur le serveur.
+#   2. Commit d'activation : retirer le préfixe « # drain: » des deux lignes
+#      et vider deployHookDrainSteps() dans DeployHookTest, rien d'autre.
+#   3. Second déploiement, par la procédure complète du § 11.4 : deploy:drain
+#      jusqu'à la fenêtre libre, deploy:guard à la main, puis « Déployer ».
+#      Tout déploiement suivant suit le § 11.4.
 #
 # Jamais cache:clear (il viderait le drapeau de drainage et échoue de toute
 # façon, FLUSHDB étant désactivé sur le Redis dédié), jamais systemctl (non
@@ -47,6 +61,7 @@ step() {
 
 step 1 "$PHP" "$COMPOSER_PHAR" install --no-dev --optimize-autoloader --no-interaction
 step 2 "$PHP" artisan optimize:clear --except=cache
+# drain: step 3 "$PHP" artisan deploy:guard
 step 4 "$PHP" artisan backup:snapshot --if-pending
 step 5 "$PHP" artisan migrate --force
 step 6 "$PHP" artisan db:seed --class=PlatformDataSeeder --force
@@ -55,3 +70,4 @@ step 8 "$PHP" artisan optimize
 step 9 "$PHP" artisan lang:hash
 step 10 "$PHP" artisan queue:restart
 step 11 "$PHP" artisan reverb:restart
+# drain: step 12 "$PHP" artisan deploy:release

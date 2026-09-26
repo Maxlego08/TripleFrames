@@ -40,6 +40,15 @@ declare module '@inertiajs/core' {
              */
             realtime: RealtimeConfig;
             /**
+             * Drapeau de drainage de déploiement (`DeployDrain::isDraining()`,
+             * spec 100 § 11.3, contrat C18-bis) : vrai tant qu'aucune nouvelle
+             * partie ne peut être lancée, dans les deux phases du drainage.
+             * Un booléen seulement — ni heure, ni phase, ni compte de
+             * parties. Lu par le bandeau de maintenance (spec 90) ; le refus
+             * de lancement, côté serveur, reste la seule garantie.
+             */
+            maintenance: boolean;
+            /**
              * Code de la locale active, ex. `'fr'`. Résolu côté serveur par
              * `SetLocale` avant que les props partagées soient construites.
              */

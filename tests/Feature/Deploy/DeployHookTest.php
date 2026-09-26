@@ -18,6 +18,13 @@ use Illuminate\Support\Facades\Process;
 | vérifie l'ordre des douze étapes du § 11.5 privé des étapes 3 et 12, que le
 | lot L100-5 ajoute au hook ET à ce test en vidant `deployHookDrainSteps()`.
 |
+| Transition I-13, en deux déploiements (accord du porteur du 24/09) : L100-5
+| livre le drapeau et les commandes, et tient les étapes 3 et 12 PRÊTES dans
+| le hook, sur des lignes `# drain: step <n> …` inactives, pour que le premier
+| déploiement ne s'arrête pas lui-même à l'étape 3. Le commit d'activation du
+| second déploiement retire ce préfixe et vide `deployHookDrainSteps()`, sans
+| autre changement de ce test.
+|
 */
 
 /**
@@ -52,6 +59,35 @@ function deployHookNormativeSteps(): array
 function deployHookDrainSteps(): array
 {
     return [3, 12];
+}
+
+/**
+ * Les étapes du hook, actives et préparées, dans l'ordre du fichier :
+ * numéro => [commande, préparée ?]. Une étape préparée est une ligne
+ * `# drain: step <n> "$PHP" …`, qu'un seul geste active : retirer le préfixe
+ * (transition I-13).
+ *
+ * @return list<array{int, string, bool}>
+ */
+function deployHookStepsWithPrepared(): array
+{
+    $steps = [];
+
+    foreach (explode("\n", (string) file_get_contents(deployHookPath())) as $line) {
+        $trimmed = trim($line);
+        $prepared = preg_match('/^# drain: (step .+)$/', $trimmed, $match) === 1;
+        $candidate = $prepared ? $match[1] : $trimmed;
+
+        if (preg_match('/^step\s+(\d+)\s+"\$PHP"\s+(.+)$/', $candidate, $step) !== 1) {
+            continue;
+        }
+
+        $command = (string) preg_replace('/^"\$COMPOSER_PHAR"\s+/', 'composer ', $step[2]);
+
+        $steps[] = [(int) $step[1], (string) preg_replace('/\s+/', ' ', $command), $prepared];
+    }
+
+    return $steps;
 }
 
 /** Le seul PHP que le hook a le droit d'invoquer : celui de l'abonnement. */
@@ -253,4 +289,43 @@ it('n\'appelle jamais cache:clear, systemctl ni un php du système', function ()
     }
 
     expect(implode("\n", $code))->not->toMatch('/^(?:\.\/)?(?:artisan|composer)\b/m');
+});
+
+it('tient prêtes à leur place, inactives, les étapes de drainage absentes du hook', function (): void {
+    $steps = deployHookStepsWithPrepared();
+    $normative = deployHookNormativeSteps();
+
+    // Une ligne préparée pour chaque étape de drainage absente, aucune de plus
+    // (liste vide une fois l'activation faite).
+    $prepared = array_values(array_filter($steps, static fn (array $step): bool => $step[2]));
+
+    expect(array_map(static fn (array $step): int => $step[0], $prepared))->toBe(deployHookDrainSteps());
+
+    // Retirer le préfixe suffit : actives et préparées ensemble donnent, dans
+    // l'ordre du fichier, le tableau normatif complet en douze étapes.
+    $sequence = array_map(static fn (array $step): array => [$step[0], $step[1]], $steps);
+    $expected = [];
+
+    foreach ($normative as $number => $command) {
+        $expected[] = [$number, $command];
+    }
+
+    expect($sequence)->toBe($expected);
+
+    // Chaque ligne préparée a exactement la forme d'une étape active, et sa
+    // commande existe déjà : le premier déploiement livre deploy:guard et
+    // deploy:release avant que le hook ne les appelle.
+    $source = (string) file_get_contents(deployHookPath());
+    $commands = Artisan::all();
+
+    foreach ($prepared as [$number, $command]) {
+        $line = sprintf('step %d "$PHP" %s', $number, $command);
+
+        expect(substr_count($source, "\n# drain: {$line}\n"))->toBe(1, "Ligne préparée absente ou ambiguë : {$line}")
+            ->and($line)->toMatch('/^step \d+ "\$PHP" artisan [A-Za-z0-9:=,\- ]+$/');
+
+        $name = explode(' ', $command)[1];
+
+        expect(array_key_exists($name, $commands))->toBeTrue("Étape préparée {$number} : la commande {$name} n'existe pas");
+    }
 });
