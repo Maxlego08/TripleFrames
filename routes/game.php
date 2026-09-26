@@ -2,6 +2,8 @@
 
 use App\Http\Controllers\Game\ClockController;
 use App\Http\Controllers\Game\RoomStateController;
+use App\Http\Controllers\Room\RoomPresetController;
+use App\Http\Controllers\Room\RoomSettingsController;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
 use Illuminate\Session\Middleware\StartSession;
@@ -10,13 +12,14 @@ use Illuminate\View\Middleware\ShareErrorsFromSession;
 
 /*
 |--------------------------------------------------------------------------
-| Moteur de partie — spec 60 § 10.1, contrat C7 § 2.4
+| Moteur de partie et salon — spec 60 § 10.1, contrat C7 § 2.4 ; spec 50
+| § 21, contrats C0 et C6
 |--------------------------------------------------------------------------
 |
-| Routes du moteur, `require`-é par `routes/web.php` : resynchronisation,
-| battements, geste d'hôte, solo, horloge et service d'image. Seuls les NOMS
-| font contrat ; les URL partent au client par Wayfinder, sauf celles des
-| images, produites par le serveur (§ 7.5).
+| Routes du moteur et du salon, `require`-é par `routes/web.php` :
+| resynchronisation, battements, gestes d'hôte, réglages, solo, horloge et
+| service d'image. Seuls les NOMS font contrat ; les URL partent au client
+| par Wayfinder, sauf celles des images, produites par le serveur (§ 7.5).
 |
 | Limiteurs (`FortifyServiceProvider::configureRateLimiting()`, § 10.3) :
 | `game-read` sur les lectures, `game-write` sur les écritures, `frame-serve`
@@ -50,3 +53,18 @@ Route::get('clock', [ClockController::class, 'show'])
 Route::get('r/{room}/state', [RoomStateController::class, 'show'])
     ->name('room.state')
     ->middleware(['translations:game,room,legal', 'throttle:game-read']);
+
+// Réglages du salon par l'hôte (spec 50 § 3, § 5.3, § 17.1, § 21 ; contrat
+// C0) : l'onglet Simple et l'application d'un preset. Toute écriture du lobby
+// passe par `seat.active` (contrat C7 : 403 sans siège tenu par le jeton, 409
+// `seat_superseded` pour un onglet supplanté), puis par `throttle:game-write`,
+// dans cet ordre et avant la liaison de `{room}` (liste de priorité de
+// `bootstrap/app.php`). Aucun domaine de traduction : ces routes ne rendent
+// aucune page, elles redirigent vers le lobby.
+Route::middleware(['seat.active', 'throttle:game-write'])->group(function (): void {
+    Route::patch('r/{room}/settings', [RoomSettingsController::class, 'update'])
+        ->name('room.settings.update');
+
+    Route::post('r/{room}/settings/preset', [RoomPresetController::class, 'store'])
+        ->name('room.settings.preset');
+});

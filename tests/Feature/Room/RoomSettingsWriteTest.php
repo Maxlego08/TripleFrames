@@ -4,12 +4,14 @@ use App\Actions\Room\ApplyRoomPreset;
 use App\Actions\Room\UpdateRoomSettings;
 use App\Actions\Room\WriteRoomSettings;
 use App\Enums\InputDifficulty;
+use App\Enums\Locale;
 use App\Enums\PoolFault;
 use App\Enums\PoolRemedyKind;
 use App\Enums\RoomRefusal;
 use App\Enums\RoomStatus;
 use App\Enums\SettingPresetKey;
 use App\Events\Game\SettingsChanged;
+use App\Jobs\Game\BroadcastLobbyState;
 use App\Models\Player;
 use App\Models\Room;
 use App\Models\Theme;
@@ -18,12 +20,19 @@ use App\Settings\RoomSettings;
 use App\Settings\RoomSettingsBounds as Bounds;
 use App\Settings\RoomSettingsEditor;
 use App\Settings\SettingPresetCatalog;
+use App\Support\Identity\PlayerToken;
+use App\Support\Realtime\ChannelNames;
 use App\Support\Room\RoomSettingsPresenter;
 use App\ValueObjects\Room\SettingsWriteOutcome;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpFoundation\Response;
 use Tests\Support\Draw\PoolFixtures;
+use Tests\Support\Realtime\RecordingBroadcaster;
+use Tests\Support\Room\LobbyWrites;
 
 /*
 |--------------------------------------------------------------------------
@@ -37,10 +46,12 @@ use Tests\Support\Draw\PoolFixtures;
 | capacité contre l'effectif présent. L'état diffusé au salon est rendu en
 | données par `RoomSettingsPresenter::state()`.
 |
-| Premier temps du lot (I-1) : les routes sous `seat.active`, le dispatch de
-| `BroadcastLobbyState` et leurs trois tests (diffusion anti-rebondie unique,
-| délai en millisecondes, rapport rendu à l'auteur seul) arrivent au second
-| temps, après le job de la spec 60 (L60-4).
+| Second temps du lot (I-1) : après validation de sa transaction, chaque
+| écriture dispatche `BroadcastLobbyState` (spec 50 § 8.3), coalescé par
+| salon sur la file `game` ; le rapport de changements revient à l'auteur
+| seul, en flash, par les routes sous `seat.active`. Ces trois tests-là
+| jouent la vraie file `database`, dépilée comme un worker : une file `sync`
+| exécuterait chaque dispatch.
 |
 */
 
@@ -495,6 +506,21 @@ it('diffuse l\'état des réglages en données, sans identifiant interne ni cha�
     // Le même contenu pour tous, quelle que soit la langue de la requête.
     expect($payloads['fr'])->toBe($payloads['en']);
 
+    // Et c'est exactement ce que le job émet, tel que le fil le porte, dans
+    // l'une ou l'autre langue : la charge réelle de `BroadcastLobbyState`
+    // porte les clés de thème, jamais les ids, et omet le thème dépublié.
+    $wire = json_decode(json_encode($payloads['fr'], JSON_THROW_ON_ERROR), true, flags: JSON_THROW_ON_ERROR);
+
+    foreach (['fr', 'en'] as $locale) {
+        $recorder = RecordingBroadcaster::install();
+        app()->setLocale($locale);
+        (new BroadcastLobbyState($room->id))->handle();
+
+        expect($recorder->sent)->toHaveCount(1)
+            ->and($recorder->sent[0]['event'])->toBe('settings.changed')
+            ->and(array_diff_key($recorder->sent[0]['payload'], array_flip(['v', 'serverNow', 'gameRef'])))->toBe($wire);
+    }
+
     $payload = $payloads['fr'];
     $client = RoomSettings::FIELDS;
     $client[array_search('themeIds', $client, true)] = RoomSettingsEditor::THEME_KEYS;
@@ -538,4 +564,268 @@ it('diffuse l\'état des réglages en données, sans identifiant interne ni cha�
         ->and(array_column($state['pool']['remedies'], 'kind'))->toBe([PoolRemedyKind::OpenNewRoom->value]);
 
     new SettingsChanged($replayed, null, $state);
+});
+
+it('dispatche une seule diffusion anti-rebondie par salon après validation, sur la file game', function (): void {
+    config(['queue.default' => 'database']);
+    $recorder = RecordingBroadcaster::install();
+    $token = PlayerToken::mint(Locale::French);
+    [$room, $host] = LobbyWrites::hostedRoom($token);
+    [$other, $otherHost] = writeRoomWithHost();
+    LobbyWrites::actAs($this, $token);
+    $defaults = RoomSettings::defaults();
+
+    // Pendant la transaction de l'appelant, rien n'entre en file ; annulée,
+    // elle ne dispatche rien et ne garde pas le verrou d'unicité.
+    try {
+        DB::transaction(function () use ($room, $host): void {
+            expect(writeUpdate($room, $host, ['roundsCount' => Bounds::MIN_ROUNDS_COUNT])->isWritten())->toBeTrue()
+                ->and(DB::table('jobs')->count())->toBe(0);
+
+            throw new RuntimeException('annulée');
+        });
+    } catch (RuntimeException) {
+    }
+
+    expect(DB::table('jobs')->count())->toBe(0);
+
+    // Validée : la diffusion entre en file au commit, pas avant.
+    DB::transaction(function () use ($room, $host): void {
+        expect(writePreset($room, $host, SettingPresetKey::Classic)->isWritten())->toBeTrue()
+            ->and(DB::table('jobs')->count())->toBe(0);
+    });
+
+    expect(LobbyWrites::queuedBroadcasts())->toHaveCount(1);
+
+    // Une rafale par les routes — un curseur glissé, un preset, un dernier
+    // geste — pendant la fenêtre : aucun dispatch de plus pour ce salon.
+    $burst = [
+        ['PATCH', 'room.settings.update', ['roundsCount' => $defaults->roundsCount + 1]],
+        ['PATCH', 'room.settings.update', ['roundsCount' => $defaults->roundsCount + 2]],
+        ['POST', 'room.settings.preset', ['preset' => SettingPresetKey::Fast->value]],
+        ['PATCH', 'room.settings.update', ['roundsCount' => Bounds::MAX_ROUNDS_COUNT]],
+    ];
+
+    foreach ($burst as [$method, $route, $body]) {
+        LobbyWrites::send($this, $method, route($route, $room), $room, $body, $host)
+            ->assertRedirect(LobbyWrites::lobbyUrl($room))
+            ->assertSessionHasNoErrors();
+    }
+
+    // Un autre salon n'est jamais coalescé avec le premier.
+    expect(writeUpdate($other, $otherHost, ['roundsCount' => Bounds::MIN_ROUNDS_COUNT])->isWritten())->toBeTrue();
+
+    // Un salon sans diffusion en attente : aucun refus ne dispatche —
+    // onglet supplanté, entrée invalide, non-hôte, hors du lobby.
+    [$quiet, $quietHost] = LobbyWrites::hostedRoom($token);
+    $update = route('room.settings.update', $quiet);
+
+    LobbyWrites::send($this, 'PATCH', $update, $quiet, ['roundsCount' => Bounds::MIN_ROUNDS_COUNT], (string) Str::ulid())
+        ->assertStatus(Response::HTTP_CONFLICT);
+    LobbyWrites::send($this, 'PATCH', $update, $quiet, ['tierPoints' => Bounds::defaultTierPoints($defaults->framesPerRound)], $quietHost)
+        ->assertSessionHasErrors('tierPoints');
+
+    Room::query()->whereKey($quiet->id)->update(['host_player_id' => Player::factory()->for($quiet)->create()->id]);
+
+    LobbyWrites::send($this, 'PATCH', $update, $quiet, ['roundsCount' => Bounds::MIN_ROUNDS_COUNT], $quietHost)
+        ->assertForbidden();
+
+    Room::query()->whereKey($quiet->id)->update(['host_player_id' => $quietHost->id, 'status' => RoomStatus::Playing->value]);
+
+    LobbyWrites::send($this, 'PATCH', $update, $quiet, ['roundsCount' => Bounds::MIN_ROUNDS_COUNT], $quietHost)
+        ->assertStatus(Response::HTTP_SEE_OTHER);
+    LobbyWrites::send($this, 'POST', route('room.settings.preset', $quiet), $quiet, ['preset' => SettingPresetKey::Fast->value], $quietHost)
+        ->assertStatus(Response::HTTP_SEE_OTHER);
+
+    // Un job par salon écrit, tous sur la file `game`, jamais sur `default` ;
+    // rien n'est encore parti.
+    $queued = LobbyWrites::queuedBroadcasts();
+
+    expect(array_map(static fn (array $entry): int => $entry['job']->roomId, $queued))->toBe([$room->id, $other->id])
+        ->and(array_column($queued, 'queue'))->toBe(['game', 'game'])
+        ->and(DB::table('jobs')->count())->toBe(2)
+        ->and(LobbyWrites::workGameQueue())->toBe(0)
+        ->and($recorder->sent)->toBe([]);
+
+    // La fenêtre passée : un seul settings.changed par salon, portant le
+    // DERNIER état de la rafale.
+    $this->travel(PlatformLimits::lobbyBroadcastDebounceMs() + 1000)->milliseconds();
+
+    expect(LobbyWrites::workGameQueue())->toBe(2)
+        ->and($recorder->sent)->toHaveCount(2);
+
+    $mine = array_values(array_filter(
+        $recorder->sent,
+        static fn (array $sent): bool => $sent['channels'] === ['presence-'.ChannelNames::room($room)],
+    ));
+
+    expect($mine)->toHaveCount(1)
+        ->and($mine[0]['event'])->toBe('settings.changed')
+        ->and($mine[0]['payload']['settings']['roundsCount'])->toBe(Bounds::MAX_ROUNDS_COUNT)
+        ->and($mine[0]['payload']['settings']['framesPerRound'])
+        ->toBe(SettingPresetCatalog::settingsFor(SettingPresetKey::Fast)->framesPerRound);
+
+    // File vide : une écriture A en attente, puis une écriture B dont la
+    // transaction n'est validée qu'APRÈS que le worker a traité A. Le verrou
+    // d'unicité n'est pris qu'au commit de B : A, déjà traité, l'a relâché, et
+    // B entre en file pour diffuser son propre état (écart E86-6).
+    expect(writeUpdate($room, $host, ['roundsCount' => Bounds::MIN_ROUNDS_COUNT])->isWritten())->toBeTrue();
+
+    $this->travel(PlatformLimits::lobbyBroadcastDebounceMs() + 1000)->milliseconds();
+
+    DB::transaction(function () use ($room, $host): void {
+        expect(writeUpdate($room, $host, ['roundsCount' => Bounds::MAX_ROUNDS_COUNT])->isWritten())->toBeTrue()
+            ->and(LobbyWrites::workGameQueue())->toBe(1);
+    });
+
+    $pending = LobbyWrites::queuedBroadcasts();
+
+    expect($pending)->toHaveCount(1)
+        ->and($pending[0]['job']->roomId)->toBe($room->id)
+        ->and($pending[0]['queue'])->toBe('game');
+});
+
+it('programme la diffusion anti-rebondie en millisecondes arrondies à la seconde supérieure, jamais en secondes', function (): void {
+    config(['queue.default' => 'database']);
+    $token = PlayerToken::mint(Locale::French);
+    LobbyWrites::actAs($this, $token);
+    $default = PlatformLimits::DEFAULT_LOBBY_BROADCAST_DEBOUNCE_MS;
+    $max = PlatformLimits::MAX_LOBBY_BROADCAST_DEBOUNCE_MS;
+
+    // [instant de l'écriture, anti-rebond configuré, route, disponibilité attendue]
+    $cases = [
+        // Défaut : 13,342 s → 14 s, jamais 13 s (troncature) ni 5 min (secondes).
+        ['2026-09-26 14:05:13.042', $default, 'room.settings.update', '2026-09-26 14:05:14'],
+        // La somme franchit la seconde : 14,258 s → 15 s.
+        ['2026-09-26 14:05:13.958', $default, 'room.settings.preset', '2026-09-26 14:05:15'],
+        // Déjà sur une seconde entière : rien à arrondir, fenêtre exacte.
+        ['2026-09-26 14:05:20.000', $max, 'room.settings.update', '2026-09-26 14:05:21'],
+        ['2026-09-26 14:05:20.500', $max, 'room.settings.preset', '2026-09-26 14:05:22'],
+    ];
+
+    foreach ($cases as [$at, $debounceMs, $route, $expected]) {
+        DB::table('jobs')->delete();
+        platformLimitsConfigure(['lobby_broadcast_debounce_ms' => $debounceMs]);
+        $now = CarbonImmutable::parse($at);
+        $this->travelTo($now);
+        [$room, $host] = LobbyWrites::hostedRoom($token);
+        $preset = $route === 'room.settings.preset';
+
+        LobbyWrites::send(
+            $this,
+            $preset ? 'POST' : 'PATCH',
+            route($route, $room),
+            $room,
+            $preset ? ['preset' => SettingPresetKey::Classic->value] : ['roundsCount' => Bounds::MIN_ROUNDS_COUNT],
+            $host,
+        )->assertSessionHasNoErrors();
+
+        $queued = LobbyWrites::queuedBroadcasts();
+        $availableAt = CarbonImmutable::parse($expected);
+
+        expect($queued)->toHaveCount(1);
+
+        // Un INSTANT, jamais un entier que Laravel lirait en secondes.
+        $delay = $queued[0]['job']->delay;
+
+        expect($delay)->toBeInstanceOf(DateTimeInterface::class)
+            ->and($delay instanceof DateTimeInterface ? $delay->format('Y-m-d H:i:s.u') : null)
+            ->toBe($now->addMilliseconds($debounceMs)->ceilSecond()->format('Y-m-d H:i:s.u'))
+            ->and($queued[0]['availableAt'])->toBe($availableAt->getTimestamp());
+
+        // Fenêtre effective dans [anti-rebond, anti-rebond + 1 s[ : jamais
+        // plus courte que l'anti-rebond.
+        $windowMs = $availableAt->getTimestampMs() - $now->getTimestampMs();
+
+        expect($windowMs)->toBeGreaterThanOrEqual($debounceMs)
+            ->and($windowMs)->toBeLessThan($debounceMs + 1000);
+
+        // Rien ne part avant l'instant, tout part à l'instant.
+        $this->travelTo($availableAt->subMillisecond());
+        expect(LobbyWrites::workGameQueue())->toBe(0);
+
+        $this->travelTo($availableAt);
+        expect(LobbyWrites::workGameQueue())->toBe(1);
+    }
+});
+
+it('rend le rapport de changements à l\'auteur seul, jamais au salon', function (): void {
+    config(['queue.default' => 'database']);
+    $recorder = RecordingBroadcaster::install();
+    $framesPerRound = Bounds::DEFAULT_FRAMES_PER_ROUND;
+    $custom = array_fill(0, $framesPerRound, Bounds::MAX_TIER_POINTS);
+    $token = PlayerToken::mint(Locale::French);
+    [$room, $host] = LobbyWrites::hostedRoom($token, RoomSettings::fromInput([
+        'framesPerRound' => $framesPerRound,
+        'tierPoints' => $custom,
+    ]));
+    $guestToken = PlayerToken::mint(Locale::English);
+    $guest = LobbyWrites::seat($room, $guestToken);
+    LobbyWrites::actAs($this, $token);
+
+    // N change : le barème personnalisé est remplacé, et l'auteur le lit dans
+    // SA réponse, en flash, sous les clés client.
+    LobbyWrites::send($this, 'PATCH', route('room.settings.update', $room), $room, [
+        'framesPerRound' => Bounds::MIN_FRAMES_PER_ROUND,
+    ], $host)
+        ->assertRedirect(LobbyWrites::lobbyUrl($room))
+        ->assertSessionHasNoErrors()
+        ->assertInertiaFlash('settingsChanges', ['tierPoints' => RoomSettings::CHANGE_RESET]);
+
+    expect(Room::query()->findOrFail($room->id)->settings->tierPoints)
+        ->toBe(Bounds::defaultTierPoints(Bounds::MIN_FRAMES_PER_ROUND));
+
+    // Rien ne part au salon avec l'écriture elle-même.
+    expect($recorder->sent)->toBe([]);
+
+    // Le salon reçoit l'ÉTAT, relu par le job, et rien d'autre : ni le
+    // rapport, ni un code de changement.
+    $this->travel(PlatformLimits::lobbyBroadcastDebounceMs() + 1000)->milliseconds();
+
+    expect(LobbyWrites::workGameQueue())->toBe(1)
+        ->and($recorder->sent)->toHaveCount(1);
+
+    $sent = $recorder->sent[0];
+    $state = RoomSettingsPresenter::state($room->refresh(), Date::now()->toImmutable());
+    $wire = json_decode((string) json_encode($state, JSON_THROW_ON_ERROR), true, flags: JSON_THROW_ON_ERROR);
+
+    expect($sent['event'])->toBe('settings.changed')
+        ->and($sent['channels'])->toBe(['presence-'.ChannelNames::room($room)])
+        ->and(array_diff_key($sent['payload'], array_flip(['v', 'serverNow', 'gameRef'])))->toBe($wire)
+        ->and($sent['json'])->not->toContain('settingsChanges')
+        ->and($sent['json'])->not->toContain('"changes"');
+
+    foreach ([RoomSettings::CHANGE_RESET, RoomSettings::CHANGE_EQUALIZED, RoomSettings::CHANGE_CLAMPED] as $code) {
+        expect($sent['json'])->not->toContain('"'.$code.'"');
+    }
+
+    // Un preset : rapport vide au J1, rendu quand même à l'auteur, qui sait
+    // ainsi que rien d'invisible n'a changé.
+    LobbyWrites::send($this, 'POST', route('room.settings.preset', $room), $room, [
+        'preset' => SettingPresetKey::Hardcore->value,
+    ], $host)
+        ->assertSessionHasNoErrors()
+        ->assertInertiaFlash('settingsChanges', []);
+
+    // Un autre siège du salon : aucun rapport dans sa session, et aucun geste
+    // de réglage pour lui.
+    $this->flushSession();
+    LobbyWrites::actAs($this, $guestToken);
+
+    LobbyWrites::send($this, 'PATCH', route('room.settings.update', $room), $room, [
+        'framesPerRound' => Bounds::DEFAULT_FRAMES_PER_ROUND,
+    ], $guest)
+        ->assertForbidden()
+        ->assertInertiaFlashMissing('settingsChanges');
+
+    // Un refus de validation n'en porte pas davantage : l'auteur lit ses
+    // erreurs de champ, jamais un rapport.
+    $this->flushSession();
+    LobbyWrites::actAs($this, $token);
+
+    LobbyWrites::send($this, 'PATCH', route('room.settings.update', $room), $room, [
+        'tierPoints' => $custom,
+    ], $host)
+        ->assertSessionHasErrors('tierPoints')
+        ->assertInertiaFlashMissing('settingsChanges');
 });

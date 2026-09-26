@@ -32,8 +32,9 @@ use Illuminate\Validation\ValidationException;
  * le blocage du vivier et ses remèdes, et seule la garde de lancement fait
  * autorité (§ 5.3).
  *
- * La diffusion anti-rebondie (`BroadcastLobbyState`, § 8.3) est posée par le
- * second temps du lot L50-2, après la validation de cette transaction.
+ * Après la validation de la transaction, la diffusion anti-rebondie de l'état
+ * (`BroadcastLobbyState`, § 8.3) part par le même dispatch que
+ * {@see UpdateRoomSettings::dispatchLobbyBroadcast()}.
  */
 final readonly class ApplyRoomPreset
 {
@@ -63,6 +64,7 @@ final readonly class ApplyRoomPreset
             RoomCapacityGuard::assertAllowed($locked, $locked->settings, $settings);
 
             $this->writer->handle($locked, $settings, $now);
+            UpdateRoomSettings::dispatchLobbyBroadcast($locked, $now);
 
             return SettingsWriteOutcome::written([]);
         });

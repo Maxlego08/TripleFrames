@@ -31,11 +31,11 @@ use Tests\Support\Realtime\RecordingBroadcaster;
 | La file est la vraie file `database` du framework, dépilée comme un worker
 | le ferait (`pop()` puis `fire()`, qui relâche le verrou d'unicité avant le
 | traitement) : c'est ce qui prouve la coalescence, qu'une file `sync`
-| exécuterait à chaque dispatch. Le dispatch est écrit comme 50 l'écrira
-| (délai en INSTANT arrondi à la seconde supérieure, après validation) ; la
-| preuve de ce délai appartient à son appelant (`RoomSettingsWriteTest`, 50,
-| R-04), comme le branchement du dispatch sur les écritures (L50-2, second
-| temps).
+| exécuterait à chaque dispatch. Les écritures dispatchent d'elles-mêmes,
+| par `UpdateRoomSettings::dispatchLobbyBroadcast()` (L50-2, second temps),
+| que ce fichier appelle aussi pour un salon sans écriture ; la preuve du
+| délai (INSTANT arrondi à la seconde supérieure, après validation)
+| appartient à l'appelant (`RoomSettingsWriteTest`, 50, R-04).
 |
 */
 
@@ -54,14 +54,10 @@ function lobbyBroadcastRoom(): array
     return [$room->refresh(), $host];
 }
 
-/** Le dispatch tel que 50 l'écrit après chaque écriture de réglages (§ 8.3). */
+/** Le dispatch que 50 pose après chaque écriture de réglages (§ 8.3). */
 function lobbyBroadcastDispatch(Room $room): void
 {
-    $now = Date::now()->toImmutable();
-
-    BroadcastLobbyState::dispatch($room->id)
-        ->delay($now->addMilliseconds(PlatformLimits::lobbyBroadcastDebounceMs())->ceilSecond())
-        ->afterCommit();
+    UpdateRoomSettings::dispatchLobbyBroadcast($room, Date::now()->toImmutable());
 }
 
 /**
@@ -100,7 +96,7 @@ it("une rafale d'écritures de réglages n'émet qu'un settings.changed portant 
         ->and($job->tries)->toBe(1);
 
     // Une rafale : un curseur glissé, trois écritures immédiates, chacune
-    // suivie de son dispatch.
+    // dispatchant elle-même sa diffusion (L50-2, second temps).
     $defaults = RoomSettings::defaults();
     $burst = [$defaults->roundsCount + 1, $defaults->roundsCount + 2, $defaults->roundsCount + 3];
 
@@ -108,8 +104,6 @@ it("une rafale d'écritures de réglages n'émet qu'un settings.changed portant 
         $outcome = app(UpdateRoomSettings::class)->handle($room, $host, ['roundsCount' => $roundsCount]);
 
         expect($outcome->isWritten())->toBeTrue();
-
-        lobbyBroadcastDispatch($room);
     }
 
     // Un autre salon n'est jamais coalescé avec le premier.
@@ -145,7 +139,6 @@ it("une rafale d'écritures de réglages n'émet qu'un settings.changed portant 
     // Le verrou est relâché au début du traitement : l'écriture suivante
     // dispatche un nouveau job (cohérence finale, sans révision stockée).
     app(UpdateRoomSettings::class)->handle($room, $host, ['roundsCount' => $defaults->roundsCount]);
-    lobbyBroadcastDispatch($room);
 
     expect(DB::table('jobs')->where('queue', 'game')->count())->toBe(1);
 

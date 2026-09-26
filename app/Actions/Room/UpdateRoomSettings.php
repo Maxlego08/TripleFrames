@@ -4,13 +4,16 @@ namespace App\Actions\Room;
 
 use App\Enums\RoomRefusal;
 use App\Enums\RoomStatus;
+use App\Jobs\Game\BroadcastLobbyState;
 use App\Models\Player;
 use App\Models\Room;
+use App\Settings\PlatformLimits;
 use App\Settings\RoomSettingsEditor;
 use App\Support\Draw\PoolQuery;
 use App\Support\Room\RoomCapacityGuard;
 use App\Support\Room\RoomSettingsPresenter;
 use App\ValueObjects\Room\SettingsWriteOutcome;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -31,16 +34,16 @@ use Illuminate\Validation\ValidationException;
  *    FormRequest, qu'une entrée partielle se valide contre l'état courant ;
  * 6. `fromInput()` : bornes simples et croisées 1 et 2 ;
  * 7. garde de capacité ({@see RoomCapacityGuard}) ;
- * 8. {@see WriteRoomSettings}, écrivain unique.
+ * 8. {@see WriteRoomSettings}, écrivain unique ;
+ * 9. après la validation de la transaction, dispatch de la diffusion
+ *    anti-rebondie {@see BroadcastLobbyState} (§ 8.3), par
+ *    {@see self::dispatchLobbyBroadcast()} — verrou d'unicité compris.
  *
  * Un refus de règle est rendu en données ({@see SettingsWriteOutcome}) ; une
  * entrée invalide lève une `ValidationException`, erreurs indexées par champ
- * dans la langue de l'hôte, et rien n'est écrit. Le rapport de changements
- * part à l'auteur seul, jamais au salon (§ 2.6).
- *
- * La diffusion anti-rebondie de l'état (`BroadcastLobbyState`, § 8.3) se
- * dispatche après la validation de cette transaction : elle est posée par le
- * second temps du lot L50-2, qui suit le job de la spec 60 (L60-4).
+ * dans la langue de l'hôte, et rien n'est écrit ni dispatché. Le rapport de
+ * changements part à l'auteur seul, jamais au salon (§ 2.6) : le salon reçoit
+ * l'ÉTAT, relu par le job au moment d'émettre.
  */
 final readonly class UpdateRoomSettings
 {
@@ -81,8 +84,48 @@ final readonly class UpdateRoomSettings
             RoomCapacityGuard::assertAllowed($locked, $current, $settings);
 
             $this->writer->handle($locked, $settings, $now);
+            self::dispatchLobbyBroadcast($locked, $now);
 
             return SettingsWriteOutcome::written(RoomSettingsPresenter::changes($edited['changes']));
+        });
+    }
+
+    /**
+     * La diffusion anti-rebondie de l'état du lobby (spec 50 § 8.3), commune
+     * aux deux écritures de réglages de l'hôte ({@see ApplyRoomPreset}) :
+     *
+     * - **le dispatch ENTIER après la validation de la transaction la plus
+     *   externe** (`DB::afterCommit()`), et non `->afterCommit()` sur le job :
+     *   celui-ci ne diffère que la mise en file, alors que le verrou
+     *   d'unicité est pris tout de suite, à la destruction du
+     *   `PendingDispatch`. Pris dans la transaction, il ferait sauter le
+     *   dispatch d'une écriture B pendant qu'un job A attend ; si le worker
+     *   traite A avant le commit de B, A relit l'état validé SANS B, et plus
+     *   rien ne reste en file pour B (écart E86-6). Après la validation, la
+     *   prise du verrou suit toujours le commit : ou le verrou est tenu par un
+     *   job qui n'a pas encore relu la salle (il lira B), ou il est libre et
+     *   B entre en file. Une écriture annulée ne prend jamais le verrou ;
+     *   hors transaction, le dispatch est immédiat ;
+     * - **file `game`, unique par salon jusqu'à son traitement** : une écriture
+     *   qui survient pendant la fenêtre ne dispatche rien, et le job relit
+     *   l'état au moment d'émettre ;
+     * - **délai en INSTANT**, `$now` + `lobbyBroadcastDebounceMs()` arrondi à
+     *   la seconde supérieure — jamais `->delay(<entier>)`, que Laravel lit en
+     *   secondes (300 deviendrait cinq minutes). La file tronque tout instant
+     *   à la seconde (`availableAt()`) : l'arrondi garantit une fenêtre
+     *   effective comprise entre `lobbyBroadcastDebounceMs()` et
+     *   `lobbyBroadcastDebounceMs()` + 1 s, jamais plus courte.
+     *
+     * À appeler DANS la transaction, après l'écrivain unique : `$now` est
+     * celui pris après le verrou, et rien ne part avant la validation.
+     */
+    public static function dispatchLobbyBroadcast(Room $room, CarbonImmutable $now): void
+    {
+        $roomId = $room->id;
+        $availableAt = $now->addMilliseconds(PlatformLimits::lobbyBroadcastDebounceMs())->ceilSecond();
+
+        DB::afterCommit(static function () use ($roomId, $availableAt): void {
+            BroadcastLobbyState::dispatch($roomId)->delay($availableAt);
         });
     }
 }

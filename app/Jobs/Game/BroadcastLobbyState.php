@@ -2,6 +2,7 @@
 
 namespace App\Jobs\Game;
 
+use App\Actions\Room\UpdateRoomSettings;
 use App\Enums\RoomStatus;
 use App\Events\Game\SettingsChanged;
 use App\Models\Room;
@@ -19,25 +20,34 @@ use Illuminate\Support\Facades\Date;
  * **Un curseur ne produit pas une rafale d'événements** : l'écriture de
  * réglages est immédiate, c'est la DIFFUSION qui est coalescée par salon.
  * 50 dispatche ce job après chaque écriture de réglages et après un refus
- * `pool_insufficient`, `->afterCommit()`, avec un délai exprimé **en
- * instant arrondi à la seconde supérieure** :
+ * `pool_insufficient`, le dispatch ENTIER après la validation de la
+ * transaction, avec un délai exprimé **en instant arrondi à la seconde
+ * supérieure** :
  *
  * ```php
- * BroadcastLobbyState::dispatch($room->id)
- *     ->delay($now->addMilliseconds(PlatformLimits::lobbyBroadcastDebounceMs())->ceilSecond())
- *     ->afterCommit();
+ * $availableAt = $now->addMilliseconds(PlatformLimits::lobbyBroadcastDebounceMs())->ceilSecond();
+ *
+ * DB::afterCommit(static function () use ($roomId, $availableAt): void {
+ *     BroadcastLobbyState::dispatch($roomId)->delay($availableAt);
+ * });
  * ```
  *
  * — jamais `->delay(<entier>)`, que Laravel lit en SECONDES (écart (n) du
- * § 22 bis ; {@see PlatformLimits::lobbyBroadcastDebounceMs()}).
+ * § 22 bis ; {@see PlatformLimits::lobbyBroadcastDebounceMs()}). Ce dispatch
+ * est écrit une fois, côté 50 : {@see UpdateRoomSettings::dispatchLobbyBroadcast()}.
+ * `DB::afterCommit()` et non `->afterCommit()` (écart E86-6) : ce dernier ne
+ * diffère que la mise en file, le verrou d'unicité étant pris dès la
+ * destruction du `PendingDispatch`, donc dans la transaction — une écriture
+ * sautée faute de verrou, validée après que ce job a relu la salle, ne serait
+ * jamais diffusée.
  *
  * - **Unique par salon jusqu'à son traitement**
  *   (`ShouldBeUniqueUntilProcessing`, `uniqueId()` = identifiant du salon) :
- *   toute écriture qui survient pendant la fenêtre ne dispatche rien, le
- *   verrou d'unicité étant tenu ; une écriture postérieure au début du
- *   traitement en dispatche un nouveau. Cohérence finale, sans numéro de
- *   révision stocké. Un dispatch dont la transaction est annulée relâche son
- *   verrou (le framework l'enregistre au retour arrière).
+ *   toute écriture validée pendant la fenêtre ne dispatche rien, le verrou
+ *   d'unicité étant tenu par un job qui n'a pas encore relu la salle ; une
+ *   écriture validée après le début du traitement en dispatche un nouveau.
+ *   Cohérence finale, sans numéro de révision stocké. Une transaction annulée
+ *   ne prend jamais le verrou.
  * - **Relit l'état au moment d'émettre** (`RoomSettingsPresenter::state()`) :
  *   le DERNIER état part toujours. C'est la seule émission coalescée de la
  *   liste close ; la coalescence est au mieux, jamais une règle de jeu.
