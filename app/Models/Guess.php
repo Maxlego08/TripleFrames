@@ -5,6 +5,8 @@ namespace App\Models;
 use App\Enums\GuessMatchKind;
 use App\Enums\GuessSource;
 use App\Enums\RoundStatus;
+use App\Enums\ScoreScope;
+use App\Settings\PlatformLimits;
 use Carbon\CarbonImmutable;
 use Database\Factories\GuessFactory;
 use Illuminate\Database\Eloquent\Attributes\DateFormat;
@@ -22,7 +24,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  *
  * **La table ne contient QUE des bonnes réponses**, par construction : il
  * n'existe aucune colonne `is_correct`, qui inviterait à y ranger les fausses.
- * Aucune IP, aucun horodatage client. Au plus 120 lignes par partie.
+ * Aucune IP, aucun horodatage client. Au plus `roomSeats()` ×
+ * min(M + `drawSubstituteMargin()`, |vivier|) lignes par partie
+ * ({@see PlatformLimits::roomSeats()}, {@see PlatformLimits::drawSubstituteMargin()}).
  *
  * **Famille d'horodatage : `created_at` seul, `const UPDATED_AT = null`.** La
  * table n'a pas de colonne `updated_at` : sans cette constante, `$timestamps`
@@ -36,7 +40,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * `answered_at_ms` — un entier, jamais un horodatage — est la valeur qui a
  * déterminé le palier et le bonus, sous `game.tier_grace_ms` (§ 7.5). Le seuil de
  * Levenshtein qui a accepté `edit_distance` se lit par `game.validation_version`,
- * la fraction de bonus par `game.scoring_version`.
+ * le pourcentage B_max(N) par `game.scoring_version`.
  *
  * `lock_rank` est alloué SOUS VERROU dans la transaction de verrouillage :
  * `SELECT … FROM round WHERE id = ? FOR UPDATE` → `found_count = found_count + 1`
@@ -51,9 +55,10 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * bonne réponse en clair, et la ligne `guess` naît à l'instant précis où part
  * l'événement « X a trouvé », alors que les onze autres cherchent encore jusqu'à
  * `D`. Seul `lock_rank` reste visible. Le score, lui, ne passe par aucune
- * sérialisation de modèle : c'est `SUM(guess.points_total)` sous
- * {@see self::counted()} ; la ressource de révélation fait un `makeVisible()`
- * explicite après `reveal_ends_at`.
+ * sérialisation de modèle : il est publiable dès `round.status = revealing`,
+ * via `Scoreboard`, jamais par `toArray()` — une somme de `points_total` lue
+ * sous une portée de {@see ScoreScope} ({@see self::inScoreScope()}), jamais
+ * sous {@see self::counted()} seul.
  *
  * @property int $id
  * @property int $round_id
@@ -126,13 +131,20 @@ class Guess extends Model
     }
 
     /**
-     * Invariant **L1** : les réponses dont les points comptent.
+     * Invariant **L1** seul : les réponses d'une manche non annulée.
      *
-     * **Toute agrégation de `guess` passe par ici** — score vivant, classement
-     * intermédiaire, gel du podium, les quatre compteurs d'historique. Une manche
-     * annulée ne rapporte aucun point, or `guess` est immuable et la ligne `round`
-     * n'est pas supprimée : sans cette exclusion, deux joueurs verrouillés au
-     * palier 2 d'une manche ensuite annulée gardent 400 points chacun.
+     * Aucune lecture de score ne l'appelle directement : `Scoreboard` lit sous
+     * {@see ScoreScope} — `Own` pour le siège, `Publishable` pour tout autre
+     * siège, `Settled` au gel et au podium ({@see self::inScoreScope()}) —, et
+     * les quatre compteurs lisent les agrégats figés de `game_player`. Ce scope
+     * compte une manche `running` : un classement recalculé sous lui et montré à
+     * un tiers publierait les points d'un joueur verrouillé, donc son palier et
+     * sa vitesse, alors que les autres cherchent encore (E10-14).
+     *
+     * Une manche annulée ne rapporte aucun point, or `guess` est immuable et la
+     * ligne `round` n'est pas supprimée : sans cette exclusion, deux joueurs
+     * verrouillés au palier 2 d'une manche ensuite annulée gardent 400 points
+     * chacun.
      *
      * Sous-requête sur `round` plutôt qu'une jointure : le scope ne doit changer ni
      * le `select` ni la cardinalité de l'agrégat qui le suit.
@@ -144,6 +156,30 @@ class Guess extends Model
     {
         $query->whereIn('round_id', Round::query()
             ->where('status', '!=', RoundStatus::Cancelled)
+            ->select('id'));
+    }
+
+    /**
+     * Les réponses dont les points entrent dans une portée de lecture du score
+     * (spec 80 § 7.4, contrat C13 § 2.3) : celles des manches dont le statut
+     * appartient à {@see ScoreScope::roundStatuses()}, seul domicile de la liste.
+     *
+     * Les trois portées excluent `cancelled` (L1) ; `Publishable` et `Settled`
+     * excluent en plus `running`, dont les points ne deviennent publics qu'à
+     * `revealing`. Sur une manche `pending`, qui ne porte jamais de `guess`,
+     * `ScoreScope::Own` est équivalent à {@see self::counted()}.
+     *
+     * Même patron que {@see self::counted()} : sous-requête sur `round`, sans
+     * jointure, pour ne changer ni le `select` ni la cardinalité de l'agrégat
+     * qui le suit.
+     *
+     * @param  Builder<Guess>  $query
+     */
+    #[Scope]
+    protected function inScoreScope(Builder $query, ScoreScope $scope): void
+    {
+        $query->whereIn('round_id', Round::query()
+            ->whereIn('status', $scope->roundStatuses())
             ->select('id'));
     }
 

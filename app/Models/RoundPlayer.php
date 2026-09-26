@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Enums\Locale;
 use App\Enums\PlayerConnectionState;
 use App\Enums\RoundPlayerInputState;
+use App\Enums\ScoreScope;
 use Carbon\CarbonImmutable;
 use Database\Factories\RoundPlayerFactory;
 use Illuminate\Database\Eloquent\Attributes\DateFormat;
@@ -130,6 +131,30 @@ class RoundPlayer extends Model
     protected function open(Builder $query): void
     {
         $query->whereIn('input_state', RoundPlayerInputState::notClosedValues());
+    }
+
+    /**
+     * Les participations dont la manche entre dans une portée de lecture du
+     * score (spec 80 § 7.4, contrat C13 § 2.3) : même sous-requête que
+     * `Guess::inScoreScope()`, sur la seule liste de
+     * {@see ScoreScope::roundStatuses()}.
+     *
+     * C'est le dénominateur des manches jouées d'un siège : sous
+     * `ScoreScope::Settled`, une manche annulée n'y entre jamais, et une manche
+     * encore `running` non plus — sans quoi une bonne réponse et sa manche ne
+     * seraient pas comptées sous le même filtre (§ 10.4).
+     *
+     * Sous-requête sur `round` plutôt qu'une jointure : le scope ne doit changer
+     * ni le `select` ni la cardinalité de l'agrégat qui le suit.
+     *
+     * @param  Builder<RoundPlayer>  $query
+     */
+    #[Scope]
+    protected function inScoreScope(Builder $query, ScoreScope $scope): void
+    {
+        $query->whereIn('round_id', Round::query()
+            ->whereIn('status', $scope->roundStatuses())
+            ->select('id'));
     }
 
     /**

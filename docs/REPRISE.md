@@ -508,7 +508,7 @@ Ensuite, à chaque session : **« Implémente l'étape suivante de l'ordre des l
 77. L70-7 — résolveur de titre, tirage des leurres (D21) → 35, 70 — ✅ livrée le 26/09
 78. L70-8 — composition du QCM, `rendered_locale` → 76, 77 — ✅ livrée le 26/09
 79. L80-1 — règle de score, fonction pure → 8, 9 — ✅ livrée le 26/09
-80. L80-2 — portées de lecture et rejeu → 79
+80. L80-2 — portées de lecture et rejeu → 79 — ✅ livrée le 26/09
 81. L60-2 — horloge, instant de réception, enveloppe, limiteurs → 8, 10
 82. L80-3 — départage, classement, `types/scoring.ts` → 69, 80, 81
 83. L60-3 — canaux, garde `player`, événements → 65, 69, 81
