@@ -36,6 +36,13 @@ return Application::configure(basePath: dirname(__DIR__))
                 ->group(__DIR__.'/../routes/ops.php');
         },
     )
+    // Canaux de diffusion du moteur (spec 60 § 10.4, contrat C7 § 2.2) :
+    // `/broadcasting/auth`, chemin fixe du framework, sous `web` — donc
+    // `EncryptCookies`, sans quoi la garde `player` lirait le jeton absent —
+    // et `throttle:game-read`, compté par jeton. Posé ici et JAMAIS par
+    // `install:broadcasting`, qui ajouterait `channels:` à `withRouting()`,
+    // donc un second `/broadcasting/auth` sans ce middleware (lot L60-1).
+    ->withBroadcasting(__DIR__.'/../routes/channels.php', ['middleware' => ['web', 'throttle:game-read']])
     // Chaque écouteur est enregistré EXPLICITEMENT dans `AppServiceProvider`.
     // La découverte de `app/Listeners`, active par défaut, les enregistrerait
     // une seconde fois : `/up` interrogerait alors deux fois la base et Redis.

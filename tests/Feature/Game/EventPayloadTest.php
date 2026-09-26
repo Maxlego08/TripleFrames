@@ -1,0 +1,564 @@
+<?php
+
+use App\Events\Game\GameEnded;
+use App\Events\Game\GameLaunched;
+use App\Events\Game\GamePaused;
+use App\Events\Game\GameResumed;
+use App\Events\Game\HostChanged;
+use App\Events\Game\PlayerLocked;
+use App\Events\Game\RoomArchived;
+use App\Events\Game\RoomBroadcast;
+use App\Events\Game\RoomReplayed;
+use App\Events\Game\RoundCancelled;
+use App\Events\Game\RoundClosed;
+use App\Events\Game\RoundRevealed;
+use App\Events\Game\RoundScheduled;
+use App\Events\Game\SeatBroadcast;
+use App\Events\Game\SeatChoicesOffered;
+use App\Events\Game\SeatJoined;
+use App\Events\Game\SeatKicked;
+use App\Events\Game\SeatSuperseded;
+use App\Events\Game\SeatUpdated;
+use App\Events\Game\SettingsChanged;
+use App\Events\Game\TierOpened;
+use App\Models\Frame;
+use App\Models\Game;
+use App\Models\Player;
+use App\Models\Room;
+use App\Models\Round;
+use App\Models\RoundChoiceSet;
+use App\Models\RoundTier;
+use App\Support\Realtime\ChannelNames;
+use App\Support\Realtime\GameRef;
+use App\Support\Realtime\GameWire;
+use App\Support\Realtime\WireTime;
+use Carbon\CarbonImmutable;
+use Illuminate\Broadcasting\BroadcastException;
+use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
+use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
+use Illuminate\Contracts\Broadcasting\ShouldRescue;
+use Illuminate\Contracts\Events\ShouldDispatchAfterCommit;
+use Illuminate\Support\Facades\Date;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Exceptions;
+use Illuminate\Support\Str;
+use Tests\Support\Realtime\RecordingBroadcaster;
+use Tests\Support\Realtime\RecordingJob;
+use Tests\Support\Realtime\WireFixtures;
+use Tests\Support\Realtime\WireScene;
+
+/*
+|--------------------------------------------------------------------------
+| Contrat d'événements — spec 60 § 11, contrat C7 § 2.3 et § 3 (lot L60-3)
+|--------------------------------------------------------------------------
+|
+| Les dix-neuf événements de la liste close, émis par la chaîne réelle du
+| framework (`ShouldDispatchAfterCommit`, `ShouldBroadcastNow`,
+| `ShouldRescue`, `broadcastOn()`, `broadcastWith()`) jusqu'à un diffuseur
+| enregistreur, avec des charges de la forme que leurs émetteurs produiront
+| (`WireFixtures`). Les intitulés de ce lot portent sur le transport :
+| enveloppe, identifiants internes, liste close, transaction annulée,
+| diffusion en échec. Les autres intitulés du fichier (60 § 20) arrivent avec
+| leurs émetteurs (L60-6, L60-7, L60-11) ; « ni aucun paquet » s'éprouve sur
+| `GameStatePacket` dès L60-4.
+|
+*/
+
+/**
+ * La liste close du J1 (60 § 11.3) : nom → classe, canal, champs de la
+ * charge hors enveloppe, dans l'ordre du tableau.
+ *
+ * @return array<string, array{class-string, string, list<string>}>
+ */
+function eventPayloadClosedList(): array
+{
+    return [
+        'seat.joined' => [SeatJoined::class, 'room', ['seat']],
+        'seat.updated' => [SeatUpdated::class, 'room', ['seat']],
+        'host.changed' => [HostChanged::class, 'room', ['hostPublicId', 'previousHostPublicId']],
+        'settings.changed' => [SettingsChanged::class, 'room', ['settings', 'warnings', 'pool']],
+        'room.replayed' => [RoomReplayed::class, 'room', ['settings', 'warnings', 'pool']],
+        'game.launched' => [GameLaunched::class, 'room', ['mode', 'roundsCount', 'framesPerRound', 'inputDifficulty', 'revealDurationMs', 'speedBonus', 'seats']],
+        'room.archived' => [RoomArchived::class, 'room', []],
+        'round.scheduled' => [RoundScheduled::class, 'room', ['round', 'image']],
+        'tier.opened' => [TierOpened::class, 'room', ['sequenceIndex', 'roundNumber', 'tierIndex', 'opensAt', 'next']],
+        'player.locked' => [PlayerLocked::class, 'room', ['sequenceIndex', 'publicId', 'lockRank']],
+        'round.closed' => [RoundClosed::class, 'room', ['sequenceIndex', 'roundNumber', 'endedAt', 'revealStartsAt', 'revealEndsAt']],
+        'round.revealed' => [RoundRevealed::class, 'room', ['sequenceIndex', 'roundNumber', 'revealEndsAt', 'movie', 'images', 'finders', 'leaderboard']],
+        'round.cancelled' => [RoundCancelled::class, 'room', ['sequenceIndex', 'roundNumber']],
+        'game.paused' => [GamePaused::class, 'room', ['pausedAt', 'interruptsAt']],
+        'game.resumed' => [GameResumed::class, 'room', ['resumedAt']],
+        'game.ended' => [GameEnded::class, 'room', ['podium']],
+        'seat.choices' => [SeatChoicesOffered::class, 'seat', ['sequenceIndex', 'choices', 'useOriginalTitle', 'lang']],
+        'seat.superseded' => [SeatSuperseded::class, 'seat', []],
+        'seat.kicked' => [SeatKicked::class, 'seat', []],
+    ];
+}
+
+/**
+ * Les clés qui ne partent jamais, en `snake_case` comme en `camelCase`
+ * (60 § 11.7, 10 § 1.1) — liste écrite ici, indépendante de la garde de
+ * `WirePayload`.
+ *
+ * @return list<string>
+ */
+function eventPayloadInternalKeys(): array
+{
+    $snake = [
+        'id', 'round_id', 'game_id', 'room_id', 'player_id', 'frame_id', 'movie_id', 'user_id',
+        'served_frame_id', 'frame_level', 'game_path', 'master_path', 'draw_seed', 'draw_pool_size',
+        'choice_1', 'choice_2', 'choice_3', 'choice_4', 'decoy_movie_id_1', 'decoy_movie_id_2',
+        'decoy_movie_id_3', 'active_seat_token', 'player_token_hash', 'serve_token', 'theme_ids',
+        'answer_key_id', 'host_player_id', 'nickname_normalized',
+    ];
+
+    $keys = [];
+
+    foreach ($snake as $key) {
+        $keys[] = $key;
+        $keys[] = Str::camel($key);
+    }
+
+    return array_values(array_unique([...$keys, 'tokenHash', 'input_state']));
+}
+
+/**
+ * Toutes les clés d'une charge, à toute profondeur.
+ *
+ * @param  array<array-key, mixed>  $payload
+ * @return list<string>
+ */
+function eventPayloadKeys(array $payload): array
+{
+    $keys = [];
+
+    foreach ($payload as $key => $value) {
+        if (is_string($key)) {
+            $keys[] = $key;
+        }
+
+        if (is_array($value)) {
+            array_push($keys, ...eventPayloadKeys($value));
+        }
+    }
+
+    return $keys;
+}
+
+/** Nom Pusher attendu du canal d'un événement de la scène. */
+function eventPayloadChannel(RoomBroadcast|SeatBroadcast $event, WireScene $scene): string
+{
+    return $event instanceof SeatBroadcast
+        ? 'private-'.ChannelNames::seat($scene->guest)
+        : 'presence-'.ChannelNames::room($scene->room);
+}
+
+it('chaque événement porte v, serverNow au format ISO-8601 UTC à la milliseconde et gameRef', function (): void {
+    $recorder = RecordingBroadcaster::install();
+    $scene = WireFixtures::scene();
+
+    // Charges précalculées sous le verrou, hors UTC, microsecondes comprises…
+    Date::setTestNow(CarbonImmutable::parse('2026-09-23 16:05:13.004999', 'Europe/Paris'));
+
+    $cases = [];
+
+    foreach (WireFixtures::events($scene) as $class => $event) {
+        $inGame = $event::GAME_BOUND || $class === SeatUpdated::class;
+        $cases[] = [$event, $inGame ? $scene->game : null];
+    }
+
+    // Les événements qui peuvent partir au lobby partent aussi en partie.
+    $cases[] = [new HostChanged($scene->room, $scene->game, ['hostPublicId' => $scene->guest->public_id, 'previousHostPublicId' => null]), $scene->game];
+    $cases[] = [new SeatSuperseded($scene->guest, $scene->game, []), $scene->game];
+    $cases[] = [new SeatUpdated($scene->room, null, ['seat' => WireFixtures::lobbySeatView($scene->room, $scene->host)]), null];
+
+    // …et émises plus tard : `serverNow` est pris à l'émission.
+    Date::setTestNow(CarbonImmutable::parse('2026-09-23 16:05:14.254321', 'Europe/Paris'));
+
+    foreach ($cases as [$event]) {
+        event($event);
+    }
+
+    expect($recorder->sent)->toHaveCount(count($cases));
+
+    foreach ($cases as $index => [$event, $game]) {
+        $sent = $recorder->sent[$index];
+        $payload = $sent['payload'];
+        $name = $event->broadcastAs();
+
+        expect($sent['event'])->toBe($name)
+            ->and($sent['channels'])->toBe([eventPayloadChannel($event, $scene)])
+            // L'enveloppe en tête, puis les seuls champs de la liste close.
+            ->and(array_slice(array_keys($payload), 0, 3))->toBe(['v', 'serverNow', 'gameRef'])
+            ->and(array_slice(array_keys($payload), 3))->toBe(array_keys($event::FIELDS))
+            ->and($payload['v'])->toBe(GameWire::VERSION)->toBe(1)
+            ->and($payload['serverNow'])->toBe('2026-09-23T14:05:14.254Z')
+            ->and($payload['serverNow'])->toMatch(WireTime::PATTERN)
+            ->and($payload['gameRef'])->toBe($game instanceof Game ? GameRef::for($game) : null);
+
+        // Sur le fil : un entier, une chaîne, et `null` écrit en toutes lettres.
+        expect($sent['json'])->toStartWith('{"v":1,"serverNow":"2026-09-23T14:05:14.254Z","gameRef":')
+            ->and($sent['json'])->not->toContain('"socket"');
+
+        if ($game instanceof Game) {
+            expect($payload['gameRef'])->toMatch('/^[0-9a-f]{16}$/')
+                ->and($sent['json'])->not->toContain('"gameRef":'.$game->id.',');
+        }
+    }
+
+    // Tous les instants d'une charge suivent la même forme `IsoMs`.
+    $revealed = collect($recorder->sent)->firstWhere('event', 'round.closed');
+
+    foreach (['endedAt', 'revealStartsAt', 'revealEndsAt'] as $field) {
+        expect($revealed['payload'][$field] ?? null)->toMatch(WireTime::PATTERN);
+    }
+});
+
+it("aucune charge d'événement ni aucun paquet ne contient de clé d'identifiant interne", function (): void {
+    $recorder = RecordingBroadcaster::install();
+    $scene = WireFixtures::scene();
+
+    // Un jeton d'image frappé et une frame réelle derrière chaque palier : ce
+    // qui ne doit jamais partir existe bien en base.
+    RoundTier::query()->each(function (RoundTier $tier): void {
+        $tier->forceFill(['serve_token' => bin2hex(random_bytes(16))])->save();
+    });
+
+    foreach (WireFixtures::events($scene) as $event) {
+        event($event);
+    }
+
+    expect($recorder->sent)->toHaveCount(count(eventPayloadClosedList()));
+
+    $forbidden = eventPayloadInternalKeys();
+    $never = array_values(array_filter([
+        ...Player::query()->pluck('player_token_hash')->all(),
+        ...Player::query()->pluck('active_seat_token')->all(),
+        ...RoundTier::query()->pluck('serve_token')->all(),
+        ...Frame::query()->pluck('game_path')->all(),
+        ...Game::query()->pluck('draw_seed')->all(),
+    ], static fn (mixed $value): bool => is_string($value) && $value !== ''));
+
+    expect($never)->not->toBeEmpty();
+
+    foreach ($recorder->sent as $sent) {
+        foreach (eventPayloadKeys($sent['payload']) as $key) {
+            expect(in_array($key, $forbidden, true))->toBeFalse("[{$sent['event']}] porte la clé interne [{$key}].");
+
+            // Toute clé d'identifiant, hors l'adresse publique d'un siège.
+            expect(preg_match('/^id$|_id$|(?<!public|Public)Id$/', $key))->toBe(0, "[{$sent['event']}] porte la clé d'identifiant [{$key}].");
+        }
+
+        foreach ($never as $value) {
+            expect($sent['json'])->not->toContain($value);
+        }
+    }
+
+    // La QCM ciblé porte ses quatre chaînes, jamais `choice_1` en position
+    // identifiable : sa charge est une liste, sans clé par proposition.
+    $choices = collect($recorder->sent)->firstWhere('event', 'seat.choices');
+    expect(array_is_list($choices['payload']['choices'] ?? null))->toBeTrue();
+
+    // La garde refuse à la construction, donc sous le verrou et avant tout
+    // envoi, un modèle, un `toArray()` distrait et toute clé interne.
+    $round = Round::query()->findOrFail($scene->scheduled->id);
+    $image = WireFixtures::image($scene->game, $round, 1);
+    $timeline = WireFixtures::timeline($scene->game, $round);
+
+    $leaks = [
+        'un modèle' => ['round' => $round, 'image' => $image],
+        'un toArray()' => ['round' => $round->toArray(), 'image' => $image],
+        'movie_id' => ['round' => [...$timeline, 'movie_id' => $round->movie_id], 'image' => $image],
+        'roundId' => ['round' => [...$timeline, 'roundId' => $round->id], 'image' => $image],
+        'frameLevel' => ['round' => $timeline, 'image' => [...$image, 'frameLevel' => 1]],
+        'servedFrameId' => ['round' => $timeline, 'image' => [...$image, 'servedFrameId' => 3]],
+        'serve_token' => ['round' => $timeline, 'image' => [...$image, 'serve_token' => 'x']],
+        'un instant objet' => ['round' => [...$timeline, 'startsAt' => $round->started_at], 'image' => $image],
+    ];
+
+    foreach ($leaks as $label => $payload) {
+        expect(fn () => new RoundScheduled($scene->room, $scene->game, $payload))
+            ->toThrow(LogicException::class, message: "La garde laisse passer {$label}.");
+    }
+
+    foreach (['drawSeed', 'activeSeatToken', 'playerTokenHash', 'choice_1', 'id'] as $key) {
+        expect(fn () => new GameEnded($scene->room, $scene->game, ['podium' => ['gameStatus' => 'completed', 'nested' => [$key => 'x']]]))
+            ->toThrow(LogicException::class);
+    }
+});
+
+it("une transaction annulée n'émet aucun événement", function (): void {
+    $recorder = RecordingBroadcaster::install();
+    $scene = WireFixtures::scene();
+    $events = WireFixtures::events($scene);
+
+    try {
+        DB::transaction(function () use ($events): void {
+            foreach ($events as $event) {
+                event($event);
+            }
+
+            throw new RuntimeException('Transition annulée.');
+        });
+    } catch (RuntimeException) {
+        // Attendu.
+    }
+
+    expect($recorder->attempts)->toBe(0)
+        ->and($recorder->sent)->toBe([]);
+
+    // Un point de sauvegarde annulé n'émet rien, même quand la transaction
+    // englobante est validée.
+    DB::transaction(function () use ($events): void {
+        try {
+            DB::transaction(function () use ($events): void {
+                event($events[RoundCancelled::class]);
+
+                throw new RuntimeException('Étape annulée.');
+            });
+        } catch (RuntimeException) {
+            // Attendu.
+        }
+
+        event($events[TierOpened::class]);
+    });
+
+    expect(array_column($recorder->sent, 'event'))->toBe(['tier.opened']);
+
+    // Témoin : validée, la transaction émet — après son commit, jamais avant.
+    DB::transaction(function () use ($events, $recorder): void {
+        event($events[SeatChoicesOffered::class]);
+
+        expect($recorder->attempts)->toBe(1);
+    });
+
+    expect(array_column($recorder->sent, 'event'))->toBe(['tier.opened', 'seat.choices']);
+});
+
+it('la liste des événements diffusés est exactement la liste close du J1', function (): void {
+    $expected = eventPayloadClosedList();
+    $found = [];
+    $bases = [];
+
+    $files = new RecursiveIteratorIterator(new RecursiveDirectoryIterator(app_path(), FilesystemIterator::SKIP_DOTS));
+
+    foreach ($files as $file) {
+        if (! $file instanceof SplFileInfo || $file->getExtension() !== 'php') {
+            continue;
+        }
+
+        $relative = str_replace(['/', '.php'], ['\\', ''], Str::after(str_replace('\\', '/', $file->getPathname()), str_replace('\\', '/', app_path()).'/'));
+        $class = 'App\\'.$relative;
+
+        if (! class_exists($class)) {
+            continue;
+        }
+
+        $reflection = new ReflectionClass($class);
+
+        if (! $reflection->implementsInterface(ShouldBroadcast::class)) {
+            continue;
+        }
+
+        if ($reflection->isAbstract()) {
+            $bases[] = $class;
+
+            continue;
+        }
+
+        /** @var RoomBroadcast|SeatBroadcast $instance */
+        $instance = $reflection->newInstanceWithoutConstructor();
+
+        expect($reflection->isFinal())->toBeTrue("{$class} doit être final.")
+            ->and(array_key_exists($instance->broadcastAs(), $found))->toBeFalse("Nom {$instance->broadcastAs()} en double.");
+
+        $found[$instance->broadcastAs()] = [
+            $class,
+            match (true) {
+                $instance instanceof RoomBroadcast => 'room',
+                $instance instanceof SeatBroadcast => 'seat',
+            },
+            array_keys($class::FIELDS),
+        ];
+    }
+
+    ksort($found);
+    ksort($expected);
+
+    // Dix-neuf, ni plus ni moins : tout nouvel événement amende 60 § 11.3 et
+    // entre ici.
+    expect($found)->toBe($expected)
+        ->and($found)->toHaveCount(19);
+
+    // Seuls trois événements sont ciblés.
+    expect(array_keys(array_filter($found, static fn (array $row): bool => $row[1] === 'seat')))
+        ->toEqualCanonicalizing(['seat.choices', 'seat.superseded', 'seat.kicked']);
+
+    // Deux bases, et le transport de 60 § 11.2 sur chacune.
+    sort($bases);
+
+    expect($bases)->toBe([RoomBroadcast::class, SeatBroadcast::class]);
+
+    foreach ($bases as $base) {
+        $reflection = new ReflectionClass($base);
+
+        expect($reflection->implementsInterface(ShouldBroadcastNow::class))->toBeTrue()
+            ->and($reflection->implementsInterface(ShouldDispatchAfterCommit::class))->toBeTrue()
+            ->and($reflection->implementsInterface(ShouldRescue::class))->toBeTrue()
+            ->and($reflection->getMethod('broadcastWith')->isFinal())->toBeTrue()
+            ->and($reflection->getMethod('__construct')->isFinal())->toBeTrue()
+            ->and($reflection->getMethod('broadcastAs')->isAbstract())->toBeTrue();
+    }
+});
+
+it("une diffusion en échec n'annule ni la transition ni la programmation du job suivant", function (): void {
+    Exceptions::fake();
+    $recorder = RecordingBroadcaster::install();
+    $recorder->failing = true;
+    RecordingJob::$handled = [];
+
+    $scene = WireFixtures::scene();
+    $events = WireFixtures::events($scene);
+    $round = Round::query()->findOrFail($scene->scheduled->id);
+    $startsAt = CarbonImmutable::parse('2026-09-23 14:05:03.000');
+
+    // Une transition qui écrit, émet sur le salon et sur un siège, puis
+    // programme le job de l'étape suivante après son commit : les rappels
+    // après commit s'exécutent dans cet ordre, la diffusion AVANT le job.
+    $outcome = DB::transaction(function () use ($round, $startsAt, $events): string {
+        $round->started_at = $startsAt;
+        $round->save();
+
+        event($events[RoundScheduled::class]);
+        event($events[SeatKicked::class]);
+
+        RecordingJob::dispatch('advance-round')->afterCommit();
+
+        return 'committed';
+    });
+
+    expect($outcome)->toBe('committed')
+        // Les deux diffusions ont été tentées, et ont échoué…
+        ->and($recorder->attempts)->toBe(2)
+        ->and($recorder->sent)->toBe([])
+        // …sans défaire l'écriture de la transition…
+        ->and($round->fresh()?->started_at?->equalTo($startsAt))->toBeTrue()
+        // …ni empêcher le job suivant de partir.
+        ->and(RecordingJob::$handled)->toBe(['advance-round']);
+
+    // L'échec est rapporté, jamais avalé en silence.
+    Exceptions::assertReported(BroadcastException::class);
+    Exceptions::assertReportedCount(2);
+});
+
+it('$round->toArray() ne contient aucune colonne cachée', function (): void {
+    // Ajout (10, tableau de renvoi vers 60) : `$round->toArray()`,
+    // `$roundTier->toArray()` et `$choiceSet->toArray()` ne contiennent aucune
+    // colonne cachée, relations chargées comprises. `ModelSerializationTest`
+    // en tient la liste modèle par modèle ; ici, sur la manche d'une scène de
+    // jeu, QCM composé et jeton frappé — et la garde des charges refuse
+    // malgré tout ce `toArray()`, qui porte encore `id`.
+    $scene = WireFixtures::scene();
+
+    RoundTier::query()->whereBelongsTo($scene->running)->each(function (RoundTier $tier): void {
+        $tier->forceFill(['serve_token' => bin2hex(random_bytes(16)), 'served_frame_id' => $tier->frame_id])->save();
+    });
+
+    $round = Round::query()
+        ->with(['movie', 'decoyMovie1', 'decoyMovie2', 'decoyMovie3', 'tiers.frame', 'tiers.servedFrame', 'choiceSets'])
+        ->findOrFail($scene->running->id);
+
+    $serialized = $round->toArray();
+    $json = json_encode($serialized, JSON_THROW_ON_ERROR);
+
+    foreach (['movie_id', 'decoy_movie_id_1', 'decoy_movie_id_2', 'decoy_movie_id_3', 'choices_use_original_title', 'movie', 'decoy_movie1', 'decoy_movie2', 'decoy_movie3', 'decoyMovie1'] as $hidden) {
+        expect(array_key_exists($hidden, $serialized))->toBeFalse("round sérialise [{$hidden}].");
+    }
+
+    expect($serialized['tiers'])->toHaveCount($scene->game->frames_per_round);
+
+    foreach ($serialized['tiers'] as $tier) {
+        foreach (['frame_id', 'served_frame_id', 'frame_level', 'serve_token', 'frame', 'served_frame'] as $hidden) {
+            expect(array_key_exists($hidden, $tier))->toBeFalse("round_tier sérialise [{$hidden}].");
+        }
+    }
+
+    expect($serialized['choice_sets'])->not->toBeEmpty();
+
+    foreach ($serialized['choice_sets'] as $set) {
+        foreach (['choice_1', 'choice_2', 'choice_3', 'choice_4', 'rendered_locale'] as $hidden) {
+            expect(array_key_exists($hidden, $set))->toBeFalse("round_choice_set sérialise [{$hidden}].");
+        }
+    }
+
+    // Ni le titre du film, ni une chaîne du QCM, ni un jeton d'image.
+    $set = RoundChoiceSet::query()->whereBelongsTo($round)->firstOrFail();
+
+    expect($json)->not->toContain($round->movie->title_original)
+        ->not->toContain($set->choice_1)
+        ->not->toContain($set->choice_2);
+
+    foreach (RoundTier::query()->whereBelongsTo($round)->pluck('serve_token') as $token) {
+        expect($json)->not->toContain((string) $token);
+    }
+
+    expect(fn () => new RoundScheduled($scene->room, $scene->game, [
+        'round' => $serialized,
+        'image' => WireFixtures::image($scene->game, $round, 1),
+    ]))->toThrow(LogicException::class, "clé d'identifiant interne [round.id]");
+});
+
+it('les bases refusent une partie solo, un siège sans salon et une charge hors de sa liste close', function (): void {
+    // Ajout : la garde de mode de 60 § 11.2 et la liste close des champs
+    // (§ 11.3) tiennent dans les bases, qu'aucun événement ne contourne. Rien
+    // n'est émis pour une construction refusée.
+    $recorder = RecordingBroadcaster::install();
+
+    $scene = WireFixtures::scene();
+    $solo = Game::factory()->solo()->create();
+    $soloSeat = Player::factory()->solo()->create();
+    $otherRoom = Room::factory()->create();
+    $otherSeat = Player::factory()->create(['room_id' => $otherRoom->id]);
+    $cancelled = ['sequenceIndex' => 2, 'roundNumber' => 2];
+
+    $qcm = ['sequenceIndex' => 1, 'choices' => ['a', 'b', 'c', 'd'], 'useOriginalTitle' => false, 'lang' => 'en'];
+    $launched = ['mode' => 'multiplayer', 'roundsCount' => 10, 'framesPerRound' => 3, 'inputDifficulty' => 'normal', 'revealDurationMs' => 8000, 'speedBonus' => true];
+
+    // Chaque refus pour SA raison : le message nomme la garde qui a levé.
+    $refusals = [
+        'partie solo au salon' => [fn () => new RoundCancelled($scene->room, $solo, $cancelled), 'partie solo'],
+        'partie solo au siège' => [fn () => new SeatSuperseded($scene->guest, $solo, []), 'partie solo'],
+        'siège sans salon' => [fn () => new SeatKicked($soloSeat, null, []), 'siège sans salon'],
+        'siège sans salon, QCM' => [fn () => new SeatChoicesOffered($soloSeat, $solo, $qcm), 'siège sans salon'],
+        "partie d'un autre salon" => [fn () => new RoundCancelled($otherRoom, $scene->game, $cancelled), "n'appartient pas"],
+        "siège d'un autre salon" => [fn () => new SeatKicked($otherSeat, $scene->game, []), "n'appartient pas"],
+        'événement de partie sans partie' => [fn () => new PlayerLocked($scene->room, null, ['sequenceIndex' => 1, 'publicId' => $scene->host->public_id, 'lockRank' => 1]), 'sans partie'],
+        'QCM sans partie' => [fn () => new SeatChoicesOffered($scene->guest, null, $qcm), 'sans partie'],
+        'champ manquant' => [fn () => new RoundCancelled($scene->room, $scene->game, ['sequenceIndex' => 2]), 'manquants [roundNumber]'],
+        'champ en trop' => [fn () => new PlayerLocked($scene->room, $scene->game, ['sequenceIndex' => 1, 'publicId' => $scene->host->public_id, 'lockRank' => 1, 'points' => 300]), 'en trop [points]'],
+        'charge pour un événement vide' => [fn () => new RoomArchived($scene->room, null, ['reason' => 'x']), 'en trop [reason]'],
+        'entier attendu' => [fn () => new RoundCancelled($scene->room, $scene->game, ['sequenceIndex' => '2', 'roundNumber' => 2]), '[sequenceIndex] doit être de nature [int]'],
+        'IsoMs attendu' => [fn () => new GameResumed($scene->room, $scene->game, ['resumedAt' => '2026-09-23 14:05:13']), '[resumedAt] doit être de nature [iso]'],
+        'IsoMs sans millisecondes' => [fn () => new GameResumed($scene->room, $scene->game, ['resumedAt' => '2026-09-23T14:05:13Z']), '[resumedAt] doit être de nature [iso]'],
+        "IsoMs suivi d'un saut de ligne" => [fn () => new GameResumed($scene->room, $scene->game, ['resumedAt' => "2026-09-23T14:05:13.004Z\n"]), '[resumedAt] doit être de nature [iso]'],
+        'objet attendu, liste reçue' => [fn () => new GameEnded($scene->room, $scene->game, ['podium' => ['a', 'b']]), '[podium] doit être de nature [object]'],
+        'objet attendu, vide reçu' => [fn () => new GameEnded($scene->room, $scene->game, ['podium' => []]), '[podium] doit être de nature [object]'],
+        'liste attendue' => [fn () => new GameLaunched($scene->room, $scene->game, [...$launched, 'seats' => ['x' => []]]), '[seats] doit être de nature [list]'],
+        'non nullable' => [fn () => new HostChanged($scene->room, null, ['hostPublicId' => null, 'previousHostPublicId' => null]), '[hostPublicId] doit être de nature [string]'],
+    ];
+
+    foreach ($refusals as $label => [$construct, $reason]) {
+        expect($construct)->toThrow(LogicException::class, $reason, "Accepté à tort, ou refusé pour une autre raison : {$label}.");
+    }
+
+    // Par le raccourci `dispatch()` aussi : la construction lève avant l'envoi.
+    expect(fn () => SeatKicked::dispatch($soloSeat, null, []))->toThrow(LogicException::class)
+        ->and($recorder->attempts)->toBe(0);
+
+    // Témoins : nullable admis, champs remis dans l'ordre déclaré.
+    $locked = new PlayerLocked($scene->room, $scene->game, ['lockRank' => 1, 'publicId' => $scene->host->public_id, 'sequenceIndex' => 1]);
+    $changed = new HostChanged($scene->room, null, ['hostPublicId' => $scene->host->public_id, 'previousHostPublicId' => null]);
+
+    expect(array_keys($locked->payload()))->toBe(['sequenceIndex', 'publicId', 'lockRank'])
+        ->and($changed->payload())->toBe(['hostPublicId' => $scene->host->public_id, 'previousHostPublicId' => null]);
+});

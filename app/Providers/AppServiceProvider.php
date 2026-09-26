@@ -13,11 +13,14 @@ use App\Support\I18n\PlayerTokenLocale;
 use App\Support\I18n\TranslationDomains;
 use App\Support\Identity\PlayerTokenManager;
 use App\Support\Ops\SystemLoad;
+use App\Support\Realtime\SeatPrincipal;
 use App\Support\Retention\PurgeHandler;
 use App\Support\Retention\PurgeHandlers;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Events\DiagnosingHealth;
 use Illuminate\Foundation\Events\LocaleUpdated;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
@@ -59,6 +62,26 @@ class AppServiceProvider extends ServiceProvider
         // dépendent (spec 100 § 15) : le framework répond 500 dès qu'un
         // écouteur de `DiagnosingHealth` lève.
         Event::listen(DiagnosingHealth::class, DiagnoseDependencies::class);
+
+        $this->registerPlayerGuard();
+    }
+
+    /**
+     * La garde `player` des canaux de diffusion (spec 60 § 10.4, contrat C7
+     * § 2.2) : elle ne lit QUE le hash du `player_token` courant, par
+     * `PlayerTokenManager::current()` (C4, R-30), qui ne frappe ni ne repose
+     * jamais le cookie. Sans jeton valide, aucun principal : `/broadcasting/auth`
+     * refuse alors tout canal privé ou de présence avant même d'appeler la
+     * classe de canal. Le siège n'est lié au principal que par cette classe,
+     * une fois le salon et l'expulsion vérifiés.
+     */
+    protected function registerPlayerGuard(): void
+    {
+        Auth::viaRequest('player-token', static function (Request $request): ?SeatPrincipal {
+            $hash = app(PlayerTokenManager::class)->current($request)?->hash();
+
+            return $hash === null ? null : new SeatPrincipal($hash);
+        });
     }
 
     /**

@@ -511,7 +511,7 @@ Ensuite, à chaque session : **« Implémente l'étape suivante de l'ordre des l
 80. L80-2 — portées de lecture et rejeu → 79 — ✅ livrée le 26/09
 81. L60-2 — horloge, instant de réception, enveloppe, limiteurs → 8, 10 — ✅ livrée le 26/09
 82. L80-3 — départage, classement, `types/scoring.ts` → 69, 80, 81 — ✅ livrée le 26/09
-83. L60-3 — canaux, garde `player`, événements → 65, 69, 81
+83. L60-3 — canaux, garde `player`, événements → 65, 69, 81 — ✅ livrée le 26/09
 84. L50-2 (1er temps) — éditeur Simple, présentateur, presets, `types/room-settings.ts` (I-1) → 9, 35, 36, 65, 81, 83
 85. L60-4 — siège actif, second onglet, lobby → 69, 76, 82, 83, 84
 86. L50-2 (2e temps) — routes sous `seat.active`, `BroadcastLobbyState` → 84, 85
