@@ -9,6 +9,7 @@ use App\Models\Game;
 use App\Models\Round;
 use App\Models\RoundTier;
 use App\Support\Draw\VariantChooser;
+use App\Support\Game\GameJournal;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use LogicException;
@@ -62,7 +63,8 @@ use LogicException;
  * verrouillante voit toujours la dernière version validée.
  *
  * Aucune diffusion : l'URL du palier part avec l'événement de l'étape qui l'a
- * frappée (`round.scheduled`, `tier.opened.next`), jamais d'ici.
+ * frappée (`round.scheduled`, `tier.opened.next`), jamais d'ici. Une
+ * substitution part au journal `game`, avec son motif (§ 4.7).
  */
 final readonly class MintTierServeToken
 {
@@ -95,7 +97,7 @@ final readonly class MintTierServeToken
         DB::transaction(function () use ($tier, $now): void {
             $gameId = (int) Round::query()->whereKey($tier->round_id)->value('game_id');
 
-            Game::query()->whereKey($gameId)->lockForUpdate()->firstOrFail();
+            $game = Game::query()->whereKey($gameId)->lockForUpdate()->firstOrFail();
             $round = Round::query()->whereKey($tier->round_id)->lockForUpdate()->firstOrFail();
             $locked = RoundTier::query()->whereKey($tier->id)->lockForUpdate()->firstOrFail();
 
@@ -129,6 +131,10 @@ final readonly class MintTierServeToken
             ])->save();
 
             self::reflect($tier, $locked);
+
+            if ($retained === null) {
+                GameJournal::tierSubstituted($game, $round, $locked->tier_index, RoundIncidentReason::FrameUnavailable);
+            }
         });
     }
 

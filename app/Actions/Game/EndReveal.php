@@ -10,6 +10,7 @@ use App\Models\Game;
 use App\Models\GamePlayer;
 use App\Models\Player;
 use App\Models\Round;
+use App\Support\Game\GameJournal;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 
@@ -96,7 +97,9 @@ final readonly class EndReveal
             $next = Round::query()->where('game_id', $lockedGame->id)->toPlay()->first();
 
             if (! $next instanceof Round) {
-                $this->finalize->handle($lockedGame, GameStatus::Completed, $revealEndsAt);
+                if ($this->finalize->handle($lockedGame, GameStatus::Completed, $revealEndsAt)) {
+                    GameJournal::gameFinalized($lockedGame, GameStatus::Completed, $revealEndsAt);
+                }
 
                 return;
             }

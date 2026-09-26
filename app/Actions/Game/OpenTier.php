@@ -20,6 +20,7 @@ use App\Models\Round;
 use App\Models\RoundPlayer;
 use App\Models\RoundTier;
 use App\Models\SeenFrame;
+use App\Support\Game\GameJournal;
 use App\Support\Game\RoundStep;
 use App\Support\Game\TierImageRefPresenter;
 use App\Support\Realtime\WireTime;
@@ -64,8 +65,10 @@ use LogicException;
  *    réellement servie, jamais sur celle du tirage ;
  * 7. après commit : en multijoueur, `tier.opened` `{ sequenceIndex,
  *    roundNumber, tierIndex, opensAt, next }` (`next` = palier `i+1` frappé
- *    à l'étape 5, nul au dernier palier) ; le job de l'étape suivante —
- *    `OpenTier(i+1)` à `Tᵢ₊₁`, ou `Close` à `started_at + D`.
+ *    à l'étape 5, nul au dernier palier), diffusion de frontière mesurée
+ *    contre `Tᵢ` ; le job de l'étape suivante — `OpenTier(i+1)` à `Tᵢ₊₁`,
+ *    ou `Close` à `started_at + D` ; l'ouverture d'une manche (`i = 1`) au
+ *    journal `game` (§ 4.7).
  *
  * **Toute annulation décidée ici précède l'écriture de `served_at(i)`** : un
  * palier dont l'ouverture annule la manche n'est jamais marqué servi.
@@ -167,15 +170,19 @@ final readonly class OpenTier
 
             self::reflect($tier, $lockedTier);
 
+            if ($lockedTier->tier_index === 1) {
+                GameJournal::roundOpened($lockedGame, $lockedRound, $opensAt);
+            }
+
             // 7. Après commit : la diffusion, puis la frontière suivante.
             if ($lockedGame->mode === GameMode::Multiplayer) {
-                TierOpened::dispatch(self::room($lockedGame), $lockedGame, [
+                event((new TierOpened(self::room($lockedGame), $lockedGame, [
                     'sequenceIndex' => $lockedRound->sequence_index,
                     'roundNumber' => (int) $lockedRound->round_number,
                     'tierIndex' => $lockedTier->tier_index,
                     'opensAt' => WireTime::iso($opensAt),
                     'next' => $nextTier instanceof RoundTier ? TierImageRefPresenter::image($lockedGame, $nextTier) : null,
-                ]);
+                ]))->atBoundary($opensAt));
             }
 
             self::scheduleNextBoundary($lockedGame, $lockedRound, $nextTier);

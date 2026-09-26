@@ -13,7 +13,9 @@ use App\Http\Middleware\RobotsDirectives;
 use App\Http\Middleware\SelectTranslationDomains;
 use App\Http\Middleware\SetLocale;
 use App\Http\Middleware\VaryOnLanguage;
+use App\Support\Game\GameJournal;
 use App\Support\Http\ErrorPageResponder;
+use Illuminate\Broadcasting\BroadcastException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -172,4 +174,13 @@ return Application::configure(basePath: dirname(__DIR__))
         Inertia::handleExceptionsUsing(
             fn (ExceptionResponse $response) => app(ErrorPageResponder::class)($response),
         );
+
+        // Une diffusion du moteur en échec (Reverb indisponible) est rapportée
+        // puis avalée par `ShouldRescue` : elle n'annule ni la transition ni le
+        // job suivant (spec 60 § 4.6). Elle part en plus au journal `game`,
+        // désignée par la diffusion que les bases viennent de préparer (§ 4.7) ;
+        // le rapport ordinaire continue.
+        $exceptions->report(static function (BroadcastException $exception): void {
+            GameJournal::broadcastFailed($exception);
+        });
     })->create();

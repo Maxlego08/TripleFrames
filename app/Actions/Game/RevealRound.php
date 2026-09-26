@@ -15,6 +15,7 @@ use App\Models\RoundTier;
 use App\Support\Game\RevealMovieBuilder;
 use App\Support\Game\RoundStep;
 use App\Support\Game\TierImageRefPresenter;
+use App\Support\Game\TransitionBroadcasts;
 use App\Support\Realtime\WireTime;
 use App\Support\Scoring\Scoreboard;
 use Carbon\CarbonImmutable;
@@ -39,6 +40,10 @@ use LogicException;
  *    de toutes les locales par {@see RevealMovieBuilder}, images des seuls
  *    paliers ouverts, trouvailles et classement intermédiaire), **puis**
  *    `round.scheduled` de `k+1` ; le job `EndReveal` à `reveal_ends_at(k)`.
+ *
+ * **Retard réel** (§ 4.7) : `round.revealed` est mesuré contre `ended_at +
+ * tier_grace_ms`, comme le `round.scheduled` de `k+1` que cette étape décide
+ * ({@see TransitionBroadcasts::decidedAt()}).
  *
  * **Jamais avant `ended_at + tier_grace_ms`** : aucune soumission reçue
  * après l'émission des titres n'est donc acceptable (§ 2.3). Une étape non
@@ -82,7 +87,10 @@ final readonly class RevealRound
             $next = self::nextToPlay($lockedGame);
 
             if ($next instanceof Round) {
-                $this->schedule->handle($next, $revealEndsAt);
+                app(TransitionBroadcasts::class)->decidedAt(
+                    self::revealStartsAt($lockedGame, $revealedRound),
+                    fn () => $this->schedule->handle($next, $revealEndsAt),
+                );
             }
 
             AdvanceRound::dispatch($lockedGame->id, $revealedRound->id, RoundStep::EndReveal, null, WireTime::iso($revealEndsAt));
@@ -114,7 +122,8 @@ final readonly class RevealRound
             // Garde de mode (§ 11.2) : aucune diffusion en solo. Charge
             // précalculée sous le verrou, points publiables dès `revealing`.
             if ($lockedGame->mode === GameMode::Multiplayer) {
-                RoundRevealed::dispatch(self::room($lockedGame), $lockedGame, self::payload($lockedGame, $lockedRound));
+                event((new RoundRevealed(self::room($lockedGame), $lockedGame, self::payload($lockedGame, $lockedRound)))
+                    ->atBoundary(self::revealStartsAt($lockedGame, $lockedRound)));
             }
 
             return $lockedRound;
@@ -136,6 +145,18 @@ final readonly class RevealRound
         }
 
         return $lockedRound->ended_at->addMilliseconds($lockedGame->tier_grace_ms)->lessThanOrEqualTo($now);
+    }
+
+    /**
+     * Le début théorique de la révélation : `ended_at + tier_grace_ms`.
+     *
+     * @throws LogicException
+     */
+    private static function revealStartsAt(Game $lockedGame, Round $lockedRound): CarbonImmutable
+    {
+        $endedAt = $lockedRound->ended_at ?? throw new LogicException('RevealRound : manche révélée sans clôture.');
+
+        return $endedAt->addMilliseconds($lockedGame->tier_grace_ms);
     }
 
     /**

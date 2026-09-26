@@ -6,7 +6,10 @@ use App\Broadcasting\SeatPrivateChannel;
 use App\Enums\GameMode;
 use App\Models\Game;
 use App\Models\Player;
+use App\Support\Game\GameJournal;
+use App\Support\Game\TransitionBroadcasts;
 use App\Support\Realtime\ChannelNames;
+use App\Support\Realtime\GameRef;
 use App\Support\Realtime\GameWire;
 use App\Support\Realtime\WirePayload;
 use Illuminate\Broadcasting\PrivateChannel;
@@ -36,6 +39,12 @@ use LogicException;
  * `solo` aussi. Tout émetteur teste d'abord `game.mode = multiplayer` ou,
  * hors partie, `seat.room_id` non nul : sans ce test, recharger `game/solo`
  * lèverait ici à la prise d'onglet (§ 12.7).
+ *
+ * **Rattrapage et journal** (§ 4.4, § 4.7, lot L60-7), comme
+ * {@see RoomBroadcast} : retenue pendant un passage de rattrapage
+ * ({@see TransitionBroadcasts}) — `seat.choices` ne part que si le palier du
+ * QCM est encore courant à la fin du passage —, et signalée au journal
+ * `game` à l'émission, pour qu'une diffusion en échec y soit désignée.
  */
 abstract class SeatBroadcast implements ShouldBroadcastNow, ShouldDispatchAfterCommit, ShouldRescue
 {
@@ -104,16 +113,44 @@ abstract class SeatBroadcast implements ShouldBroadcastNow, ShouldDispatchAfterC
     }
 
     /**
-     * L'enveloppe, puis la charge — `serverNow` pris à l'émission.
+     * Faux tant qu'un passage de rattrapage retient la diffusion (§ 4.4) :
+     * évalué par le dispatcher APRÈS le commit de la transaction émettrice.
+     */
+    final public function broadcastWhen(): bool
+    {
+        return ! app(TransitionBroadcasts::class)->holds($this);
+    }
+
+    /**
+     * L'enveloppe, puis la charge — `serverNow` pris à l'émission, et signalé
+     * au journal `game` (aucune diffusion ciblée n'est une frontière).
      *
      * @return array<string, mixed>
      */
     final public function broadcastWith(): array
     {
+        $serverNow = Date::now()->toImmutable();
+
+        GameJournal::emitting($this->broadcastAs(), $this->gameRef(), $this->sequenceIndex(), null, $serverNow, null);
+
         return [
-            ...GameWire::envelope($this->game, Date::now()->toImmutable()),
+            ...GameWire::envelope($this->game, $serverNow),
             ...$this->payload,
         ];
+    }
+
+    /** La référence publique de la partie, nulle hors partie. */
+    final public function gameRef(): ?string
+    {
+        return $this->game === null ? null : GameRef::for($this->game);
+    }
+
+    /** La manche que désigne la charge — nulle pour un événement sans manche. */
+    final public function sequenceIndex(): ?int
+    {
+        $sequenceIndex = $this->payload['sequenceIndex'] ?? null;
+
+        return is_int($sequenceIndex) ? $sequenceIndex : null;
     }
 
     /**

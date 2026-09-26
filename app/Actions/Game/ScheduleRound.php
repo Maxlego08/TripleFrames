@@ -14,6 +14,7 @@ use App\Models\RoundTier;
 use App\Support\Game\RoundStep;
 use App\Support\Game\RoundTimelinePresenter;
 use App\Support\Game\TierImageRefPresenter;
+use App\Support\Game\TransitionBroadcasts;
 use App\Support\Realtime\WireTime;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Date;
@@ -47,6 +48,12 @@ use LogicException;
  * `AdvanceToNextRound` (L60-6, L60-7, L60-13). Réémettre `round.scheduled`
  * pour une manche `pending` reprogrammée est voulu : le client garde celui au
  * `serverNow` le plus grand (§ 11.8).
+ *
+ * **Retard réel** (§ 4.7) : `round.scheduled` est une diffusion de frontière,
+ * mesurée contre l'instant théorique de l'étape qui a décidé la programmation
+ * — le début théorique de la révélation quand `RevealRound` programme `k+1`
+ * ({@see TransitionBroadcasts::decidedAt()}), l'instant de la transaction pour
+ * un geste (lancement, reprise, « manche suivante », remplacement).
  *
  * Les lignes `round_player` naissent à `T₁`, jamais ici (E10-49). Aucun
  * palier n'est ouvert ici : `served_at` et `seen_frame` appartiennent à
@@ -99,7 +106,9 @@ final readonly class ScheduleRound
                 ->where('tier_index', 1)
                 ->firstOrFail();
 
-            $this->mint->handle($firstTier, Date::now()->toImmutable());
+            $decidedAt = Date::now()->toImmutable();
+
+            $this->mint->handle($firstTier, $decidedAt);
 
             // Relue telle qu'écrite (milliseconde de `timestamp(3)`), statut
             // compris : la frappe a pu annuler la manche.
@@ -120,10 +129,10 @@ final readonly class ScheduleRound
             if ($game->mode === GameMode::Multiplayer) {
                 $locked->setRelation('game', $game);
 
-                RoundScheduled::dispatch(self::room($game), $game, [
+                event((new RoundScheduled(self::room($game), $game, [
                     'round' => RoundTimelinePresenter::timeline($game, $locked),
                     'image' => TierImageRefPresenter::image($game, $firstTier->setRelation('round', $locked)),
-                ]);
+                ]))->atBoundary(app(TransitionBroadcasts::class)->currentDecision() ?? $decidedAt));
             }
         });
     }

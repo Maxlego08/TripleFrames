@@ -6,6 +6,7 @@ use App\Actions\Game\FinalizeGame;
 use App\Enums\GameStatus;
 use App\Models\Game;
 use App\Settings\EngineConstants;
+use App\Support\Game\GameJournal;
 use App\Support\Realtime\WireTime;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Queue\ShouldQueueAfterCommit;
@@ -104,7 +105,9 @@ final class InterruptPausedGame implements ShouldQueueAfterCommit
                 return;
             }
 
-            $finalize->handle($lockedGame, GameStatus::Interrupted, $interruptsAt);
+            if ($finalize->handle($lockedGame, GameStatus::Interrupted, $interruptsAt)) {
+                GameJournal::gameFinalized($lockedGame, GameStatus::Interrupted, $interruptsAt);
+            }
         });
     }
 

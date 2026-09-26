@@ -1,5 +1,8 @@
 <?php
 
+use App\Actions\Game\AdvanceToNextRound;
+use App\Actions\Game\CatchUpGame;
+use App\Actions\Game\ScheduleRound;
 use App\Enums\Locale;
 use App\Enums\RoundStatus;
 use App\Events\Game\GameEnded;
@@ -35,7 +38,10 @@ use App\Models\Room;
 use App\Models\Round;
 use App\Models\RoundChoiceSet;
 use App\Models\RoundTier;
+use App\Settings\EngineConstants;
 use App\Support\Game\GameStateBuilder;
+use App\Support\Game\NextRoundOutcome;
+use App\Support\Game\TransitionBroadcasts;
 use App\Support\Identity\PlayerToken;
 use App\Support\Identity\PlayerTokenCookie;
 use App\Support\Realtime\ChannelNames;
@@ -63,7 +69,7 @@ use Tests\Support\Realtime\WireScene;
 
 /*
 |--------------------------------------------------------------------------
-| Contrat d'événements — spec 60 § 11, contrat C7 § 2.3 et § 3 (lots L60-3, L60-6)
+| Contrat d'événements — spec 60 § 11, contrat C7 § 2.3 et § 3 (lots L60-3, L60-6, L60-7)
 |--------------------------------------------------------------------------
 |
 | Les dix-neuf événements de la liste close, émis par la chaîne réelle du
@@ -74,9 +80,10 @@ use Tests\Support\Realtime\WireScene;
 | enveloppe, identifiants internes, liste close, transaction annulée,
 | diffusion en échec. Ceux de L60-6 portent sur les émetteurs de clôture et
 | de révélation (`CloseRound`, `RevealRound`, par les transitions réelles) :
-| instants de clôture et de titres, `lang` de chaque titre. Les autres
-| intitulés du fichier (60 § 20) arrivent avec leurs émetteurs (L60-7,
-| L60-11) ; « ni aucun paquet » s'éprouve sur
+| instants de clôture et de titres, `lang` de chaque titre. Celui de L60-7
+| porte sur la réémission de `round.scheduled` (« manche suivante »,
+| rattrapage). Les autres intitulés du fichier (60 § 20) arrivent avec leurs
+| émetteurs (L60-11) ; « ni aucun paquet » s'éprouve sur
 | `GameStatePacket` : branche sans partie dès L60-4 (lobby et solo, par
 | `room.state` et par le constructeur), branche de partie en L60-12
 | (passation obligatoire, E83-3).
@@ -842,4 +849,142 @@ it("chaque titre de la révélation porte l'attribut lang de la locale atteinte"
             // Une entrée par locale activée, dans l'ordre du registre.
             ->and(array_keys($packet['titles'] ?? []))->toBe(array_map(static fn (Locale $locale): string => $locale->value, Locale::cases()), $label);
     }
+});
+
+it('round.scheduled est réémis pour une manche pending reprogrammée et jamais après T₁', function (): void {
+    PoolFixtures::fakeFramesDisk();
+    Queue::fake([AdvanceRound::class]);
+    Date::setTestNow(CarbonImmutable::parse('2026-09-26 14:00:00.250'));
+    $recorder = RecordingBroadcaster::install();
+
+    [$game, $first] = eventPayloadOpenedRound();
+    $second = EngineFixtures::round($game, 2);
+    $host = static fn (Room $room): bool => true;
+
+    /** @return list<array<string, mixed>> les `round.scheduled` de la manche 2, dans l'ordre */
+    $scheduledSecond = static fn (): array => array_values(array_filter(
+        $recorder->sent,
+        static fn (array $sent): bool => $sent['event'] === 'round.scheduled' && $sent['payload']['round']['sequenceIndex'] === 2,
+    ));
+
+    // La révélation de la manche 1 programme la manche 2 à sa fin.
+    EngineFixtures::close($first);
+    EngineFixtures::reveal($first);
+
+    $plannedT1 = $first->refresh()->reveal_ends_at ?? throw new LogicException('Manche 1 sans fin de révélation.');
+
+    expect($scheduledSecond())->toHaveCount(1)
+        ->and($scheduledSecond()[0]['payload']['round']['startsAt'])->toBe(WireTime::iso($plannedT1));
+
+    // « Manche suivante » pendant la révélation : la manche 2, encore
+    // `pending`, est reprogrammée plus tôt, et `round.scheduled` réémis pour
+    // la même manche, au `serverNow` plus grand, qui l'emporte (C7 § 4.2).
+    $endedAt = $first->ended_at ?? throw new LogicException('Manche 1 non close.');
+    $gestureAt = $endedAt->addMilliseconds($game->tier_grace_ms + 1_000);
+    $newT1 = $gestureAt->addMilliseconds($game->preload_lead_ms + EngineConstants::nextRoundMarginMs());
+    Date::setTestNow($gestureAt);
+
+    expect(app(AdvanceToNextRound::class)->handle($game, $gestureAt, $host))->toBe(NextRoundOutcome::Advanced);
+
+    [$initial, $reissued] = $scheduledSecond();
+
+    expect($reissued['payload']['round'])->toMatchArray(['sequenceIndex' => 2, 'roundNumber' => 2, 'startsAt' => WireTime::iso($newT1)])
+        ->and($reissued['payload']['image'])->toMatchArray(['tierIndex' => 1, 'fetchNotBefore' => WireTime::iso($newT1->subMilliseconds($game->preload_lead_ms))])
+        ->and($reissued['payload']['serverNow'] > $initial['payload']['serverNow'])->toBeTrue()
+        ->and($first->refresh()->reveal_ends_at?->equalTo($newT1))->toBeTrue()
+        ->and($second->refresh()->status)->toBe(RoundStatus::Pending)
+        ->and($second->started_at?->equalTo($newT1))->toBeTrue();
+
+    // Un geste qui ne raccourcirait rien ne réémet rien.
+    expect(app(AdvanceToNextRound::class)->handle($game, $gestureAt, $host))->toBe(NextRoundOutcome::Unchanged)
+        ->and($scheduledSecond())->toHaveCount(2);
+
+    // T₁ : la fin de révélation de la manche 1, puis l'ouverture de la
+    // manche 2 — `tier.opened`, jamais un `round.scheduled`.
+    Date::setTestNow($newT1);
+    app(CatchUpGame::class)->handle($game, $newT1);
+
+    expect($second->refresh()->status)->toBe(RoundStatus::Running)
+        ->and(collect($recorder->sent)->last()['event'] ?? null)->toBe('tier.opened')
+        ->and($scheduledSecond())->toHaveCount(2);
+
+    // Après T₁, plus rien ne la reprogramme : le geste est hors révélation,
+    // l'origine est immuable, et les rattrapages suivants n'émettent que ses
+    // paliers.
+    $after = $newT1->addMilliseconds(500);
+    Date::setTestNow($after);
+
+    expect(app(AdvanceToNextRound::class)->handle($game, $after, $host))->toBe(NextRoundOutcome::NotRevealing)
+        ->and(static fn () => app(ScheduleRound::class)->handle($second, $after->addSeconds(10)))->toThrow(LogicException::class);
+
+    $secondT2 = EngineFixtures::opensAt($second, 2);
+    Date::setTestNow($secondT2);
+    app(CatchUpGame::class)->handle($game, $secondT2);
+
+    expect($scheduledSecond())->toHaveCount(2)
+        ->and($second->refresh()->started_at?->equalTo($newT1))->toBeTrue();
+
+    // Aucun `round.scheduled` n'est jamais parti après le T₁ qu'il annonce.
+    foreach ($recorder->sent as $sent) {
+        if ($sent['event'] === 'round.scheduled') {
+            expect($sent['payload']['serverNow'] < $sent['payload']['round']['startsAt'])->toBeTrue();
+        }
+    }
+});
+
+it('un passage de rattrapage ne libère que l\'état courant de chaque manche et jamais un événement annulé', function (): void {
+    // Ajout (§ 4.4) : la règle de péremption de `TransitionBroadcasts`,
+    // éprouvée sur des charges réelles de la liste close, `seat.choices`
+    // compris (son émetteur arrive en L60-11).
+    $recorder = RecordingBroadcaster::install();
+    $scene = WireFixtures::scene();
+    $events = WireFixtures::events($scene);
+    $game = $scene->game;
+    $room = $scene->room;
+    $running = $scene->running;
+
+    $laterTier = new TierOpened($room, $game, [
+        'sequenceIndex' => $running->sequence_index,
+        'roundNumber' => (int) $running->round_number,
+        'tierIndex' => 2,
+        'opensAt' => WireTime::iso(CarbonImmutable::parse('2026-09-23 14:05:13.000')),
+        'next' => null,
+    ]);
+
+    app(TransitionBroadcasts::class)->coalesce(static function () use ($events, $laterTier): void {
+        // Manche courante : palier 1, son QCM, puis le palier 2 qui les
+        // rend tous deux périmés.
+        event($events[TierOpened::class]);
+        event($events[SeatChoicesOffered::class]);
+        event($events[PlayerLocked::class]);
+        event($laterTier);
+        // Manche révélée : sa clôture, puis ses titres.
+        event($events[RoundClosed::class]);
+        event($events[RoundRevealed::class]);
+        // Manche programmée, puis annulée : l'annulation ne se périme jamais
+        // et rend la programmation périmée.
+        event($events[RoundScheduled::class]);
+        event($events[RoundCancelled::class]);
+        event($events[GamePaused::class]);
+
+        // Une transaction annulée ne confie rien au passage.
+        try {
+            DB::transaction(static function () use ($events): void {
+                event($events[GameResumed::class]);
+
+                throw new RuntimeException('transition annulée');
+            });
+        } catch (RuntimeException) {
+            // La transition a échoué : rien à émettre.
+        }
+    });
+
+    expect(array_column($recorder->sent, 'event'))->toBe([
+        'player.locked',
+        'tier.opened',
+        'round.revealed',
+        'round.cancelled',
+        'game.paused',
+    ])
+        ->and($recorder->sent[1]['payload']['tierIndex'])->toBe(2);
 });

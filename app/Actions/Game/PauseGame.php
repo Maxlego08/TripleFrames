@@ -11,6 +11,7 @@ use App\Models\Game;
 use App\Models\Room;
 use App\Models\Round;
 use App\Settings\EngineConstants;
+use App\Support\Game\GameJournal;
 use App\Support\Realtime\WireTime;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
@@ -32,7 +33,8 @@ use LogicException;
  *   gardé : la reprise le réutilise (§ 14.2) ;
  * - après commit : le job {@see InterruptPausedGame} à `paused_at +
  *   pauseTimeoutMs` (clôture à 15 minutes, § 14.3) et, **en multijoueur
- *   seulement**, `game.paused` `{ pausedAt, interruptsAt }`.
+ *   seulement**, `game.paused` `{ pausedAt, interruptsAt }` ; la pause au
+ *   journal `game` (§ 4.7).
  *
  * **L'horloge d'une manche ne se met jamais en pause** : la pause n'arrive
  * qu'entre deux manches, et une manche en cours refuse la pause. Une partie
@@ -97,6 +99,8 @@ final readonly class PauseGame
             $armedAt = $lockedGame->paused_at ?? throw new LogicException('PauseGame : instant de pause perdu à l’écriture.');
 
             InterruptPausedGame::dispatch($lockedGame->id, WireTime::iso($armedAt));
+
+            GameJournal::gamePaused($lockedGame, $armedAt);
 
             // Garde de mode (§ 11.2) : aucune diffusion en solo.
             if ($lockedGame->mode === GameMode::Multiplayer) {

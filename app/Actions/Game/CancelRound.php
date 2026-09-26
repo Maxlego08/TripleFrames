@@ -12,6 +12,7 @@ use App\Models\Room;
 use App\Models\Round;
 use App\Settings\EngineConstants;
 use App\Support\Draw\ReplacementRoundChooser;
+use App\Support\Game\GameJournal;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use LogicException;
@@ -59,6 +60,9 @@ use LogicException;
  * l'annulation couperait la révélation de `k`. Le gel est laissé à
  * `EndReveal(k)`, à `reveal_ends_at(k)` (§ 9.6, § 14.5).
  *
+ * **Journal `game`** (§ 4.7) : l'annulation, son motif et son remplacement
+ * (remplacée par une manche de réserve, ou non) ; le gel, avec son issue.
+ *
  * **Idempotente** : une manche déjà annulée n'est ni relue, ni remplacée, ni
  * rediffusée. Une annulation programme toujours la suite dans sa propre
  * transaction : `cancelled` n'est qu'un état transitoire d'un rattrapage
@@ -98,7 +102,10 @@ final readonly class CancelRound
 
             // `started_at` n'est pas touché par l'annulation : c'est le T₁ prévu.
             $startsAt = self::replacementStart($now, $cancelled->started_at);
-            $next = $this->replacement($game, $cancelled) ?? self::nextToPlay($game);
+            $replacement = $this->replacement($game, $cancelled);
+            $next = $replacement ?? self::nextToPlay($game);
+
+            GameJournal::roundCancelled($game, $cancelled, $reason, $replacement instanceof Round);
 
             if ($next instanceof Round) {
                 app(ScheduleRound::class)->handle($next, $startsAt);
@@ -117,7 +124,9 @@ final readonly class CancelRound
                 return;
             }
 
-            $this->finalize->handle($game, GameStatus::Completed, $now);
+            if ($this->finalize->handle($game, GameStatus::Completed, $now)) {
+                GameJournal::gameFinalized($game, GameStatus::Completed, $now);
+            }
         });
     }
 

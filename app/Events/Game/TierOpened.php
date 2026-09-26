@@ -27,6 +27,9 @@ final class TierOpened extends RoomBroadcast
     /** Événement de partie : jamais émis sans partie. */
     public const bool GAME_BOUND = true;
 
+    /** Diffusion de frontière : retard réel journalisé, périmée au rattrapage (§ 4.4, § 4.7). */
+    public const bool BOUNDARY = true;
+
     public function broadcastAs(): string
     {
         return 'tier.opened';

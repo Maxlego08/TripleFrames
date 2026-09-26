@@ -10,6 +10,7 @@ use App\Jobs\Game\AdvanceRound;
 use App\Models\Game;
 use App\Models\Room;
 use App\Models\Round;
+use App\Support\Game\GameJournal;
 use App\Support\Game\RoundStep;
 use App\Support\Realtime\WireTime;
 use Carbon\CarbonImmutable;
@@ -44,7 +45,10 @@ use LogicException;
  *   garde recevable une soumission reçue dans la grâce finale ;
  * - après commit : `round.closed` `{ sequenceIndex, roundNumber, endedAt,
  *   revealStartsAt, revealEndsAt }`, **en multijoueur seulement**, sans
- *   aucun titre ; le job `Reveal` à `ended_at + tier_grace_ms`.
+ *   aucun titre — diffusion de frontière, mesurée contre l'instant de
+ *   clôture écrit ; le job `Reveal` à `ended_at + tier_grace_ms` ; la
+ *   clôture au journal `game`, avec sa cause : `D` si l'instant écrit est
+ *   `started_at + D`, fin anticipée sinon (§ 4.7).
  *
  * Une clôture sur une partie close ou en pause, ou sur une manche qui ne
  * court pas (`pending`, `revealing`, `completed`, `cancelled`), est périmée :
@@ -106,15 +110,22 @@ final readonly class CloseRound
 
             self::reflect($round, $lockedRound);
 
+            GameJournal::roundClosed(
+                $game,
+                $lockedRound,
+                $closedAt->equalTo($durationEnd->startOfMillisecond()) ? GameJournal::CLOSE_CAUSE_DURATION : GameJournal::CLOSE_CAUSE_EARLY_END,
+                $closedAt,
+            );
+
             // Garde de mode (§ 11.2) : aucune diffusion en solo. Aucun titre.
             if ($game->mode === GameMode::Multiplayer) {
-                RoundClosed::dispatch(self::room($game), $game, [
+                event((new RoundClosed(self::room($game), $game, [
                     'sequenceIndex' => $lockedRound->sequence_index,
                     'roundNumber' => (int) $lockedRound->round_number,
                     'endedAt' => WireTime::iso($closedAt),
                     'revealStartsAt' => WireTime::iso($revealStartsAt),
                     'revealEndsAt' => WireTime::iso($revealEndsAt),
-                ]);
+                ]))->atBoundary($closedAt));
             }
 
             AdvanceRound::dispatch($game->id, $lockedRound->id, RoundStep::Reveal, null, WireTime::iso($revealStartsAt));
