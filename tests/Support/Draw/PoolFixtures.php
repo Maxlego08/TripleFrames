@@ -54,16 +54,25 @@ final class PoolFixtures
      * `$levels` vaut par défaut la répartition nominale du `N` par défaut, lue
      * dans {@see FrameLevelCoverage} — jamais recopiée ici. `$state` applique un
      * état de fabrique APRÈS `playable()` (suspendu, retiré, bloqué…), pour
-     * éprouver le vivier sur un film par ailleurs complet.
+     * éprouver le vivier sur un film par ailleurs complet. `$titles` (locale de
+     * catalogue => titre) remplace les titres par défaut de `playable()` — `en`
+     * et `fr` — et fixe donc le profil de titre du film (leurres, spec 70
+     * § 10.3) : `['fr' => …]` seul, ou une locale non activée seule pour un
+     * masque nul.
      *
      * @param  list<FrameLevel>|null  $levels
      * @param  (Closure(MovieFactory): MovieFactory)|null  $state
+     * @param  array<string, string>  $titles
      */
-    public static function movie(?array $levels = null, ?MovieGroup $group = null, ?Closure $state = null): Movie
-    {
+    public static function movie(
+        ?array $levels = null,
+        ?MovieGroup $group = null,
+        ?Closure $state = null,
+        array $titles = [],
+    ): Movie {
         $levels ??= FrameLevelCoverage::nominal(RoomSettingsBounds::DEFAULT_FRAMES_PER_ROUND);
 
-        $factory = Movie::factory()->playable();
+        $factory = Movie::factory()->playable(titles: $titles);
 
         if ($group instanceof MovieGroup) {
             $factory = $factory->inGroup($group);
