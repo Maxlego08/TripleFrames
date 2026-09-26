@@ -38,5 +38,6 @@ Route::middleware(['auth', 'verified', 'translations:account,legal'])->group(fun
 });
 
 require __DIR__.'/admin.php';
+require __DIR__.'/game.php';
 require __DIR__.'/legal.php';
 require __DIR__.'/settings.php';

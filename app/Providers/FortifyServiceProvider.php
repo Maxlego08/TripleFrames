@@ -4,7 +4,9 @@ namespace App\Providers;
 
 use App\Actions\Fortify\CreateNewUser;
 use App\Actions\Fortify\ResetUserPassword;
+use App\Settings\EngineConstants;
 use App\Support\Identity\AccountSwitches;
+use App\Support\Identity\PlayerTokenManager;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Config;
@@ -18,6 +20,12 @@ use Laravel\Fortify\Fortify;
 
 class FortifyServiceProvider extends ServiceProvider
 {
+    /** Espace des clés de limiteur de jeu comptées par jeton. */
+    private const string SEAT_THROTTLE_TOKEN_PREFIX = 'token:';
+
+    /** Espace des clés de limiteur de jeu comptées par adresse, faute de jeton. */
+    private const string SEAT_THROTTLE_IP_PREFIX = 'ip:';
+
     /**
      * Register any application services.
      */
@@ -185,5 +193,55 @@ class FortifyServiceProvider extends ServiceProvider
         RateLimiter::for('ops-probe', function (Request $request) {
             return Limit::perMinute(30)->by((string) $request->ip());
         });
+
+        $this->configureGameRateLimiting();
+    }
+
+    /**
+     * Les trois limiteurs du moteur de partie (spec 60 § 10.3, contrat C7
+     * § 2.4, C8) : `game-read` sur les lectures (resynchronisation, horloge,
+     * pages de jeu), `game-write` sur les écritures (battements, gestes),
+     * `frame-serve` sur les octets d'image. `answer` appartient à 70.
+     *
+     * Débits lus dans `EngineConstants` (§ 19.1), jamais en littéral ; ils
+     * couvrent le sondage du solo, les battements et deux chargements
+     * d'image par palier au pire cas des bornes (`EngineConstantsTest`).
+     *
+     * Posés dès que la première route en porte un (`clock.show`) : un
+     * limiteur nommé absent se lit comme un maximum de zéro et refuse tout
+     * en 429.
+     */
+    private function configureGameRateLimiting(): void
+    {
+        RateLimiter::for('game-read', function (Request $request) {
+            return Limit::perMinute(EngineConstants::gameReadsPerMinute())
+                ->by($this->seatThrottleKey($request));
+        });
+
+        RateLimiter::for('game-write', function (Request $request) {
+            return Limit::perMinute(EngineConstants::gameWritesPerMinute())
+                ->by($this->seatThrottleKey($request));
+        });
+
+        RateLimiter::for('frame-serve', function (Request $request) {
+            return Limit::perMinute(EngineConstants::frameServePerMinute())
+                ->by($this->seatThrottleKey($request));
+        });
+    }
+
+    /**
+     * Clé d'un limiteur de jeu : le hash du `player_token` courant, lu par
+     * {@see PlayerTokenManager::current()} — qui ne frappe jamais et ne repose
+     * jamais le cookie —, avec repli sur l'IP pour une requête sans jeton.
+     * Deux espaces préfixés, qui ne se recouvrent jamais. La clé ne vit que
+     * dans le cache du limiteur, jamais dans une table de domaine.
+     */
+    private function seatThrottleKey(Request $request): string
+    {
+        $hash = $this->app->make(PlayerTokenManager::class)->current($request)?->hash();
+
+        return $hash !== null
+            ? self::SEAT_THROTTLE_TOKEN_PREFIX.$hash
+            : self::SEAT_THROTTLE_IP_PREFIX.$request->ip();
     }
 }

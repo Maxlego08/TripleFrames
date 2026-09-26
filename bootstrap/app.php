@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\CaptureReceptionInstant;
 use App\Http\Middleware\EnforceAccountSwitches;
 use App\Http\Middleware\EnsurePrivilegedTwoFactor;
 use App\Http\Middleware\EnsureProbeToken;
@@ -104,12 +105,20 @@ return Application::configure(basePath: dirname(__DIR__))
         // `SetLocale` passe AVANT `HandleInertiaRequests` : les props partagées
         // doivent déjà connaître la locale quand elles sont construites.
         //
-        // `VaryOnLanguage` est en TÊTE du groupe, donc le DERNIER à toucher la
-        // réponse : `Inertia\Middleware` pose `Vary: X-Inertia` en écrasant
-        // l'en-tête, et un `Vary` posé plus bas dans l'oignon serait
-        // silencieusement effacé. Il n'agit que sur les routes qui le demandent
-        // par leur défaut `vary_language`.
+        // `CaptureReceptionInstant` ouvre le groupe (spec 60 § 2.2, contrat
+        // C10 L3) : l'instant de réception est capturé AVANT les cookies, la
+        // session, la langue et tout middleware de jeu (`throttle:*`,
+        // `seat.active`), si bien qu'aucune attente de verrou ou de cache ne le
+        // décale. Aucun middleware de la liste de priorité ne le déplace : le
+        // tri du routeur ne réordonne que les middlewares qui y figurent.
+        //
+        // `VaryOnLanguage` le suit, et reste le DERNIER à toucher la réponse
+        // (le premier ne la modifie pas) : `Inertia\Middleware` pose
+        // `Vary: X-Inertia` en écrasant l'en-tête, et un `Vary` posé plus bas
+        // dans l'oignon serait silencieusement effacé. Il n'agit que sur les
+        // routes qui le demandent par leur défaut `vary_language`.
         $middleware->web(prepend: [
+            CaptureReceptionInstant::class,
             VaryOnLanguage::class,
         ], append: [
             SetLocale::class,

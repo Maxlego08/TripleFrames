@@ -33,7 +33,8 @@ use Symfony\Component\HttpFoundation\Response;
  * une liste de noms de routes vivant dans un middleware serait une seconde
  * table de routage. Le middleware, lui, n'apporte que la mécanique.
  *
- * **Il est en tête du groupe `web`, donc le dernier à toucher la réponse.**
+ * **Il est en tête du groupe `web`, derrière le seul `CaptureReceptionInstant`,
+ * qui ne modifie pas la réponse : il est donc le dernier à la toucher.**
  * `Inertia\Middleware` pose `Vary: X-Inertia` en écrasant l'en-tête : posé plus
  * bas dans l'oignon, celui-ci serait silencieusement effacé. Un `Vary` déjà
  * présent est conservé — l'en-tête est une union, et l'écraser retirerait une
