@@ -12,7 +12,11 @@ use App\Models\Round;
 use App\Settings\PlatformLimits;
 use App\Settings\RoomSettings;
 use App\Support\Catalog\AnswerKeyNormalizer;
+use App\Support\Scoring\ScoreCalculator;
+use App\ValueObjects\Scoring\TierSchedule;
+use App\ValueObjects\Scoring\TierScore;
 use Illuminate\Database\Eloquent\Factories\Factory;
+use LogicException;
 
 /**
  * Fabrique de test de {@see Guess} — **une bonne réponse, et rien d'autre**
@@ -33,6 +37,9 @@ use Illuminate\Database\Eloquent\Factories\Factory;
  * Les trois parts de points sont **figées au verrouillage et jamais recalculées** :
  * {@see self::atTier()} et {@see self::withSpeedBonus()} les écrivent ensemble,
  * pour qu'aucun état ne laisse `points_total ≠ points_tier + points_bonus`.
+ * {@see self::scoredAt()} les fait calculer par la règle de score elle-même
+ * ({@see ScoreCalculator::forGuess()}), sur la manche matérialisée : c'est l'état
+ * de tout test qui lit un score, un classement ou un agrégat.
  *
  * `lock_rank` est alloué **sous verrou** dans la transaction de verrouillage
  * (`round.found_count + 1`) : la fabrique le pose à 1, et `guess_round_rank_uq`
@@ -119,17 +126,80 @@ class GuessFactory extends Factory
      * Bonus de rapidité — **fraction du palier**, donc jamais additionné sans
      * réécrire `points_total`. La formule exacte appartient à `80`, et cet état ne
      * la reproduit pas : il pose une part déjà calculée.
+     *
+     * `points_total` est résolu **à l'expansion des attributs**, comme dans
+     * {@see self::scoredAt()} : `points_tier` précède `points_total` dans l'ordre
+     * des clés, donc il y est déjà résolu, fermeture de `scoredAt()` comprise. Lu
+     * pendant la réduction des états, il vaudrait encore la fermeture, et le total
+     * perdrait la valeur du palier.
      */
     public function withSpeedBonus(int $pointsBonus): static
     {
-        return $this->state(function (array $attributes) use ($pointsBonus): array {
-            $pointsTier = $attributes['points_tier'] ?? 0;
+        return $this->state(fn (array $attributes): array => [
+            'points_bonus' => $pointsBonus,
+            'points_total' => static fn (array $resolved): int => (is_int($resolved['points_tier'] ?? null) ? $resolved['points_tier'] : 0) + $pointsBonus,
+        ]);
+    }
 
-            return [
-                'points_bonus' => $pointsBonus,
-                'points_total' => (is_int($pointsTier) ? $pointsTier : 0) + $pointsBonus,
-            ];
-        });
+    /**
+     * Bonne réponse reçue à `$answeredAtMs` millisecondes de `round.started_at`,
+     * NOTÉE comme la saisie la note : palier retenu et trois parts de points
+     * rendus par {@see ScoreCalculator::forGuess()} sur la manche et la partie
+     * rattachées, jamais recopiés à la main (spec 80 § 5).
+     *
+     * La manche doit porter ses `N` paliers matérialisés (`round_tier`) : le
+     * calendrier est lu par {@see TierSchedule::fromRound()}, seule source du
+     * chemin de score, et une manche sans paliers fait échouer la fixture au lieu
+     * d'inventer un palier. Un clic ({@see GuessSource::Choice}) pose aussi l'état
+     * {@see self::viaChoice()} ; le plancher du QCM s'applique alors selon
+     * `game.input_difficulty`, et un clic dans une partie Expert lève.
+     *
+     * Le calcul a lieu à l'expansion des attributs, donc sur la `source` et
+     * l'`answered_at_ms` finalement retenus : un état appliqué ensuite qui les
+     * changerait reste noté juste, et un état qui réécrit les points
+     * ({@see self::atTier()}) l'emporte, comme tout état ultérieur.
+     */
+    public function scoredAt(int $answeredAtMs, GuessSource $source = GuessSource::Text): static
+    {
+        $factory = $source === GuessSource::Choice
+            ? $this->viaChoice()
+            : $this->state(fn (array $attributes): array => [
+                'source' => GuessSource::Text,
+                'match_kind' => ($attributes['match_kind'] ?? null) === GuessMatchKind::Choice
+                    ? GuessMatchKind::Title
+                    : ($attributes['match_kind'] ?? GuessMatchKind::Title),
+            ]);
+
+        /** @var array<string, TierScore> $scores */
+        $scores = [];
+
+        $score = static function (array $attributes) use (&$scores): TierScore {
+            $roundId = $attributes['round_id'] ?? null;
+            $answeredAtMs = $attributes['answered_at_ms'] ?? null;
+            $source = $attributes['source'] ?? null;
+            $source = is_string($source) ? GuessSource::tryFrom($source) : $source;
+
+            if (! is_int($roundId) || ! is_int($answeredAtMs) || ! $source instanceof GuessSource) {
+                throw new LogicException('GuessFactory::scoredAt() : manche, instant ou source illisible.');
+            }
+
+            $key = $roundId.':'.$answeredAtMs.':'.$source->value;
+
+            if (! isset($scores[$key])) {
+                $round = Round::query()->with('game')->findOrFail($roundId);
+                $scores[$key] = ScoreCalculator::forGuess($round->game, TierSchedule::fromRound($round), $answeredAtMs, $source);
+            }
+
+            return $scores[$key];
+        };
+
+        return $factory->state([
+            'answered_at_ms' => $answeredAtMs,
+            'tier_index' => fn (array $attributes): int => $score($attributes)->tierIndex,
+            'points_tier' => fn (array $attributes): int => $score($attributes)->pointsTier,
+            'points_bonus' => fn (array $attributes): int => $score($attributes)->pointsBonus,
+            'points_total' => fn (array $attributes): int => $score($attributes)->pointsTotal,
+        ]);
     }
 
     /**

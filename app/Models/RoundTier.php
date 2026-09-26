@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\FrameLevel;
 use App\Enums\RoundIncidentReason;
+use App\ValueObjects\Scoring\TierWindow;
 use Carbon\CarbonImmutable;
 use Database\Factories\RoundTierFactory;
 use Illuminate\Database\Eloquent\Attributes\DateFormat;
@@ -142,11 +143,14 @@ class RoundTier extends Model
      * `max(0, guess.answered_at_ms − game.tier_grace_ms)` : l'arithmétique entière
      * est identique en MySQL et en SQLite et immune à tout fuseau, et aucune valeur
      * mesurée ou déclarée par le client n'entre ici (invariant **L3**).
+     *
+     * Délègue à {@see TierWindow::contains()}, seule formule de fenêtre du dépôt
+     * (spec 80 § 4.1) : le palier retenu par le calcul de score et celui que lit
+     * ce modèle ne peuvent pas diverger.
      */
     public function containsOffsetMs(int $correctedOffsetMs): bool
     {
-        return $correctedOffsetMs >= $this->starts_at_offset_ms
-            && $correctedOffsetMs < $this->starts_at_offset_ms + $this->duration_ms;
+        return TierWindow::fromRoundTier($this)->contains($correctedOffsetMs);
     }
 
     /**

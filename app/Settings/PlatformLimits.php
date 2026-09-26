@@ -49,8 +49,7 @@ use InvalidArgumentException;
  * servi sous `preloadLeadMs` — trois faits conservés douze mois. Tout changement de
  * la table `B_max(N)` ou du DÉFAUT de `tierGraceMs` ou de `preloadLeadMs` incrémente
  * la version de la règle de score (`ScoringRules::VERSION`, donc
- * `game.scoring_version`, spec 80 § 6.1 ; `GameFactory::SCORING_VERSION` en tient
- * lieu tant que la spec 80 n'est pas livrée). Les valeurs de tirage et de mémoire
+ * `game.scoring_version`, spec 80 § 6.1). Les valeurs de tirage et de mémoire
  * n'incrémentent aucune version.
  */
 final readonly class PlatformLimits

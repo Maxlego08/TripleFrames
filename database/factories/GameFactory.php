@@ -10,6 +10,7 @@ use App\Settings\PlatformLimits;
 use App\Settings\RoomSettings;
 use App\Support\Answers\AnswerRules;
 use App\Support\Draw\SeededPrf;
+use App\Support\Scoring\ScoringRules;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
@@ -36,7 +37,9 @@ use Illuminate\Database\Eloquent\Factories\Factory;
  *   vivier qui remplit juste la réserve du tirage : aucune copie locale de la
  *   marge (spec 30, lot L30-5) ;
  * - `validation_version` de {@see AnswerRules::VERSION}, la version de la règle
- *   de validation que la partie applique (spec 70 § 12) ; aucune copie locale.
+ *   de validation que la partie applique (spec 70 § 12) ; aucune copie locale ;
+ * - `scoring_version` de {@see ScoringRules::VERSION}, la version de la règle de
+ *   score (spec 80 § 6.1) ; aucune copie locale.
  *
  * `room_id` est nul en solo, et `mode` est figé à la création : aucun chemin ne le
  * mute (§ 7.10). {@see self::solo()} pose les deux ensemble.
@@ -45,17 +48,6 @@ use Illuminate\Database\Eloquent\Factories\Factory;
  */
 class GameFactory extends Factory
 {
-    /**
-     * Version de la règle de SCORE appliquée par la partie.
-     *
-     * > **Provisoire nommé.** Le § 7.2 veut cette valeur « écrite au lancement
-     * > depuis une constante de code », et cette constante appartient à
-     * > `80-scoring-podium-et-fin-de-partie.md`, qui n'est pas écrite. La fabrique
-     * > la porte en attendant ; le jour où la constante existe, c'est elle qui est
-     * > lue ici, et cette ligne disparaît.
-     */
-    public const int SCORING_VERSION = 1;
-
     /**
      * Define the model's default state.
      *
@@ -170,7 +162,7 @@ class GameFactory extends Factory
             'preload_lead_ms' => PlatformLimits::preloadLeadMs(),
             'settings_version' => $settings->sourceVersion,
             'settings_snapshot' => $settings,
-            'scoring_version' => self::SCORING_VERSION,
+            'scoring_version' => ScoringRules::VERSION,
             'validation_version' => AnswerRules::VERSION,
         ];
     }

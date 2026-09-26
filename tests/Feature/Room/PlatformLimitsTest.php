@@ -3,7 +3,7 @@
 use App\Settings\PlatformLimits;
 use App\Settings\RoomSettings;
 use App\Settings\RoomSettingsBounds;
-use Database\Factories\GameFactory;
+use App\Support\Scoring\ScoringRules;
 use Illuminate\Support\Str;
 
 /*
@@ -100,9 +100,8 @@ function platformLimitsScalarAccessors(): array
 
 it('fixe speedBonusMaxPercent à 50, 50, 33 et 25 pour N = 2 à 5 sous la version de score 1', function (): void {
     // Toute modification de cette table incrémente la version de score (spec 80
-    // § 6.1). `GameFactory::SCORING_VERSION` en tient lieu jusqu'au lot L80-1,
-    // qui la remplace par `ScoringRules::VERSION`.
-    expect(GameFactory::SCORING_VERSION)->toBe(1);
+    // § 6.1).
+    expect(ScoringRules::VERSION)->toBe(1);
 
     expect(platformLimitsSpeedBonusTable())->toBe([2 => 50, 3 => 50, 4 => 33, 5 => 25]);
 
