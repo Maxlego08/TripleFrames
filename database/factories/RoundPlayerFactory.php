@@ -8,6 +8,7 @@ use App\Models\Guess;
 use App\Models\Player;
 use App\Models\Round;
 use App\Models\RoundPlayer;
+use App\Settings\RoomSettingsBounds;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
@@ -24,12 +25,14 @@ use Illuminate\Database\Eloquent\Factories\Factory;
  * rien d'autre, ni texte ni ligne. Aucun état de cette fabrique n'écrit une
  * tentative.
  *
- * Deux invariants que la fabrique ne peut pas tenir seule, et qui appartiennent à
+ * Trois invariants que la fabrique ne peut pas tenir seule, et qui appartiennent à
  * l'appelant :
  *
  * - `input_state = 'locked'` **si et seulement si** une ligne `guess` existe pour
  *   le même couple. {@see self::locked()} pose l'état ; c'est au test d'écrire la
  *   ligne `guess` correspondante ({@see GuessFactory}).
+ * - `text_exhausted` est **inatteignable hors `game.input_difficulty =
+ *   'normal'`** ({@see self::textExhausted()}).
  * - `revealed` et `skipped` sont **inatteignables hors `game.mode = 'solo'`**.
  *   Leurs deux états le rappellent, mais aucune colonne de cette table ne porte le
  *   mode.
@@ -41,8 +44,9 @@ class RoundPlayerFactory extends Factory
     /**
      * Define the model's default state.
      *
-     * Un participant dont la saisie est encore ouverte — le seul état qui bloque
-     * la fin anticipée (§ 7.7).
+     * Un participant dont la saisie est encore ouverte — avec `text_exhausted`
+     * ({@see self::textExhausted()}), l'un des deux états qui bloquent la fin
+     * anticipée (§ 7.7, D20 du 23/09).
      *
      * @return array<string, mixed>
      */
@@ -107,6 +111,25 @@ class RoundPlayerFactory extends Factory
             'input_state' => RoundPlayerInputState::AttemptsExhausted,
             'input_closed_at' => now(),
             'wrong_attempts' => $wrongAttempts,
+        ]);
+    }
+
+    /**
+     * « Texte épuisé, QCM attendu » (D20 du 23/09) : plus de texte libre, mais
+     * le clic QCM reste recevable à `T_N`, et la saisie n'est PAS close —
+     * `input_closed_at` reste NULL. **Inatteignable hors
+     * `game.input_difficulty = 'normal'`** : aucune colonne de cette table ne
+     * porte la difficulté, c'est à l'appelant de rattacher la ligne à une
+     * partie en Normal. Tentatives au plafond par défaut, `attemptsPerRound`
+     * pour la durée par défaut, sauf valeur imposée.
+     */
+    public function textExhausted(?int $wrongAttempts = null): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'input_state' => RoundPlayerInputState::TextExhausted,
+            'input_closed_at' => null,
+            'wrong_attempts' => $wrongAttempts
+                ?? RoomSettingsBounds::defaultAttemptsPerRound(RoomSettingsBounds::DEFAULT_ROUND_DURATION),
         ]);
     }
 

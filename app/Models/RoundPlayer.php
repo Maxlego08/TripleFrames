@@ -33,8 +33,10 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * révélerait une mauvaise réponse, que la règle interdit de diffuser.
  *
  * Invariants testés : `input_state = 'locked'` **si et seulement si** une ligne
- * `guess` existe pour le même couple ; `revealed` et `skipped` sont inatteignables
- * hors `game.mode = 'solo'` ({@see RoundPlayerInputState::isSoloOnly()}).
+ * `guess` existe pour le même couple ; `text_exhausted` est inatteignable hors
+ * `game.input_difficulty = 'normal'` ; `revealed` et `skipped` sont
+ * inatteignables hors `game.mode = 'solo'`
+ * ({@see RoundPlayerInputState::isSoloOnly()}).
  *
  * @property int $id
  * @property int $round_id
@@ -115,15 +117,19 @@ class RoundPlayer extends Model
     }
 
     /**
-     * Les lignes dont la saisie est encore ouverte — le complément du numérateur
-     * de la fin anticipée.
+     * Les lignes dont la saisie n'est **pas close** — le complément du
+     * numérateur de la fin anticipée.
+     *
+     * Le nom est conservé, la sémantique élargie (D20 du 23/09, contrat C10) :
+     * `open` ET `text_exhausted`, qui attend encore le QCM. La liste se lit
+     * sur {@see RoundPlayerInputState::notClosedValues()}, jamais recopiée.
      *
      * @param  Builder<RoundPlayer>  $query
      */
     #[Scope]
     protected function open(Builder $query): void
     {
-        $query->where('input_state', RoundPlayerInputState::Open);
+        $query->whereIn('input_state', RoundPlayerInputState::notClosedValues());
     }
 
     /**

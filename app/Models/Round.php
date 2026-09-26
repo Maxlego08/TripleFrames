@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\RoundIncidentReason;
+use App\Enums\RoundPlayerInputState;
 use App\Enums\RoundStatus;
 use Carbon\CarbonImmutable;
 use Database\Factories\RoundFactory;
@@ -171,7 +172,13 @@ class Round extends Model
      * **Participants** = les lignes `round_player` de cette manche dont le
      * `player` est `connected` ET `left_at IS NULL`.
      * **Fin anticipée si et seulement si** `COUNT(participants) >= 1` ET tous les
-     * participants ont un `input_state` autre qu'`open`.
+     * participants ont leur saisie close : `input_state NOT IN ('open',
+     * 'text_exhausted')`, lu par {@see RoundPlayerInputState::isClosed()}
+     * (E10-53). `text_exhausted` n'est JAMAIS une saisie close (D20 du 23/09) :
+     * en Normal, un participant qui a épuisé son texte libre attend encore le
+     * QCM, et la manche ne se clôt pas d'anticipation tant qu'il peut cliquer.
+     * Le code ne change pas avec D20 : c'est la sémantique d'`isClosed()` qui
+     * change.
      *
      * La borne `>= 1` est la correction du cas vide et se lit comme telle : zéro
      * participant connecté ne clôt JAMAIS une manche — elle va au bout de `D`,
