@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="fr">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <meta name="description" content="Connexion à ton compte TripleFrames." />
+        <title>Connexion — TripleFrames</title>
+        <link rel="icon" href="brand-logo.svg" type="image/svg+xml" />
+        <link rel="stylesheet" href="auth.css" />
+    </head>
+    <body class="auth-page">
+        <a class="skip-link" href="#auth-content">Aller au formulaire</a>
+
+        <header class="auth-header">
+            <div class="auth-header__inner">
+                <a class="brand" href="index.html" aria-label="TripleFrames, retour à l’accueil">
+                    <img class="brand__logo" src="brand-logo.svg" alt="" width="44" height="36" />
+                    <span class="brand__name">TripleFrames</span>
+                </a>
+                <div class="auth-header__account-link">
+                    <span>Nouveau joueur ?</span>
+                    <a class="button button--small button--yellow" href="register.html">S’inscrire</a>
+                </div>
+            </div>
+        </header>
+
+        <main class="auth-stage" id="auth-content">
+            <section class="auth-ticket" aria-labelledby="login-title">
+                <aside class="auth-ticket__brand-panel">
+                    <img class="auth-ticket__logo" src="brand-logo.svg" alt="" width="108" height="88" />
+                    <p class="auth-ticket__tag">Ton espace joueur</p>
+                    <h1>Reprends la partie là où tu l’as laissée.</h1>
+                    <p class="auth-ticket__description">
+                        Retrouve tes statistiques, tes salons et tes meilleurs scores.
+                    </p>
+                    <ul class="auth-ticket__benefits">
+                        <li><span aria-hidden="true">✓</span> Historique des parties</li>
+                        <li><span aria-hidden="true">✓</span> Réglages sauvegardés</li>
+                        <li><span aria-hidden="true">✓</span> Passkey sans mot de passe</li>
+                    </ul>
+                </aside>
+
+                <div class="auth-ticket__form-panel">
+                    <div class="auth-heading">
+                        <p class="auth-heading__step">Entrée des joueurs</p>
+                        <h2 id="login-title">Bon retour !</h2>
+                        <p>Connecte-toi pour retrouver ton profil.</p>
+                    </div>
+
+                    <form class="auth-form" id="login-form" action="/login" method="post" novalidate>
+                        <div class="auth-field">
+                            <label class="auth-field__label" for="email">Adresse e-mail</label>
+                            <input
+                                class="auth-field__input"
+                                id="email"
+                                name="email"
+                                type="email"
+                                autocomplete="email"
+                                inputmode="email"
+                                placeholder="toi@exemple.fr"
+                                aria-describedby="email-error"
+                                required
+                            />
+                            <p class="auth-field__error" id="email-error"></p>
+                        </div>
+
+                        <div class="auth-field">
+                            <div class="auth-field__label-row">
+                                <label class="auth-field__label" for="password">Mot de passe</label>
+                                <a href="#forgot-password">Mot de passe oublié ?</a>
+                            </div>
+                            <div class="auth-field__password-wrap">
+                                <input
+                                    class="auth-field__input"
+                                    id="password"
+                                    name="password"
+                                    type="password"
+                                    autocomplete="current-password"
+                                    placeholder="Ton mot de passe"
+                                    aria-describedby="password-error"
+                                    required
+                                />
+                                <button class="auth-field__toggle" type="button" aria-label="Afficher le mot de passe" data-password-toggle="password">
+                                    Afficher
+                                </button>
+                            </div>
+                            <p class="auth-field__error" id="password-error"></p>
+                        </div>
+
+                        <label class="auth-check">
+                            <input name="remember" type="checkbox" value="1" />
+                            <span class="auth-check__box" aria-hidden="true"></span>
+                            <span>Se souvenir de moi</span>
+                        </label>
+
+                        <button class="button button--primary" type="submit">
+                            <span>Se connecter</span>
+                            <span aria-hidden="true">✦</span>
+                        </button>
+                    </form>
+
+                    <div class="auth-divider"><span>ou entre directement</span></div>
+
+                    <div class="auth-providers" aria-label="Autres méthodes de connexion">
+                        <button class="provider-button provider-button--passkey" type="button" data-provider="Passkey">
+                            <span class="provider-button__icon" aria-hidden="true">⌘</span>
+                            <span>Passkey</span>
+                        </button>
+                        <button class="provider-button" type="button" data-provider="Google">
+                            <span class="provider-button__icon provider-button__icon--letter" aria-hidden="true">G</span>
+                            <span>Google</span>
+                        </button>
+                        <button class="provider-button provider-button--discord" type="button" data-provider="Discord">
+                            <span class="provider-button__icon" aria-hidden="true">◉</span>
+                            <span>Discord</span>
+                        </button>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <footer class="auth-footer">
+            <p>© TripleFrames</p>
+            <nav aria-label="Informations légales">
+                <a href="#terms">Conditions</a>
+                <a href="#privacy">Confidentialité</a>
+            </nav>
+        </footer>
+
+        <div class="toast" id="auth-toast" role="status" aria-live="polite"></div>
+        <script src="auth.js"></script>
+    </body>
+</html>

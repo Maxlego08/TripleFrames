@@ -70,21 +70,6 @@ document.querySelector('#create-game').addEventListener('click', () => {
     showToast('Le parcours de création de partie s’ouvrira ici.');
 });
 
-document.querySelectorAll('[data-dialog]').forEach((trigger) => {
-    trigger.addEventListener('click', () => {
-        const dialog = document.querySelector(`#${trigger.dataset.dialog}`);
-        dialog?.showModal();
-    });
-});
-
-document.querySelectorAll('.auth-dialog').forEach((dialog) => {
-    dialog.addEventListener('click', (event) => {
-        if (event.target === dialog) {
-            dialog.close();
-        }
-    });
-});
-
 const params = new URLSearchParams(window.location.search);
 document.body.dataset.authenticated = params.get('connected') === '1' ? 'true' : 'false';
 

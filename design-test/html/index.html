@@ -8,6 +8,7 @@
             content="TripleFrames, le blindtest cinéma à jouer entre amis."
         />
         <title>TripleFrames — Devine le film</title>
+        <link rel="icon" href="brand-logo.svg" type="image/svg+xml" />
         <link rel="stylesheet" href="styles.css" />
     </head>
     <body data-background="curtain">
@@ -16,19 +17,17 @@
         <header class="site-header">
             <div class="site-header__inner">
                 <a class="site-header__brand" href="#" aria-label="TripleFrames, accueil">
-                    <span class="site-header__brand-mark" aria-hidden="true">
-                        <span></span><span></span><span></span>
-                    </span>
+                    <img class="site-header__brand-logo" src="brand-logo.svg" alt="" width="44" height="36" />
                     <span class="site-header__brand-name">TripleFrames</span>
                 </a>
 
                 <nav class="site-header__account-nav site-header__account-nav--guest" aria-label="Compte">
-                    <button class="site-header__nav-link" type="button" data-dialog="login-dialog">
+                    <a class="site-header__nav-link" href="login.html">
                         Connexion
-                    </button>
-                    <button class="site-header__nav-pill" type="button" data-dialog="register-dialog">
+                    </a>
+                    <a class="site-header__nav-pill" href="register.html">
                         S’inscrire
-                    </button>
+                    </a>
                 </nav>
 
                 <nav class="site-header__account-nav site-header__account-nav--member" aria-label="Compte connecté">
@@ -44,31 +43,19 @@
             <section class="home-stage" aria-labelledby="hero-title">
                 <div class="hero">
                     <div class="hero__content">
-                        <div class="hero__logo" aria-hidden="true">
-                            <span class="hero__frame hero__frame--back"></span>
-                            <span class="hero__frame hero__frame--middle"></span>
-                            <span class="hero__frame hero__frame--front">
-                                <span class="hero__play-icon"></span>
-                            </span>
-                        </div>
+                        <img class="hero__logo" src="brand-logo.svg" alt="" width="184" height="150" />
 
                         <div class="hero__text">
-                            <p class="hero__kicker">Blindtest cinéma</p>
                             <h1 id="hero-title">Trois images.<br />Un film à trouver.</h1>
                             <p class="hero__description">
                                 Devine le titre avant tes amis. Plus tu trouves tôt,
                                 plus tu marques de points.
                             </p>
-                            <ul class="hero__notes" aria-label="Les points forts du jeu">
-                                <li>Sans installation</li>
-                                <li>Sans compte obligatoire</li>
-                            </ul>
                         </div>
                     </div>
 
                     <form class="join-card" id="join-form" novalidate>
                         <div class="join-card__heading">
-                            <span class="step-badge" aria-hidden="true">1</span>
                             <h2>Rejoins la partie</h2>
                         </div>
 
@@ -116,7 +103,6 @@
 
                 <div class="create-game">
                     <div class="create-game__copy">
-                        <span class="step-badge step-badge--alternate" aria-hidden="true">2</span>
                         <p><strong>Pas encore de code ?</strong> Lance ton propre salon.</p>
                     </div>
                     <button class="button button--secondary" id="create-game" type="button">
@@ -137,30 +123,6 @@
                 <p class="site-footer__note">Prototype de direction artistique</p>
             </div>
         </footer>
-
-        <dialog class="auth-dialog" id="login-dialog">
-            <form method="dialog" class="auth-dialog__card">
-                <button class="auth-dialog__close" value="cancel" aria-label="Fermer">×</button>
-                <p class="auth-dialog__symbol" aria-hidden="true">◉</p>
-                <h2>Bon retour !</h2>
-                <p>La connexion sera branchée à l’application finale.</p>
-                <label for="login-email">Adresse e-mail</label>
-                <input id="login-email" type="email" placeholder="toi@exemple.fr" />
-                <button class="button button--primary button--compact" value="confirm">Continuer</button>
-            </form>
-        </dialog>
-
-        <dialog class="auth-dialog" id="register-dialog">
-            <form method="dialog" class="auth-dialog__card">
-                <button class="auth-dialog__close" value="cancel" aria-label="Fermer">×</button>
-                <p class="auth-dialog__symbol auth-dialog__symbol--alternate" aria-hidden="true">✦</p>
-                <h2>Crée ton compte</h2>
-                <p>Garde tes statistiques et tes réglages de partie.</p>
-                <label for="register-email">Adresse e-mail</label>
-                <input id="register-email" type="email" placeholder="toi@exemple.fr" />
-                <button class="button button--primary button--compact" value="confirm">Commencer</button>
-            </form>
-        </dialog>
 
         <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
