@@ -284,6 +284,11 @@ a {
             width: 76%;
         }
 
+        &--mobile-middle-one,
+        &--mobile-middle-two {
+            display: none;
+        }
+
         &--front {
             top: 79%;
             width: 93%;
@@ -761,17 +766,114 @@ a {
         }
 
         &__count {
+            position: absolute;
             top: 1.05rem;
             right: 0.75rem;
         }
     }
 
     .cinema-room {
+        width: calc(100% - 1rem);
         min-height: 47rem;
+        margin-inline: auto;
+        align-self: center;
+
+        &__scene {
+            transform: none;
+        }
 
         &__screen {
-            width: 68%;
+            top: 1.5rem;
+            right: auto;
+            left: 50%;
+            width: min(68%, 19rem);
+            margin-inline: 0;
+            transform: none;
+            translate: -50% 0;
         }
+
+        &__tier {
+            height: 12%;
+
+            &--back {
+                top: 29%;
+                width: 70%;
+            }
+
+            &--mobile-middle-one {
+                top: 46.7%;
+                display: block;
+                width: 80%;
+            }
+
+            &--mobile-middle-two {
+                top: 64.3%;
+                display: block;
+                width: 90%;
+            }
+
+            &--front {
+                top: 82%;
+                width: 98%;
+            }
+        }
+
+        &__seats {
+            top: 29%;
+            right: 10%;
+            bottom: 6%;
+            left: 10%;
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            grid-template-rows: repeat(4, 18.4615%);
+            row-gap: 8.718%;
+        }
+    }
+
+    .cinema-seat {
+        position: relative;
+        top: auto;
+        left: auto;
+        align-self: end;
+        justify-self: center;
+        transform: none;
+
+        &--position-1,
+        &--position-2,
+        &--position-10 {
+            --seat-scale: 0.66;
+        }
+
+        &--position-3,
+        &--position-4,
+        &--position-5 {
+            --seat-scale: 0.76;
+        }
+
+        &--position-6,
+        &--position-7,
+        &--position-8 {
+            --seat-scale: 0.86;
+        }
+
+        &--position-9,
+        &--position-11,
+        &--position-12 {
+            --seat-scale: 0.96;
+        }
+
+        &--position-1 { grid-area: 1 / 1; }
+        &--position-10 { grid-area: 1 / 2; }
+        &--position-2 { grid-area: 1 / 3; }
+        &--position-3 { grid-area: 2 / 1; }
+        &--position-4 { grid-area: 2 / 2; }
+        &--position-5 { grid-area: 2 / 3; }
+        &--position-6 { grid-area: 3 / 1; }
+        &--position-7 { grid-area: 3 / 2; }
+        &--position-8 { grid-area: 3 / 3; }
+        &--position-9 { grid-area: 4 / 1; }
+        &--position-11 { grid-area: 4 / 2; }
+        &--position-12 { grid-area: 4 / 3; }
     }
 
     .lobby-actions {
@@ -804,8 +906,7 @@ a {
         min-height: 40rem;
 
         &__screen {
-            top: 11%;
-            width: 72%;
+            width: min(72%, 18rem);
         }
 
         &__screen-content {
@@ -833,11 +934,6 @@ a {
         }
 
         &__name {
-            min-width: 5rem;
-            max-width: 5.8rem;
-        }
-
-        &__name {
             min-width: 4.2rem;
             max-width: 4.8rem;
             padding-inline: 0.3rem;
@@ -846,39 +942,28 @@ a {
 
         &--position-1,
         &--position-2,
-        &--position-3,
-        &--position-4,
-        &--position-5,
-        &--position-6 {
-            --seat-scale: 0.43;
+        &--position-10 {
+            --seat-scale: 0.55;
         }
 
-        &--position-7,
-        &--position-8,
-        &--position-9,
-        &--position-10,
-        &--position-11,
-        &--position-12 {
-            --seat-scale: 0.56;
-        }
-
-        &--position-1,
-        &--position-7 { left: 8%; }
-
-        &--position-2,
-        &--position-8 { left: 25%; }
-
         &--position-3,
-        &--position-9 { left: 42%; }
-
         &--position-4,
-        &--position-10 { left: 58%; }
-
-        &--position-5,
-        &--position-11 { left: 75%; }
+        &--position-5 {
+            --seat-scale: 0.62;
+        }
 
         &--position-6,
-        &--position-12 { left: 92%; }
+        &--position-7,
+        &--position-8 {
+            --seat-scale: 0.69;
+        }
+
+        &--position-9,
+        &--position-11,
+        &--position-12 {
+            --seat-scale: 0.76;
+        }
+
     }
 
     .lobby-actions {

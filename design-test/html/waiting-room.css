@@ -252,6 +252,9 @@ a {
   top: 59%;
   width: 76%;
 }
+.cinema-room__tier--mobile-middle-one, .cinema-room__tier--mobile-middle-two {
+  display: none;
+}
 .cinema-room__tier--front {
   top: 79%;
   width: 93%;
@@ -687,14 +690,114 @@ a {
     align-self: flex-start;
   }
   .waiting-room__count {
+    position: absolute;
     top: 1.05rem;
     right: 0.75rem;
   }
   .cinema-room {
+    width: calc(100% - 1rem);
     min-height: 47rem;
+    margin-inline: auto;
+    align-self: center;
+  }
+  .cinema-room__scene {
+    transform: none;
   }
   .cinema-room__screen {
-    width: 68%;
+    top: 1.5rem;
+    right: auto;
+    left: 50%;
+    width: min(68%, 19rem);
+    margin-inline: 0;
+    transform: none;
+    translate: -50% 0;
+  }
+  .cinema-room__tier {
+    height: 12%;
+  }
+  .cinema-room__tier--back {
+    top: 29%;
+    width: 70%;
+  }
+  .cinema-room__tier--mobile-middle-one {
+    top: 46.7%;
+    display: block;
+    width: 80%;
+  }
+  .cinema-room__tier--mobile-middle-two {
+    top: 64.3%;
+    display: block;
+    width: 90%;
+  }
+  .cinema-room__tier--front {
+    top: 82%;
+    width: 98%;
+  }
+  .cinema-room__seats {
+    top: 29%;
+    right: 10%;
+    bottom: 6%;
+    left: 10%;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-rows: repeat(4, 18.4615%);
+    row-gap: 8.718%;
+  }
+  .cinema-seat {
+    position: relative;
+    top: auto;
+    left: auto;
+    align-self: end;
+    justify-self: center;
+    transform: none;
+  }
+  .cinema-seat--position-1, .cinema-seat--position-2, .cinema-seat--position-10 {
+    --seat-scale: 0.66;
+  }
+  .cinema-seat--position-3, .cinema-seat--position-4, .cinema-seat--position-5 {
+    --seat-scale: 0.76;
+  }
+  .cinema-seat--position-6, .cinema-seat--position-7, .cinema-seat--position-8 {
+    --seat-scale: 0.86;
+  }
+  .cinema-seat--position-9, .cinema-seat--position-11, .cinema-seat--position-12 {
+    --seat-scale: 0.96;
+  }
+  .cinema-seat--position-1 {
+    grid-area: 1/1;
+  }
+  .cinema-seat--position-10 {
+    grid-area: 1/2;
+  }
+  .cinema-seat--position-2 {
+    grid-area: 1/3;
+  }
+  .cinema-seat--position-3 {
+    grid-area: 2/1;
+  }
+  .cinema-seat--position-4 {
+    grid-area: 2/2;
+  }
+  .cinema-seat--position-5 {
+    grid-area: 2/3;
+  }
+  .cinema-seat--position-6 {
+    grid-area: 3/1;
+  }
+  .cinema-seat--position-7 {
+    grid-area: 3/2;
+  }
+  .cinema-seat--position-8 {
+    grid-area: 3/3;
+  }
+  .cinema-seat--position-9 {
+    grid-area: 4/1;
+  }
+  .cinema-seat--position-11 {
+    grid-area: 4/2;
+  }
+  .cinema-seat--position-12 {
+    grid-area: 4/3;
   }
   .lobby-actions {
     grid-template-columns: 1fr 1fr;
@@ -720,8 +823,7 @@ a {
     min-height: 40rem;
   }
   .cinema-room__screen {
-    top: 11%;
-    width: 72%;
+    width: min(72%, 18rem);
   }
   .cinema-room__screen-content img {
     width: 2.5rem;
@@ -741,38 +843,22 @@ a {
     width: 2.8rem;
   }
   .cinema-seat__name {
-    min-width: 5rem;
-    max-width: 5.8rem;
-  }
-  .cinema-seat__name {
     min-width: 4.2rem;
     max-width: 4.8rem;
     padding-inline: 0.3rem;
     font-size: 0.7rem;
   }
-  .cinema-seat--position-1, .cinema-seat--position-2, .cinema-seat--position-3, .cinema-seat--position-4, .cinema-seat--position-5, .cinema-seat--position-6 {
-    --seat-scale: 0.43;
+  .cinema-seat--position-1, .cinema-seat--position-2, .cinema-seat--position-10 {
+    --seat-scale: 0.55;
   }
-  .cinema-seat--position-7, .cinema-seat--position-8, .cinema-seat--position-9, .cinema-seat--position-10, .cinema-seat--position-11, .cinema-seat--position-12 {
-    --seat-scale: 0.56;
+  .cinema-seat--position-3, .cinema-seat--position-4, .cinema-seat--position-5 {
+    --seat-scale: 0.62;
   }
-  .cinema-seat--position-1, .cinema-seat--position-7 {
-    left: 8%;
+  .cinema-seat--position-6, .cinema-seat--position-7, .cinema-seat--position-8 {
+    --seat-scale: 0.69;
   }
-  .cinema-seat--position-2, .cinema-seat--position-8 {
-    left: 25%;
-  }
-  .cinema-seat--position-3, .cinema-seat--position-9 {
-    left: 42%;
-  }
-  .cinema-seat--position-4, .cinema-seat--position-10 {
-    left: 58%;
-  }
-  .cinema-seat--position-5, .cinema-seat--position-11 {
-    left: 75%;
-  }
-  .cinema-seat--position-6, .cinema-seat--position-12 {
-    left: 92%;
+  .cinema-seat--position-9, .cinema-seat--position-11, .cinema-seat--position-12 {
+    --seat-scale: 0.76;
   }
   .lobby-actions {
     grid-template-columns: 1fr;
