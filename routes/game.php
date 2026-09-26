@@ -50,9 +50,9 @@ Route::get('clock', [ClockController::class, 'show'])
 // `serve_token` de la manche, jamais par un chemin. URL signée RELATIVE
 // produite par le serveur (`ServeUrl`), jamais reconstruite par Wayfinder :
 // 403 sur une signature invalide ou expirée, 429 au-delà du débit, 404
-// uniforme sinon. Posée par L60-5, que `ServeUrl` exige ; le prédicat de
-// service (`ServeGuard`) y est branché par L60-8, et d'ici là la route
-// refuse tout.
+// uniforme sinon — jeton inconnu, prédicat de service (`ServeGuard` :
+// catalogue, temps, appartenance du demandeur) faux ou fichier absent. En
+// lecture seule : aucune transition, aucun rattrapage, aucun `seen_frame`.
 Route::get('f/{serveToken}', [FrameServeController::class, 'show'])
     ->name('frame.serve')
     ->where('serveToken', '[0-9a-f]{32}')

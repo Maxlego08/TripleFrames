@@ -27,7 +27,7 @@ use LogicException;
  * — `tier_grace_ms` relu sur la partie (colonne figée au lancement, jamais la
  * configuration), `R` sur son instantané de réglages, la marge dans
  * {@see EngineConstants}. L'expiration borne la RÉUTILISATION d'une URL ;
- * c'est `ServeGuard`, à chaque service, qui borne l'ACCÈS (C8 § 4.4) :
+ * c'est {@see ServeGuard}, à chaque service, qui borne l'ACCÈS (C8 § 4.4) :
  * une URL transmise avant sa garde (`round.scheduled`, `tier.opened.next`)
  * est refusée jusqu'à `Tᵢ − preload_lead_ms` (résidu nommé, § 18).
  *
@@ -38,8 +38,8 @@ use LogicException;
  * **Livrée par L60-5**, avant le reste du service d'image (L60-8) : la
  * programmation d'une manche émet `round.scheduled`, dont la charge porte
  * l'URL du palier 1 (§ 11.3) ; la route nommée `frame.serve` est posée avec
- * elle, et refuse tout ({@see FrameServeController}) jusqu'à ce que L60-8 y
- * branche `ServeGuard`.
+ * elle, et {@see FrameServeController} ne sert ses octets qu'à travers
+ * {@see ServeGuard} (L60-8).
  */
 final class ServeUrl
 {

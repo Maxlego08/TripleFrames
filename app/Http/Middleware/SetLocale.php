@@ -104,9 +104,20 @@ class SetLocale
             : [Translations::fallback(), false];
     }
 
-    /** Niveau 1. */
+    /**
+     * Niveau 1 — sur une requête qui porte une session, seulement. Sans elle
+     * (`clock.show`, `frame.serve`, page d'erreur d'une URL inconnue), le
+     * guard retomberait sur le cookie « se souvenir de moi » : lecture de
+     * `users`, régénération d'une session (un DELETE sur `sessions`) et
+     * `Login` émis à chaque requête, sur des routes en lecture seule (spec 60
+     * § 7.3, contrat C8 § 4.5).
+     */
     protected function fromUser(Request $request): ?Locale
     {
+        if (! $request->hasSession()) {
+            return null;
+        }
+
         $user = $request->user();
 
         return $user instanceof User ? $user->locale : null;

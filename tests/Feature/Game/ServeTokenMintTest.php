@@ -203,8 +203,9 @@ test('le jeton du palier 1 est frappé à la programmation, celui du palier i à
         ->and($payload['image']['fetchNotBefore'])->toBe(WireTime::iso($startsAt->subMilliseconds($game->preload_lead_ms)));
 
     // L'URL : relative, adressée par le jeton de la MANCHE, signée, expirant
-    // à la fin prévue de la révélation plus la marge (§ 7.5) ; la route
-    // existe et ne sert rien sans son prédicat de service (L60-8).
+    // à la fin prévue de la révélation plus la marge (§ 7.5). Une requête
+    // sans `player_token` ne désigne aucun siège : le prédicat de service
+    // la refuse (C8 § 4.4, partie 3).
     $url = $payload['image']['url'];
     $expires = $startsAt->addMilliseconds(
         $settings->roundDuration() * 1000 + $game->tier_grace_ms + $settings->revealDuration * 1000
@@ -548,7 +549,7 @@ test('served_at vaut l\'instant théorique même quand le job est en retard', fu
 
 test('après N requêtes d\'image anticipées et aucune frontière franchie, served_at est nul et seen_frame est vide', function (): void {
     // Le siège présente son `player_token` comme le navigateur : c'est la
-    // requête que le prédicat de service autorisera (C8 § 2, membre de la
+    // requête que le prédicat de service autorise (C8 § 2, membre de la
     // manche), celle que vise la règle (10 § 7.4).
     $token = PlayerToken::mint(Locale::French);
     $game = EngineFixtures::game(EngineFixtures::settings());
@@ -567,17 +568,16 @@ test('après N requêtes d\'image anticipées et aucune frontière franchie, ser
     // N requêtes du palier 1 dans SA fenêtre de préchargement
     // `[T₁ − preload_lead_ms, T₁)`, bords compris, sans qu'aucune frontière
     // soit franchie : la première requête d'image d'un palier arrive
-    // jusqu'à `preload_lead_ms` avant son ouverture (10 § 7.4). Servie (200)
-    // une fois le prédicat branché (L60-8), refusée (404) d'ici là par la
-    // route fermée : dans les deux cas elle est en lecture seule et n'ouvre
-    // rien.
+    // jusqu'à `preload_lead_ms` avant son ouverture (10 § 7.4). Servie
+    // (200) : le siège est membre, la frame servable et la garde franchie —
+    // et pourtant en lecture seule, elle n'ouvre rien.
     foreach (range(1, $game->frames_per_round) as $request) {
         Date::setTestNow($windowOpens->addMilliseconds(intdiv(
             ($request - 1) * ($game->preload_lead_ms - 1),
             $game->frames_per_round - 1,
         )));
 
-        expect($this->get($url)->baseResponse->getStatusCode())->toBeIn([200, 404]);
+        expect($this->get($url)->baseResponse->getStatusCode())->toBe(200);
     }
 
     expect(Date::now()->equalTo($t1->subMillisecond()))->toBeTrue();

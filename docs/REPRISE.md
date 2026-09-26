@@ -522,7 +522,7 @@ Ensuite, à chaque session : **« Implémente l'étape suivante de l'ordre des l
 91. L60-6 — transitions de manche, pause → 77, 82, 89, 90 — ✅ livrée le 27/09
 92. L80-5 — podium, récapitulatif, faits (D25) → 69, 77, 81, 89, 91 — ✅ livrée le 27/09
 93. L60-7 — rattrapage, jobs de frontière, fin anticipée → 23, 76, 91 — ✅ livrée le 27/09
-94. L60-8 — service d'image `/f/{serveToken}` → 21, 40, 65, 81, 90
+94. L60-8 — service d'image `/f/{serveToken}` → 21, 40, 65, 81, 90 — ✅ livrée le 27/09
 95. L60-9 — client temps réel → 8, 39, 81, 83, 84, 85, 87
 96. L60-10 — prédicat « partie en cours », `game:reschedule` → 89, 91, 93
 97. L100-5 — drainage (D32), étapes 3 et 12 du hook → 11, 20, 96

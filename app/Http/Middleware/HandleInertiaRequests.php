@@ -55,8 +55,13 @@ class HandleInertiaRequests extends Middleware
         return [
             ...parent::share($request),
             'name' => config('app.name'),
+            // `share()` est évaluée à l'entrée du middleware, sur TOUTE route
+            // du groupe `web`. Sans session (`clock.show`, `frame.serve`),
+            // aucun compte n'est résolu : le guard retomberait sur le cookie
+            // « se souvenir de moi » et écrirait (régénération de session,
+            // `Login`) sur une route en lecture seule (spec 60 § 7.3).
             'auth' => [
-                'user' => $request->user(),
+                'user' => $request->hasSession() ? $request->user() : null,
             ],
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
 
