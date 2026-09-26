@@ -1,30 +1,47 @@
 <?php
 
+use App\Actions\Game\MintTierServeToken;
 use App\Enums\AdminActionRetention;
 use App\Enums\AnswerKeyKind;
 use App\Enums\ContentFlag;
+use App\Enums\GameMode;
+use App\Enums\GameStatus;
 use App\Enums\ImportSource;
 use App\Enums\Locale;
+use App\Enums\PlayerConnectionState;
 use App\Enums\ReviewDecision;
+use App\Enums\RoomStatus;
+use App\Enums\RoundStatus;
+use App\Enums\SettingPresetKey;
 use App\Enums\ThemeKind;
 use App\Enums\TmdbTagKind;
 use App\Enums\UserRole;
+use App\Jobs\Game\AdvanceRound;
 use App\Models\AdminAction;
 use App\Models\Alias;
 use App\Models\AnswerKey;
 use App\Models\Frame;
 use App\Models\FrameReview;
+use App\Models\Game;
+use App\Models\GamePlayer;
 use App\Models\Movie;
 use App\Models\MovieCertification;
 use App\Models\MovieProjection;
 use App\Models\MovieTheme;
 use App\Models\MovieTitle;
 use App\Models\MovieTmdbTag;
+use App\Models\Player;
+use App\Models\Room;
+use App\Models\Round;
+use App\Models\RoundTier;
 use App\Models\SettingPreset;
 use App\Models\Theme;
 use App\Models\User;
+use App\Settings\EngineConstants;
 use App\Settings\PlatformLimits;
+use App\Settings\RoomSettings;
 use App\Settings\RoomSettingsBounds;
+use App\Settings\SettingPresetCatalog;
 use App\Support\Curation\ExclusionGrid;
 use App\Support\Draw\DrawnRound;
 use App\Support\Draw\GameDrawer;
@@ -32,16 +49,25 @@ use App\Support\Draw\PoolQuery;
 use App\Support\Draw\PoolScope;
 use App\Support\Draw\SeededPrf;
 use App\Support\Frames\FrameStoragePrefix;
+use App\Support\Game\RoundStep;
+use App\Support\Realtime\WireTime;
 use App\ValueObjects\Catalog\FrameLevelCoverage;
 use Database\Factories\AnswerKeyFactory;
 use Database\Seeders\DatabaseSeeder;
 use Database\Seeders\DemoCatalogueSeeder;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
+use Illuminate\Support\Facades\Date;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
+use Symfony\Component\HttpFoundation\Response;
+use Tests\Support\Room\LobbyWrites;
+use Tests\Support\Room\SeatEntry;
 
 /**
- * **Exigence 4 du § 13.3** — le test qui prouve la chaîne des SEPT FAITS.
+ * **Exigence 4 du § 13.3** — la chaîne des SEPT FAITS, et la partie qu'elle
+ * rend possible.
  *
  * Le schéma conditionne une partie jouable à sept faits indépendants, dont deux
  * portent sur des octets réels sur disque. Chacun est ici son propre test, nommé
@@ -56,11 +82,19 @@ use Illuminate\Support\Facades\Storage;
  * réponses ; et les **variantes**, sans lesquelles le tirage de la spec 30 n'a
  * rien à départager.
  *
- * **Périmètre, et il est volontairement étroit.** Ce test se joue **au niveau
- * des données** — que le catalogue de démonstration seedé satisfait réellement la
- * chaîne. Il ne lance aucune partie, n'appelle aucune route et ne simule aucun
- * moteur : la transaction de lancement appartient à la spec 50, la
- * matérialisation à la spec 60.
+ * **Deux niveaux, et c'est voulu.** Les faits se jouent **au niveau des
+ * données** — que le catalogue de démonstration seedé satisfait réellement la
+ * chaîne : ils ne lancent aucune partie, n'appellent aucune route et ne
+ * simulent aucun moteur. Ils disent **lequel** a lâché ; aucun ne prouve que la
+ * chaîne TIENT. C'est le test de BOUT EN BOUT, en fin de fichier (lot L100-14,
+ * spec 100 § 8, règle 1), et lui seul, qui le prouve : il crée un salon par la
+ * route de l'hôte, aux réglages par défaut (M = 10, N = 3), y assoit
+ * `RoomSettingsBounds::MIN_CONNECTED_PLAYERS_TO_LAUNCH` joueurs par la route
+ * d'entrée, puis lance par la route de lancement — la transaction de la spec 50
+ * (`LaunchGame`, contrat C6), le tirage de la spec 30, la matérialisation et la
+ * programmation de la spec 60. Il ne JOUE pas la partie : les jobs sont simulés
+ * (`Queue::fake()`), et aucune redirection n'est suivie (la page du salon en
+ * partie est le lot L60-12).
  *
  * Le vivier est lu, depuis le lot L30-5, par **le** constructeur unique de la
  * spec 30, {@see PoolQuery} — jamais par un prédicat recopié ici, qui
@@ -920,4 +954,253 @@ it('EXIGENCE 2 — un film `playable()` sans curateur emprunte la voie de la cer
 
     $this->assertSame($curator->id, $verified->content_verified_by_id);
     $this->assertNotNull($verified->content_verified_at);
+});
+
+it('un salon créé sur le catalogue de démonstration peut lancer une partie de 10 manches', function () {
+    // BOUT EN BOUT (lot L100-14, spec 100 § 8, règle 1) : le seul test qui
+    // prouve que la chaîne des faits TIENT. Chaque geste passe par sa vraie
+    // route — création, entrée, page du salon, lancement —, sur le catalogue
+    // seedé par `beforeEach`, octets réels compris.
+    //
+    // Ni clé TMDB (vide par `phpunit.xml`) ni réseau : le garde global de
+    // `tests/Pest.php` (`Http::preventStrayRequests()`, posé avant ce fichier,
+    // seeding compris) fait lever toute requête sortante (§ 13.3 ; CLAUDE.md
+    // § 7, règle 6).
+
+    // La partie est lancée, jamais jouée : les jobs de frontière restent en
+    // file simulée, et le test lit ce que le lancement y a posé.
+    Queue::fake();
+
+    SeatEntry::isolateCookies();
+    $this->withoutVite();
+
+    // 1. La création, par la route de l'hôte : le salon naît TOUT DE SUITE,
+    //    aux réglages par défaut (spec 50 § 6.1).
+    $created = $this->post(route('room.store'), SeatEntry::form(SeatEntry::NICKNAME, SeatEntry::avatar(1)));
+    $room = Room::query()->sole();
+
+    $created->assertStatus(Response::HTTP_SEE_OTHER)
+        ->assertRedirect(route('room.show', $room))
+        ->assertSessionHasNoErrors();
+
+    $hostToken = SeatEntry::tokenFrom($created);
+    $settings = $room->settings;
+
+    $this->assertTrue(
+        $settings->equals(RoomSettings::defaults()),
+        'BOUT EN BOUT — la route de création ne pose pas les réglages par défaut : le salon de référence du '
+        .'§ 13.3 n’est pas celui qu’un hôte obtient.',
+    );
+    $this->assertTrue(
+        $settings->equals(SettingPresetCatalog::settingsFor(SettingPresetKey::Classic)),
+        'BOUT EN BOUT — les réglages par défaut ne sont plus ceux du preset par défaut du site : la partie '
+        .'de référence ne décrit plus le produit que le nom annonce.',
+    );
+    $this->assertSame(
+        DemoCatalogueSeeder::REFERENCE_ROUNDS,
+        $settings->roundsCount,
+        'BOUT EN BOUT — le salon créé ne compte pas les '.DemoCatalogueSeeder::REFERENCE_ROUNDS.' manches de la '
+        .'partie de référence du § 13.3.',
+    );
+    $this->assertSame(
+        DemoCatalogueSeeder::DEMO_FRAMES_PER_ROUND,
+        $settings->framesPerRound,
+        'BOUT EN BOUT — le salon créé ne joue pas au N de référence du § 13.3.',
+    );
+
+    // 2. Les autres sièges, par la route d'entrée, chacun sous son propre
+    //    jeton : aucun cookie n'est porté tant que l'hôte n'est pas revenu.
+    for ($seatNumber = 2; $seatNumber <= RoomSettingsBounds::MIN_CONNECTED_PLAYERS_TO_LAUNCH; $seatNumber++) {
+        $this->flushSession();
+
+        $this->post(route('room.join', $room), SeatEntry::form('Invitée '.$seatNumber, SeatEntry::avatar($seatNumber)))
+            ->assertStatus(Response::HTTP_SEE_OTHER)
+            ->assertRedirect(route('room.show', $room))
+            ->assertSessionHasNoErrors();
+    }
+
+    /** @var EloquentCollection<int, Player> $seats */
+    $seats = Player::query()
+        ->whereBelongsTo($room)
+        ->where('connection_state', PlayerConnectionState::Connected->value)
+        ->orderBy('id')
+        ->get();
+
+    $this->assertCount(
+        RoomSettingsBounds::MIN_CONNECTED_PLAYERS_TO_LAUNCH,
+        $seats,
+        'BOUT EN BOUT — les routes de création et d’entrée n’ont pas assis le seuil de joueurs connectés que '
+        .'le lancement exige.',
+    );
+
+    // 3. L'hôte revient par le lien : la page du salon lui donne la main et
+    //    le jeton d'onglet que porte toute écriture du lobby (spec 60 § 12.7).
+    $this->flushSession();
+    LobbyWrites::actAs($this, $hostToken);
+
+    $page = $this->get(route('room.show', $room))->assertOk();
+    $seatToken = $page->inertiaProps('seatToken');
+
+    $this->assertTrue($page->inertiaProps('state.self.isHost'), 'BOUT EN BOUT — le créateur n’est pas l’hôte.');
+    $this->assertIsString($seatToken, 'BOUT EN BOUT — la page du salon ne rend aucun jeton d’onglet.');
+
+    // Le vivier que la garde rejouera sous le verrou : même constructeur, même
+    // portée — celle du salon, jamais celle du catalogue.
+    $works = app(PoolQuery::class)->countWorks(PoolScope::forRoom($room->refresh(), $settings, Date::now()->toImmutable()));
+
+    // 10 § 13.3, alinéa 2 : sur la portée du SALON, le vivier porte la partie
+    // ET sa réserve de remplacement — min(M + marge, vivier) = M + marge.
+    $this->assertGreaterThanOrEqual(
+        DemoCatalogueSeeder::REFERENCE_ROUNDS + PlatformLimits::drawSubstituteMargin(),
+        $works,
+        "BOUT EN BOUT — le vivier du salon ne compte que {$works} œuvres : la réserve de remplacement ne tient "
+        .'pas sur le catalogue de démonstration (10 § 13.3).',
+    );
+
+    $expectedRounds = min($settings->roundsCount + PlatformLimits::drawSubstituteMargin(), $works);
+
+    // 4. Le lancement, par la route, depuis l'onglet actif de l'hôte.
+    LobbyWrites::send($this, 'POST', route('room.launch', $room), $room, [], $seatToken)
+        ->assertStatus(Response::HTTP_SEE_OTHER)
+        ->assertRedirect(route('room.show', $room))
+        ->assertSessionHasNoErrors();
+
+    $game = Game::query()->sole();
+    $room->refresh();
+
+    $this->assertSame(RoomStatus::Playing, $room->status, 'BOUT EN BOUT — le salon lancé n’est pas en partie.');
+    $this->assertSame(GameMode::Multiplayer, $game->mode);
+    $this->assertSame(GameStatus::Running, $game->status);
+    $this->assertSame($settings->roundsCount, $game->rounds_count);
+    $this->assertSame($settings->framesPerRound, $game->frames_per_round);
+    $this->assertTrue(
+        $game->settings_snapshot->equals($settings),
+        'BOUT EN BOUT — la partie n’a pas figé les réglages du salon.',
+    );
+    $this->assertSame(
+        $works,
+        $game->draw_pool_size,
+        "BOUT EN BOUT — la garde de lancement a compté {$game->draw_pool_size} œuvres là où le vivier du salon "
+        ."en compte {$works} : la garde et le lobby ne lisent plus le même vivier.",
+    );
+
+    // Une participation par siège connecté, dans l'ordre d'arrivée.
+    $this->assertSame(
+        $seats->modelKeys(),
+        GamePlayer::query()->whereBelongsTo($game)->orderBy('id')->pluck('player_id')->all(),
+        'BOUT EN BOUT — les participations ne sont pas celles des sièges assis par les routes.',
+    );
+
+    // min(M + marge, vivier) manches : M numérotées, puis la réserve, sans
+    // numéro, chacune sur une œuvre distincte du vivier.
+    /** @var EloquentCollection<int, Round> $rounds */
+    $rounds = Round::query()->whereBelongsTo($game)->orderBy('sequence_index')->get();
+
+    $this->assertCount(
+        $expectedRounds,
+        $rounds,
+        "BOUT EN BOUT — le lancement a matérialisé {$rounds->count()} manches au lieu de min(M + marge, vivier) "
+        ."= {$expectedRounds} : le tirage ne matérialise pas le compte que la garde a mesuré.",
+    );
+    $this->assertSame(range(1, $expectedRounds), $rounds->pluck('sequence_index')->all());
+    $this->assertSame(
+        [...range(1, $settings->roundsCount), ...array_fill(0, $expectedRounds - $settings->roundsCount, null)],
+        $rounds->pluck('round_number')->all(),
+        'BOUT EN BOUT — le tirage ne numérote pas exactement M manches : la réserve se confondrait avec la partie.',
+    );
+    $this->assertSame($expectedRounds, $rounds->pluck('movie_id')->unique()->count());
+    $this->assertSame(
+        [],
+        array_values(array_diff(
+            $rounds->pluck('movie_id')->all(),
+            demoPool($settings->framesPerRound)->get()->modelKeys(),
+        )),
+        'BOUT EN BOUT — une manche porte un film hors du vivier.',
+    );
+
+    // Chaque manche porte ses N paliers : niveau nominal, variante servable de
+    // son film, durée, décalage et valeur figés depuis les réglages (C6 § 5).
+    $levels = FrameLevelCoverage::nominal($settings->framesPerRound);
+
+    foreach ($rounds as $round) {
+        $this->assertSame(RoundStatus::Pending, $round->status);
+        $this->assertSame($settings->roundDuration() * 1000, $round->duration_ms);
+
+        /** @var EloquentCollection<int, RoundTier> $tiers */
+        $tiers = RoundTier::query()->where('round_id', $round->id)->orderBy('tier_index')->get();
+
+        $this->assertSame(range(1, $settings->framesPerRound), $tiers->pluck('tier_index')->all());
+        $this->assertSame(
+            $levels,
+            $tiers->pluck('frame_level')->all(),
+            "BOUT EN BOUT — la manche {$round->sequence_index} ne sert pas les niveaux nominaux de N = "
+            ."{$settings->framesPerRound} : le catalogue de démonstration est tombé dans le repli de niveau.",
+        );
+
+        foreach ($tiers as $tier) {
+            $frame = Frame::query()->findOrFail($tier->frame_id);
+
+            $this->assertSame($round->movie_id, $frame->movie_id);
+            $this->assertTrue(
+                $frame->isServable(),
+                "BOUT EN BOUT — le palier {$tier->tier_index} de la manche {$round->sequence_index} porte la "
+                ."frame #{$frame->id}, qui n’est pas servable.",
+            );
+            $this->assertSame($settings->tierDurations[$tier->tier_index - 1] * 1000, $tier->duration_ms);
+            $this->assertSame($settings->tierStartOffsetMs($tier->tier_index), $tier->starts_at_offset_ms);
+            $this->assertSame($settings->tierPoints[$tier->tier_index - 1], $tier->points);
+        }
+    }
+
+    // La manche 1, seule programmée, après le décompte de lancement.
+    $first = $rounds->firstOrFail();
+
+    $this->assertSame(
+        $game->started_at->addMilliseconds(EngineConstants::launchCountdownMs())->format('Y-m-d H:i:s.v'),
+        $first->started_at?->format('Y-m-d H:i:s.v'),
+        'BOUT EN BOUT — la manche 1 n’est pas programmée au terme du décompte de lancement.',
+    );
+    $this->assertSame([], $rounds->slice(1)->pluck('started_at')->filter()->all());
+
+    // Le jeton du palier 1 de la manche 1, frappé sur la variante TIRÉE : sans
+    // octets réels sur le disque, la frappe aurait substitué une variante, ou
+    // annulé la manche.
+    $firstTier = RoundTier::query()->where('round_id', $first->id)->where('tier_index', 1)->sole();
+
+    $this->assertMatchesRegularExpression(
+        '/^[0-9a-f]{'.(MintTierServeToken::TOKEN_BYTES * 2).'}$/',
+        (string) $firstTier->serve_token,
+        'BOUT EN BOUT — le palier 1 de la manche 1 n’a pas de jeton d’image : la première image de la partie '
+        .'n’est adressable par aucun joueur.',
+    );
+    $this->assertSame(
+        $firstTier->frame_id,
+        $firstTier->served_frame_id,
+        'BOUT EN BOUT — la frappe du palier 1 a substitué la variante tirée : son fichier manque sur le disque '
+        .'`frames`, ou la variante n’est plus servable.',
+    );
+    $this->assertNull($firstTier->substitution_reason);
+    $this->assertTrue(
+        Frame::query()->findOrFail($firstTier->served_frame_id)->hasGameFile(),
+        'BOUT EN BOUT — la variante servie au palier 1 n’a pas son dérivé de jeu sur le disque `frames`.',
+    );
+
+    // Un cran à l'avance, jamais plus : aucun autre palier n'est frappé.
+    $this->assertSame(
+        1,
+        RoundTier::query()->whereIn('round_id', $rounds->modelKeys())->whereNotNull('serve_token')->count(),
+        'BOUT EN BOUT — un palier autre que le palier 1 de la manche 1 a déjà son jeton d’image.',
+    );
+
+    // Lancée, jamais jouée : un seul job de frontière — l'ouverture du palier
+    // 1 de la manche 1, à son instant —, et aucune participation de manche
+    // avant T₁.
+    Queue::assertPushed(AdvanceRound::class, 1);
+    Queue::assertPushedOn('game', AdvanceRound::class, fn (AdvanceRound $job): bool => $job->gameId === $game->id
+        && $job->roundId === $first->id
+        && $job->step === RoundStep::OpenTier
+        && $job->tierIndex === 1
+        && $job->dueAt === WireTime::iso($first->started_at ?? $game->started_at));
+
+    $this->assertSame(0, DB::table('round_player')->count());
 });
