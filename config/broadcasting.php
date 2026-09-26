@@ -53,6 +53,17 @@ return [
             'client_options' => [
                 // Guzzle client options: https://docs.guzzlephp.org/en/stable/request-options.html
             ],
+            // Ce que le NAVIGATEUR vise, lu au runtime par la prop partagée
+            // `realtime` (spec 60 § 10.5, contrat C7 § 2.6), jamais figé au
+            // build par une variable `VITE_REVERB_*` (A-27) : un artefact
+            // construit en CI se promeut sans rebuild. Vide = celui de
+            // `window.location` (spec 100 § 10.10). À ne pas confondre avec
+            // `options`, publication SERVEUR vers Reverb en boucle locale.
+            'client' => [
+                'host' => env('REVERB_CLIENT_HOST'),
+                'port' => env('REVERB_CLIENT_PORT'),
+                'scheme' => env('REVERB_CLIENT_SCHEME'),
+            ],
         ],
 
         'mercure' => [

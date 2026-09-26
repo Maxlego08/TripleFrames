@@ -35,4 +35,8 @@ return [
         'tier_opened' => 'New frame, :index of :total.',
     ],
 
+    'errors' => [
+        'seat_superseded' => 'This tab is no longer in control: you are playing in another tab. Reload the page to take over here.',
+    ],
+
 ];

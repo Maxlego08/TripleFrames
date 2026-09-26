@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\Locale;
 use App\Events\Game\GameEnded;
 use App\Events\Game\GameLaunched;
 use App\Events\Game\GamePaused;
@@ -21,6 +22,7 @@ use App\Events\Game\SeatSuperseded;
 use App\Events\Game\SeatUpdated;
 use App\Events\Game\SettingsChanged;
 use App\Events\Game\TierOpened;
+use App\Http\Middleware\EnsureActiveSeat;
 use App\Models\Frame;
 use App\Models\Game;
 use App\Models\Player;
@@ -28,9 +30,13 @@ use App\Models\Room;
 use App\Models\Round;
 use App\Models\RoundChoiceSet;
 use App\Models\RoundTier;
+use App\Support\Game\GameStateBuilder;
+use App\Support\Identity\PlayerToken;
+use App\Support\Identity\PlayerTokenCookie;
 use App\Support\Realtime\ChannelNames;
 use App\Support\Realtime\GameRef;
 use App\Support\Realtime\GameWire;
+use App\Support\Realtime\WirePayload;
 use App\Support\Realtime\WireTime;
 use Carbon\CarbonImmutable;
 use Illuminate\Broadcasting\BroadcastException;
@@ -60,7 +66,9 @@ use Tests\Support\Realtime\WireScene;
 | enveloppe, identifiants internes, liste close, transaction annulée,
 | diffusion en échec. Les autres intitulés du fichier (60 § 20) arrivent avec
 | leurs émetteurs (L60-6, L60-7, L60-11) ; « ni aucun paquet » s'éprouve sur
-| `GameStatePacket` dès L60-4.
+| `GameStatePacket` : branche sans partie dès L60-4 (lobby et solo, par
+| `room.state` et par le constructeur), branche de partie en L60-12
+| (passation obligatoire, E83-3).
 |
 */
 
@@ -252,6 +260,55 @@ it("aucune charge d'événement ni aucun paquet ne contient de clé d'identifian
         foreach ($never as $value) {
             expect($sent['json'])->not->toContain($value);
         }
+    }
+
+    // « Ni aucun paquet » — branche sans partie (L60-4) : le paquet de lobby
+    // servi par `room.state` à un siège dont l'onglet tient la main, et le
+    // paquet solo. Mêmes clés interdites, même garde, et aucune des valeurs
+    // qui ne partent jamais — `active_seat_token` compris, que l'onglet
+    // présente pourtant.
+    $lobby = Room::factory()->create();
+    $token = PlayerToken::mint(Locale::French);
+    $seat = Player::factory()->create(['room_id' => $lobby->id, 'player_token_hash' => $token->hash()]);
+    Player::factory()->count(2)->create(['room_id' => $lobby->id]);
+    Player::factory()->kicked()->create(['room_id' => $lobby->id]);
+    $lobby->forceFill(['host_player_id' => $seat->id])->save();
+
+    $served = $this->withCredentials()
+        ->withCookie(PlayerTokenCookie::NAME, json_encode($token->toClaims(), JSON_THROW_ON_ERROR))
+        ->getJson(route('room.state', ['room' => $lobby->room_code]), [EnsureActiveSeat::HEADER => (string) $seat->active_seat_token])
+        ->assertOk();
+
+    expect($served->json('self.seatActive'))->toBeTrue();
+
+    $packets = [
+        'lobby' => ['payload' => $served->json(), 'json' => (string) $served->getContent()],
+    ];
+
+    $solo = GameStateBuilder::build(null, Player::factory()->solo()->create(), Date::now()->toImmutable(), null);
+    $packets['solo'] = ['payload' => $solo, 'json' => json_encode($solo, JSON_THROW_ON_ERROR)];
+
+    $never = array_values(array_filter([
+        ...$never,
+        ...Player::query()->pluck('player_token_hash')->all(),
+        ...Player::query()->pluck('active_seat_token')->all(),
+    ], static fn (mixed $value): bool => is_string($value) && $value !== ''));
+
+    foreach ($packets as $label => $packet) {
+        WirePayload::assertSafe($packet['payload'], "paquet {$label}");
+
+        foreach (eventPayloadKeys($packet['payload']) as $key) {
+            expect(in_array($key, $forbidden, true))->toBeFalse("[paquet {$label}] porte la clé interne [{$key}].");
+            expect(preg_match('/^id$|_id$|(?<!public|Public)Id$/', $key))->toBe(0, "[paquet {$label}] porte la clé d'identifiant [{$key}].");
+        }
+
+        foreach ($never as $value) {
+            expect($packet['json'])->not->toContain($value);
+        }
+
+        // Ni l'identifiant du salon, ni son code : le canal passe par la clé
+        // HMAC (E10-31).
+        expect($packet['json'])->not->toContain('"'.$lobby->room_code.'"');
     }
 
     // La QCM ciblé porte ses quatre chaînes, jamais `choice_1` en position

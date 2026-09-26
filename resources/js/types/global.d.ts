@@ -1,6 +1,7 @@
 import type { FrameFormat } from '@/components/game/game-frame';
 import type { LocaleOption } from '@/lib/i18n';
 import type { Auth } from '@/types/auth';
+import type { RealtimeConfig } from '@/types/game-wire';
 import type { TranslationMessages } from '@/types/translations';
 
 declare module 'react' {
@@ -30,6 +31,14 @@ declare module '@inertiajs/core' {
              * `--aspect-frame` (R-37).
              */
             frameFormat: FrameFormat;
+            /**
+             * Configuration du client temps réel (`RealtimeClientConfig`,
+             * spec 60 § 10.5) : clé PUBLIQUE de Reverb, hôte, port et schéma
+             * visés (nuls = `window.location`), cadence du battement et
+             * échantillons d'horloge. Lue au runtime par `lib/game/echo.ts`,
+             * jamais depuis une variable figée au build.
+             */
+            realtime: RealtimeConfig;
             /**
              * Code de la locale active, ex. `'fr'`. Résolu côté serveur par
              * `SetLocale` avant que les props partagées soient construites.

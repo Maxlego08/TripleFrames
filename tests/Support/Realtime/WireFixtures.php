@@ -28,7 +28,6 @@ use App\Events\Game\SeatUpdated;
 use App\Events\Game\SettingsChanged;
 use App\Events\Game\TierOpened;
 use App\Models\Game;
-use App\Models\GamePlayer;
 use App\Models\Movie;
 use App\Models\Player;
 use App\Models\Room;
@@ -38,7 +37,7 @@ use App\Models\RoundPlayer;
 use App\Models\RoundTier;
 use App\Settings\EngineConstants;
 use App\Support\Answers\ChoicesPresenter;
-use App\Support\Identity\PlayerIdentity;
+use App\Support\Game\SeatViewPresenter;
 use App\Support\Realtime\WireTime;
 use App\Support\Room\RoomSettingsPresenter;
 use App\Support\Scoring\Scoreboard;
@@ -55,7 +54,8 @@ use Tests\Support\Scoring\ScoringFixtures;
  * garde d'identifiants internes sur ce qui part vraiment.
  *
  * Les blocs dont le producteur existe déjà viennent de lui :
- * `PlayerIdentity` (C5), `TierWindow::fromRoundTier()` et `Scoreboard` (C13),
+ * `SeatViewPresenter` (C7, sur `PlayerIdentity` de C5),
+ * `TierWindow::fromRoundTier()` et `Scoreboard` (C13),
  * `ChoicesPresenter` (C11), `RoomSettingsPresenter` (C0). Les autres —
  * `RevealMovie` (L60-6), `Podium` (L80-5), l'URL signée d'image (L60-8) — sont
  * composés à la main à la forme de leur type client, en attendant leur lot.
@@ -190,50 +190,31 @@ final class WireFixtures
     }
 
     /**
-     * `SeatView` d'un siège au lobby : identité courante (C5) et état de siège.
+     * `SeatView` d'un siège au lobby, par son producteur
+     * ({@see SeatViewPresenter::lobby()}) : identité courante (C5) et état de
+     * siège, relus en base.
      *
      * @return array<string, mixed>
      */
     public static function lobbySeatView(Room $room, Player $seat): array
     {
-        $seat = Player::query()->findOrFail($seat->id);
+        $room = Room::query()->findOrFail($room->id);
 
-        return [
-            ...PlayerIdentity::fromSeat($seat)->toArray(),
-            'isHost' => $room->host_player_id === $seat->id,
-            'connection' => $seat->connection_state->value,
-            'kicked' => $seat->kicked_at !== null,
-            'firstRoundNumber' => null,
-        ];
+        return SeatViewPresenter::lobby(Player::query()->findOrFail($seat->id), $room->host_player_id);
     }
 
     /**
-     * `SeatView` des sièges d'une partie, par `game_player.id` croissant :
-     * identité GELÉE (C5) et état de siège.
+     * `SeatView` des sièges d'une partie, par `game_player.id` croissant, par
+     * leur producteur ({@see SeatViewPresenter::gameSeats()}) : identité
+     * GELÉE (C5) et état de siège.
      *
      * @return list<array<string, mixed>>
      */
     public static function seatViews(Game $game, Room $room): array
     {
-        $views = [];
+        $room = Room::query()->findOrFail($room->id);
 
-        $participations = GamePlayer::query()
-            ->whereBelongsTo($game)
-            ->with('player:'.implode(',', [...PlayerIdentity::FROZEN_SEAT_COLUMNS, 'connection_state', 'kicked_at']))
-            ->orderBy('id')
-            ->get();
-
-        foreach ($participations as $participation) {
-            $views[] = [
-                ...PlayerIdentity::fromGamePlayer($participation)->toArray(),
-                'isHost' => $room->host_player_id === $participation->player_id,
-                'connection' => $participation->player->connection_state->value,
-                'kicked' => $participation->player->kicked_at !== null,
-                'firstRoundNumber' => $participation->first_round_number,
-            ];
-        }
-
-        return $views;
+        return SeatViewPresenter::gameSeats($game, $room->host_player_id);
     }
 
     /**

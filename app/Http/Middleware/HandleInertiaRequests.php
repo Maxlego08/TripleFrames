@@ -8,6 +8,7 @@ use App\Support\I18n\LangVersion;
 use App\Support\I18n\TranslationDomains;
 use App\Support\I18n\Translations;
 use App\Support\Identity\AccountSwitches;
+use App\Support\Realtime\RealtimeClientConfig;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\App;
 use Inertia\Middleware;
@@ -75,6 +76,15 @@ class HandleInertiaRequests extends Middleware
                 'width' => FrameGeometry::GAME_WIDTH,
                 'height' => FrameGeometry::GAME_HEIGHT,
             ],
+
+            // Configuration du client temps réel (spec 60 § 10.5, contrat C7
+            // § 2.6) : clé PUBLIQUE de Reverb, hôte, port et schéma visés par
+            // le navigateur (nuls = `window.location`), cadence du battement
+            // et échantillons d'horloge. Lue au runtime, jamais figée au build
+            // (A-27) ; identique pour tous, sans aucune donnée de partie.
+            // Closure : un rechargement partiel qui ne la demande pas ne la
+            // calcule pas.
+            'realtime' => fn (): array => RealtimeClientConfig::toArray(),
 
             // Les trois props d'i18n sont des closures : `share()` est appelée
             // à l'entrée du middleware Inertia, donc AVANT les middlewares de

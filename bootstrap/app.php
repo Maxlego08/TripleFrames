@@ -2,6 +2,7 @@
 
 use App\Http\Middleware\CaptureReceptionInstant;
 use App\Http\Middleware\EnforceAccountSwitches;
+use App\Http\Middleware\EnsureActiveSeat;
 use App\Http\Middleware\EnsurePrivilegedTwoFactor;
 use App\Http\Middleware\EnsureProbeToken;
 use App\Http\Middleware\EnsureUserHasRole;
@@ -19,6 +20,7 @@ use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Middleware\SubstituteBindings;
+use Illuminate\Routing\Middleware\ThrottleRequests;
 use Illuminate\Support\Facades\Route;
 use Inertia\ExceptionResponse;
 use Inertia\Inertia;
@@ -81,6 +83,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'admin.2fa' => EnsurePrivilegedTwoFactor::class,
             'admin.locale' => ForceAdminLocale::class,
             'role' => EnsureUserHasRole::class,
+            'seat.active' => EnsureActiveSeat::class,
             'translations' => SelectTranslationDomains::class,
         ]);
 
@@ -108,6 +111,24 @@ return Application::configure(basePath: dirname(__DIR__))
         // substitution. Les ajouts « avant » s'appliquent dans l'ordre de
         // déclaration : `role`, puis `admin.2fa`, puis `SubstituteBindings`.
         $middleware->prependToPriorityList(SubstituteBindings::class, EnsurePrivilegedTwoFactor::class);
+
+        // `SetLocale`, puis `seat.active`, AVANT tout limiteur nommé (spec 70
+        // § 8, spec 60 § 10.2), dans cet ordre de déclaration — les ajouts
+        // « avant » s'appliquent dans l'ordre où ils sont déclarés. La pile
+        // réelle d'une écriture de jeu devient `…, SetLocale, EnsureActiveSeat,
+        // ThrottleRequests, SubstituteBindings, …`. Sans ces deux rangs,
+        // Laravel trierait `ThrottleRequests` avant tout middleware absent de
+        // sa liste de priorité :
+        // - le limiteur `answer` de 70, clé sur le SIÈGE, ne verrait jamais le
+        //   siège que `seat.active` résout, donc aucune cadence ;
+        // - un 429 (`game-read`, `game-write`, `frame-serve`, `answer`)
+        //   sortirait dans `APP_LOCALE`, contre la règle 4.
+        // `SetLocale` ne dépend d'aucune liaison de route (utilisateur, cookie
+        // `locale`, revendication du `player_token`). Conséquence voulue pour
+        // `seat.active` : il s'exécute AVANT la liaison implicite et lit
+        // `{room}` et `{player}` comme paramètres bruts.
+        $middleware->prependToPriorityList(ThrottleRequests::class, SetLocale::class);
+        $middleware->prependToPriorityList(ThrottleRequests::class, EnsureActiveSeat::class);
 
         // `SetLocale` passe AVANT `HandleInertiaRequests` : les props partagées
         // doivent déjà connaître la locale quand elles sont construites.

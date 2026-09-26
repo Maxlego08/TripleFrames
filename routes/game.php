@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Game\ClockController;
+use App\Http\Controllers\Game\RoomStateController;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
 use Illuminate\Session\Middleware\StartSession;
@@ -40,3 +41,12 @@ Route::get('clock', [ClockController::class, 'show'])
         PreventRequestForgery::class,
         AddQueuedCookiesToResponse::class,
     ]);
+
+// Resynchronisation d'un siège de salon (§ 12) : le paquet `GameStatePacket`,
+// JSON à destinataire unique. Une LECTURE : ni `seat.active` — l'onglet
+// supplanté doit pouvoir y lire `seatActive: false` (§ 12.7) —, ni frappe de
+// jeton d'onglet. `translations:game,room,legal` comme toute route GET joueur
+// du moteur (contrat C15 § 2.3).
+Route::get('r/{room}/state', [RoomStateController::class, 'show'])
+    ->name('room.state')
+    ->middleware(['translations:game,room,legal', 'throttle:game-read']);

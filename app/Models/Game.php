@@ -12,7 +12,9 @@ use Database\Factories\GameFactory;
 use Illuminate\Database\Eloquent\Attributes\DateFormat;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
+use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Attributes\Table;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -112,6 +114,28 @@ class Game extends Model
             'total_paused_ms' => 'integer',
             'ended_at' => 'datetime',
         ];
+    }
+
+    /**
+     * Partie **en cours** — prédicat propriété de la spec 60 (§ 17.1, contrat
+     * C17, D32 du 23/09) : `ended_at IS NULL AND status IN ('running',
+     * 'paused')`, **solo compris**. Servi par `game_ended_idx (ended_at)`.
+     *
+     * C'est la « partie courante » d'un siège que `seat.active` met en mémoire
+     * (§ 10.2) et que le drainage compte (`GamesInProgress`, L60-10). Un salon
+     * au lobby n'en a aucune. L'invariant `ended_at IS NOT NULL` ⇔ statut
+     * terminal (`FinalizeGame`, seul écrivain) rend les deux clauses
+     * redondantes sur une base saine ; elles sont gardées toutes deux, à la
+     * lettre du prédicat, pour qu'une ligne incohérente ne compte jamais comme
+     * une partie en cours.
+     *
+     * @param  Builder<static>  $query
+     */
+    #[Scope]
+    protected function inProgress(Builder $query): void
+    {
+        $query->whereNull('ended_at')
+            ->whereIn('status', [GameStatus::Running->value, GameStatus::Paused->value]);
     }
 
     /**

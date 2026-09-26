@@ -26,4 +26,8 @@ return [
         'tier_opened' => 'Nouvelle image, :index sur :total.',
     ],
 
+    'errors' => [
+        'seat_superseded' => 'Cet onglet n’a plus la main : vous jouez dans un autre onglet. Rechargez la page pour la reprendre ici.',
+    ],
+
 ];

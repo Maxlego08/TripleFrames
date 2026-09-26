@@ -1477,6 +1477,7 @@ export type TranslationKey =
     | 'game.a11y.round_ended'
     | 'game.a11y.seconds_left'
     | 'game.a11y.tier_opened'
+    | 'game.errors.seat_superseded'
     | 'game.frame.alt'
     | 'game.frame.loading'
     | 'game.frame.unavailable'
