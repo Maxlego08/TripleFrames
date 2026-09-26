@@ -26,6 +26,14 @@ return [
         'tier_opened' => 'Nouvelle image, :index sur :total.',
     ],
 
+    // Spec 60 § 12.7 et § 13.4 (lot L60-9) : lecture seule d’un onglet
+    // supplanté par un autre onglet du même siège (`ReadOnlyNotice`), et
+    // expulsion par l’hôte, avant le retour à `room.show`.
+    'seat' => [
+        'superseded' => 'Vous jouez désormais dans un autre onglet : celui-ci n’affiche plus que la partie. Rechargez la page pour y reprendre la main.',
+        'kicked' => 'L’hôte vous a retiré du salon.',
+    ],
+
     'errors' => [
         'seat_superseded' => 'Cet onglet n’a plus la main : vous jouez dans un autre onglet. Rechargez la page pour la reprendre ici.',
     ],

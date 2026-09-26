@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\EnsureActiveSeat;
 use App\Support\Realtime\GameWire;
 use Tests\Support\I18n\FrontSource;
 
@@ -30,4 +31,14 @@ it('GAME_WIRE_VERSION côté TS égale GameWire::VERSION', function (): void {
 
     // Et l'enveloppe serveur porte bien cette constante.
     expect(GameWire::envelope(null, now()->toImmutable())['v'])->toBe(GameWire::VERSION);
+});
+
+it("le jeton d'onglet part côté TS sous l'en-tête que lit EnsureActiveSeat", function (): void {
+    // Ajout du lot L60-9 (60 § 12.7) : le magasin présente le jeton d'onglet
+    // sur toute requête ; un en-tête mal nommé ferait supplanter l'onglet
+    // par lui-même à chaque rechargement partiel.
+    $store = FrontSource::withoutComments((string) file_get_contents(resource_path('js/lib/game/store.ts')));
+
+    expect(preg_match("/export\s+const\s+SEAT_TOKEN_HEADER\s*=\s*'(?<header>[^']+)'\s*;/", $store, $constant))->toBe(1)
+        ->and($constant['header'])->toBe(EnsureActiveSeat::HEADER);
 });

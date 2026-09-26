@@ -62,6 +62,7 @@ use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
 use Tests\Support\Draw\PoolFixtures;
 use Tests\Support\Game\EngineFixtures;
+use Tests\Support\I18n\FrontSource;
 use Tests\Support\Realtime\RecordingBroadcaster;
 use Tests\Support\Realtime\RecordingJob;
 use Tests\Support\Realtime\WireFixtures;
@@ -82,8 +83,11 @@ use Tests\Support\Realtime\WireScene;
 | de révélation (`CloseRound`, `RevealRound`, par les transitions réelles) :
 | instants de clôture et de titres, `lang` de chaque titre. Celui de L60-7
 | porte sur la réémission de `round.scheduled` (« manche suivante »,
-| rattrapage). Les autres intitulés du fichier (60 § 20) arrivent avec leurs
-| émetteurs (L60-11) ; « ni aucun paquet » s'éprouve sur
+| rattrapage). La liste close s'éprouve aussi sur son miroir client (L60-9,
+| écart (i)) : l'union `GameEventName` et les charges de `types/game-wire.ts`,
+| et la répartition salon / siège des écoutes de `lib/game/echo.ts`. Les
+| autres intitulés du fichier (60 § 20) arrivent avec leurs émetteurs
+| (L60-11) ; « ni aucun paquet » s'éprouve sur
 | `GameStatePacket` : branche sans partie dès L60-4 (lobby et solo, par
 | `room.state` et par le constructeur), branche de partie en L60-12
 | (passation obligatoire, E83-3).
@@ -119,6 +123,69 @@ function eventPayloadClosedList(): array
         'seat.superseded' => [SeatSuperseded::class, 'seat', []],
         'seat.kicked' => [SeatKicked::class, 'seat', []],
     ];
+}
+
+/**
+ * Les littéraux d'une union TS de chaînes (`export type X = 'a' | 'b';`), dans
+ * l'ordre du fichier, commentaires retirés.
+ *
+ * @return list<string>
+ */
+function eventPayloadTsUnion(string $file, string $type): array
+{
+    $source = FrontSource::withoutComments((string) file_get_contents(resource_path($file)));
+
+    expect(preg_match('/export\s+type\s+'.$type.'\s*=([^;]+);/', $source, $union))->toBe(1, "Union {$type} introuvable dans {$file}.");
+    preg_match_all("/'([^']+)'/", $union[1], $literals);
+
+    return $literals[1];
+}
+
+/**
+ * Les éléments d'un tableau TS constant (`export const X = ['a', …]`).
+ *
+ * @return list<string>
+ */
+function eventPayloadTsArray(string $file, string $constant): array
+{
+    $source = FrontSource::withoutComments((string) file_get_contents(resource_path($file)));
+
+    expect(preg_match('/export\s+const\s+'.$constant.'\s*=\s*\[([^\]]*)\]/', $source, $array))->toBe(1, "Tableau {$constant} introuvable dans {$file}.");
+    preg_match_all("/'([^']+)'/", $array[1], $literals);
+
+    return $literals[1];
+}
+
+/**
+ * Les clés de premier niveau d'une interface TS écrites entre apostrophes
+ * (`'a.b': …;`), dans l'ordre.
+ *
+ * @return list<string>
+ */
+function eventPayloadTsInterfaceKeys(string $file, string $interface): array
+{
+    $source = FrontSource::withoutComments((string) file_get_contents(resource_path($file)));
+    $start = strpos($source, 'export interface '.$interface.' ');
+
+    expect($start)->not->toBeFalse("Interface {$interface} introuvable dans {$file}.");
+
+    $body = substr($source, (int) strpos($source, '{', (int) $start) + 1);
+    $keys = [];
+    $depth = 0;
+
+    foreach (preg_split('/\R/', $body) ?: [] as $line) {
+        if ($depth === 0 && preg_match("/^\s*'([^']+)'\s*:/", $line, $key) === 1) {
+            $keys[] = $key[1];
+        }
+
+        $depth += substr_count($line, '{') - substr_count($line, '}');
+
+        if ($depth < 0) {
+            break;
+        }
+    }
+
+    return $keys;
 }
 
 /**
@@ -468,6 +535,20 @@ it('la liste des événements diffusés est exactement la liste close du J1', fu
     // Seuls trois événements sont ciblés.
     expect(array_keys(array_filter($found, static fn (array $row): bool => $row[1] === 'seat')))
         ->toEqualCanonicalizing(['seat.choices', 'seat.superseded', 'seat.kicked']);
+
+    // Miroir client (L60-9, écart (i) du § 22 bis) : l'union `GameEventName`
+    // et les charges typées nomment exactement les dix-neuf, dans l'ordre de
+    // la liste close ; les écoutes d'Echo suivent le canal de chaque classe.
+    $closedList = eventPayloadClosedList();
+    $onChannel = static fn (string $channel): array => array_keys(array_filter(
+        $closedList,
+        static fn (array $row): bool => $row[1] === $channel,
+    ));
+
+    expect(eventPayloadTsUnion('js/types/game-wire.ts', 'GameEventName'))->toBe(array_keys($closedList))
+        ->and(eventPayloadTsInterfaceKeys('js/types/game-wire.ts', 'GameEventPayloads'))->toBe(array_keys($closedList))
+        ->and(eventPayloadTsArray('js/lib/game/echo.ts', 'ROOM_EVENTS'))->toBe($onChannel('room'))
+        ->and(eventPayloadTsArray('js/lib/game/echo.ts', 'SEAT_EVENTS'))->toBe($onChannel('seat'));
 
     // Deux bases, et le transport de 60 § 11.2 sur chacune.
     sort($bases);

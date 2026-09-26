@@ -1523,6 +1523,8 @@ export type TranslationKey =
     | 'game.score.gained'
     | 'game.score.points'
     | 'game.score.total'
+    | 'game.seat.kicked'
+    | 'game.seat.superseded'
     | 'legal.contact.description'
     | 'legal.contact.heading'
     | 'legal.contact.unavailable'

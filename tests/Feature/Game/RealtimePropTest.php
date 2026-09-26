@@ -4,10 +4,11 @@ use App\Models\User;
 use App\Settings\EngineConstants;
 use App\Support\I18n\TranslationDomains;
 use App\Support\Realtime\RealtimeClientConfig;
+use Tests\Support\I18n\FrontSource;
 
 /*
 |--------------------------------------------------------------------------
-| Prop partagée `realtime` — spec 60 § 10.5, contrat C7 § 2.6 (lot L60-4)
+| Prop partagée `realtime` — spec 60 § 10.5, contrat C7 § 2.6 (lots L60-4, L60-9)
 |--------------------------------------------------------------------------
 |
 | Ajout (aucun intitulé de la spec ne la prouve) : la configuration d'Echo
@@ -81,4 +82,48 @@ it('partage la configuration du client temps réel, lue au runtime et sans secre
 
         expect(RealtimeClientConfig::toArray())->toMatchArray(['host' => $host, 'port' => $port, 'scheme' => $scheme]);
     }
+});
+
+it('le client Echo se configure depuis la prop realtime, jamais depuis une variable VITE_REVERB ni configureEcho', function (): void {
+    // Ajout du lot L60-9 (60 § 10.5, A-27) : le seul module qui instancie
+    // Echo lit la prop partagée et l'emplacement de la page ; aucun fichier
+    // du client ne lit une variable figée au build, et `app.tsx` ne configure
+    // aucun Echo global (L60-1, `install:broadcasting` jamais lancé).
+    $echo = (string) file_get_contents(resource_path('js/lib/game/echo.ts'));
+
+    expect($echo)->toContain('new Echo(')
+        ->and($echo)->toContain("broadcaster: 'reverb'")
+        ->and($echo)->toContain('window.location')
+        ->and($echo)->toContain("enabledTransports: ['ws', 'wss']");
+
+    $files = new RecursiveIteratorIterator(new RecursiveDirectoryIterator(resource_path('js'), FilesystemIterator::SKIP_DOTS));
+    $echoInstances = [];
+    $buildTimeReads = [];
+    $globalEchoes = [];
+
+    foreach ($files as $file) {
+        if (! $file instanceof SplFileInfo || ! in_array($file->getExtension(), ['ts', 'tsx'], true)) {
+            continue;
+        }
+
+        $relative = str_replace(DIRECTORY_SEPARATOR, '/', substr($file->getPathname(), strlen(resource_path('js')) + 1));
+        // Le code seul : un commentaire qui EXPLIQUE la règle n'est pas une lecture.
+        $source = FrontSource::withoutComments((string) file_get_contents($file->getPathname()));
+
+        if (str_contains($source, 'VITE_REVERB')) {
+            $buildTimeReads[] = $relative;
+        }
+
+        if (str_contains($source, 'configureEcho')) {
+            $globalEchoes[] = $relative;
+        }
+
+        if (str_contains($source, 'new Echo(')) {
+            $echoInstances[] = $relative;
+        }
+    }
+
+    expect($buildTimeReads)->toBe([])
+        ->and($globalEchoes)->toBe([])
+        ->and($echoInstances)->toBe(['lib/game/echo.ts']);
 });

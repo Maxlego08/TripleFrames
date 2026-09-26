@@ -16,9 +16,17 @@ export type GameFrameProps = {
      * URL fournie par le serveur, jamais reconstruite par Wayfinder (R-37) :
      * URL d'objet produite par `frame-loader` à partir de `TierImageRef.url`
      * en jeu (C7, C8), ou `game_url` de l'aperçu admin (C9). `null` = rien de
-     * servable : le cadre affiche l'indisponibilité.
+     * servable : le cadre affiche l'indisponibilité — sauf si `pending`.
      */
     src: string | null;
+    /**
+     * Image attendue, pas encore là (E39-1, ajout de 60 à C16 § 2.5) : avec
+     * `src` nul, le cadre montre le chargement et non l'indisponibilité —
+     * client lent au palier 1, avant que `frame-loader` ait produit une URL
+     * d'objet. Sans effet quand `src` est une URL. Défaut faux : l'aperçu
+     * admin, qui ne la passe jamais, est inchangé.
+     */
+    pending?: boolean;
     /** Déjà traduit par l'appelant : neutre, jamais descriptif (principe 8). */
     alt: string;
     /** Déjà traduit : lu par un lecteur d'écran pendant le chargement. */
@@ -60,9 +68,11 @@ function preventDefault(event: SyntheticEvent): void {
  * - **Aucun LQIP, aucun flou** (D7, E10-60). Sans image chargée : un aplat au
  *   token, un `Spinner` neutralisé — sans quoi son `role="status"` généré
  *   ferait une seconde région vivante — et `aria-busy`, avec `loadingLabel`
- *   pour les lecteurs d'écran. Rien de servable (`src` nul) ou échec du
- *   chargement : l'aplat reste et `unavailableLabel` s'affiche en clair. Le
- *   serveur ne décale jamais le chrono pour un client lent.
+ *   pour les lecteurs d'écran — aussi quand `src` est nul mais `pending`
+ *   vrai (image attendue, E39-1). Rien de servable (`src` nul sans
+ *   `pending`) ou échec du chargement : l'aplat reste et `unavailableLabel`
+ *   s'affiche en clair. Le serveur ne décale jamais le chrono pour un client
+ *   lent.
  * - **Au changement de `src`, l'image précédente reste jusqu'au `load` de la
  *   suivante** : la nouvelle se charge dans une couche invisible, qui devient
  *   la couche affichée une fois chargée et décodée — même nœud, même clé,
@@ -78,6 +88,7 @@ function preventDefault(event: SyntheticEvent): void {
  */
 export function GameFrame({
     src,
+    pending = false,
     alt,
     loadingLabel,
     unavailableLabel,
@@ -90,11 +101,13 @@ export function GameFrame({
     // Source dont le chargement a échoué.
     const [failedSrc, setFailedSrc] = useState<string | null>(null);
 
-    const unavailable = src === null || src === failedSrc;
+    // Image attendue : aucune URL encore, mais rien d'indisponible (E39-1).
+    const awaited = src === null && pending;
+    const unavailable = src === null ? !awaited : src === failedSrc;
     const isCurrent = shown !== null && shown.src === src;
-    const pending = src !== null && !unavailable && !isCurrent;
+    const loadingSrc = src !== null && !unavailable && !isCurrent;
     const visible = unavailable ? null : shown;
-    const loading = pending && visible === null;
+    const loading = (loadingSrc || awaited) && visible === null;
 
     const layers: Layer[] = [];
 
@@ -106,7 +119,7 @@ export function GameFrame({
         });
     }
 
-    if (pending) {
+    if (loadingSrc) {
         layers.push({ src, alt: '', hidden: true });
     }
 

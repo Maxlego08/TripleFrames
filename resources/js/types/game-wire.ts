@@ -19,8 +19,9 @@
  * récapitulatif.
  */
 
-import type { SeatInputView } from '@/types/answers';
+import type { ChoicesPayload, SeatInputView } from '@/types/answers';
 import type { PlayerIdentity } from '@/types/player';
+import type { InputDifficulty, RoomSettingsState } from '@/types/room-settings';
 import type {
     Leaderboard,
     Podium,
@@ -200,3 +201,109 @@ export interface RealtimeConfig {
     heartbeatIntervalMs: number;
     clockSamples: number;
 }
+
+// --- L60-9 : liste close des événements et leurs charges --------------------
+
+/**
+ * Les dix-neuf noms `broadcastAs` de la liste close du J1 (60 § 11.3, écart
+ * (i) du § 22 bis), miroir de `app/Events/Game/` : `EventPayloadTest` refuse
+ * tout écart. Seize sont diffusés au salon, trois ciblés au siège
+ * (`seat.choices`, `seat.superseded`, `seat.kicked`). Tout nouvel événement
+ * amende 60 et entre ici.
+ */
+export type GameEventName =
+    | 'seat.joined'
+    | 'seat.updated'
+    | 'host.changed'
+    | 'settings.changed'
+    | 'room.replayed'
+    | 'game.launched'
+    | 'room.archived'
+    | 'round.scheduled'
+    | 'tier.opened'
+    | 'player.locked'
+    | 'round.closed'
+    | 'round.revealed'
+    | 'round.cancelled'
+    | 'game.paused'
+    | 'game.resumed'
+    | 'game.ended'
+    | 'seat.choices'
+    | 'seat.superseded'
+    | 'seat.kicked';
+
+/** Charge vide (`{}`) : l'événement ne porte que son enveloppe. */
+export type EmptyPayload = Record<never, never>;
+
+/**
+ * La charge de chaque événement, **hors enveloppe** (60 § 11.3 et § 11.5).
+ * Aucune ne porte, avant `revealStartsAt`, un titre ou un alias hors des
+ * quatre chaînes du QCM ciblé, ni un identifiant interne, ni un niveau
+ * d'image (§ 11.7). `settings.changed` et `room.replayed` portent l'état des
+ * réglages de 50 (`RoomSettingsState`, contrat C0), en données.
+ */
+export interface GameEventPayloads {
+    'seat.joined': { seat: SeatView };
+    'seat.updated': { seat: SeatView };
+    'host.changed': {
+        hostPublicId: string;
+        previousHostPublicId: string | null;
+    };
+    'settings.changed': RoomSettingsState;
+    'room.replayed': RoomSettingsState;
+    'game.launched': {
+        mode: 'multiplayer';
+        roundsCount: number;
+        framesPerRound: number;
+        inputDifficulty: InputDifficulty;
+        revealDurationMs: number;
+        speedBonus: boolean;
+        seats: SeatView[];
+    };
+    'room.archived': EmptyPayload;
+    /** La manche programmée et l'image de son palier 1. */
+    'round.scheduled': { round: RoundTimeline; image: TierImageRef };
+    /** `opensAt` = `Tᵢ` théorique ; `next` = palier `i + 1`, nul au dernier. */
+    'tier.opened': {
+        sequenceIndex: number;
+        roundNumber: number;
+        tierIndex: number;
+        opensAt: IsoMs;
+        next: TierImageRef | null;
+    };
+    'player.locked': {
+        sequenceIndex: number;
+        publicId: string;
+        lockRank: number;
+    };
+    'round.closed': {
+        sequenceIndex: number;
+        roundNumber: number;
+        endedAt: IsoMs;
+        revealStartsAt: IsoMs;
+        revealEndsAt: IsoMs;
+    };
+    /** `images` : les seuls paliers OUVERTS, par `tierIndex` (D14 du 23/09). */
+    'round.revealed': {
+        sequenceIndex: number;
+        roundNumber: number;
+        revealEndsAt: IsoMs;
+        movie: RevealMovie;
+        images: TierImageRef[];
+        finders: RoundFinder[];
+        leaderboard: Leaderboard;
+    };
+    /** Ni motif, ni titre. */
+    'round.cancelled': { sequenceIndex: number; roundNumber: number };
+    'game.paused': { pausedAt: IsoMs; interruptsAt: IsoMs };
+    'game.resumed': { resumedAt: IsoMs };
+    'game.ended': { podium: Podium };
+    /** Ciblé : les quatre chaînes du QCM de CE siège (contrat C11). */
+    'seat.choices': { sequenceIndex: number } & ChoicesPayload;
+    'seat.superseded': EmptyPayload;
+    'seat.kicked': EmptyPayload;
+}
+
+/** Un événement tel qu'il arrive : l'enveloppe, puis sa charge. */
+export type GameEvent<N extends GameEventName = GameEventName> = WireEnvelope &
+    GameEventPayloads[N];

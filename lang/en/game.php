@@ -35,6 +35,14 @@ return [
         'tier_opened' => 'New frame, :index of :total.',
     ],
 
+    // Spec 60 § 12.7 et § 13.4 (lot L60-9) : lecture seule d’un onglet
+    // supplanté par un autre onglet du même siège (`ReadOnlyNotice`), et
+    // expulsion par l’hôte, avant le retour à `room.show`.
+    'seat' => [
+        'superseded' => 'You are now playing in another tab: this one only shows the game. Reload the page to take over here.',
+        'kicked' => 'The host removed you from the room.',
+    ],
+
     'errors' => [
         'seat_superseded' => 'This tab is no longer in control: you are playing in another tab. Reload the page to take over here.',
     ],

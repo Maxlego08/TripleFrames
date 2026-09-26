@@ -101,6 +101,9 @@ export default defineConfig({
             // depuis le 23/09 (D9), en est exclu pour la même raison.
             'CLAUDE.md',
             'design-test/**',
+            // Espace de travail de l'outil de maquettes du porteur, comme
+            // `design-test/` : ni généré ni mis en forme par le dépôt.
+            '.superdesign/**',
             'docs/**',
             'resources/js/components/ui/*',
             'resources/views/mail/*',
