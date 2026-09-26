@@ -197,11 +197,12 @@ a {
 .cinema-room__screen {
   position: absolute;
   z-index: 4;
-  top: 8.5%;
+  top: 5.5%;
   left: 50%;
   display: grid;
-  width: min(46vw, 37rem);
-  height: 24%;
+  width: min(43vw, 35rem);
+  height: auto;
+  aspect-ratio: 16/9;
   border: 0.38rem solid oklch(27% 0.08 292deg);
   border-radius: 1rem;
   background: oklch(98% 0.03 91deg);
@@ -248,15 +249,11 @@ a {
   transform: translateX(-50%) rotateX(4deg);
 }
 .cinema-room__tier--back {
-  top: 37%;
-  width: 63%;
-}
-.cinema-room__tier--middle {
-  top: 55%;
-  width: 78%;
+  top: 59%;
+  width: 76%;
 }
 .cinema-room__tier--front {
-  top: 73%;
+  top: 79%;
   width: 93%;
 }
 .cinema-room__seats {
@@ -268,69 +265,60 @@ a {
 .cinema-seat {
   --seat-depth: 0rem;
   --seat-scale: 1;
-  --label-scale: 1;
   position: absolute;
   width: 9rem;
   height: 8rem;
-  transform: translate3d(-50%, -50%, var(--seat-depth)) scale(var(--seat-scale));
+  transform: translate3d(-50%, -50%, var(--seat-depth));
   transform-origin: center bottom;
   transform-style: preserve-3d;
 }
-.cinema-seat--position-1, .cinema-seat--position-2, .cinema-seat--position-3, .cinema-seat--position-4 {
+.cinema-seat--position-1, .cinema-seat--position-2, .cinema-seat--position-3, .cinema-seat--position-4, .cinema-seat--position-5, .cinema-seat--position-6 {
   --seat-depth: 0rem;
-  --seat-scale: 0.68;
-  --label-scale: 1.32;
+  --seat-scale: 0.78;
   z-index: 6;
-  top: 43.5%;
+  top: 66%;
 }
 .cinema-seat--position-1 {
-  left: 37%;
+  left: 25%;
 }
 .cinema-seat--position-2 {
-  left: 45.5%;
+  left: 35%;
 }
 .cinema-seat--position-3 {
-  left: 54.5%;
+  left: 45%;
 }
 .cinema-seat--position-4 {
-  left: 63%;
-}
-.cinema-seat--position-5, .cinema-seat--position-6, .cinema-seat--position-7, .cinema-seat--position-8 {
-  --seat-depth: 0rem;
-  --seat-scale: 0.86;
-  --label-scale: 1.12;
-  z-index: 10;
-  top: 61.5%;
+  left: 55%;
 }
 .cinema-seat--position-5 {
-  left: 31%;
+  left: 65%;
 }
 .cinema-seat--position-6 {
-  left: 43.5%;
+  left: 75%;
+}
+.cinema-seat--position-7, .cinema-seat--position-8, .cinema-seat--position-9, .cinema-seat--position-10, .cinema-seat--position-11, .cinema-seat--position-12 {
+  --seat-depth: 0rem;
+  --seat-scale: 1;
+  z-index: 12;
+  top: 86%;
 }
 .cinema-seat--position-7 {
-  left: 56.5%;
+  left: 17%;
 }
 .cinema-seat--position-8 {
-  left: 69%;
-}
-.cinema-seat--position-9, .cinema-seat--position-10, .cinema-seat--position-11, .cinema-seat--position-12 {
-  --seat-depth: 0rem;
-  --seat-scale: 1.05;
-  z-index: 15;
-  top: 79.5%;
+  left: 30.2%;
 }
 .cinema-seat--position-9 {
-  left: 23%;
+  left: 43.4%;
 }
 .cinema-seat--position-10 {
-  left: 41%;
+  left: 56.6%;
 }
 .cinema-seat--position-11 {
-  left: 59%;
+  left: 69.8%;
 }
 .cinema-seat--position-12 {
-  left: 77%;
+  left: 83%;
 }
 .cinema-seat__chair {
   position: absolute;
@@ -339,6 +327,8 @@ a {
   bottom: 0.25rem;
   left: 0.45rem;
   height: 5.5rem;
+  scale: var(--seat-scale);
+  transform-origin: center bottom;
 }
 .cinema-seat__back {
   position: absolute;
@@ -406,13 +396,11 @@ a {
   padding: 0.26rem 0.65rem;
   background: oklch(88% 0.16 89deg);
   box-shadow: 0.14rem 0.14rem 0 oklch(27% 0.08 292deg);
-  font-size: 0.74rem;
+  font-size: 0.9rem;
   font-weight: 900;
   line-height: 1;
   text-align: center;
   text-overflow: ellipsis;
-  transform: scale(var(--label-scale));
-  transform-origin: center bottom;
   white-space: nowrap;
 }
 .cinema-seat__arrow {
@@ -485,6 +473,8 @@ a {
   border-radius: 48% 52% 46% 54%;
   background: oklch(70% 0.2 25deg);
   box-shadow: 0.18rem 0.18rem 0 oklch(27% 0.08 292deg);
+  scale: var(--seat-scale);
+  transform-origin: center bottom;
 }
 .player-avatar::before {
   position: absolute;
@@ -732,7 +722,6 @@ a {
   .cinema-room__screen {
     top: 11%;
     width: 72%;
-    height: 20%;
   }
   .cinema-room__screen-content img {
     width: 2.5rem;
@@ -755,50 +744,35 @@ a {
     min-width: 5rem;
     max-width: 5.8rem;
   }
-  .cinema-seat--position-1, .cinema-seat--position-2, .cinema-seat--position-3, .cinema-seat--position-4 {
-    --seat-scale: 0.48;
+  .cinema-seat__name {
+    min-width: 4.2rem;
+    max-width: 4.8rem;
+    padding-inline: 0.3rem;
+    font-size: 0.7rem;
   }
-  .cinema-seat--position-1 {
-    left: 29%;
+  .cinema-seat--position-1, .cinema-seat--position-2, .cinema-seat--position-3, .cinema-seat--position-4, .cinema-seat--position-5, .cinema-seat--position-6 {
+    --seat-scale: 0.43;
   }
-  .cinema-seat--position-2 {
-    left: 43%;
+  .cinema-seat--position-7, .cinema-seat--position-8, .cinema-seat--position-9, .cinema-seat--position-10, .cinema-seat--position-11, .cinema-seat--position-12 {
+    --seat-scale: 0.56;
   }
-  .cinema-seat--position-3 {
-    left: 57%;
+  .cinema-seat--position-1, .cinema-seat--position-7 {
+    left: 8%;
   }
-  .cinema-seat--position-4 {
-    left: 71%;
+  .cinema-seat--position-2, .cinema-seat--position-8 {
+    left: 25%;
   }
-  .cinema-seat--position-5, .cinema-seat--position-6, .cinema-seat--position-7, .cinema-seat--position-8 {
-    --seat-scale: 0.62;
+  .cinema-seat--position-3, .cinema-seat--position-9 {
+    left: 42%;
   }
-  .cinema-seat--position-5 {
-    left: 23%;
+  .cinema-seat--position-4, .cinema-seat--position-10 {
+    left: 58%;
   }
-  .cinema-seat--position-6 {
-    left: 41%;
+  .cinema-seat--position-5, .cinema-seat--position-11 {
+    left: 75%;
   }
-  .cinema-seat--position-7 {
-    left: 59%;
-  }
-  .cinema-seat--position-8 {
-    left: 77%;
-  }
-  .cinema-seat--position-9, .cinema-seat--position-10, .cinema-seat--position-11, .cinema-seat--position-12 {
-    --seat-scale: 0.75;
-  }
-  .cinema-seat--position-9 {
-    left: 17%;
-  }
-  .cinema-seat--position-10 {
-    left: 39%;
-  }
-  .cinema-seat--position-11 {
-    left: 61%;
-  }
-  .cinema-seat--position-12 {
-    left: 83%;
+  .cinema-seat--position-6, .cinema-seat--position-12 {
+    left: 92%;
   }
   .lobby-actions {
     grid-template-columns: 1fr;

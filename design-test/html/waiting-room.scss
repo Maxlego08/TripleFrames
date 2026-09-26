@@ -220,11 +220,12 @@ a {
     &__screen {
         position: absolute;
         z-index: 4;
-        top: 8.5%;
+        top: 5.5%;
         left: 50%;
         display: grid;
-        width: min(46vw, 37rem);
-        height: 24%;
+        width: min(43vw, 35rem);
+        height: auto;
+        aspect-ratio: 16 / 9;
         border: 0.38rem solid $color-ink;
         border-radius: 1rem;
         background: $color-paper;
@@ -279,17 +280,12 @@ a {
         transform: translateX(-50%) rotateX(4deg);
 
         &--back {
-            top: 37%;
-            width: 63%;
-        }
-
-        &--middle {
-            top: 55%;
-            width: 78%;
+            top: 59%;
+            width: 76%;
         }
 
         &--front {
-            top: 73%;
+            top: 79%;
             width: 93%;
         }
     }
@@ -304,60 +300,50 @@ a {
 .cinema-seat {
     --seat-depth: 0rem;
     --seat-scale: 1;
-    --label-scale: 1;
     position: absolute;
     width: 9rem;
     height: 8rem;
-    transform: translate3d(-50%, -50%, var(--seat-depth)) scale(var(--seat-scale));
+    transform: translate3d(-50%, -50%, var(--seat-depth));
     transform-origin: center bottom;
     transform-style: preserve-3d;
 
     &--position-1,
     &--position-2,
     &--position-3,
-    &--position-4 {
-        --seat-depth: 0rem;
-        --seat-scale: 0.68;
-        --label-scale: 1.32;
-        z-index: 6;
-        top: 43.5%;
-    }
-
-    &--position-1 { left: 37%; }
-    &--position-2 { left: 45.5%; }
-    &--position-3 { left: 54.5%; }
-    &--position-4 { left: 63%; }
-
+    &--position-4,
     &--position-5,
-    &--position-6,
-    &--position-7,
-    &--position-8 {
+    &--position-6 {
         --seat-depth: 0rem;
-        --seat-scale: 0.86;
-        --label-scale: 1.12;
-        z-index: 10;
-        top: 61.5%;
+        --seat-scale: 0.78;
+        z-index: 6;
+        top: 66%;
     }
 
-    &--position-5 { left: 31%; }
-    &--position-6 { left: 43.5%; }
-    &--position-7 { left: 56.5%; }
-    &--position-8 { left: 69%; }
+    &--position-1 { left: 25%; }
+    &--position-2 { left: 35%; }
+    &--position-3 { left: 45%; }
+    &--position-4 { left: 55%; }
+    &--position-5 { left: 65%; }
+    &--position-6 { left: 75%; }
 
+    &--position-7,
+    &--position-8,
     &--position-9,
     &--position-10,
     &--position-11,
     &--position-12 {
         --seat-depth: 0rem;
-        --seat-scale: 1.05;
-        z-index: 15;
-        top: 79.5%;
+        --seat-scale: 1;
+        z-index: 12;
+        top: 86%;
     }
 
-    &--position-9 { left: 23%; }
-    &--position-10 { left: 41%; }
-    &--position-11 { left: 59%; }
-    &--position-12 { left: 77%; }
+    &--position-7 { left: 17%; }
+    &--position-8 { left: 30.2%; }
+    &--position-9 { left: 43.4%; }
+    &--position-10 { left: 56.6%; }
+    &--position-11 { left: 69.8%; }
+    &--position-12 { left: 83%; }
 
     &__chair {
         position: absolute;
@@ -366,6 +352,8 @@ a {
         bottom: 0.25rem;
         left: 0.45rem;
         height: 5.5rem;
+        scale: var(--seat-scale);
+        transform-origin: center bottom;
     }
 
     &__back {
@@ -441,13 +429,11 @@ a {
         padding: 0.26rem 0.65rem;
         background: $color-yellow;
         box-shadow: 0.14rem 0.14rem 0 $color-ink;
-        font-size: 0.74rem;
+        font-size: 0.9rem;
         font-weight: 900;
         line-height: 1;
         text-align: center;
         text-overflow: ellipsis;
-        transform: scale(var(--label-scale));
-        transform-origin: center bottom;
         white-space: nowrap;
     }
 
@@ -536,6 +522,8 @@ a {
     border-radius: 48% 52% 46% 54%;
     background: $color-coral;
     box-shadow: 0.18rem 0.18rem 0 $color-ink;
+    scale: var(--seat-scale);
+    transform-origin: center bottom;
 
     &::before {
         position: absolute;
@@ -818,7 +806,6 @@ a {
         &__screen {
             top: 11%;
             width: 72%;
-            height: 20%;
         }
 
         &__screen-content {
@@ -850,41 +837,48 @@ a {
             max-width: 5.8rem;
         }
 
+        &__name {
+            min-width: 4.2rem;
+            max-width: 4.8rem;
+            padding-inline: 0.3rem;
+            font-size: 0.7rem;
+        }
+
         &--position-1,
         &--position-2,
         &--position-3,
-        &--position-4 {
-            --seat-scale: 0.48;
-        }
-
-        &--position-1 { left: 29%; }
-        &--position-2 { left: 43%; }
-        &--position-3 { left: 57%; }
-        &--position-4 { left: 71%; }
-
+        &--position-4,
         &--position-5,
-        &--position-6,
-        &--position-7,
-        &--position-8 {
-            --seat-scale: 0.62;
+        &--position-6 {
+            --seat-scale: 0.43;
         }
 
-        &--position-5 { left: 23%; }
-        &--position-6 { left: 41%; }
-        &--position-7 { left: 59%; }
-        &--position-8 { left: 77%; }
-
+        &--position-7,
+        &--position-8,
         &--position-9,
         &--position-10,
         &--position-11,
         &--position-12 {
-            --seat-scale: 0.75;
+            --seat-scale: 0.56;
         }
 
-        &--position-9 { left: 17%; }
-        &--position-10 { left: 39%; }
-        &--position-11 { left: 61%; }
-        &--position-12 { left: 83%; }
+        &--position-1,
+        &--position-7 { left: 8%; }
+
+        &--position-2,
+        &--position-8 { left: 25%; }
+
+        &--position-3,
+        &--position-9 { left: 42%; }
+
+        &--position-4,
+        &--position-10 { left: 58%; }
+
+        &--position-5,
+        &--position-11 { left: 75%; }
+
+        &--position-6,
+        &--position-12 { left: 92%; }
     }
 
     .lobby-actions {

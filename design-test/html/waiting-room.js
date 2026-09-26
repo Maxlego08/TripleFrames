@@ -151,7 +151,7 @@ async function copyRoomCode() {
         textArea.remove();
     }
 
-    showToast(`Code ${roomCodeValue} copié !`);
+    showToast('Code de la partie copié !');
 }
 
 document.querySelector('#copy-code').addEventListener('click', copyRoomCode);
