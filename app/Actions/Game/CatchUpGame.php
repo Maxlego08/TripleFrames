@@ -60,11 +60,13 @@ use Illuminate\Support\Facades\DB;
  * **Borne** : chaque étape exécutée fait avancer l'état ; une étape désignée
  * deux fois de suite (transition qui n'a rien pu écrire) arrête le passage,
  * jamais une boucle — les filets suivants la reprennent.
+ *
+ * @phpstan-type EngineStep array{kind: string, at: CarbonImmutable, game: Game, round: Round|null, tier: RoundTier|null}
  */
 final readonly class CatchUpGame
 {
-    /** Étape de partie : la clôture d'une pause échue. */
-    private const string INTERRUPT = 'interrupt';
+    /** Étape de partie : la clôture d'une pause échue ({@see self::nextStep()}). */
+    public const string INTERRUPT = 'interrupt';
 
     public function __construct(
         private OpenTier $openTier,
@@ -99,7 +101,7 @@ final readonly class CatchUpGame
     /**
      * Exécute l'étape désignée par sa transition réelle.
      *
-     * @param  array{kind: string, at: CarbonImmutable, game: Game, round: Round|null, tier: RoundTier|null}  $step
+     * @param  EngineStep  $step
      */
     private function execute(array $step, CarbonImmutable $now): void
     {
@@ -130,9 +132,31 @@ final readonly class CatchUpGame
     /**
      * La prochaine étape échue de la partie, relue en base — ou `null`.
      *
-     * @return array{kind: string, at: CarbonImmutable, game: Game, round: Round|null, tier: RoundTier|null}|null
+     * @return EngineStep|null
      */
     private static function nextDueStep(int $gameId, CarbonImmutable $now): ?array
+    {
+        $step = self::nextStep($gameId);
+
+        return $step !== null && $step['at']->lessThanOrEqualTo($now) ? $step : null;
+    }
+
+    /**
+     * La prochaine étape de la partie, **échue ou non**, relue en base, avec
+     * son instant théorique — ou `null` (partie close ou disparue, ou sans
+     * étape programmée).
+     *
+     * Partie en pause : la clôture à `paused_at + pauseTimeoutMs` (`kind` =
+     * {@see self::INTERRUPT}). Partie en cours : la première étape de manche
+     * dans l'ordre du rattrapage (instant, puis fin de révélation d'abord à
+     * instant égal), `kind` = valeur d'un {@see RoundStep}. Seule définition
+     * de « la prochaine étape » : le rattrapage la lit pour exécuter ce qui est
+     * échu, et `game:reschedule` pour redonner à la partie le job de l'étape
+     * qui n'est pas encore échue (§ 17.5, lot L60-10). Elle ne décide rien.
+     *
+     * @return EngineStep|null
+     */
+    public static function nextStep(int $gameId): ?array
     {
         $game = Game::query()->find($gameId);
 
@@ -147,9 +171,7 @@ final readonly class CatchUpGame
 
             $interruptsAt = $game->paused_at->addMilliseconds(EngineConstants::pauseTimeoutMs());
 
-            return $interruptsAt->lessThanOrEqualTo($now)
-                ? ['kind' => self::INTERRUPT, 'at' => $interruptsAt, 'game' => $game, 'round' => null, 'tier' => null]
-                : null;
+            return ['kind' => self::INTERRUPT, 'at' => $interruptsAt, 'game' => $game, 'round' => null, 'tier' => null];
         }
 
         if ($game->status !== GameStatus::Running) {
@@ -188,7 +210,7 @@ final readonly class CatchUpGame
             return $byInstant !== 0 ? $byInstant : self::rank($left['kind']) <=> self::rank($right['kind']);
         });
 
-        return $candidates[0]['at']->lessThanOrEqualTo($now) ? $candidates[0] : null;
+        return $candidates[0];
     }
 
     /**
