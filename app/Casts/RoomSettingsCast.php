@@ -4,6 +4,7 @@ namespace App\Casts;
 
 use App\Settings\RoomSettings;
 use Illuminate\Contracts\Database\Eloquent\CastsAttributes;
+use Illuminate\Contracts\Database\Eloquent\ComparesCastableAttributes;
 use Illuminate\Database\Eloquent\Model;
 use InvalidArgumentException;
 use UnexpectedValueException;
@@ -30,9 +31,18 @@ use UnexpectedValueException;
  * **`set()` retourne les DEUX colonnes ensemble**, de sorte que l'état « JSON
  * normalisé + version périmée » soit impossible.
  *
+ * **La comparaison est fondée sur la VALEUR** ({@see self::compare()}, spec 50
+ * § 2.5 et § 12.7, contrat C6) : MySQL 8 relit une colonne `json` sous forme
+ * normalisée (clés triées, séparateurs `": "` et `", "`), et dès que l'objet est
+ * lu, `Model::save()` la réécrit en JSON compact dans l'ordre de `FIELDS`. Une
+ * comparaison de chaînes verrait alors la colonne « sale » après une simple
+ * lecture : l'écrivain unique des réglages refuserait une instance qu'il n'a pas
+ * touchée, et la garde des colonnes figées de `game` lèverait sur toute
+ * sauvegarde légitime.
+ *
  * @implements CastsAttributes<RoomSettings, RoomSettings>
  */
-final class RoomSettingsCast implements CastsAttributes
+final class RoomSettingsCast implements CastsAttributes, ComparesCastableAttributes
 {
     /**
      * La colonne de version est la même sur les quatre tables porteuses — `game`
@@ -66,20 +76,12 @@ final class RoomSettingsCast implements CastsAttributes
             );
         }
 
-        $decoded = json_decode($value, true);
+        $payload = self::payload($value);
 
-        if (! is_array($decoded)) {
+        if ($payload === null) {
             throw new UnexpectedValueException(
                 "La colonne [{$key}] de [".$model::class.'] ne contient pas un objet JSON valide.',
             );
-        }
-
-        $payload = [];
-
-        foreach ($decoded as $field => $item) {
-            if (is_string($field)) {
-                $payload[$field] = $item;
-            }
         }
 
         return RoomSettings::fromStorage($payload, $this->version($attributes));
@@ -112,6 +114,81 @@ final class RoomSettingsCast implements CastsAttributes
             $key => $value->toJson(),
             $this->versionColumn => $value->sourceVersion,
         ];
+    }
+
+    /**
+     * Deux charges brutes de la colonne sont égales si elles décrivent les mêmes
+     * réglages : `fromStorage()` des deux, puis {@see RoomSettings::equals()}.
+     *
+     * La version de chacune est lue en colonne — l'originale pour la première,
+     * la courante pour la seconde, que {@see self::set()} écrit avec la charge.
+     * Deux versions différentes ne sont jamais égales : la même charge ne décrit
+     * pas les mêmes réglages sous deux dispositions. Une charge illisible n'est
+     * égale à aucune autre chaîne (Eloquent a déjà tenu pour égales deux chaînes
+     * identiques avant d'appeler cette méthode) : l'écriture qui suit la remplace.
+     */
+    public function compare(Model $model, string $key, mixed $firstValue, mixed $secondValue): bool
+    {
+        if ($firstValue === null || $secondValue === null) {
+            return $firstValue === $secondValue;
+        }
+
+        $firstVersion = $this->version([$this->versionColumn => $model->getRawOriginal($this->versionColumn)]);
+        $secondVersion = $this->version($model->getAttributes());
+
+        if ($firstVersion !== $secondVersion) {
+            return false;
+        }
+
+        $first = $this->decode($firstValue, $firstVersion);
+        $second = $this->decode($secondValue, $secondVersion);
+
+        return $first instanceof RoomSettings
+            && $second instanceof RoomSettings
+            && $first->equals($second);
+    }
+
+    /**
+     * Une charge brute relue sans lever : `null` si elle est illisible.
+     */
+    private function decode(mixed $value, int $version): ?RoomSettings
+    {
+        $payload = is_string($value) ? self::payload($value) : null;
+
+        if ($payload === null) {
+            return null;
+        }
+
+        try {
+            return RoomSettings::fromStorage($payload, $version);
+        } catch (UnexpectedValueException) {
+            return null;
+        }
+    }
+
+    /**
+     * L'objet JSON d'une charge brute, réduit à ses clés de chaîne ; `null` si
+     * la chaîne ne décode pas en objet.
+     *
+     * @return array<string, mixed>|null
+     */
+    private static function payload(string $json): ?array
+    {
+        $decoded = json_decode($json, true);
+
+        if (! is_array($decoded)) {
+            return null;
+        }
+
+        $payload = [];
+
+        foreach ($decoded as $field => $item) {
+            if (is_string($field)) {
+                $payload[$field] = $item;
+            }
+        }
+
+        return $payload;
     }
 
     /**

@@ -177,21 +177,26 @@ return [
     |
     | Miroir exact de `lang/en/validation.php` § `room_settings`. Émises par
     | `App\Settings\RoomSettings` : l’hôte qui règle une manche de 10 s avec
-    | 5 images doit lire le minimum calculé, pas une clé brute.
+    | 5 images doit lire le minimum calculé, pas une clé brute. `not_editable`
+    | et `theme_keys` viennent de `App\Settings\RoomSettingsEditor`,
+    | `capacity_below_headcount` de la garde de capacité (spec 50 § 3.1, § 10).
     |
     */
 
     'room_settings' => [
         'between' => 'Le réglage :attribute doit être compris entre :min et :max.',
         'boolean' => 'Le réglage :attribute doit être activé ou désactivé.',
+        'capacity_below_headcount' => 'Le salon compte déjà :count joueurs : les places ne peuvent pas descendre en dessous.',
         'duration_mismatch' => 'Le réglage :attribute totalise :sum secondes alors que la manche en dure :duration.',
         'enum' => 'Le réglage :attribute ne fait pas partie des valeurs autorisées.',
         'integer' => 'Le réglage :attribute doit être un nombre entier.',
         'integer_list' => 'Le réglage :attribute doit être une liste de nombres entiers.',
         'list_size' => 'Le réglage :attribute doit compter exactement :size valeurs, une par image.',
+        'not_editable' => 'Le réglage :attribute ne peut pas être modifié depuis cet onglet.',
         'round_duration' => 'Le réglage :attribute doit être compris entre :min et :max secondes pour :frames images par manche.',
         'sum_between' => 'Le réglage :attribute doit totaliser entre :min et :max secondes.',
         'theme_ids' => 'Le réglage :attribute doit être une liste d’identifiants de thèmes.',
+        'theme_keys' => 'Le réglage :attribute contient un thème inconnu ou retiré du site.',
         'tier_duration' => 'Le palier :tier du réglage :attribute doit être compris entre :min et :max secondes.',
         'unknown_field' => 'Le réglage :attribute n’existe pas.',
     ],
@@ -256,7 +261,6 @@ return [
         'disconnectGraceSeconds' => 'délai de grâce à la déconnexion',
         'email' => 'adresse e-mail',
         'framesPerRound' => 'nombre d’images par manche',
-        'frames_per_round' => 'nombre d’images par manche',
         'inputDifficulty' => 'difficulté de saisie',
         'locale' => 'langue',
         'maxAnswerLength' => 'longueur maximale d’une réponse',
@@ -271,10 +275,9 @@ return [
         'revealDuration' => 'durée de révélation',
         'roundDuration' => 'durée d’une manche',
         'roundsCount' => 'nombre de manches',
-        'room_code' => 'code du salon',
-        'rounds_count' => 'nombre de manches',
         'speedBonus' => 'bonus de rapidité',
         'themeIds' => 'thèmes',
+        'themeKeys' => 'thèmes',
         'tierDurations' => 'durées des paliers',
         'tierPoints' => 'valeurs des paliers',
         'token' => 'jeton',

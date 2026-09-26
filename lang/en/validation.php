@@ -182,21 +182,26 @@ return [
     |
     | Le TEXTE definitif de ces messages appartient a
     | `50-salon-reglages-presets-et-lobby.md` ; seules les lignes que du code
-    | livre appelle deja sont ecrites ici.
+    | livre appelle deja sont ecrites ici. `not_editable` et `theme_keys` sont
+    | emises par `App\Settings\RoomSettingsEditor`, `capacity_below_headcount`
+    | par la garde de capacite (spec 50 § 3.1, § 10).
     |
     */
 
     'room_settings' => [
         'between' => 'The :attribute setting must be between :min and :max.',
         'boolean' => 'The :attribute setting must be on or off.',
+        'capacity_below_headcount' => 'The room already has :count players: seats cannot go below that.',
         'duration_mismatch' => 'The :attribute setting adds up to :sum seconds while the round lasts :duration.',
         'enum' => 'The :attribute setting is not one of the allowed values.',
         'integer' => 'The :attribute setting must be a whole number.',
         'integer_list' => 'The :attribute setting must be a list of whole numbers.',
         'list_size' => 'The :attribute setting must hold exactly :size values, one per frame.',
+        'not_editable' => 'The :attribute setting cannot be changed from this tab.',
         'round_duration' => 'The :attribute setting must be between :min and :max seconds for :frames frames per round.',
         'sum_between' => 'The :attribute setting must add up to between :min and :max seconds.',
         'theme_ids' => 'The :attribute setting must be a list of theme identifiers.',
+        'theme_keys' => 'The :attribute setting contains an unknown or withdrawn theme.',
         'tier_duration' => 'Tier :tier of the :attribute setting must be between :min and :max seconds.',
         'unknown_field' => 'The :attribute setting does not exist.',
     ],
@@ -264,7 +269,6 @@ return [
         'disconnectGraceSeconds' => 'disconnection grace period',
         'email' => 'email address',
         'framesPerRound' => 'frames per round',
-        'frames_per_round' => 'frames per round',
         'inputDifficulty' => 'input difficulty',
         'locale' => 'language',
         'maxAnswerLength' => 'answer length',
@@ -279,10 +283,9 @@ return [
         'revealDuration' => 'reveal duration',
         'roundDuration' => 'round duration',
         'roundsCount' => 'rounds',
-        'room_code' => 'room code',
-        'rounds_count' => 'rounds',
         'speedBonus' => 'speed bonus',
         'themeIds' => 'themes',
+        'themeKeys' => 'themes',
         'tierDurations' => 'tier durations',
         'tierPoints' => 'tier points',
         'token' => 'token',

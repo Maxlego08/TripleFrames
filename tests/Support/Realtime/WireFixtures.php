@@ -37,12 +37,10 @@ use App\Models\RoundChoiceSet;
 use App\Models\RoundPlayer;
 use App\Models\RoundTier;
 use App\Settings\EngineConstants;
-use App\Settings\RoomSettings;
 use App\Support\Answers\ChoicesPresenter;
-use App\Support\Draw\PoolReporter;
-use App\Support\Draw\PoolScope;
 use App\Support\Identity\PlayerIdentity;
 use App\Support\Realtime\WireTime;
+use App\Support\Room\RoomSettingsPresenter;
 use App\Support\Scoring\Scoreboard;
 use App\ValueObjects\Scoring\TierWindow;
 use Carbon\CarbonImmutable;
@@ -58,9 +56,9 @@ use Tests\Support\Scoring\ScoringFixtures;
  *
  * Les blocs dont le producteur existe déjà viennent de lui :
  * `PlayerIdentity` (C5), `TierWindow::fromRoundTier()` et `Scoreboard` (C13),
- * `ChoicesPresenter` (C11), `PoolReporter` (C2). Les autres — `RevealMovie`
- * (L60-6), `Podium` (L80-5), l'URL signée d'image (L60-8) — sont composés à la
- * main à la forme de leur type client, en attendant leur lot.
+ * `ChoicesPresenter` (C11), `RoomSettingsPresenter` (C0). Les autres —
+ * `RevealMovie` (L60-6), `Podium` (L80-5), l'URL signée d'image (L60-8) — sont
+ * composés à la main à la forme de leur type client, en attendant leur lot.
  */
 final class WireFixtures
 {
@@ -112,7 +110,9 @@ final class WireFixtures
         $revealed = $scene->revealed;
         $scheduled = $scene->scheduled;
         $running = $scene->running;
-        $settingsState = self::settingsState();
+        // `RoomSettingsState` par son producteur (spec 50 § 2.6), tel que
+        // `BroadcastLobbyState` le relit au moment d'émettre.
+        $settingsState = RoomSettingsPresenter::state($room, $now);
         $choices = app(ChoicesPresenter::class)->forSeat($scene->guestChoices)
             ?? throw new LogicException('Le QCM du second siège devrait être composé.');
 
@@ -186,28 +186,6 @@ final class WireFixtures
             ]),
             SeatSuperseded::class => new SeatSuperseded($scene->guest, null, []),
             SeatKicked::class => new SeatKicked($scene->guest, null, []),
-        ];
-    }
-
-    /**
-     * `RoomSettingsState` (contrat C0 § 3.4) : la vue client des seize champs,
-     * `themeKeys` à la place de `themeIds`, les avertissements et le rapport de
-     * vivier.
-     *
-     * @return array{settings: array<string, mixed>, warnings: list<string>, pool: array<string, mixed>}
-     */
-    public static function settingsState(): array
-    {
-        $settings = RoomSettings::defaults();
-        $payload = $settings->toPayload();
-        unset($payload['themeIds']);
-
-        return [
-            'settings' => ['themeKeys' => [], ...$payload],
-            'warnings' => array_values($settings->warnings()),
-            'pool' => app(PoolReporter::class)
-                ->report(PoolScope::catalogue([], $settings->framesPerRound), $settings->roundsCount)
-                ->toArray(),
         ];
     }
 

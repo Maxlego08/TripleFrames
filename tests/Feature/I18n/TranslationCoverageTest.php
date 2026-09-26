@@ -244,8 +244,10 @@ function i18nKeyExists(string $key): bool
 }
 
 /**
- * Les douze suffixes de bornes croisées émis par `App\Settings\RoomSettings`,
- * dont le préfixe est concaténé et donc invisible au balayage.
+ * Les quinze clés `validation.room_settings.*` : les douze suffixes de bornes
+ * croisées émis par `App\Settings\RoomSettings`, dont le préfixe est concaténé
+ * et donc invisible au balayage, et les trois refus de l'écriture des réglages
+ * (`RoomSettingsEditor`, garde de capacité), listés ici avec eux.
  *
  * @return list<string>
  */
@@ -254,9 +256,10 @@ function i18nRoomSettingsKeys(): array
     return array_map(
         static fn (string $suffix): string => 'validation.room_settings.'.$suffix,
         [
-            'between', 'boolean', 'duration_mismatch', 'enum', 'integer',
-            'integer_list', 'list_size', 'round_duration', 'sum_between',
-            'theme_ids', 'tier_duration', 'unknown_field',
+            'between', 'boolean', 'capacity_below_headcount', 'duration_mismatch',
+            'enum', 'integer', 'integer_list', 'list_size', 'not_editable',
+            'round_duration', 'sum_between', 'theme_ids', 'theme_keys',
+            'tier_duration', 'unknown_field',
         ],
     );
 }
