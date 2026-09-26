@@ -26,9 +26,21 @@ const answerForm = document.querySelector('#answer-form');
 const answerInput = document.querySelector('#answer');
 const answerError = document.querySelector('#answer-error');
 const toast = document.querySelector('#game-toast');
-const timerOutput = document.querySelector('#round-timer');
+const timerOutputs = document.querySelectorAll('[data-round-timer]');
+const timerBadge = document.querySelector('#round-timer-badge');
+const cooldown = document.querySelector('#round-cooldown');
+const movieFrame = document.querySelector('#movie-frame');
+const movieFrameStatus = document.querySelector('#movie-frame-status');
+const roundDuration = 30;
+const roundDurationMilliseconds = roundDuration * 1000;
+const movieFrames = ['../movie/movie-1.webp', '../movie/movie-2.webp', '../movie/movie-3.webp'];
 let toastTimer;
-let roundTimer = 24;
+let remainingTimeMilliseconds = roundDurationMilliseconds;
+let roundTimer = roundDuration;
+let currentMovieFrameIndex = -1;
+let currentColorState;
+let lastDisplayedSecond;
+let previousAnimationTime;
 let isPaused = false;
 
 function formatScore(score) {
@@ -86,6 +98,54 @@ function showToast(message) {
     toastTimer = window.setTimeout(() => toast.classList.remove('toast--visible'), 2500);
 }
 
+function updateRoundDisplay() {
+    roundTimer = Math.ceil(remainingTimeMilliseconds / 1000);
+    const progress = (remainingTimeMilliseconds / roundDurationMilliseconds) * 100;
+    const colorState = roundTimer >= 20 ? 'green' : roundTimer >= 10 ? 'orange' : 'red';
+    const frameIndex = roundTimer >= 20 ? 0 : roundTimer >= 10 ? 1 : 2;
+
+    if (roundTimer !== lastDisplayedSecond) {
+        timerOutputs.forEach((output) => {
+            output.textContent = String(roundTimer);
+        });
+        timerBadge.setAttribute('aria-label', `${roundTimer} secondes restantes`);
+        lastDisplayedSecond = roundTimer;
+    }
+
+    cooldown.style.setProperty('--cooldown-progress', `${progress}%`);
+
+    if (colorState !== currentColorState) {
+        cooldown.classList.remove(
+            'game-screen__cooldown--green',
+            'game-screen__cooldown--orange',
+            'game-screen__cooldown--red',
+        );
+        cooldown.classList.add(`game-screen__cooldown--${colorState}`);
+        currentColorState = colorState;
+    }
+
+    if (frameIndex !== currentMovieFrameIndex) {
+        currentMovieFrameIndex = frameIndex;
+        movieFrame.src = movieFrames[frameIndex];
+        movieFrame.alt = `Indice visuel ${frameIndex + 1} sur ${movieFrames.length} du film`;
+        movieFrameStatus.textContent = `Image ${frameIndex + 1} / ${movieFrames.length}`;
+    }
+}
+
+function animateRound(timestamp) {
+    if (previousAnimationTime === undefined) previousAnimationTime = timestamp;
+
+    const elapsedTime = timestamp - previousAnimationTime;
+    previousAnimationTime = timestamp;
+
+    if (!isPaused && remainingTimeMilliseconds > 0) {
+        remainingTimeMilliseconds = Math.max(0, remainingTimeMilliseconds - elapsedTime);
+        updateRoundDisplay();
+    }
+
+    if (remainingTimeMilliseconds > 0) window.requestAnimationFrame(animateRound);
+}
+
 function setPaused(paused) {
     isPaused = paused;
     pauseOverlay.hidden = !paused;
@@ -126,11 +186,11 @@ answerForm.addEventListener('submit', (event) => {
     showToast('Réponse envoyée !');
 });
 
-window.setInterval(() => {
-    if (isPaused || roundTimer <= 0) return;
-    roundTimer -= 1;
-    timerOutput.textContent = String(roundTimer);
-    timerOutput.parentElement.setAttribute('aria-label', `${roundTimer} secondes restantes`);
-}, 1000);
+movieFrames.forEach((source) => {
+    const image = new Image();
+    image.src = source;
+});
 
 renderPlayers();
+updateRoundDisplay();
+window.requestAnimationFrame(animateRound);

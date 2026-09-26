@@ -212,81 +212,56 @@ a {
   inset: 0;
   display: grid;
   grid-template-rows: 1fr auto;
-  background: oklch(90% 0.08 197deg);
+  background: oklch(16% 0.04 290deg);
 }
-.game-screen__content > p {
+.game-screen__picture {
   position: relative;
+  overflow: hidden;
+  background: oklch(16% 0.04 290deg);
+}
+.game-screen__picture img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.game-screen__cooldown {
+  --cooldown-color: oklch(0.76 0.18 145);
+  --cooldown-progress: 100%;
+  position: relative;
+  isolation: isolate;
   z-index: 2;
+  display: flex;
+  min-height: 3.35rem;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
   margin: 0;
   padding: clamp(0.55rem, 1.2vh, 0.85rem);
-  background: oklch(98% 0.03 91deg);
+  background: oklch(100% 0 0deg);
   font-family: "Arial Rounded MT Bold", "Trebuchet MS", sans-serif;
   font-size: clamp(1rem, 1.8vw, 1.45rem);
   font-weight: 900;
   text-align: center;
 }
-.game-screen__picture {
-  position: relative;
-  overflow: hidden;
-  background: linear-gradient(180deg, oklch(38% 0.14 292deg) 0%, oklch(55% 0.18 322deg) 58%, oklch(77% 0.15 55deg) 100%);
-}
-.game-screen__moon {
+.game-screen__cooldown::before {
   position: absolute;
-  top: 14%;
-  right: 18%;
-  width: 13%;
-  aspect-ratio: 1;
-  border: 0.2rem solid oklch(27% 0.08 292deg);
-  border-radius: 50%;
-  background: oklch(88% 0.16 89deg);
-  box-shadow: 0.3rem 0.3rem 0 oklch(29% 0.08 293deg / 0.55);
+  z-index: -1;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: var(--cooldown-progress);
+  background: var(--cooldown-color);
+  content: "";
 }
-.game-screen__mountain {
-  position: absolute;
-  left: -8%;
-  bottom: 12%;
-  width: 70%;
-  height: 58%;
-  border: 0.22rem solid oklch(27% 0.08 292deg);
-  background: oklch(40% 0.15 295deg);
-  transform: rotate(8deg) skewX(-28deg);
+.game-screen__cooldown--green {
+  --cooldown-color: oklch(0.76 0.18 145);
 }
-.game-screen__mountain--front {
-  right: -14%;
-  bottom: -8%;
-  left: auto;
-  width: 72%;
-  height: 66%;
-  background: oklch(30% 0.11 295deg);
-  transform: rotate(-9deg) skewX(25deg);
+.game-screen__cooldown--orange {
+  --cooldown-color: oklch(0.78 0.17 65);
 }
-.game-screen__road {
-  position: absolute;
-  z-index: 1;
-  bottom: -28%;
-  left: 50%;
-  width: 28%;
-  height: 82%;
-  border-inline: 0.18rem solid oklch(27% 0.08 292deg);
-  background: oklch(16% 0.04 290deg);
-  clip-path: polygon(42% 0, 58% 0, 100% 100%, 0 100%);
-  translate: -50% 0;
-}
-.game-screen__car {
-  position: absolute;
-  z-index: 2;
-  bottom: 19%;
-  left: 50%;
-  display: grid;
-  width: clamp(2.8rem, 7vw, 5.5rem);
-  aspect-ratio: 1.7;
-  border: 0.2rem solid oklch(27% 0.08 292deg);
-  border-radius: 45% 45% 0.65rem 0.65rem;
-  background: oklch(70% 0.2 25deg);
-  color: oklch(88% 0.16 89deg);
-  font-size: clamp(1rem, 2vw, 1.8rem);
-  translate: -50% 0;
-  place-items: center;
+.game-screen__cooldown--red {
+  --cooldown-color: oklch(0.65 0.23 25);
 }
 .game-screen__timer {
   position: absolute;
@@ -749,7 +724,8 @@ a {
     padding: 0.25rem 0.4rem;
     font-size: 0.7rem;
   }
-  .game-screen__content > p {
+  .game-screen__cooldown {
+    min-height: 2.45rem;
     padding: 0.45rem;
     font-size: 0.82rem;
   }

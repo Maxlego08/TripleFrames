@@ -30,23 +30,25 @@
                 <div class="game-screen__frame">
                     <div class="game-screen__status">
                         <span>Manche 2</span>
-                        <span>Image 1 / 3</span>
+                        <span id="movie-frame-status">Image 1 / 3</span>
                     </div>
 
                     <div class="game-screen__content">
-                        <div class="game-screen__picture" aria-hidden="true">
-                            <span class="game-screen__moon"></span>
-                            <span class="game-screen__mountain game-screen__mountain--back"></span>
-                            <span class="game-screen__mountain game-screen__mountain--front"></span>
-                            <span class="game-screen__road"></span>
-                            <span class="game-screen__car">●</span>
+                        <div class="game-screen__picture">
+                            <img
+                                id="movie-frame"
+                                src="../movie/movie-1.webp"
+                                alt="Premier indice visuel du film"
+                            />
                         </div>
-                        <p>Quel est ce film&nbsp;?</p>
+                        <p class="game-screen__cooldown game-screen__cooldown--green" id="round-cooldown">
+                            <span>Quel est ce film&nbsp;?</span>
+                        </p>
                     </div>
 
-                    <div class="game-screen__timer" aria-label="24 secondes restantes">
+                    <div class="game-screen__timer" id="round-timer-badge" aria-label="30 secondes restantes">
                         <img class="icon" src="../svg/icons/clock.svg" alt="" aria-hidden="true" />
-                        <strong id="round-timer">24</strong>
+                        <strong data-round-timer>30</strong>
                     </div>
                 </div>
             </section>
