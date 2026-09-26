@@ -1,12 +1,17 @@
 <?php
 
+use App\Models\Player;
 use App\Models\Room;
 use App\Support\Room\RoomCode;
 use App\Support\Room\SeatPublicId;
 use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
+use Inertia\Testing\AssertableInertia as Assert;
+use Symfony\Component\HttpFoundation\Response;
 use Tests\Support\I18n\FrontSource;
+use Tests\Support\Room\LobbyWrites;
+use Tests\Support\Room\SeatEntry;
 
 /*
 |--------------------------------------------------------------------------
@@ -19,8 +24,8 @@ use Tests\Support\I18n\FrontSource;
 | `lib/game/room-code.ts` rend les mêmes formes et les mêmes verdicts, prouvé
 | par le jeu partagé `tests/Fixtures/room/room-codes.json`, écrit à la main.
 |
-| L50-3b complète ce fichier (attribution et recyclage par la création,
-| résolution et 404 par la route `room.show`).
+| L50-3b complète ce fichier : attribution et recyclage par la création,
+| course sur le code, résolution et 404 par les routes du salon.
 |
 */
 
@@ -323,4 +328,153 @@ it('tire un public_id de douze signes base32, sans I, L, O ni U', function (): v
 
     // Aucune requête : l'unicité est tenue par l'index de la colonne.
     expect(roomCodeQueries(fn () => SeatPublicId::generate()))->toBe([]);
+});
+
+it("n'attribue jamais un code porté par un salon actif et recycle le code d'un salon archivé", function (): void {
+    SeatEntry::isolateCookies();
+
+    $active = Room::factory()->create();
+    $archived = Room::factory()->archived()->create();
+
+    // Le générateur saute le code d'un salon actif et rend celui d'un salon
+    // archivé : l'archivage, qui a remis son créneau à NULL, est l'unique
+    // événement qui rend un code réattribuable.
+    $candidates = [$active->room_code, $archived->room_code];
+    $drawn = 0;
+    $code = RoomCode::generate(function () use (&$candidates, &$drawn): string {
+        $drawn++;
+
+        return (string) array_shift($candidates);
+    });
+
+    expect($code)->toBe($archived->room_code)
+        ->and($drawn)->toBe(2);
+
+    // Le code recyclé porte un salon neuf : c'est lui que le code désigne
+    // désormais, et un vieux lien y mène (résidu assumé, § 6.3).
+    $recycled = Room::factory()->create(['room_code' => $code, 'room_code_active' => $code]);
+
+    expect((new Room)->resolveRouteBinding($code)?->id)->toBe($recycled->id);
+
+    $this->get('/r/'.$code)
+        ->assertStatus(Response::HTTP_SEE_OTHER)
+        ->assertRedirect(route('room.entry', $recycled));
+
+    // Course à la création : un autre salon prend le code tiré entre sa
+    // lecture et l'insertion. La violation de `room_active_code_uq` relance
+    // la transaction entière, qui tire un autre code.
+    $mode = 'steal-once';
+    $attempts = 0;
+
+    Room::creating(function (Room $room) use (&$mode, &$attempts): void {
+        $attempts++;
+
+        if ($mode === 'steal-once' && $attempts > 1) {
+            return;
+        }
+
+        Room::factory()->make([
+            'room_code' => $room->room_code,
+            'room_code_active' => $room->room_code_active,
+        ])->saveQuietly();
+    });
+
+    $this->post(route('room.store'), SeatEntry::form())->assertStatus(Response::HTTP_SEE_OTHER);
+
+    $activeCodes = DB::table('room')->whereNotNull('room_code_active')->pluck('room_code_active')->all();
+
+    expect($attempts)->toBe(2)
+        ->and(Room::query()->count())->toBe(4)
+        ->and($activeCodes)->toHaveCount(3)
+        ->and(array_unique($activeCodes))->toHaveCount(3)
+        ->and(Player::query()->count())->toBe(1);
+
+    // Au-delà de `MAX_ATTEMPTS` collisions, l'échec est bruyant : jamais un
+    // code déjà actif, jamais un salon à moitié créé.
+    $mode = 'steal-always';
+    $attempts = 0;
+
+    $this->withoutExceptionHandling();
+
+    expect(fn () => $this->post(route('room.store'), SeatEntry::form()))->toThrow(RuntimeException::class);
+
+    expect($attempts)->toBe(RoomCode::MAX_ATTEMPTS)
+        ->and(Room::query()->count())->toBe(4)
+        ->and(Player::query()->count())->toBe(1);
+});
+
+it('résout /r/abcdef comme /r/ABCDEF', function (): void {
+    SeatEntry::isolateCookies();
+    $this->withoutVite();
+
+    $room = Room::factory()->create(['room_code' => 'ABCDEF', 'room_code_active' => 'ABCDEF']);
+
+    // Sans siège : la page du salon renvoie vers l'entrée, sous le code
+    // canonique, quelle que soit la saisie.
+    foreach (['abcdef', 'ABCDEF', 'AbC-dEf'] as $typed) {
+        $this->get('/r/'.$typed)
+            ->assertStatus(Response::HTTP_SEE_OTHER)
+            ->assertRedirect('/r/ABCDEF/join');
+
+        $this->get('/r/'.$typed.'/join')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->component('room/join')->where('room.code', 'ABCDEF')->etc());
+    }
+
+    // La prise de siège par le lien en minuscules prend un siège de CE salon.
+    $joined = $this->post('/r/abcdef/join', SeatEntry::form());
+
+    $joined->assertStatus(Response::HTTP_SEE_OTHER)->assertRedirect('/r/ABCDEF');
+
+    $token = SeatEntry::tokenFrom($joined);
+
+    expect(SeatEntry::seatOf($room, $token))->not->toBeNull();
+
+    // Porteur du siège : le lien en minuscules mène au lobby, l'entrée au
+    // salon.
+    LobbyWrites::actAs($this, $token);
+
+    $this->get('/r/abcdef')
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page->component('game/lobby', shouldExist: false)->where('room.code', 'ABCDEF')->etc());
+
+    $this->get('/r/abcdef/join')
+        ->assertStatus(Response::HTTP_SEE_OTHER)
+        ->assertRedirect('/r/ABCDEF');
+});
+
+it('répond 404 à un code mal formé sans interroger la base', function (): void {
+    SeatEntry::isolateCookies();
+
+    Room::factory()->create();
+
+    // Chaque saisie passe le motif tolérant du routeur, puis échoue au
+    // contrôle de forme de la liaison : un signe hors de l'alphabet (0, 1,
+    // I, O), ou une longueur fausse une fois espaces et tirets retirés.
+    $malformed = ['abcde0', 'ABCDE1', 'ABCDEI', 'OABCDE', 'AB-CDE', 'ABCDEFG', 'ABC DEF GH', '222222222'];
+
+    foreach ($malformed as $code) {
+        expect(preg_match('/^'.RoomCode::ROUTE_PATTERN.'$/', $code))->toBe(1, $code)
+            ->and(RoomCode::isWellFormed($code))->toBeFalse($code);
+
+        $segment = rawurlencode($code);
+        $gestures = [
+            'room.show' => fn () => $this->get('/r/'.$segment),
+            'room.entry' => fn () => $this->get('/r/'.$segment.'/join'),
+            'room.join' => fn () => $this->post('/r/'.$segment.'/join', SeatEntry::form()),
+        ];
+
+        foreach ($gestures as $route => $gesture) {
+            $response = null;
+            $queries = roomCodeQueries(function () use ($gesture, &$response): void {
+                $response = $gesture();
+            });
+
+            expect($response?->status())->toBe(Response::HTTP_NOT_FOUND, "{$route} {$code}")
+                ->and($queries)->toBe([], "{$route} {$code}")
+                ->and($response === null ? [] : SeatEntry::tokenCookies($response))->toBe([], "{$route} {$code}");
+        }
+    }
+
+    expect(Player::query()->count())->toBe(0);
 });

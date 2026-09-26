@@ -37,6 +37,6 @@ class RoomSettingsController extends Controller
     {
         $seat = $this->hostSeat($request, $room);
 
-        return $this->settingsWriteResponse($update->handle($room, $seat, $request->posted()));
+        return $this->settingsWriteResponse($room, $update->handle($room, $seat, $request->posted()));
     }
 }

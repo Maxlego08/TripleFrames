@@ -32,6 +32,6 @@ class RoomPresetController extends Controller
     {
         $seat = $this->hostSeat($request, $room);
 
-        return $this->settingsWriteResponse($apply->handle($room, $seat, $request->preset()));
+        return $this->settingsWriteResponse($room, $apply->handle($room, $seat, $request->preset()));
     }
 }

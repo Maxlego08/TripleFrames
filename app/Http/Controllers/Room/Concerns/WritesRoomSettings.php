@@ -55,14 +55,11 @@ trait WritesRoomSettings
      *   part même vide : l'auteur sait ainsi que sa dernière écriture n'a
      *   rien changé d'autre que ce qu'il a posté ;
      * - **`not_host`** — l'hôte a changé entre la policy et le verrou : 403 ;
-     * - **`not_in_lobby`** — la partie est lancée : 303 vers la page du salon,
-     *   sans erreur (§ 12.5, § 12.7), qui montre alors l'état de partie.
-     *
-     * La page du salon (`room.show`) naît au lot L50-3b ; d'ici là, la
-     * redirection 303 vise la page d'où vient l'écriture — seule la page du
-     * salon en poste une.
+     * - **`not_in_lobby`** — la partie est lancée : 303 vers la page du salon
+     *   (`room.show`), sans erreur (§ 12.5, § 12.7), qui montre alors l'état
+     *   de partie — jamais `back()`, qui dépendrait de l'en-tête `Referer`.
      */
-    private function settingsWriteResponse(SettingsWriteOutcome $outcome): RedirectResponse
+    private function settingsWriteResponse(Room $room, SettingsWriteOutcome $outcome): RedirectResponse
     {
         $refusal = $outcome->refusal;
 
@@ -74,7 +71,7 @@ trait WritesRoomSettings
 
         return match ($refusal) {
             RoomRefusal::NotHost => abort(Response::HTTP_FORBIDDEN),
-            RoomRefusal::NotInLobby => back(Response::HTTP_SEE_OTHER),
+            RoomRefusal::NotInLobby => to_route('room.show', $room, Response::HTTP_SEE_OTHER),
             default => throw new LogicException(sprintf(
                 'Refus inattendu pour une écriture de réglages : %s.',
                 $refusal->value,

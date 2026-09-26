@@ -7,13 +7,12 @@ use App\Models\Player;
 use App\Models\Room;
 use App\Models\RoundPlayer;
 use App\Models\User;
+use App\Rules\ValidNickname;
 use App\Settings\PlatformLimits;
 use App\Support\I18n\LocaleCookie;
-use App\Support\Identity\NicknameNormalizer;
 use App\Support\Identity\PlayerToken;
 use App\Support\Identity\PlayerTokenCookie;
 use App\Support\Identity\PlayerTokenManager;
-use App\Support\Room\SeatPublicId;
 use Carbon\CarbonImmutable;
 use Illuminate\Cookie\CookieValuePrefix;
 use Illuminate\Encryption\Encrypter;
@@ -22,15 +21,13 @@ use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Log\Events\MessageLogged;
-use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\Cookie;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Route;
-use Illuminate\Support\Str;
 use Illuminate\Testing\TestResponse;
-use Illuminate\Validation\Rule;
 use Symfony\Component\HttpFoundation\Cookie as SymfonyCookie;
+use Symfony\Component\HttpFoundation\Response;
 
 /*
 |--------------------------------------------------------------------------
@@ -40,17 +37,18 @@ use Symfony\Component\HttpFoundation\Cookie as SymfonyCookie;
 | Cookie HttpOnly chiffré, frappé paresseusement, glissant sur 30 jours ; en
 | base, le SHA-256 du `tid` et rien d'autre.
 |
-| **Tant que `50` n'a pas livré `room.join`**, les tests qui exigent un geste
-| de siège passent par une route déclarée dans ce fichier (lettre de L40-1),
-| qui suit l'ordre du § 2.1, étape 4 : (1) `current()`, qui ne frappe rien ;
-| (2) `seatIn()` — un siège existant est repris sans revalidation, et
-| `ensure()` fait glisser le cookie ; (3) `wasKickedFrom()` refuse avant tout
-| comptage ; (4) capacité et unicité du pseudo sous le verrou du salon ;
-| (5) `ensure()` seulement alors, écriture du siège, puis re-signature avec
-| l'avatar choisi. Le pseudo y est plié par `NicknameNormalizer::normalize()`
-| (L40-3), seul écrivain de `nickname_normalized`, mais sa validation reste
-| minimale : la règle de pseudo n'est pas l'objet de ce fichier
-| (`NicknameValidationTest`).
+| Les tests qui exigent un geste de siège passent par la vraie route
+| `room.join` (`JoinRoomRequest`, puis `TakeSeat` : spec 50 § 7.3, lot
+| L50-3b), qui suit l'ordre du § 2.1, étape 4 : (1) `current()`, qui ne
+| frappe rien ; (2) `seatIn()` — un siège existant est repris sans
+| revalidation, et `ensure()` fait glisser le cookie ; (3) `wasKickedFrom()`
+| refuse avant tout comptage ; (4) capacité et unicité du pseudo sous le
+| verrou du salon ; (5) `ensure()` seulement alors, écriture du siège, puis
+| re-signature avec l'avatar choisi. Une prise ou une reprise réussie répond
+| 303 vers `room.show` ; la règle de pseudo n'est pas l'objet de ce fichier
+| (`NicknameValidationTest`, `SeatTakingTest`). Les autres routes déclarées
+| ici (lecture du jeton, `ensure()` multiples, re-signature d'avatar hors
+| siège, présélection) n'ont pas de vraie route à leur mesure.
 |
 */
 
@@ -78,74 +76,6 @@ function playerTokenPrefix(): string
 
 function playerTokenRoutes(): void
 {
-    // Geste de siège — § 2.1, étape 4.
-    Route::middleware('web')->post(playerTokenPrefix().'/rooms/{room}/seat', function (Request $request, Room $room, PlayerTokenManager $tokens): JsonResponse {
-        // (1) Lecture seule.
-        $tokens->current($request);
-
-        // (2) Reprise : aucune revalidation, aucune écriture du siège ; le
-        // cookie glisse et sa langue se réaligne.
-        $seat = $tokens->seatIn($request, $room);
-
-        if ($seat instanceof Player) {
-            $tokens->ensure($request);
-
-            return response()->json(['outcome' => 'resumed', 'seat' => $seat->public_id]);
-        }
-
-        if ($room->archived_at !== null) {
-            return response()->json(['refused' => 'archived'], 410);
-        }
-
-        $validated = $request->validate([
-            'nickname' => ['required', 'string', 'between:2,20'],
-            'avatar' => ['required', 'string', Rule::in(AvatarPresetCatalog::keys())],
-        ]);
-
-        // (3) Expulsé : refus avant tout comptage.
-        if ($tokens->wasKickedFrom($request, $room)) {
-            return response()->json(['refused' => 'room.join.kicked'], 403);
-        }
-
-        return DB::transaction(function () use ($request, $room, $tokens, $validated): JsonResponse {
-            // (4) Capacité et unicité du pseudo sous le verrou du salon.
-            $locked = Room::query()->whereKey($room->id)->lockForUpdate()->firstOrFail();
-
-            if (Player::query()->whereBelongsTo($locked)->holdingSeat()->count() >= $locked->capacity) {
-                return response()->json(['refused' => 'room.join.full'], 409);
-            }
-
-            $nickname = (string) $validated['nickname'];
-            $normalized = NicknameNormalizer::normalize($nickname);
-
-            if (Player::query()->whereBelongsTo($locked)->where('nickname_normalized', $normalized)->exists()) {
-                return response()->json(['refused' => 'validation.nickname.taken'], 422);
-            }
-
-            // (5) Seulement alors : la frappe, l'écriture, la re-signature.
-            $token = $tokens->ensure($request);
-
-            $seat = new Player;
-            $seat->forceFill([
-                'public_id' => SeatPublicId::generate(),
-                'room_id' => $locked->id,
-                'nickname' => $nickname,
-                'nickname_normalized' => $normalized,
-                'player_token_hash' => $token->hash(),
-                'active_seat_token' => (string) Str::ulid(),
-                'locale' => App::getLocale(),
-                'avatar_kind' => AvatarKind::Preset,
-                'avatar_preset' => (string) $validated['avatar'],
-                'joined_at' => now(),
-                'last_seen_at' => now(),
-            ])->save();
-
-            $tokens->resign($request, $token->withAvatar((string) $validated['avatar']));
-
-            return response()->json(['outcome' => 'seated', 'seat' => $seat->public_id], 201);
-        });
-    });
-
     // Ce que voit un consommateur par `current()` : présence et revendications.
     Route::middleware('web')->get(playerTokenPrefix().'/probe', function (Request $request, PlayerTokenManager $tokens): JsonResponse {
         $token = $tokens->current($request);
@@ -232,9 +162,22 @@ function playerTokenRoutes(): void
     });
 }
 
+/** La prise de siège réelle, `room.join` (spec 50 § 7.3). */
 function playerTokenSeatUri(Room $room): string
 {
-    return playerTokenPrefix().'/rooms/'.$room->room_code.'/seat';
+    return route('room.join', $room);
+}
+
+/**
+ * Une prise ou une reprise de siège réussie : 303 vers la page du salon.
+ *
+ * @param  TestResponse<Response>  $response
+ * @return TestResponse<Response>
+ */
+function playerTokenSeated(TestResponse $response, Room $room): TestResponse
+{
+    return $response->assertStatus(Response::HTTP_SEE_OTHER)
+        ->assertRedirect(route('room.show', $room));
 }
 
 function playerTokenSuggestUri(Room $room): string
@@ -343,8 +286,8 @@ it("ne frappe qu'un player_token par requête, quel que soit le nombre d'appels 
 
     // Un geste de siège appelle `ensure()` puis `resign()` : un seul Set-Cookie,
     // celui de la re-signature, et un seul siège.
-    $seat = $this->postJson(playerTokenSeatUri(Room::factory()->create()), ['nickname' => 'Zoé', 'avatar' => 'preset-07'])
-        ->assertCreated();
+    $room = Room::factory()->create();
+    $seat = playerTokenSeated($this->postJson(playerTokenSeatUri($room), ['nickname' => 'Zoé', 'avatar' => 'preset-07']), $room);
 
     expect(playerTokenSetCookies($seat))->toHaveCount(1)
         ->and(playerTokenClaims($seat)['avatar'])->toBe('preset-07')
@@ -354,7 +297,7 @@ it("ne frappe qu'un player_token par requête, quel que soit le nombre d'appels 
 it('ne stocke que le SHA-256 du tid dans player_token_hash', function () {
     $room = Room::factory()->create();
 
-    $first = $this->postJson(playerTokenSeatUri($room), ['nickname' => 'Zoé', 'avatar' => 'preset-07'])->assertCreated();
+    $first = playerTokenSeated($this->postJson(playerTokenSeatUri($room), ['nickname' => 'Zoé', 'avatar' => 'preset-07']), $room);
     $raw = playerTokenRaw($first);
     $tid = (string) playerTokenClaims($first)['tid'];
     $seat = Player::query()->sole();
@@ -373,12 +316,11 @@ it('ne stocke que le SHA-256 du tid dans player_token_hash', function () {
 
     // La re-signature change la valeur chiffrée (vecteur d'initialisation neuf),
     // jamais le hash : le siège se retrouve.
-    $second = $this->withUnencryptedCookie(PlayerTokenCookie::NAME, $raw)
-        ->postJson(playerTokenSeatUri($room))
-        ->assertOk()
-        ->assertJson(['outcome' => 'resumed', 'seat' => $seat->public_id]);
+    $second = playerTokenSeated($this->withUnencryptedCookie(PlayerTokenCookie::NAME, $raw)
+        ->postJson(playerTokenSeatUri($room)), $room);
 
     expect(playerTokenRaw($second))->not->toBe($raw)
+        ->and(Player::query()->sole()->is($seat))->toBeTrue()
         ->and(Player::query()->sole()->player_token_hash)->toBe(hash('sha256', $tid));
 });
 
@@ -389,8 +331,8 @@ it('écrit le cookie player_token chiffré, HttpOnly, SameSite=Lax, sur le chemi
     // ne s'étend jamais au jeton : hôte seul.
     Cookie::setDefaultPathAndDomain('/', '.sessions.example.test', false, 'lax');
 
-    $response = $this->postJson(playerTokenSeatUri(Room::factory()->create()), ['nickname' => 'Zoé', 'avatar' => 'preset-07'])
-        ->assertCreated();
+    $room = Room::factory()->create();
+    $response = playerTokenSeated($this->postJson(playerTokenSeatUri($room), ['nickname' => 'Zoé', 'avatar' => 'preset-07']), $room);
 
     $cookie = $response->getCookie(PlayerTokenCookie::NAME, decrypt: false);
 
@@ -439,9 +381,8 @@ it("fait glisser l'expiration du cookie et réaligne la revendication de langue 
     $roomB = Room::factory()->create();
 
     // Prise de siège en anglais.
-    $first = $this->withUnencryptedCookie(LocaleCookie::NAME, Locale::English->value)
-        ->postJson(playerTokenSeatUri($roomA), ['nickname' => 'Zoé', 'avatar' => 'preset-07'])
-        ->assertCreated();
+    $first = playerTokenSeated($this->withUnencryptedCookie(LocaleCookie::NAME, Locale::English->value)
+        ->postJson(playerTokenSeatUri($roomA), ['nickname' => 'Zoé', 'avatar' => 'preset-07']), $roomA);
     $claims = playerTokenClaims($first);
 
     expect($claims['locale'])->toBe('en')
@@ -451,14 +392,13 @@ it("fait glisser l'expiration du cookie et réaligne la revendication de langue 
     // depuis la reprise, langue réalignée, même tid.
     $this->travel(10)->days();
 
-    $second = $this->withUnencryptedCookie(PlayerTokenCookie::NAME, playerTokenRaw($first))
+    $second = playerTokenSeated($this->withUnencryptedCookie(PlayerTokenCookie::NAME, playerTokenRaw($first))
         ->withUnencryptedCookie(LocaleCookie::NAME, Locale::French->value)
-        ->postJson(playerTokenSeatUri($roomA))
-        ->assertOk()
-        ->assertJson(['outcome' => 'resumed']);
+        ->postJson(playerTokenSeatUri($roomA)), $roomA);
     $resumed = playerTokenClaims($second);
 
-    expect($resumed['locale'])->toBe('fr')
+    expect(Player::query()->whereBelongsTo($roomA)->count())->toBe(1)
+        ->and($resumed['locale'])->toBe('fr')
         ->and($resumed['tid'])->toBe($claims['tid'])
         ->and($resumed['avatar'])->toBe('preset-07')
         ->and($second->getCookie(PlayerTokenCookie::NAME, decrypt: false)?->getExpiresTime())->toBe(now()->addDays(30)->getTimestamp());
@@ -467,10 +407,9 @@ it("fait glisser l'expiration du cookie et réaligne la revendication de langue 
     // nouveau en anglais.
     $this->travel(5)->days();
 
-    $third = $this->withUnencryptedCookie(PlayerTokenCookie::NAME, playerTokenRaw($second))
+    $third = playerTokenSeated($this->withUnencryptedCookie(PlayerTokenCookie::NAME, playerTokenRaw($second))
         ->withUnencryptedCookie(LocaleCookie::NAME, Locale::English->value)
-        ->postJson(playerTokenSeatUri($roomB), ['nickname' => 'Zoé', 'avatar' => 'preset-07'])
-        ->assertCreated();
+        ->postJson(playerTokenSeatUri($roomB), ['nickname' => 'Zoé', 'avatar' => 'preset-07']), $roomB);
     $seated = playerTokenClaims($third);
 
     expect($seated['locale'])->toBe('en')
@@ -543,10 +482,8 @@ it("traite comme absent un cookie altéré, illisible, étranger ou d'une versio
         ->assertJson(['present' => false, 'hash' => null]);
 
     // Le geste de siège suivant frappe un jeton neuf, sans erreur.
-    $seat = $this->withUnencryptedCookie(PlayerTokenCookie::NAME, $raw)
-        ->postJson(playerTokenSeatUri($room), ['nickname' => 'Zoé', 'avatar' => 'preset-03'])
-        ->assertCreated()
-        ->assertJson(['outcome' => 'seated']);
+    $seat = playerTokenSeated($this->withUnencryptedCookie(PlayerTokenCookie::NAME, $raw)
+        ->postJson(playerTokenSeatUri($room), ['nickname' => 'Zoé', 'avatar' => 'preset-03']), $room);
 
     $minted = (string) playerTokenClaims($seat)['tid'];
 
@@ -590,13 +527,11 @@ it("conserve le tid quand sa revendication de langue ou d'avatar n'est plus conn
         ->and($decoded?->avatar)->toBeNull();
 
     // Aucun siège n'est détruit : le geste reprend le même siège, sous le même tid.
-    $resumed = $this->withCookie(PlayerTokenCookie::NAME, json_encode($claims, JSON_THROW_ON_ERROR))
-        ->postJson(playerTokenSeatUri($room))
-        ->assertOk()
-        ->assertJson(['outcome' => 'resumed', 'seat' => $seat->public_id]);
+    $resumed = playerTokenSeated($this->withCookie(PlayerTokenCookie::NAME, json_encode($claims, JSON_THROW_ON_ERROR))
+        ->postJson(playerTokenSeatUri($room)), $room);
 
     expect(playerTokenClaims($resumed)['tid'])->toBe($token->toClaims()['tid'])
-        ->and(Player::query()->count())->toBe(1);
+        ->and(Player::query()->sole()->is($seat))->toBeTrue();
 });
 
 it('refuse de re-signer un jeton sous un autre tid', function () {
@@ -630,7 +565,7 @@ it('refuse de re-signer un jeton sous un autre tid', function () {
 
 it("laisse le player_token intact à la connexion, à la déconnexion et à l'inscription", function () {
     $room = Room::factory()->create();
-    $seated = $this->postJson(playerTokenSeatUri($room), ['nickname' => 'Zoé', 'avatar' => 'preset-07'])->assertCreated();
+    $seated = playerTokenSeated($this->postJson(playerTokenSeatUri($room), ['nickname' => 'Zoé', 'avatar' => 'preset-07']), $room);
     $raw = playerTokenRaw($seated);
     $hash = Player::query()->sole()->player_token_hash;
 
@@ -663,9 +598,7 @@ it("laisse le player_token intact à la connexion, à la déconnexion et à l'in
     $probe();
 
     // Le siège se retrouve toujours par le même jeton.
-    $this->postJson(playerTokenSeatUri($room))
-        ->assertOk()
-        ->assertJson(['outcome' => 'resumed']);
+    playerTokenSeated($this->postJson(playerTokenSeatUri($room)), $room);
 
     expect(Player::query()->count())->toBe(1);
 });
@@ -675,26 +608,34 @@ it('ne frappe aucun player_token quand la prise de siège est refusée', functio
     $open = Room::factory()->create();
 
     $invalid = $this->postJson(playerTokenSeatUri($open), ['nickname' => 'Z', 'avatar' => 'preset-07'])
-        ->assertUnprocessable();
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('nickname');
 
-    // Salon archivé.
-    $archived = $this->postJson(playerTokenSeatUri(Room::factory()->archived()->create()), ['nickname' => 'Zoé', 'avatar' => 'preset-07'])
-        ->assertStatus(410);
+    // Salon archivé : renvoyé sans erreur vers la page du salon (« salon
+    // expiré »).
+    $this->flushSession();
+    $closed = Room::factory()->archived()->create();
 
-    // Salon plein.
+    $archived = playerTokenSeated($this->postJson(playerTokenSeatUri($closed), ['nickname' => 'Zoé', 'avatar' => 'preset-07']), $closed)
+        ->assertSessionHasNoErrors();
+
+    // Salon plein : retour au formulaire d'entrée, erreur `room`.
     $full = Room::factory()->create();
     Player::factory()->count($full->capacity)->for($full)->create();
 
+    $this->flushSession();
     $crowded = $this->postJson(playerTokenSeatUri($full), ['nickname' => 'Zoé', 'avatar' => 'preset-07'])
-        ->assertStatus(409)
-        ->assertJson(['refused' => 'room.join.full']);
+        ->assertStatus(Response::HTTP_SEE_OTHER)
+        ->assertRedirect(route('room.entry', $full))
+        ->assertSessionHasErrors(['room' => trans('room.join.full')]);
 
     // Pseudo pris, repli compris.
     Player::factory()->for($open)->withNickname('Zoé')->create();
 
+    $this->flushSession();
     $taken = $this->postJson(playerTokenSeatUri($open), ['nickname' => 'zoe', 'avatar' => 'preset-07'])
         ->assertUnprocessable()
-        ->assertJson(['refused' => 'validation.nickname.taken']);
+        ->assertJsonValidationErrors(['nickname' => trans(ValidNickname::KEY_TAKEN)]);
 
     foreach (compact('invalid', 'archived', 'crowded', 'taken') as $gesture => $response) {
         expect(playerTokenSetCookies($response))->toBe([], "[{$gesture}] a frappé un player_token.");
@@ -706,10 +647,12 @@ it('ne frappe aucun player_token quand la prise de siège est refusée', functio
     Player::factory()->for($full)->kicked()->create(['player_token_hash' => $token->hash()]);
     $before = Player::query()->count();
 
+    $this->flushSession();
     $kicked = $this->withCookie(PlayerTokenCookie::NAME, json_encode($token->toClaims(), JSON_THROW_ON_ERROR))
         ->postJson(playerTokenSeatUri($full), ['nickname' => 'Autre', 'avatar' => 'preset-02'])
-        ->assertForbidden()
-        ->assertJson(['refused' => 'room.join.kicked']);
+        ->assertStatus(Response::HTTP_SEE_OTHER)
+        ->assertRedirect(route('room.entry', $full))
+        ->assertSessionHasErrors(['room' => trans('room.join.kicked')]);
 
     expect(playerTokenSetCookies($kicked))->toBe([])
         ->and(Player::query()->count())->toBe($before);
@@ -718,8 +661,8 @@ it('ne frappe aucun player_token quand la prise de siège est refusée', functio
 it('repart de 30 jours pleins à chaque re-signature, changement de langue compris', function () {
     $this->freezeSecond();
 
-    $seated = $this->postJson(playerTokenSeatUri(Room::factory()->create()), ['nickname' => 'Zoé', 'avatar' => 'preset-07'])
-        ->assertCreated();
+    $room = Room::factory()->create();
+    $seated = playerTokenSeated($this->postJson(playerTokenSeatUri($room), ['nickname' => 'Zoé', 'avatar' => 'preset-07']), $room);
     $tid = playerTokenClaims($seated)['tid'];
 
     // Douze jours plus tard, un changement de langue re-signe le jeton — par
@@ -757,7 +700,7 @@ it("re-signe le player_token avec l'avatar choisi sous le même tid, que suggest
     // Un siège parti ne tient plus son avatar.
     Player::factory()->for($busy)->left()->create(['avatar_preset' => 'preset-02']);
 
-    $seated = $this->postJson(playerTokenSeatUri($roomA), ['nickname' => 'Zoé', 'avatar' => 'preset-07'])->assertCreated();
+    $seated = playerTokenSeated($this->postJson(playerTokenSeatUri($roomA), ['nickname' => 'Zoé', 'avatar' => 'preset-07']), $roomA);
     $claims = playerTokenClaims($seated);
 
     expect($claims['avatar'])->toBe('preset-07')
@@ -772,7 +715,7 @@ it("re-signe le player_token avec l'avatar choisi sous le même tid, que suggest
     $this->getJson(playerTokenSuggestUri($busy))->assertOk()->assertJson(['suggested' => 'preset-02']);
 
     // Un autre choix au salon suivant re-signe le jeton sous le même tid.
-    $next = $this->postJson(playerTokenSeatUri($free), ['nickname' => 'Zoé', 'avatar' => 'preset-03'])->assertCreated();
+    $next = playerTokenSeated($this->postJson(playerTokenSeatUri($free), ['nickname' => 'Zoé', 'avatar' => 'preset-03']), $free);
 
     expect(playerTokenClaims($next)['avatar'])->toBe('preset-03')
         ->and(playerTokenClaims($next)['tid'])->toBe($claims['tid'])
@@ -781,10 +724,10 @@ it("re-signe le player_token avec l'avatar choisi sous le même tid, que suggest
 
 it("prend le siège d'un compte connecté sous le pseudo saisi, sans user_id au jalon 1", function () {
     $user = User::factory()->create(['name' => 'Alice Martin']);
+    $room = Room::factory()->create();
 
-    $seated = $this->actingAs($user)
-        ->postJson(playerTokenSeatUri(Room::factory()->create()), ['nickname' => 'Zoé', 'avatar' => 'preset-04'])
-        ->assertCreated();
+    $seated = playerTokenSeated($this->actingAs($user)
+        ->postJson(playerTokenSeatUri($room), ['nickname' => 'Zoé', 'avatar' => 'preset-04']), $room);
 
     $seat = Player::query()->sole();
 
@@ -833,9 +776,8 @@ it('re-signe le player_token avec la nouvelle langue et le même tid', function 
     $this->freezeSecond();
     $room = Room::factory()->create();
 
-    $seated = $this->withUnencryptedCookie(LocaleCookie::NAME, Locale::English->value)
-        ->postJson(playerTokenSeatUri($room), ['nickname' => 'Zoé', 'avatar' => 'preset-07'])
-        ->assertCreated();
+    $seated = playerTokenSeated($this->withUnencryptedCookie(LocaleCookie::NAME, Locale::English->value)
+        ->postJson(playerTokenSeatUri($room), ['nickname' => 'Zoé', 'avatar' => 'preset-07']), $room);
     $claims = playerTokenClaims($seated);
     $seat = Player::query()->sole();
 
@@ -864,9 +806,9 @@ it('re-signe le player_token avec la nouvelle langue et le même tid', function 
         ->assertOk()
         ->assertJson(['present' => true, 'hash' => $seat->player_token_hash, 'locale' => 'fr', 'avatar' => 'preset-07']);
 
-    $this->postJson(playerTokenSeatUri($room))
-        ->assertOk()
-        ->assertJson(['outcome' => 'resumed', 'seat' => $seat->public_id]);
+    playerTokenSeated($this->postJson(playerTokenSeatUri($room)), $room);
+
+    expect(Player::query()->sole()->is($seat))->toBeTrue();
 
     // Idempotent : rejouer le geste rend le même jeton et le même siège.
     $again = $this->from('/')

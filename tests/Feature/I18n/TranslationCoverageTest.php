@@ -6,6 +6,7 @@ use App\Enums\AdminActionSubject;
 use App\Enums\AdminActionType;
 use App\Enums\ErrorPageStatus;
 use App\Enums\FrameProcessingFailure;
+use App\Enums\JoinRefusal;
 use App\Enums\LegalPage;
 use App\Enums\Locale;
 use App\Enums\SettingPresetKey;
@@ -443,6 +444,12 @@ it('carries every key built by an enumerable key constructor', function () {
         // Les sept messages du pseudo, `taken` de `50` compris (40 § 5.9,
         // L40-3) : la règle les émet par constante, jamais par littéral.
         ...ValidNickname::MESSAGE_KEYS,
+        // Refus d'une prise de siège (50 § 7.3, L50-3b) : `room.join.<valeur>`,
+        // sauf le salon archivé, que la page « salon expiré » dit seule.
+        ...array_values(array_filter(array_map(
+            static fn (JoinRefusal $refusal): ?string => $refusal->messageKey(),
+            JoinRefusal::cases(),
+        ))),
     ];
 
     $missing = array_values(array_filter(

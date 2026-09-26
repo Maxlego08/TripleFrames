@@ -7,6 +7,7 @@ use App\Actions\Fortify\ResetUserPassword;
 use App\Settings\EngineConstants;
 use App\Support\Identity\AccountSwitches;
 use App\Support\Identity\PlayerTokenManager;
+use App\Support\Room\RoomRateLimits;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Config;
@@ -225,6 +226,32 @@ class FortifyServiceProvider extends ServiceProvider
 
         RateLimiter::for('frame-serve', function (Request $request) {
             return Limit::perMinute(EngineConstants::frameServePerMinute())
+                ->by($this->seatThrottleKey($request));
+        });
+
+        $this->configureRoomRateLimiting();
+    }
+
+    /**
+     * Les deux limiteurs d'entrée du salon (spec 50 § 17.3) : gardes
+     * anti-abus, jamais des limites de confort ni des valeurs de jeu, jamais
+     * résolues par compte. Débits lus dans `RoomRateLimits` à chaque
+     * comptage, jamais en littéral.
+     *
+     * - `room-create` (`room.store`) : par adresse IP, clé qui ne vit que dans
+     *   le cache du limiteur, jamais dans une table de domaine ;
+     * - `room-join` (`room.join`) : par hash du `player_token`, repli sur
+     *   l'IP, comme les limiteurs de jeu.
+     */
+    private function configureRoomRateLimiting(): void
+    {
+        RateLimiter::for('room-create', function (Request $request) {
+            return Limit::perHour(RoomRateLimits::createsPerHour())
+                ->by(self::SEAT_THROTTLE_IP_PREFIX.$request->ip());
+        });
+
+        RateLimiter::for('room-join', function (Request $request) {
+            return Limit::perMinute(RoomRateLimits::joinsPerMinute())
                 ->by($this->seatThrottleKey($request));
         });
     }

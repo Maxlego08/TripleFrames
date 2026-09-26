@@ -32,10 +32,10 @@ use Symfony\Component\HttpFoundation\Response;
  * redirige le visiteur sans siège vers la page d'entrée `room/*`, hors du
  * groupe, qui suit l'apparence du visiteur. `ShellTest` garde la règle.
  *
- * Il sera posé (L50-4, L50-8, L60-16) sur le groupe de `routes/game.php` qui
- * rendra les pages `game/*` — aucune route ne le porte encore —, APRÈS
- * `HandleAppearance` (fin du groupe `web`), dont il supplante la valeur lue
- * dans le cookie. Une exception levée derrière lui rend la page publique
+ * Il est posé sur les routes de `routes/game.php` qui rendent les pages
+ * `game/*` — `room.show` depuis le lot L50-3b, puis `solo.show` (L60-16) —,
+ * APRÈS `HandleAppearance` (fin du groupe `web`), dont il supplante la valeur
+ * lue dans le cookie. Une exception levée derrière lui rend la page publique
  * `error` : `ErrorPageResponder` remet alors l'apparence du visiteur (spec 90
  * § 4.8), pour qu'aucune page hors `game/*` ne soit jamais forcée.
  *

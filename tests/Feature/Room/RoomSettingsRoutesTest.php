@@ -236,6 +236,21 @@ it('renvoie au salon sans erreur ni rapport une écriture hors du lobby, en 303'
         ->assertSessionHasNoErrors()
         ->assertInertiaFlashMissing('settingsChanges');
 
+    // Sans en-tête `Referer` ni URL précédente en session : la page du salon
+    // (`room.show`), jamais un retour arrière vers l'accueil (L50-3b, E86-1).
+    $this->flushSession();
+    $this->withoutHeader('referer')
+        ->json('PATCH', route('room.settings.update', $room), ['roundsCount' => Bounds::MIN_ROUNDS_COUNT], [
+            'X-Inertia' => 'true',
+            'X-Requested-With' => 'XMLHttpRequest',
+            'Accept' => 'text/html, application/xhtml+xml',
+            EnsureActiveSeat::HEADER => (string) $host->active_seat_token,
+        ])
+        ->assertStatus(Response::HTTP_SEE_OTHER)
+        ->assertRedirect(route('room.show', $room))
+        ->assertSessionHasNoErrors()
+        ->assertInertiaFlashMissing('settingsChanges');
+
     expect(settingsRouteRow($room))->toBe($before);
 });
 

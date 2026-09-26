@@ -11,14 +11,3 @@ parameters:
         - routes/
 
     level: 7
-
-    ignoreErrors:
-        # Contrat C5 (spec 40 § 5.8, L40-3) : le trait est livré avant ses
-        # FormRequest, qui appartiennent aux lots de prise de siège (`50`) et
-        # de démarrage solo (`60`). La première qui l'utilise rend ce motif
-        # sans objet, et PHPStan échoue alors sur un motif ignoré jamais
-        # rencontré (`reportUnmatchedIgnoredErrors`, vrai par défaut) :
-        # l'exception se retire d'elle-même, dans le commit de ce lot-là.
-        -
-            identifier: trait.unused
-            path: app/Concerns/PlayerIdentityValidationRules.php

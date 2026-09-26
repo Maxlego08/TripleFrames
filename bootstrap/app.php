@@ -71,11 +71,11 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->encryptCookies(except: ['appearance', 'sidebar_state', 'locale']);
 
         // `game.appearance` force le sombre des pages `game/*`, et d'elles
-        // seules (spec 90 § 2.2) : il sera posé (L50-4, L50-8, L60-16) sur le
-        // groupe de `routes/game.php` qui les rendra, jamais sur une route qui
-        // rend une autre page ; aucune route ne le porte encore. Aucun forçage
-        // pour le back-office : il suit la préférence du visiteur (D8 du
-        // 23/09).
+        // seules (spec 90 § 2.2) : posé sur `room.show` (L50-3b), la page du
+        // salon, puis sur `solo.show` (L60-16), jamais sur une route qui rend
+        // une autre page — les pages d'entrée `room/*` suivent l'apparence du
+        // visiteur. Aucun forçage pour le back-office : il suit la préférence
+        // du visiteur (D8 du 23/09).
         //
         // `accounts.switches` ferme l'inscription et les passkeys hors `local`
         // et `testing` (spec 40 § 8.2) : posé sur le groupe de Fortify par

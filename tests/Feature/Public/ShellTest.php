@@ -474,8 +474,8 @@ it("ne marque jamais une page publique comme d'apparence forcée", function () {
     // 3. Règle de groupe (spec 90 § 2.2) : une route qui porte
     //    `game.appearance` ne rend QUE des pages `game/*` — le partage a lieu
     //    avant le contrôleur, qui ne peut plus rien décider après coup. Garde
-    //    auto-activée : aucune route réelle ne le porte avant le lobby (L50-4).
-    //    Les pages d'entrée `room/*` ne le portent jamais.
+    //    auto-activée : `room.show` le porte depuis L50-3b. Les pages d'entrée
+    //    `room/*` ne le portent jamais.
     $violations = [];
 
     foreach (Route::getRoutes()->getRoutes() as $route) {
