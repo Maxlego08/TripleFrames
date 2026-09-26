@@ -7,6 +7,7 @@ use App\Enums\FrameLevel;
 use App\Enums\FrameProcessingFailure;
 use App\Enums\FrameProcessingState;
 use App\Enums\FrameSourceKind;
+use App\Support\Frames\FrameStoragePrefix;
 use Carbon\CarbonImmutable;
 use Database\Factories\FrameFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -19,6 +20,8 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\Storage;
+use League\Flysystem\FilesystemException;
 
 /**
  * Une variante d'image de la banque d'un film.
@@ -132,6 +135,33 @@ class Frame extends Model
         return $this->availability->isPlayable()
             && $this->processing_state === FrameProcessingState::Ready
             && $this->game_path !== null;
+    }
+
+    /**
+     * Le dérivé de jeu est PRÉSENT : `game_path` appartient au préfixe `game/`
+     * ({@see FrameStoragePrefix::owns()}, la garde même de la route `/f/`,
+     * contrat C8) **et** le fichier existe sur le disque `frames`. Une erreur
+     * du disque vaut absence : une variante douteuse n'est jamais retenue.
+     *
+     * Complément de {@see self::isServable()}, qui ne regarde que la base : la
+     * même présence est lue des deux côtés de la frappe du jeton d'image — la
+     * retenue de la variante tirée (`MintTierServeToken`, spec 60 § 6.2) et
+     * les candidates de substitution (`VariantChooser::substitute()`, spec 30
+     * § 8.1) —, faute de quoi une frame retenue d'un côté serait servie en 404
+     * toute la manche (E72-2). Ni la garde temporelle ni l'appartenance du
+     * demandeur n'en font partie.
+     */
+    public function hasGameFile(): bool
+    {
+        if ($this->game_path === null || ! FrameStoragePrefix::Game->owns($this->game_path)) {
+            return false;
+        }
+
+        try {
+            return Storage::disk(FrameStoragePrefix::DISK)->exists($this->game_path);
+        } catch (FilesystemException) {
+            return false;
+        }
     }
 
     /**

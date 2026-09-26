@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Game\ClockController;
+use App\Http\Controllers\Game\FrameServeController;
 use App\Http\Controllers\Game\RoomStateController;
 use App\Http\Controllers\Room\RoomPresetController;
 use App\Http\Controllers\Room\RoomSettingsController;
@@ -38,6 +39,24 @@ use Illuminate\View\Middleware\ShareErrorsFromSession;
 Route::get('clock', [ClockController::class, 'show'])
     ->name('clock.show')
     ->middleware('throttle:game-read')
+    ->withoutMiddleware([
+        StartSession::class,
+        ShareErrorsFromSession::class,
+        PreventRequestForgery::class,
+        AddQueuedCookiesToResponse::class,
+    ]);
+
+// Service d'image d'un palier (§ 7.3, contrat C8 § 2), adressé par le
+// `serve_token` de la manche, jamais par un chemin. URL signée RELATIVE
+// produite par le serveur (`ServeUrl`), jamais reconstruite par Wayfinder :
+// 403 sur une signature invalide ou expirée, 429 au-delà du débit, 404
+// uniforme sinon. Posée par L60-5, que `ServeUrl` exige ; le prédicat de
+// service (`ServeGuard`) y est branché par L60-8, et d'ici là la route
+// refuse tout.
+Route::get('f/{serveToken}', [FrameServeController::class, 'show'])
+    ->name('frame.serve')
+    ->where('serveToken', '[0-9a-f]{32}')
+    ->middleware(['signed:relative', 'throttle:frame-serve'])
     ->withoutMiddleware([
         StartSession::class,
         ShareErrorsFromSession::class,

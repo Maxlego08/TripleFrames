@@ -6,12 +6,9 @@ use App\Enums\FrameLevel;
 use App\Models\Frame;
 use App\Models\Round;
 use App\Models\RoundTier;
-use App\Support\Frames\FrameStoragePrefix;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Query\JoinClause;
-use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
-use League\Flysystem\FilesystemException;
 
 /**
  * Le choix d'une variante parmi celles d'un même (film, niveau) — au lancement
@@ -221,7 +218,10 @@ final readonly class VariantChooser
         $candidates = [];
 
         foreach ($query->get() as $frame) {
-            if (! self::gameFileIsPresent($frame->game_path)) {
+            // Même présence que la retenue de la variante tirée à la frappe
+            // (`MintTierServeToken`, spec 60 § 6.2 ; E72-2) : préfixe `game/`
+            // et fichier sur le disque `frames`.
+            if (! $frame->hasGameFile()) {
                 continue;
             }
 
@@ -235,24 +235,5 @@ final readonly class VariantChooser
         }
 
         return $candidates;
-    }
-
-    /**
-     * Le dérivé est servable par la route de jeu : son chemin appartient au
-     * préfixe `game/` ({@see FrameStoragePrefix::owns()}, la garde même de la
-     * route, C8) et le fichier existe sur le disque `frames`. Une erreur du
-     * disque vaut absence : une candidate douteuse n'est jamais proposée.
-     */
-    private static function gameFileIsPresent(?string $gamePath): bool
-    {
-        if ($gamePath === null || ! FrameStoragePrefix::Game->owns($gamePath)) {
-            return false;
-        }
-
-        try {
-            return Storage::disk(FrameStoragePrefix::DISK)->exists($gamePath);
-        } catch (FilesystemException) {
-            return false;
-        }
     }
 }

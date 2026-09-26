@@ -16,15 +16,20 @@ use InvalidArgumentException;
  * Fabrique de test de {@see RoundTier} — le palier matérialisé : une image, un
  * instant, une durée, une valeur (§ 7.4).
  *
- * **`serve_token` est NULL tant que le palier n'est pas ouvert**, et c'est la
- * propriété la plus facile à casser ici. Le jeton est frappé *à l'ouverture du
- * palier*, dans la même transaction que `served_frame_id` et `served_at`, par la
- * transition serveur et par elle seule — jamais par la route de service d'image,
- * qui est en lecture seule sans exception. Un défaut de fabrique qui le
- * remplirait rendrait vert le test nommé du § 7.4 (« après `N` requêtes d'image
- * anticipées et aucune frontière franchie, `served_at` est nul ») sur un montage
- * qui le viole. Les quatre colonnes ne sont donc écrites que par
- * {@see self::served()} et {@see self::substituted()}.
+ * **Les quatre colonnes de service sont NULL par défaut**, et c'est la propriété
+ * la plus facile à casser ici. En jeu, elles ont deux écrivains uniques (spec 60
+ * § 6.1, contrat C8 § 2, E10-47) : le jeton est frappé *à l'ouverture du palier
+ * précédent* — à la programmation de la manche pour le palier 1 — avec
+ * `served_frame_id` et `substitution_reason`, par `MintTierServeToken` ;
+ * `served_at` est écrit plus tard, *à l'ouverture du palier* (`Tᵢ`, instant
+ * théorique), par `OpenTier`. Jamais par la route de service d'image, qui est en
+ * lecture seule sans exception. Un défaut de fabrique qui les remplirait rendrait
+ * vert le test nommé du § 7.4 (« après `N` requêtes d'image anticipées et aucune
+ * frontière franchie, `served_at` est nul ») sur un montage qui le viole. Elles
+ * ne sont donc écrites que par {@see self::served()} et {@see self::substituted()},
+ * qui posent l'état d'un palier après SES DEUX écrivains ; un test qui a besoin
+ * d'un palier frappé mais non ouvert le fait frapper par `MintTierServeToken`
+ * elle-même.
  *
  * **Aucune colonne `opened_at` n'existe** : l'instant d'ouverture se calcule par
  * `round.started_at + starts_at_offset_ms`, de sorte qu'un job de frontière en
@@ -91,8 +96,12 @@ class RoundTierFactory extends Factory
     }
 
     /**
-     * Palier OUVERT : les quatre colonnes de service écrites ensemble, comme la
-     * transition serveur les écrit — exactement une fois.
+     * Palier FRAPPÉ PUIS OUVERT : les colonnes de service dans l'état où les
+     * laissent leurs deux écrivains — le jeton et la variante servie par
+     * `MintTierServeToken` (au palier précédent, ou à la programmation pour le
+     * palier 1), `served_at` par `OpenTier` à `Tᵢ` —, chacune exactement une
+     * fois (E10-47). `served_at` vaut ici « maintenant », jamais l'instant
+     * théorique : un test qui en dépend le pose lui-même.
      *
      * `serve_token` est un `bin2hex(random_bytes(16))` lié à la **manche** et non à
      * la frame : deux manches portant la même image produisent deux jetons

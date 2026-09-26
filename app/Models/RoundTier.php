@@ -19,15 +19,26 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * Le palier matérialisé : une image, un instant, une durée, une valeur (§ 7.4).
  *
  * Rien de ce qui décide d'un score ne se recalcule : `starts_at_offset_ms`,
- * `duration_ms` et `points` sont figés au lancement et **aucune colonne de temps
- * ni de points n'est jamais touchée ensuite**. Seules `served_frame_id`,
- * `served_at`, `substitution_reason` et `serve_token` sont écrites — exactement
- * une fois, à l'ouverture du palier, par la transition serveur, JAMAIS par la
- * route de service d'image, qui est en lecture seule sans exception : une requête
- * cliente qui les écrirait daterait le journal sur le préchargement, laisserait
- * un palier affiché sans image enregistrée, et fabriquerait une ligne
- * `seen_frame` sur une image jamais montrée — influençant le tirage des parties
- * suivantes du salon.
+ * `duration_ms` et `points` sont figés au lancement (`MaterializeDraw`) et
+ * **aucune colonne de temps ni de points n'est jamais touchée ensuite**. Les
+ * quatre colonnes de service s'écrivent chacune exactement une fois, par deux
+ * écrivains uniques (spec 60 § 3.3 et § 6.1, contrat C8 § 2, E10-47) :
+ *
+ * - **à la FRAPPE** — ouverture du palier précédent, ou programmation de la
+ *   manche pour le palier 1 — `serve_token`, `served_frame_id` et
+ *   `substitution_reason`, par `MintTierServeToken` seule : la frappe un cran
+ *   à l'avance rend le préchargement possible sans qu'une substitution ne
+ *   change jamais les octets derrière une URL déjà transmise ;
+ * - **à l'OUVERTURE** (`Tᵢ`) `served_at`, à l'instant THÉORIQUE, même si le
+ *   job de frontière est en retard, par `OpenTier` seule, qui upserte aussi
+ *   `seen_frame` sur `served_frame_id`, en multijoueur seulement.
+ *
+ * JAMAIS par la route de service d'image, qui est en lecture seule sans
+ * exception : une requête cliente qui les écrirait daterait le journal sur le
+ * préchargement, laisserait un palier affiché sans image enregistrée, et
+ * fabriquerait une ligne `seen_frame` sur une image jamais montrée —
+ * influençant le tirage des parties suivantes du salon. Un palier jamais
+ * ouvert (fin anticipée, annulation) n'est jamais marqué servi.
  *
  * Il n'existe AUCUNE colonne `opened_at` absolue : l'instant d'ouverture se
  * calcule (`round.started_at + starts_at_offset_ms`), de sorte qu'un job de
@@ -46,9 +57,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property int $tier_index Rang d'affichage `1..N`, propriété volatile née du tirage.
  * @property int|null $frame_id Variante tirée et figée au lancement. `#[Hidden]`.
  * @property FrameLevel $frame_level Dénormalisé ; garde le journal lisible si la frame disparaît. `#[Hidden]`.
- * @property string|null $serve_token `bin2hex(random_bytes(16))`, écrit à l'ouverture du palier ; seul identifiant d'image qui quitte le serveur, et lié à une MANCHE, pas à une frame. `#[Hidden]`.
- * @property int|null $served_frame_id La variante réellement affichée. `#[Hidden]`.
- * @property CarbonImmutable|null $served_at Instant d'affichage effectif.
+ * @property string|null $serve_token `bin2hex(random_bytes(16))`, frappé à l'ouverture du palier précédent (palier 1 : à la programmation de la manche) ; seul identifiant d'image qui quitte le serveur, et lié à une MANCHE, pas à une frame. `#[Hidden]`.
+ * @property int|null $served_frame_id La variante réellement affichée, retenue à la frappe. `#[Hidden]`.
+ * @property CarbonImmutable|null $served_at Instant THÉORIQUE d'ouverture (`started_at + starts_at_offset_ms`), écrit à `Tᵢ` ; nul pour un palier jamais ouvert.
  * @property RoundIncidentReason|null $substitution_reason Non nulle seulement si `served_frame_id <> frame_id`.
  * @property int $starts_at_offset_ms Décalage depuis `round.started_at`.
  * @property int $duration_ms Toujours multiple de 1000.
