@@ -1,6 +1,8 @@
 <?php
 
+use App\Actions\Game\FinalizeGame;
 use App\Enums\GamePlayerStatus;
+use App\Enums\GameStatus;
 use App\Enums\GuessSource;
 use App\Enums\InputDifficulty;
 use App\Enums\RoundStatus;
@@ -12,6 +14,7 @@ use App\Support\Scoring\Scoreboard;
 use App\ValueObjects\Scoring\PlayerTally;
 use App\ValueObjects\Scoring\TierScore;
 use App\ValueObjects\Scoring\TierWindow;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Support\Facades\DB;
 use Tests\Support\Scoring\ScoringFixtures;
@@ -293,14 +296,29 @@ test('types/scoring.ts déclare une seule fois chaque type du contrat et reprend
         ->and($fields('LeaderboardRow'))->toBe([array_keys($leaderboard['rows'][0])])
         ->and($fields('RoundFinder'))->toBe([array_keys(Scoreboard::roundFinders($round)[0])]);
 
-    // Le podium n'a pas encore de producteur (L80-5) : ses clés sont celles de C13 § 3.
+    // Le podium (L80-5) : clés de C13 § 3, dans l'ordre de son producteur, sur
+    // une partie gelée qui a une manche close et une annulation non remplacée.
+    $frozen = ScoringFixtures::game();
+    $finder = ScoringFixtures::seat($frozen);
+    ScoringFixtures::find(ScoringFixtures::round($frozen, 1, RoundStatus::Completed), $finder, $frozen->tier_grace_ms);
+    ScoringFixtures::round($frozen, 2, RoundStatus::Cancelled);
+    app(FinalizeGame::class)->handle($frozen, GameStatus::Completed, CarbonImmutable::now());
+    $podium = Scoreboard::podium($frozen);
+    $identity = ['publicId', 'nickname', 'masked', 'avatar'];
+
     expect($fields('Podium'))->toBe([['gameStatus', 'mode', 'roundsCompleted', 'roundsCount', 'framesPerRound', 'scoreless', 'endedAt', 'standings', 'recap', 'highlights']])
+        ->and($fields('Podium'))->toBe([array_keys($podium)])
         ->and($fields('PodiumStanding'))->toBe([['status', 'firstRoundNumber', 'rank', 'rankShared', 'finalScore', 'correctAnswers', 'roundsPlayed', 'totalAnswerTimeMs']])
+        ->and(array_slice(array_keys($podium['standings'][0]), 0, count($identity)))->toBe($identity)
+        ->and($fields('PodiumStanding'))->toBe([array_slice(array_keys($podium['standings'][0]), count($identity))])
         ->and($fields('RecapEntry'))->toBe([
             ['roundNumber', 'outcome', 'titles', 'foundCount', 'finders'],
             ['roundNumber', 'outcome', 'titles', 'foundCount', 'finders'],
         ])
-        ->and($fields('PodiumHighlights'))->toBe([['bestAnswer', 'fastestFind', 'unfoundRoundNumbers']]);
+        ->and(array_column($podium['recap'], 'outcome'))->toBe(['completed', 'cancelled'])
+        ->and($fields('RecapEntry'))->toBe(array_map(array_keys(...), $podium['recap']))
+        ->and($fields('PodiumHighlights'))->toBe([['bestAnswer', 'fastestFind', 'unfoundRoundNumbers']])
+        ->and($fields('PodiumHighlights'))->toBe([array_keys($podium['highlights'])]);
 
     // L'issue d'un siège : exactement les cas de GamePlayerStatus.
     preg_match_all("/'([^']*)'/", $declarations['SeatOutcome'], $outcomes);

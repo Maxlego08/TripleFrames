@@ -58,8 +58,11 @@ use Tests\Support\Scoring\ScoringFixtures;
  * `SeatViewPresenter` (C7, sur `PlayerIdentity` de C5),
  * `TierWindow::fromRoundTier()` et `Scoreboard` (C13),
  * `ChoicesPresenter` (C11), `RoomSettingsPresenter` (C0), `RevealMovieBuilder`
- * (L60-6). Les autres — `Podium` (L80-5), l'URL signée d'image (L60-8) — sont
- * composés à la main à la forme de leur type client, en attendant leur lot.
+ * (L60-6). Les autres — `Podium`, l'URL signée d'image (L60-8) — sont
+ * composés à la main à la forme de leur type client : l'URL en attendant son
+ * lot ; le podium parce que la scène n'est pas gelée (une manche y court
+ * encore), son producteur `Scoreboard::podium()` (L80-5) n'étant lisible
+ * qu'après le gel — `PodiumTest` fait passer le podium réel par `game.ended`.
  */
 final class WireFixtures
 {
@@ -270,8 +273,9 @@ final class WireFixtures
     }
 
     /**
-     * `Podium` à la forme de son type client (`types/scoring.ts`), en attendant
-     * `Scoreboard::podium()` (L80-5).
+     * `Podium` à la forme de son type client (`types/scoring.ts`), composé à
+     * la main : `Scoreboard::podium()` (L80-5) exige une partie gelée, et la
+     * scène ne l'est pas.
      *
      * @return array<string, mixed>
      */

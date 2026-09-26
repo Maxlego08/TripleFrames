@@ -76,7 +76,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property bool $prefix_was_ambiguous Vrai si et seulement si la forme soumise était portée, à l'instant du match, par un autre film publié (clé exacte homonyme) ; toujours faux pour un `prefix` ou un `subtitle` accepté ; jamais rétroactif.
  * @property int $points_tier `#[Hidden]`.
  * @property int $points_bonus `#[Hidden]`.
- * @property int $points_total `#[Hidden]` — le podium l'agrège en SQL, jamais par `toArray()`.
+ * @property int $points_total `#[Hidden]` — le gel l'agrège en SQL (`Scoreboard`, portée `Settled`) ; le podium lit ensuite les agrégats figés ; jamais par `toArray()`.
  * @property CarbonImmutable|null $created_at
  * @property-read Round $round
  * @property-read Player $player

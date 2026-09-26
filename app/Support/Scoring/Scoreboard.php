@@ -3,6 +3,8 @@
 namespace App\Support\Scoring;
 
 use App\Enums\GameMode;
+use App\Enums\GameStatus;
+use App\Enums\RoundStatus;
 use App\Enums\ScoreScope;
 use App\Models\Game;
 use App\Models\GamePlayer;
@@ -11,7 +13,10 @@ use App\Models\Player;
 use App\Models\Round;
 use App\Models\RoundPlayer;
 use App\Support\Game\RevealMovieBuilder;
+use App\Support\Identity\PlayerIdentity;
+use App\Support\Realtime\WireTime;
 use App\ValueObjects\Scoring\PlayerTally;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Facades\DB;
@@ -52,13 +57,18 @@ use stdClass;
  * `roundsPlayed` (invariant de 80 § 10.4). Appelé sous la transaction d'une
  * action (`RevealRound`, `FinalizeGame`), l'appel s'y emboîte.
  *
- * **Ce qui sort d'ici** : des entiers, des booléens, `player.public_id` et les
- * issues de siège, rien d'autre. Aucun `game.id`, `game_player.id`,
+ * **Ce qui sort d'ici** : des entiers, des booléens, `player.public_id`, les
+ * issues de siège et, au podium seulement ({@see self::podium()}), les valeurs
+ * d'énumération `gameStatus`, `mode` et `recap[].outcome`, `endedAt` (forme
+ * `IsoMs`), l'identité gelée de `PlayerIdentity` (C5) et le paquet de titres
+ * du récapitulatif ; rien d'autre. Aucun `game.id`, `game_player.id`,
  * `player.id`, `round.id`, `guess.id`, `movie_id`, `answer_key_*`,
  * `submitted_normalized`, `match_kind` ni `source` ; aucune chaîne traduite ;
  * les manches par `round_number`. Le seul bloc qui porte des titres est
- * `Podium.recap`, après le gel (L80-5). Pseudo et avatar ne sont pas dans le
- * classement : le client les lit dans les sièges de 60 (identité gelée).
+ * `Podium.recap`, après le gel ({@see self::podium()}), et le seul qui porte
+ * pseudo et avatar est `Podium.standings`, par `PlayerIdentity` (C5) : dans
+ * le classement intermédiaire, le client les lit dans les sièges de 60
+ * (identité gelée).
  *
  * Formes des charges : contrat C13 § 3, miroirs client dans
  * `resources/js/types/scoring.ts`. Le paquet de titres du récapitulatif
@@ -318,6 +328,305 @@ final class Scoreboard
             ->sum('points_total');
 
         return ['ownScore' => (int) $ownScore];
+    }
+
+    /**
+     * Le podium (§ 11), lisible seulement après le gel : diffusé par
+     * `game.ended`, rejoué à l'identique par toute resynchronisation jusqu'à
+     * l'archivage du salon (en solo, par la prop de la page).
+     *
+     * - `standings` (§ 11.3) : **uniquement les agrégats figés** de
+     *   `game_player` (§ 10.4), jamais un total relu dans `guess` — le podium
+     *   montre la partie telle que le gel l'a arrêtée —, avec l'identité GELÉE
+     *   de chaque siège ({@see PlayerIdentity::fromGamePlayer()}, C5), dans
+     *   l'ordre du § 8.2 : rang croissant, puis `game_player.id`, les sièges
+     *   sans rang en dernier. `rankShared` se dérive à la lecture : vrai si un
+     *   autre siège porte le même rang non nul.
+     * - `recap` (§ 11.4) : voir {@see self::recap()}.
+     * - `highlights` (§ 11.5, D25 du 23/09) : voir {@see self::highlights()}.
+     *
+     * Toutes les lectures partagent une transaction, donc un instantané, comme
+     * {@see self::leaderboard()}. Texte seul : aucune URL d'image de jeu.
+     *
+     * @return PodiumPayload
+     *
+     * @throws LogicException Partie non gelée (`ended_at` nul, ou statut non
+     *                        terminal), siège aux agrégats non figés, ou
+     *                        journal incohérent (manche close sans numéro,
+     *                        deux manches closes sous un même numéro).
+     */
+    public static function podium(Game $game): array
+    {
+        $endedAt = $game->ended_at ?? throw new LogicException(
+            'Scoreboard::podium() : la partie n’est pas gelée (ended_at nul) ; le podium ne se lit qu’après FinalizeGame.',
+        );
+
+        $gameStatus = match ($game->status) {
+            GameStatus::Completed => GameStatus::Completed->value,
+            GameStatus::Interrupted => GameStatus::Interrupted->value,
+            GameStatus::Running, GameStatus::Paused => throw new LogicException(sprintf(
+                'Scoreboard::podium() : la partie porte ended_at mais son statut est %s ; seul un statut terminal a un podium.',
+                $game->status->value,
+            )),
+        };
+
+        return DB::transaction(static fn (): array => self::composePodium($game, $gameStatus, $endedAt));
+    }
+
+    /**
+     * Le corps de {@see self::podium()}, gardes passées, sous une transaction.
+     *
+     * @param  'completed'|'interrupted'  $gameStatus
+     * @return PodiumPayload
+     */
+    private static function composePodium(Game $game, string $gameStatus, CarbonImmutable $endedAt): array
+    {
+        $recap = self::recap($game);
+
+        return [
+            'gameStatus' => $gameStatus,
+            'mode' => $game->mode->value,
+            'roundsCompleted' => $game->rounds_completed,
+            'roundsCount' => $game->rounds_count,
+            'framesPerRound' => $game->frames_per_round,
+            'scoreless' => ScoringRules::isScoreless($game->settings_snapshot),
+            'endedAt' => WireTime::iso($endedAt),
+            'standings' => self::podiumStandings($game),
+            'recap' => $recap,
+            'highlights' => self::highlights($recap),
+        ];
+    }
+
+    /**
+     * Le classement final : agrégats figés de chaque ligne `game_player` —
+     * partis, expulsés et retardataires compris, sans plafond —, identité
+     * gelée, ordre du § 8.2. Rien n'y est recalculé : en solo, `final_rank` est
+     * déjà nul (le gel l'a forcé).
+     *
+     * @return list<PodiumStandingPayload>
+     *
+     * @throws LogicException Siège aux agrégats non figés.
+     */
+    private static function podiumStandings(Game $game): array
+    {
+        $seats = GamePlayer::query()
+            ->where('game_id', $game->id)
+            ->with('player:'.implode(',', PlayerIdentity::FROZEN_SEAT_COLUMNS))
+            ->get()
+            ->all();
+
+        /** @var array<int, int> $holders Rang figé → nombre de sièges qui le portent. */
+        $holders = [];
+
+        foreach ($seats as $seat) {
+            if ($seat->final_rank !== null) {
+                $holders[$seat->final_rank] = ($holders[$seat->final_rank] ?? 0) + 1;
+            }
+        }
+
+        usort($seats, static fn (GamePlayer $a, GamePlayer $b): int => [$a->final_rank === null, $a->final_rank, $a->id]
+            <=> [$b->final_rank === null, $b->final_rank, $b->id]);
+
+        return array_map(static fn (GamePlayer $seat): array => [
+            ...PlayerIdentity::fromGamePlayer($seat)->toArray(),
+            'status' => $seat->status->value,
+            'firstRoundNumber' => $seat->first_round_number,
+            'rank' => $seat->final_rank,
+            'rankShared' => $seat->final_rank !== null && ($holders[$seat->final_rank] ?? 0) > 1,
+            'finalScore' => self::frozen($seat, $seat->final_score),
+            'correctAnswers' => self::frozen($seat, $seat->correct_answers),
+            'roundsPlayed' => self::frozen($seat, $seat->rounds_played),
+            'totalAnswerTimeMs' => self::frozen($seat, $seat->total_answer_time_ms),
+        ], $seats);
+    }
+
+    /**
+     * Un agrégat figé, jamais nul après le gel (§ 10.4) : un agrégat nul sur
+     * une partie close dit un gel manqué, et le podium le refuse au lieu de
+     * publier un zéro qui n'a jamais été calculé.
+     *
+     * @throws LogicException
+     */
+    private static function frozen(GamePlayer $seat, ?int $aggregate): int
+    {
+        return $aggregate ?? throw new LogicException(sprintf(
+            'Scoreboard::podium() : le siège %d de la partie %d n’a pas d’agrégats figés ; seul FinalizeGame les écrit.',
+            $seat->id,
+            $seat->game_id,
+        ));
+    }
+
+    /**
+     * Le récapitulatif (§ 11.4) : pour chaque `round_number` porté par une
+     * manche `completed` ou `cancelled`, en ordre croissant, UNE entrée —
+     * - la manche close de ce numéro s'il y en a une : `titles` par
+     *   {@see RevealMovieBuilder::build()}, seul constructeur du paquet de la
+     *   révélation (R-24 : révélation et récapitulatif ne divergent jamais, un
+     *   titre par locale activée), `foundCount = round.found_count`, `finders`
+     *   par {@see self::roundFinders()} ;
+     * - sinon l'annulation NON remplacée : ni titre (elle n'a jamais été
+     *   révélée), ni trouvaille (invariant L1, ses lignes `guess` restent en
+     *   base sans compter), `foundCount = 0`.
+     *
+     * Une manche annulée puis remplacée n'apparaît donc qu'une fois, sous son
+     * remplaçant, qui partage son numéro. **Jamais une manche `pending`** —
+     * programmée ou de réserve — : elle révélerait une partie du tirage.
+     *
+     * @return list<RecapEntryPayload>
+     *
+     * @throws LogicException Manche close sans numéro, ou deux manches closes
+     *                        sous un même numéro.
+     */
+    private static function recap(Game $game): array
+    {
+        $rounds = Round::query()
+            ->where('game_id', $game->id)
+            ->whereIn('status', [RoundStatus::Completed, RoundStatus::Cancelled])
+            ->orderBy('round_number')
+            ->orderBy('sequence_index')
+            ->get();
+
+        /** @var array<int, Round|null> $byNumber Numéro affiché → sa manche close, `null` s'il ne porte que des annulations. */
+        $byNumber = [];
+
+        foreach ($rounds as $round) {
+            $number = $round->round_number;
+
+            if ($round->status === RoundStatus::Cancelled) {
+                // Une manche de réserve n'a pas de numéro tant qu'elle ne remplace rien.
+                if ($number !== null) {
+                    $byNumber[$number] ??= null;
+                }
+
+                continue;
+            }
+
+            if ($number === null) {
+                throw new LogicException(sprintf(
+                    'Scoreboard::podium() : la manche %d est close sans numéro affiché.',
+                    $round->sequence_index,
+                ));
+            }
+
+            if (($byNumber[$number] ?? null) !== null) {
+                throw new LogicException(sprintf(
+                    'Scoreboard::podium() : deux manches closes portent le numéro %d.',
+                    $number,
+                ));
+            }
+
+            $byNumber[$number] = $round;
+        }
+
+        ksort($byNumber);
+
+        // Les titres des seules manches closes : ceux d'une annulation ne sont jamais lus.
+        $rounds->filter(static fn (Round $round): bool => $round->status === RoundStatus::Completed)
+            ->load('movie.titles');
+
+        $recap = [];
+
+        foreach ($byNumber as $number => $round) {
+            if ($round === null) {
+                $recap[] = [
+                    'roundNumber' => $number,
+                    'outcome' => RoundStatus::Cancelled->value,
+                    'titles' => null,
+                    'foundCount' => 0,
+                    'finders' => [],
+                ];
+
+                continue;
+            }
+
+            $recap[] = [
+                'roundNumber' => $number,
+                'outcome' => RoundStatus::Completed->value,
+                'titles' => RevealMovieBuilder::build($round->movie),
+                'foundCount' => $round->found_count,
+                'finders' => self::roundFinders($round),
+            ];
+        }
+
+        return $recap;
+    }
+
+    /**
+     * Les trois faits marquants de la partie (§ 11.5, D25 du 23/09), dérivés
+     * des trouvailles du récapitulatif — donc des `guess` des manches
+     * `completed`, portée `Settled` —, sans seconde lecture :
+     * - `bestAnswer` : `points_total` décroissant, puis `answered_at_ms`
+     *   croissant, puis `round_number`, puis `lock_rank` ; en mode sans score,
+     *   tous les points valent 0 et ce tri redonne mécaniquement la réponse la
+     *   plus rapide, le repli voulu par D25 ;
+     * - `fastestFind` : `answered_at_ms` croissant, puis `round_number`, puis
+     *   `lock_rank` ;
+     * - `unfoundRoundNumbers` : manches `completed` à `found_count = 0`, par
+     *   numéro croissant — le filtre de la file de curation des films jamais
+     *   trouvés (10 § 7.4).
+     *
+     * Les deux tris sont totaux : `round_number` et `lock_rank` identifient une
+     * bonne réponse parmi les manches closes. Le titre d'un fait se lit dans
+     * l'entrée du récapitulatif de même numéro, toujours close. Ce ne sont pas
+     * des scores : `scoring_version` ne les couvre pas (§ 6.1).
+     *
+     * @param  list<RecapEntryPayload>  $recap
+     * @return PodiumHighlightsPayload
+     */
+    private static function highlights(array $recap): array
+    {
+        /** @var list<array{publicId: string, roundNumber: int, lockRank: int, tierIndex: int, answeredAtMs: int, pointsTotal: int}> $answers */
+        $answers = [];
+        $unfound = [];
+
+        foreach ($recap as $entry) {
+            if ($entry['outcome'] !== RoundStatus::Completed->value) {
+                continue;
+            }
+
+            if ($entry['foundCount'] === 0) {
+                $unfound[] = $entry['roundNumber'];
+            }
+
+            foreach ($entry['finders'] as $finder) {
+                $answers[] = [
+                    'publicId' => $finder['publicId'],
+                    'roundNumber' => $entry['roundNumber'],
+                    'lockRank' => $finder['lockRank'],
+                    'tierIndex' => $finder['tierIndex'],
+                    'answeredAtMs' => $finder['answeredAtMs'],
+                    'pointsTotal' => $finder['pointsTotal'],
+                ];
+            }
+        }
+
+        if ($answers === []) {
+            return ['bestAnswer' => null, 'fastestFind' => null, 'unfoundRoundNumbers' => $unfound];
+        }
+
+        $best = $answers;
+        usort($best, static fn (array $a, array $b): int => [$b['pointsTotal'], $a['answeredAtMs'], $a['roundNumber'], $a['lockRank']]
+            <=> [$a['pointsTotal'], $b['answeredAtMs'], $b['roundNumber'], $b['lockRank']]);
+
+        $fastest = $answers;
+        usort($fastest, static fn (array $a, array $b): int => [$a['answeredAtMs'], $a['roundNumber'], $a['lockRank']]
+            <=> [$b['answeredAtMs'], $b['roundNumber'], $b['lockRank']]);
+
+        return [
+            'bestAnswer' => [
+                'publicId' => $best[0]['publicId'],
+                'roundNumber' => $best[0]['roundNumber'],
+                'tierIndex' => $best[0]['tierIndex'],
+                'answeredAtMs' => $best[0]['answeredAtMs'],
+                'pointsTotal' => $best[0]['pointsTotal'],
+            ],
+            'fastestFind' => [
+                'publicId' => $fastest[0]['publicId'],
+                'roundNumber' => $fastest[0]['roundNumber'],
+                'answeredAtMs' => $fastest[0]['answeredAtMs'],
+            ],
+            'unfoundRoundNumbers' => $unfound,
+        ];
     }
 
     /**

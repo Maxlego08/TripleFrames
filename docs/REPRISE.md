@@ -520,7 +520,7 @@ Ensuite, à chaque session : **« Implémente l'étape suivante de l'ordre des l
 89. L80-4 — `FinalizeGame` → 6, 82 — ✅ livrée le 27/09
 90. L60-5 — matérialisation, programmation, `serve_token`, annulation → 8, 72, 83, 89 — ✅ livrée le 27/09
 91. L60-6 — transitions de manche, pause → 77, 82, 89, 90 — ✅ livrée le 27/09
-92. L80-5 — podium, récapitulatif, faits (D25) → 69, 77, 81, 89, 91
+92. L80-5 — podium, récapitulatif, faits (D25) → 69, 77, 81, 89, 91 — ✅ livrée le 27/09
 93. L60-7 — rattrapage, jobs de frontière, fin anticipée → 23, 76, 91
 94. L60-8 — service d'image `/f/{serveToken}` → 21, 40, 65, 81, 90
 95. L60-9 — client temps réel → 8, 39, 81, 83, 84, 85, 87

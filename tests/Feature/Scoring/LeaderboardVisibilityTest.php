@@ -1,6 +1,8 @@
 <?php
 
+use App\Actions\Game\FinalizeGame;
 use App\Enums\GamePlayerStatus;
+use App\Enums\GameStatus;
 use App\Enums\GuessMatchKind;
 use App\Enums\GuessSource;
 use App\Enums\InputDifficulty;
@@ -16,6 +18,7 @@ use App\Settings\RoomSettings;
 use App\Support\Scoring\Ranking;
 use App\Support\Scoring\Scoreboard;
 use App\ValueObjects\Scoring\TierScore;
+use Carbon\CarbonImmutable;
 use Tests\Support\Scoring\ScoringFixtures;
 use Tests\Support\Scoring\ScoringTypes;
 
@@ -310,8 +313,7 @@ test('aucun bloc TierScore, SeatScore, Leaderboard ni RoundFinder ne contient d�
 
     // Seul Podium.recap porte des titres : dans le miroir client des blocs de
     // score, le paquet de titres n'est référencé que par l'entrée du
-    // récapitulatif. `Scoreboard::podium()`, qui le compose après le gel et
-    // lève tant que la partie n'est pas gelée, naît avec L80-5 (PodiumTest).
+    // récapitulatif…
     $declarations = ScoringTypes::declarations();
     $carriers = array_keys(array_filter(
         $declarations,
@@ -328,6 +330,53 @@ test('aucun bloc TierScore, SeatScore, Leaderboard ni RoundFinder ne contient d�
         foreach (ScoringTypes::objectFields($declarations[$name]) as $fields) {
             expect(array_intersect($fields, $forbiddenKeys))->toBe([], $name);
         }
+    }
+
+    // … et sur la charge réelle (L80-5) : pas de podium avant le gel.
+    expect(fn () => Scoreboard::podium($game))->toThrow(LogicException::class, 'n’est pas gelée');
+
+    // Le gel clôt d'office la manche révélée et la manche en cours, arrivée à D.
+    expect(app(FinalizeGame::class)->handle($game, GameStatus::Completed, CarbonImmutable::now()->addMilliseconds($rounds[2]->duration_ms)))
+        ->toBeTrue();
+
+    $podium = Scoreboard::podium($game);
+
+    // Chaque manche close porte son paquet de titres dans le récapitulatif…
+    expect(array_column($podium['recap'], 'outcome'))->toBe(['completed', 'completed', 'completed']);
+
+    foreach ($podium['recap'] as $entry) {
+        expect(array_keys($entry))->toBe(['roundNumber', 'outcome', 'titles', 'foundCount', 'finders'])
+            ->and($entry['titles'])->not->toBeNull();
+    }
+
+    // … et nulle part ailleurs : ni dans le classement final, ni dans les
+    // faits marquants, ni dans le reste du récapitulatif.
+    $titleKeys = ['title', 'titles', 'originalTitle', 'originalTitleLatin', 'originalLanguage', 'text', 'lang', 'year'];
+
+    foreach (['standings', 'highlights'] as $part) {
+        expect(array_intersect(leaderboardVisibilityLeaves($podium[$part])['keys'], $titleKeys))->toBe([], $part);
+    }
+
+    $untitled = $podium;
+
+    foreach (array_keys($untitled['recap']) as $position) {
+        $untitled['recap'][$position]['titles'] = null;
+    }
+
+    $untitledJson = (string) json_encode($untitled, JSON_UNESCAPED_UNICODE);
+    $podiumJson = (string) json_encode($podium, JSON_UNESCAPED_UNICODE);
+
+    foreach ($secrets as $secret) {
+        expect(mb_stripos($untitledJson, $secret))->toBeFalse("le podium, hors titres du récapitulatif, contient « {$secret} »");
+    }
+
+    // Jamais un alias ni une nature d'appariement, même dans le récapitulatif.
+    foreach ([0, 1, 2] as $position) {
+        expect(mb_stripos($podiumJson, "Phare Brumeux {$position}"))->toBeFalse();
+    }
+
+    foreach ($appariements as $value) {
+        expect(str_contains($podiumJson, ':"'.$value.'"'))->toBeFalse("le podium contient la valeur « {$value} »");
     }
 });
 
