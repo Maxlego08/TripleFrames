@@ -17,6 +17,8 @@
                 <span class="brand__name">TripleFrames</span>
             </a>
 
+            <p class="waiting-room__count" id="player-count">0 / 12 joueurs</p>
+
             <section class="room-code" aria-labelledby="room-code-title">
                 <button class="room-code__action" id="copy-code" type="button">
                     <span class="room-code__action-icon" aria-hidden="true">▣</span>
@@ -34,37 +36,22 @@
                 </button>
             </section>
 
-            <section class="roundtable" aria-labelledby="lobby-title">
-                <header class="roundtable__header">
-                    <div>
-                        <h1 id="lobby-title">La salle se remplit</h1>
-                    </div>
-                    <p class="roundtable__count" id="player-count">0 / 12 joueurs</p>
-                </header>
-
-                <div class="roundtable__scene">
-                    <div class="roundtable__floor" aria-hidden="true"></div>
-                    <div class="roundtable__table" aria-hidden="true">
-                        <div class="roundtable__table-content">
+            <section class="cinema-room" aria-label="Salle de cinéma">
+                <div class="cinema-room__scene">
+                    <div class="cinema-room__screen" aria-hidden="true">
+                        <div class="cinema-room__screen-content">
                             <img src="brand-logo.svg" alt="" width="72" height="59" />
                             <strong>TripleFrames</strong>
-                            <span>En attente des joueurs</span>
+                            <span>La séance va commencer</span>
                         </div>
                     </div>
-
-                    <div class="roundtable__seats" id="seat-list" aria-live="polite"></div>
-
-                    <div class="avatar-picker" aria-label="Ta place et le choix de ton avatar">
-                        <button class="avatar-picker__arrow" id="previous-avatar" type="button" aria-label="Avatar précédent">←</button>
-                        <div class="avatar-picker__seat">
-                            <div class="player-avatar player-avatar--coral player-avatar--large" id="current-avatar" aria-hidden="true">
-                                <span class="player-avatar__spark">✦</span>
-                            </div>
-                            <strong class="avatar-picker__name" id="current-player-name">Marty</strong>
-                            <span class="avatar-picker__caption">Ta place</span>
-                        </div>
-                        <button class="avatar-picker__arrow" id="next-avatar" type="button" aria-label="Avatar suivant">→</button>
+                    <div class="cinema-room__tiers" aria-hidden="true">
+                        <span class="cinema-room__tier cinema-room__tier--back"></span>
+                        <span class="cinema-room__tier cinema-room__tier--middle"></span>
+                        <span class="cinema-room__tier cinema-room__tier--front"></span>
                     </div>
+
+                    <div class="cinema-room__seats" id="seat-list" aria-live="polite"></div>
                 </div>
             </section>
 

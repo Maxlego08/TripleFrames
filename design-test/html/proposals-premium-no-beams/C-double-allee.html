@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Double allée — TripleFrames</title>
+<style>
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden}button{font:inherit}.app{--bg:oklch(0.18 0.045 145);--room:oklch(0.24 0.065 145);--tier:oklch(0.30 0.07 145);--chair:oklch(0.58 0.13 146);--trim:oklch(0.87 0.15 91);--accent:oklch(0.86 0.16 93);--ink:oklch(0.14 0.04 145);--paper:oklch(0.97 0.025 95);position:relative;width:100vw;height:100vh;min-width:320px;overflow:hidden;background:var(--bg);color:var(--paper);font-family:Inter,ui-sans-serif,system-ui,sans-serif}.topbar{position:absolute;z-index:30;top:26px;left:34px;right:34px;height:72px;display:grid;grid-template-columns:1fr auto 1fr;align-items:center}.brand{display:flex;align-items:center;gap:13px;color:var(--paper);font-weight:1000;letter-spacing:-.04em;font-size:24px}.brand img{width:42px;height:42px}.room-code{display:flex;align-items:center;gap:12px;padding:8px;border:2px solid color-mix(in oklch,var(--trim) 55%,transparent);border-radius:999px;background:var(--room);box-shadow:0 6px 0 var(--ink)}.room-code__value{min-width:190px;text-align:center;font-family:ui-monospace,monospace;font-size:22px;font-weight:1000;letter-spacing:.22em}.round-button{width:44px;height:44px;border:0;border-radius:50%;background:var(--accent);color:var(--ink);font-weight:1000;cursor:pointer}.status{justify-self:end;padding:10px 16px;border:2px solid var(--trim);border-radius:999px;background:var(--ink);font-size:13px;font-weight:900;letter-spacing:.08em}.heading{position:absolute;z-index:25;top:105px;left:50%;translate:-50% 0;text-align:center}.heading h1{margin:0;font-size:30px;line-height:1;font-weight:1000;letter-spacing:-.045em}.heading p{margin:8px 0 0;color:var(--trim);font-size:12px;font-weight:1000;letter-spacing:.17em}.cinema{position:absolute;z-index:2;top:160px;left:50%;width:min(1460px,88vw);height:700px;translate:-50% 0;perspective:1100px}.architecture{position:absolute;inset:0;border:3px solid color-mix(in oklch,var(--trim) 45%,var(--room));border-radius:54px 54px 26px 26px;background:var(--room);box-shadow:0 14px 0 var(--ink),inset 0 0 0 12px color-mix(in oklch,var(--room) 80%,var(--trim));overflow:hidden}.architecture:before,.architecture:after{content:"";position:absolute;top:18px;bottom:100px;width:70px;border:2px solid color-mix(in oklch,var(--trim) 45%,transparent);background:var(--tier)}.architecture:before{left:18px;border-radius:28px 8px 8px 28px}.architecture:after{right:18px;border-radius:8px 28px 28px 8px}.screen-frame{position:absolute;z-index:3;top:30px;left:50%;width:610px;height:145px;translate:-50% 0;border:8px solid var(--ink);border-radius:20px;background:var(--trim);box-shadow:0 10px 0 color-mix(in oklch,var(--ink) 80%,black);display:grid;place-items:center}.screen{width:100%;height:100%;display:grid;place-items:center;border:4px solid var(--paper);border-radius:9px;background:var(--paper);color:var(--ink);text-align:center}.screen img{width:52px}.screen b{display:block;margin-top:2px;font-size:17px}.screen span{display:block;margin-top:2px;color:color-mix(in oklch,var(--ink) 65%,white);font-size:11px;font-weight:900;letter-spacing:.08em}.auditorium{position:absolute;z-index:5;left:100px;right:100px;top:178px;height:490px;transform:rotateX(5deg);transform-origin:top center;transform-style:preserve-3d}.tier{position:absolute;left:50%;width:86%;height:108px;translate:-50% 0;border:2px solid color-mix(in oklch,var(--trim) 35%,var(--tier));border-bottom:12px solid var(--ink);border-radius:50% 50% 18px 18px;background:var(--tier)}.tier--1{top:68px;width:63%}.tier--2{top:192px;width:78%}.tier--3{top:324px;width:94%}.seat-row{position:absolute;z-index:7;left:50%;width:72%;translate:-50% 0;display:flex;justify-content:space-evenly;align-items:flex-end;transform-origin:center bottom}.seat-row--1{top:37px;scale:.73}.seat-row--2{top:150px;scale:.87}.seat-row--3{top:273px;scale:1}.seat{position:relative;width:180px;height:134px;text-align:center}.seat__shell{position:absolute;top:0;left:50%;width:116px;height:105px;translate:-50% 0}.seat__head{position:absolute;z-index:5;top:2px;left:50%;width:62px;height:62px;translate:-50% 0;border:4px solid var(--ink);border-radius:50%;background:var(--paper);display:grid;place-items:center;font-size:32px}.seat__back{position:absolute;z-index:2;top:38px;left:10px;width:96px;height:61px;border:4px solid var(--ink);border-radius:28px 28px 14px 14px;background:var(--chair);box-shadow:0 7px 0 color-mix(in oklch,var(--chair) 65%,var(--ink))}.seat__cushion{position:absolute;z-index:4;left:18px;bottom:0;width:80px;height:31px;border:4px solid var(--ink);border-radius:12px;background:color-mix(in oklch,var(--chair) 76%,var(--paper));transform:skewX(-5deg)}.seat__arm{position:absolute;z-index:5;bottom:5px;width:18px;height:47px;border:4px solid var(--ink);border-radius:10px;background:var(--trim)}.seat__arm--left{left:2px}.seat__arm--right{right:2px}.seat strong{position:absolute;z-index:10;left:50%;bottom:0;min-width:92px;translate:-50% 0;padding:7px 12px;border:3px solid var(--ink);border-radius:999px;background:var(--paper);box-shadow:0 4px 0 var(--ink);color:var(--ink);font-size:13px;font-weight:1000;letter-spacing:.07em;white-space:nowrap}.seat--current strong{background:var(--accent)}.seat--current .seat__shell{outline:4px solid var(--accent);outline-offset:5px;border-radius:36px}.seat__switch{position:absolute;z-index:12;top:42px;left:50%;width:166px;translate:-50% 0;display:flex;justify-content:space-between}.seat__switch button{width:28px;height:28px;border:2px solid var(--ink);border-radius:50%;background:var(--accent);color:var(--ink);font-weight:1000}.actions{position:absolute;z-index:40;bottom:28px;left:50%;width:min(1120px,86vw);translate:-50% 0;display:grid;grid-template-columns:230px 1fr 230px;gap:24px}.action{height:62px;border:3px solid var(--ink);border-radius:18px;background:var(--paper);box-shadow:0 7px 0 var(--ink);color:var(--ink);font-weight:1000;cursor:pointer}.action--primary{background:var(--accent);font-size:19px}.action--danger{background:color-mix(in oklch,var(--chair) 58%,var(--paper))}
+.app--center-aisle .seat-row{column-gap:90px}.app--center-aisle .seat:nth-child(2){margin-right:90px}.app--center-aisle .tier:after{content:"";position:absolute;left:50%;top:-7px;bottom:-12px;width:44px;translate:-50% 0;background:var(--bg);border-inline:2px solid var(--trim)}
+.app--double-aisle .seat-row{width:78%}.app--double-aisle .seat:nth-child(1),.app--double-aisle .seat:nth-child(3){margin-right:42px}.app--double-aisle .architecture:before,.app--double-aisle .architecture:after{width:112px}
+.app--compact .cinema{width:min(1120px,82vw)}.app--compact .auditorium{left:40px;right:40px}.app--compact .seat-row{width:84%}.app--compact .screen-frame{width:520px}.app--compact .tier--1{width:72%}.app--compact .tier--2{width:82%}
+.app--deco .architecture{border-radius:120px 120px 20px 20px}.app--deco .screen-frame{border-radius:70px 70px 16px 16px}.app--deco .architecture:before,.app--deco .architecture:after{width:120px;border-radius:60px 60px 8px 8px}.app--deco .seat__back{border-radius:45px 45px 10px 10px}
+.app--wood .architecture:before,.app--wood .architecture:after{width:150px;border-width:8px;border-color:var(--ink)}.app--wood .screen-frame{border-radius:4px}.app--wood .tier{border-radius:12px}.app--wood .seat__back{border-radius:18px 18px 8px 8px}
+.app--blackbox .architecture{border-radius:12px;border-color:var(--paper)}.app--blackbox .architecture:before,.app--blackbox .architecture:after{display:none}.app--blackbox .tier{border-color:var(--paper);border-radius:4px}.app--blackbox .screen-frame{border-color:var(--paper);box-shadow:0 10px 0 var(--paper)}.app--blackbox .seat__back,.app--blackbox .seat__cushion{border-color:var(--paper)}
+.app--balcony .tier--3{height:126px;border:5px solid var(--trim);border-bottom:22px solid var(--ink);border-radius:24px}.app--balcony .seat-row--3{top:255px}.app--balcony .architecture:before,.app--balcony .architecture:after{border-radius:70px 70px 12px 12px}
+.app--pods .seat__shell{width:130px}.app--pods .seat__back{left:0;width:130px;height:76px;border-radius:54px 54px 22px 22px}.app--pods .seat__arm{width:26px;height:56px}.app--pods .seat__arm--left{left:-5px}.app--pods .seat__arm--right{right:-5px}.app--pods .seat__cushion{left:18px;width:94px}.app--pods .tier{border-radius:26px}
+.app--fan .screen-frame{left:42%;width:560px}.app--fan .seat-row--1{transform:rotate(-2deg)}.app--fan .seat-row--2{transform:rotate(2deg)}.app--fan .seat-row--3{transform:rotate(-3deg)}.app--fan .tier{clip-path:polygon(5% 0,95% 0,100% 100%,0 100%)}
+@media(max-width:900px){.topbar{top:14px;left:14px;right:14px;grid-template-columns:1fr auto}.room-code{grid-column:2}.status{display:none}.brand span{display:none}.heading{top:90px}.cinema{top:145px;width:1120px;scale:.66;transform-origin:top center}.actions{bottom:16px;width:calc(100vw - 24px);grid-template-columns:1fr 1.6fr 1fr;gap:8px}.action{height:54px;font-size:12px}}
+</style>
+</head>
+<body>
+<div class="app app--double-aisle" id="proposal-c">
+  <header class="topbar">
+    <div class="brand"><img src="https://vgbujcuwptvheqijyjbe.supabase.co/storage/v1/object/public/hmac-uploads/projects/710e23fa-b801-40cf-b0be-a28fc414ec96/brand-assets/design-test-html-brand-logo.svg/brand-logo.svg" alt=""><span>TripleFrames</span></div>
+    <div class="room-code" aria-label="Code de la partie"><button class="round-button" id="copy-code" aria-label="Copier le code">⧉</button><div class="room-code__value">••••••</div><button class="round-button" id="toggle-code" aria-label="Afficher le code">◉</button></div>
+    <div class="status">12 / 12 JOUEURS</div>
+  </header>
+  <section class="heading"><h1>Double allée</h1><p>CLUB 12 · ACCÈS LATÉRAL</p></section>
+  <main class="cinema">
+    <div class="architecture"></div>
+    <div class="screen-frame"><div class="screen"><div><img src="https://vgbujcuwptvheqijyjbe.supabase.co/storage/v1/object/public/hmac-uploads/projects/710e23fa-b801-40cf-b0be-a28fc414ec96/brand-assets/design-test-html-brand-logo.svg/brand-logo.svg" alt="TripleFrames"><b>La salle se remplit</b><span>La séance va bientôt commencer</span></div></div></div>
+    <div class="auditorium"><div class="tier tier--1"></div><div class="tier tier--2"></div><div class="tier tier--3"></div><div class="seat-row seat-row--1" id="row-1"><article class="seat" id="seat-1">
+    <div class="seat__shell"><div class="seat__head"><span>🦊</span></div><div class="seat__back"></div><i class="seat__arm seat__arm--left"></i><i class="seat__arm seat__arm--right"></i><div class="seat__cushion"></div></div>
+    <strong>MILO</strong>
+  </article><article class="seat" id="seat-2">
+    <div class="seat__shell"><div class="seat__head"><span>🐼</span></div><div class="seat__back"></div><i class="seat__arm seat__arm--left"></i><i class="seat__arm seat__arm--right"></i><div class="seat__cushion"></div></div>
+    <strong>LUNA</strong>
+  </article><article class="seat" id="seat-3">
+    <div class="seat__shell"><div class="seat__head"><span>🐸</span></div><div class="seat__back"></div><i class="seat__arm seat__arm--left"></i><i class="seat__arm seat__arm--right"></i><div class="seat__cushion"></div></div>
+    <strong>NOA</strong>
+  </article><article class="seat" id="seat-4">
+    <div class="seat__shell"><div class="seat__head"><span>🐯</span></div><div class="seat__back"></div><i class="seat__arm seat__arm--left"></i><i class="seat__arm seat__arm--right"></i><div class="seat__cushion"></div></div>
+    <strong>INES</strong>
+  </article></div><div class="seat-row seat-row--2" id="row-2"><article class="seat" id="seat-5">
+    <div class="seat__shell"><div class="seat__head"><span>🐨</span></div><div class="seat__back"></div><i class="seat__arm seat__arm--left"></i><i class="seat__arm seat__arm--right"></i><div class="seat__cushion"></div></div>
+    <strong>SACHA</strong>
+  </article><article class="seat" id="seat-6">
+    <div class="seat__shell"><div class="seat__head"><span>🦄</span></div><div class="seat__back"></div><i class="seat__arm seat__arm--left"></i><i class="seat__arm seat__arm--right"></i><div class="seat__cushion"></div></div>
+    <strong>MAYA</strong>
+  </article><article class="seat seat--current" id="seat-7">
+    <div class="seat__shell"><div class="seat__head"><span>🐙</span></div><div class="seat__back"></div><i class="seat__arm seat__arm--left"></i><i class="seat__arm seat__arm--right"></i><div class="seat__cushion"></div></div>
+    <strong>TOI</strong><div class="seat__switch"><button id="avatar-previous" aria-label="Avatar précédent">←</button><button id="avatar-next" aria-label="Avatar suivant">→</button></div>
+  </article><article class="seat" id="seat-8">
+    <div class="seat__shell"><div class="seat__head"><span>🦁</span></div><div class="seat__back"></div><i class="seat__arm seat__arm--left"></i><i class="seat__arm seat__arm--right"></i><div class="seat__cushion"></div></div>
+    <strong>JULES</strong>
+  </article></div><div class="seat-row seat-row--3" id="row-3"><article class="seat" id="seat-9">
+    <div class="seat__shell"><div class="seat__head"><span>🐵</span></div><div class="seat__back"></div><i class="seat__arm seat__arm--left"></i><i class="seat__arm seat__arm--right"></i><div class="seat__cushion"></div></div>
+    <strong>LÉO</strong>
+  </article><article class="seat" id="seat-10">
+    <div class="seat__shell"><div class="seat__head"><span>🐰</span></div><div class="seat__back"></div><i class="seat__arm seat__arm--left"></i><i class="seat__arm seat__arm--right"></i><div class="seat__cushion"></div></div>
+    <strong>NINA</strong>
+  </article><article class="seat" id="seat-11">
+    <div class="seat__shell"><div class="seat__head"><span>🐲</span></div><div class="seat__back"></div><i class="seat__arm seat__arm--left"></i><i class="seat__arm seat__arm--right"></i><div class="seat__cushion"></div></div>
+    <strong>SAM</strong>
+  </article><article class="seat" id="seat-12">
+    <div class="seat__shell"><div class="seat__head"><span>🦋</span></div><div class="seat__back"></div><i class="seat__arm seat__arm--left"></i><i class="seat__arm seat__arm--right"></i><div class="seat__cushion"></div></div>
+    <strong>ZOE</strong>
+  </article></div></div>
+  </main>
+  <nav class="actions" aria-label="Actions de la partie"><button class="action action--danger" id="leave-game">Quitter la partie</button><button class="action action--primary" id="start-game">Lancer la partie</button><button class="action" id="configure-game">Configurer</button></nav>
+</div>
+</body>
+</html>
