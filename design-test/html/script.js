@@ -64,10 +64,13 @@ joinForm.addEventListener('submit', (event) => {
     }
 
     showToast(`Prêt à rejoindre ${roomCode} avec le pseudo ${nickname} !`);
+    window.setTimeout(() => {
+        window.location.href = `waiting-room.html?host=0&name=${encodeURIComponent(nickname)}&code=${encodeURIComponent(roomCode)}`;
+    }, 450);
 });
 
 document.querySelector('#create-game').addEventListener('click', () => {
-    showToast('Le parcours de création de partie s’ouvrira ici.');
+    window.location.href = 'waiting-room.html?host=1&name=Marty';
 });
 
 const params = new URLSearchParams(window.location.search);

@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="fr">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <meta name="description" content="Salle d’attente d’une partie TripleFrames." />
+        <title>Salle d’attente — TripleFrames</title>
+        <link rel="icon" href="brand-logo.svg" type="image/svg+xml" />
+        <link rel="stylesheet" href="waiting-room.css" />
+    </head>
+    <body class="waiting-page">
+        <a class="skip-link" href="#waiting-content">Aller à la salle</a>
+
+        <main class="waiting-room" id="waiting-content">
+            <a class="brand waiting-room__brand" href="index.html" aria-label="TripleFrames, retour à l’accueil">
+                <img class="brand__logo" src="brand-logo.svg" alt="" width="44" height="36" />
+                <span class="brand__name">TripleFrames</span>
+            </a>
+
+            <section class="room-code" aria-labelledby="room-code-title">
+                <button class="room-code__action" id="copy-code" type="button">
+                    <span class="room-code__action-icon" aria-hidden="true">▣</span>
+                    <span>Copier</span>
+                </button>
+
+                <div class="room-code__display">
+                    <p id="room-code-title">Code de la partie</p>
+                    <output id="room-code" aria-live="polite">****</output>
+                </div>
+
+                <button class="room-code__action" id="toggle-code" type="button" aria-pressed="false">
+                    <span class="room-code__action-icon" aria-hidden="true">◉</span>
+                    <span id="toggle-code-label">Afficher</span>
+                </button>
+            </section>
+
+            <section class="roundtable" aria-labelledby="lobby-title">
+                <header class="roundtable__header">
+                    <div>
+                        <h1 id="lobby-title">La salle se remplit</h1>
+                    </div>
+                    <p class="roundtable__count" id="player-count">0 / 12 joueurs</p>
+                </header>
+
+                <div class="roundtable__scene">
+                    <div class="roundtable__floor" aria-hidden="true"></div>
+                    <div class="roundtable__table" aria-hidden="true">
+                        <div class="roundtable__table-content">
+                            <img src="brand-logo.svg" alt="" width="72" height="59" />
+                            <strong>TripleFrames</strong>
+                            <span>En attente des joueurs</span>
+                        </div>
+                    </div>
+
+                    <div class="roundtable__seats" id="seat-list" aria-live="polite"></div>
+
+                    <div class="avatar-picker" aria-label="Ta place et le choix de ton avatar">
+                        <button class="avatar-picker__arrow" id="previous-avatar" type="button" aria-label="Avatar précédent">←</button>
+                        <div class="avatar-picker__seat">
+                            <div class="player-avatar player-avatar--coral player-avatar--large" id="current-avatar" aria-hidden="true">
+                                <span class="player-avatar__spark">✦</span>
+                            </div>
+                            <strong class="avatar-picker__name" id="current-player-name">Marty</strong>
+                            <span class="avatar-picker__caption">Ta place</span>
+                        </div>
+                        <button class="avatar-picker__arrow" id="next-avatar" type="button" aria-label="Avatar suivant">→</button>
+                    </div>
+                </div>
+            </section>
+
+            <div class="lobby-actions">
+                <button class="button button--quiet" id="leave-game" type="button">
+                    <span aria-hidden="true">←</span>
+                    <span>Quitter</span>
+                </button>
+                <button class="button button--start" id="start-game" type="button">
+                    <span>Lancer la partie</span>
+                    <span aria-hidden="true">▶</span>
+                </button>
+                <button class="button button--settings" id="open-settings" type="button">
+                    <span aria-hidden="true">⚙</span>
+                    <span>Configurer</span>
+                </button>
+            </div>
+        </main>
+
+        <dialog class="settings-dialog" id="settings-dialog">
+            <div class="settings-dialog__card">
+                <button class="settings-dialog__close" id="close-settings" type="button" aria-label="Fermer">×</button>
+                <span class="settings-dialog__icon" aria-hidden="true">⚙</span>
+                <h2>Configuration de la partie</h2>
+                <p>TODO — Les options de la partie seront ajoutées ici.</p>
+                <button class="button button--start" id="confirm-settings" type="button">Compris</button>
+            </div>
+        </dialog>
+
+        <div class="toast" id="waiting-toast" role="status" aria-live="polite"></div>
+        <script src="waiting-room.js"></script>
+    </body>
+</html>
