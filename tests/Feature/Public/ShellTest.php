@@ -1,15 +1,18 @@
 <?php
 
+use App\Enums\Locale;
 use App\Models\User;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Testing\TestResponse;
+use Tests\Support\I18n\FrontSource;
 
 /*
 |--------------------------------------------------------------------------
 | Coquilles et thème — spec 90 § 2, contrat C16 § 2.1-2.4
 |--------------------------------------------------------------------------
 |
-| Créé par L90-1, complété par L90-7 (forçage sombre de `game/*`) et L90-9.
+| Créé par L90-1, complété par L90-3b (bandeau de maintenance), L90-7
+| (forçage sombre de `game/*`) et L90-9.
 |
 | Un seul forçage d'apparence existe dans le produit : les pages `game/*`, en
 | sombre. Le back-office a perdu le sien (D8 du 23/09) : forcer le clair
@@ -84,4 +87,63 @@ it("laisse le back-office suivre l'apparence du visiteur", function () {
     // Le script en ligne ne force rien non plus : il ne lit que la préférence
     // (`light` ici), et n'ajoute `dark` qu'en préférence « système ».
     expect((string) $light->getContent())->toContain("const appearance = 'light';");
+});
+
+it("monte le bandeau de maintenance sous l'en-tête public, au rôle note, sur sa seule clé sans paramètre", function () {
+    // Ajouté par L90-3b, hors des intitulés de la spec : le rendu se vérifie à
+    // la main (aucun DOM au jalon 1, C18 § 2.4), la prop par
+    // `MaintenanceBannerTest` (100). Ce test garde dans la source les
+    // invariants du § 3.3 (rien hors drainage, rôle note porté par `Alert`,
+    // seule clé sans paramètre, place dans la coquille), que la vérification
+    // manuelle ne rejoue pas à chaque commit.
+    $banner = FrontSource::withoutComments((string) file_get_contents(
+        resource_path('js/components/public/maintenance-banner.tsx'),
+    ));
+
+    // Il ne lit que le booléen partagé, et ne rend que sa clé.
+    expect(substr_count($banner, 'usePage()'))->toBe(1)
+        ->and($banner)->toMatch('/const \{\s*maintenance\s*\} = usePage\(\)\.props;/')
+        ->and(FrontSource::literalKeys($banner))->toBe(['common.maintenance.banner']);
+
+    // Hors drainage, il ne rend rien : le retour `null` précède tout rendu. Un
+    // bandeau permanent dirait à tout visiteur qu'aucune partie ne se lance.
+    expect($banner)->toMatch('/if \(!maintenance\) \{\s*return null;\s*\}/');
+    expect(strpos($banner, 'return null;'))->toBeInt()
+        ->toBeLessThan(strpos($banner, '<Alert'));
+
+    // Il ne parle pas : l'unique `Alert` porte lui-même le rôle `note` (seul un
+    // rôle passé à `Alert` supplante le `role="alert"` de `ui/alert.tsx`), et
+    // aucun autre rôle ni aucune région vivante n'est posé. `\b` écarte
+    // `<AlertDescription`.
+    expect($banner)->toMatch('/<Alert\b[^>]*\brole="note"/');
+    expect(preg_match_all('/<Alert\b/', $banner))->toBe(1)
+        ->and(substr_count($banner, 'role='))->toBe(1)
+        ->and($banner)->not->toContain('aria-live');
+
+    // Ni heure, ni phase, ni nombre de parties : le texte n'a ni paramètre ni
+    // chiffre, dans aucune langue activée (C18-bis § 3).
+    foreach (Locale::cases() as $locale) {
+        $text = __('common.maintenance.banner', [], $locale->value);
+
+        expect($text)->toBeString()
+            ->not->toBe('common.maintenance.banner')
+            ->not->toMatch('/:[a-z_]+/')
+            ->not->toMatch('/\d/');
+    }
+
+    // Monté une fois par la coquille publique, entre l'en-tête et le contenu
+    // (§ 2.4).
+    $layout = FrontSource::withoutComments((string) file_get_contents(
+        resource_path('js/layouts/public/public-layout.tsx'),
+    ));
+
+    $header = strpos($layout, '<PublicHeader />');
+    $mounted = strpos($layout, '<MaintenanceBanner />');
+    $main = strpos($layout, '<main');
+
+    expect(substr_count($layout, '<MaintenanceBanner />'))->toBe(1)
+        ->and($header)->toBeInt()
+        ->and($mounted)->toBeInt()
+        ->and($main)->toBeInt()
+        ->and($header < $mounted && $mounted < $main)->toBeTrue();
 });

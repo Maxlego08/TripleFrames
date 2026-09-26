@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { MaintenanceBanner } from '@/components/public/maintenance-banner';
 import { PublicHeader } from '@/components/public/public-header';
 import { SiteFooter } from '@/components/public/site-footer';
 import { Toaster } from '@/components/ui/sonner';
@@ -13,9 +14,9 @@ const MAIN_ID = 'public-main';
  * l'apparence du visiteur : seules les pages `game/*` sont forcées en sombre.
  *
  * De haut en bas : le lien d'évitement (première cible de tabulation), l'en-
- * tête, le contenu, le pied de page complet. Le bandeau de maintenance
- * (L90-3b, sous l'en-tête) et l'annonceur, pour l'annonce de changement de
- * langue (L90-7), rejoignent la coquille avec leurs lots.
+ * tête, le bandeau de maintenance (L90-3b, rendu seulement pendant un
+ * drainage, § 3.3), le contenu, le pied de page complet. L'annonceur, pour
+ * l'annonce de changement de langue, rejoint la coquille avec L90-7.
  *
  * `<Toaster />` est monté ICI et non plus dans `app.tsx` (spec 90 § 2.3) : la
  * section que rend sonner est une région `aria-live` toujours présente, même
@@ -35,6 +36,8 @@ export default function PublicLayout({ children }: { children: ReactNode }) {
             </a>
 
             <PublicHeader />
+
+            <MaintenanceBanner />
 
             <main
                 id={MAIN_ID}
