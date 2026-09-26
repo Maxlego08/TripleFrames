@@ -565,6 +565,10 @@ test('aucune classe de App\Support\Scoring n’emploie draw_seed, hash_hmac, ran
         'app/Support/Scoring/ScoringRules.php',
         'app/Support/Scoring/ScoreCalculator.php',
         'app/Support/Scoring/ScoreReplayer.php',
+        'app/Support/Scoring/Ranking.php',
+        'app/Support/Scoring/Scoreboard.php',
+        'app/ValueObjects/Scoring/PlayerTally.php',
+        'app/ValueObjects/Scoring/Standing.php',
     );
 
     foreach ($files as $file) {
