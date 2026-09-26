@@ -178,10 +178,12 @@ class RoundFactory extends Factory
     }
 
     /**
-     * Les trois leurres du QCM, tirés et figés au lancement.
+     * Les trois leurres du QCM, tirés à la première composition (`T₁` Facile,
+     * `T_N` Normal), jamais au lancement (E10-15) — en jeu, par
+     * `ComposeChoiceSets` seul ; ici, trois films quelconques.
      *
      * Ils restent `#[Hidden]` : les composer ici ne les publie pas, et la seule
-     * voie de sortie reste la ressource dédiée du QCM, à `T_N`.
+     * voie de sortie reste `ChoicesPresenter`, à `T_N` (ou `T₁` en Facile).
      */
     public function withDecoys(): static
     {

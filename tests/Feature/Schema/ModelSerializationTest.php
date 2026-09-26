@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\Locale;
 use App\Models\AdminAction;
 use App\Models\Frame;
 use App\Models\Game;
@@ -14,6 +15,8 @@ use App\Models\RoundPlayer;
 use App\Models\RoundTier;
 use App\Models\SeenFrame;
 use App\Models\User;
+use App\Support\Answers\ChoicesPresenter;
+use App\ValueObjects\Answers\ChoicesPayload;
 use Illuminate\Database\Eloquent\Model;
 
 /**
@@ -78,7 +81,7 @@ function forbiddenSerializedKeys(): array
         ]],
         'round_tier' => [RoundTier::class, ['frame_id', 'served_frame_id', 'frame_level', 'serve_token']],
         'round_player' => [RoundPlayer::class, ['player_id']],
-        'round_choice_set' => [RoundChoiceSet::class, ['choice_1', 'choice_2', 'choice_3', 'choice_4']],
+        'round_choice_set' => [RoundChoiceSet::class, ['choice_1', 'choice_2', 'choice_3', 'choice_4', 'rendered_locale']],
         'guess' => [Guess::class, [
             'player_id',
             'answer_key_id',
@@ -212,4 +215,61 @@ it("ne sérialise jamais nickname_normalized ni kicked_at d'un siège", function
 
     // Ce qui reste visible : le public_id, seule adresse d'un siège côté client.
     expect($serialized)->toHaveKey('public_id');
+});
+
+it('ChoicesPayload ne porte aucun identifiant de film', function () {
+    // Spec 70 § 10.8, contrat C11 : les quatre chaînes, le drapeau et `lang`,
+    // rien d'autre. La forme est prouvée sur la CLASSE — aucune propriété,
+    // aucun paramètre de plus — et sur une charge réelle, rendue par le
+    // présentateur pour une manche aux trois leurres posés.
+    $properties = array_map(
+        static fn (ReflectionProperty $property): string => $property->getName(),
+        (new ReflectionClass(ChoicesPayload::class))->getProperties(),
+    );
+    $parameters = array_map(
+        static fn (ReflectionParameter $parameter): string => $parameter->getName(),
+        (new ReflectionMethod(ChoicesPayload::class, '__construct'))->getParameters(),
+    );
+
+    expect($properties)->toBe(['choices', 'useOriginalTitle', 'lang'])
+        ->and($parameters)->toBe(['choices', 'useOriginalTitle', 'lang'])
+        ->and(is_subclass_of(ChoicesPayload::class, JsonSerializable::class))->toBeFalse();
+
+    $round = Round::factory()->withDecoys()->create();
+    RoundChoiceSet::factory()->forRound($round)->create();
+    $seat = RoundPlayer::factory()
+        ->forRound($round, Player::factory()->create())
+        ->withChoices(Locale::English)
+        ->create();
+
+    $payload = app(ChoicesPresenter::class)->forSeat($seat)?->toArray() ?? throw new LogicException;
+    $movieIds = [$round->movie_id, $round->decoy_movie_id_1, $round->decoy_movie_id_2, $round->decoy_movie_id_3];
+
+    expect(array_keys($payload))->toBe(['choices', 'useOriginalTitle', 'lang']);
+
+    // Pas un entier dans la charge : ni identifiant de film, ni index de la
+    // bonne réponse.
+    array_walk_recursive($payload, static function (mixed $value) use ($movieIds): void {
+        expect(is_int($value))->toBeFalse()
+            ->and(in_array($value, $movieIds, true))->toBeFalse();
+    });
+
+    expect(json_encode($payload, JSON_THROW_ON_ERROR))->not->toContain('movie')
+        ->not->toContain('decoy')
+        ->not->toContain('"id"')
+        ->and($payload['lang'])->toBe(Locale::English->bcp47());
+
+    // `lang` est la locale ATTEINTE de la ligne, jamais sa locale : une ligne
+    // anglaise rendue en français au rang 2 dit `fr`, une ligne de titres
+    // originaux ne dit rien.
+    foreach ([Locale::French, null] as $reached) {
+        $other = Round::factory()->withDecoys()->create();
+        RoundChoiceSet::factory()->forRound($other)->renderedIn($reached)->create();
+        $otherSeat = RoundPlayer::factory()
+            ->forRound($other, Player::factory()->create())
+            ->withChoices(Locale::English)
+            ->create();
+
+        expect(app(ChoicesPresenter::class)->forSeat($otherSeat)?->toArray()['lang'])->toBe($reached?->bcp47());
+    }
 });

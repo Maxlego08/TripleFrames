@@ -25,10 +25,20 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * **`choice_1` est la bonne réponse en clair.** Les quatre colonnes sont donc
  * cachées deux fois — par `#[Hidden]` et par `$hidden` au niveau modèle — parce
  * qu'un `toArray()` distrait dans une ressource de resynchronisation les
- * publierait. Les quatre chaînes ne partent au client que par la ressource dédiée
- * du QCM, **permutées** par `HMAC(game.draw_seed, round_id, player_id)`, à `T_N`
- * (ou `T₁` en Facile) : rien n'est stocké par joueur, et l'ordre ne peut être ni
- * deviné ni comparé entre deux écrans.
+ * publierait. Les quatre chaînes ne partent au client que par
+ * `ChoicesPresenter::forSeat()` (spec 70 § 10.8), **permutées** par
+ * `SeededPrf::forGame(game)->permutation(DrawContext::qcmOrder(sequence_index,
+ * player.public_id), 4)` (E10-54), à `T_N` (ou `T₁` en Facile) : rien n'est
+ * stocké par joueur, et l'ordre ne peut être ni deviné ni comparé entre deux
+ * écrans.
+ *
+ * `rendered_locale` (E10-03) est la locale EFFECTIVE atteinte par les quatre
+ * chaînes de la ligne — celle de la ligne au rang 1, une autre locale activée
+ * au rang 2 —, NULL quand elles sortent de `title_original` (rang 3 ou mode
+ * dégradé). Elle donne l'attribut `lang` de la charge du QCM et le rejoue à
+ * l'identique à chaque renvoi. Cachée elle aussi, pour la raison qui cache
+ * `round.choices_use_original_title` : lue pour une autre locale que celle du
+ * siège, elle apprendrait si le film cible a un titre dans cette locale.
  *
  * Au plus une ligne par locale activée et par manche — jamais une ligne par
  * joueur, qui coûterait ~720 Mo sur douze mois.
@@ -40,6 +50,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property int $id
  * @property int $round_id
  * @property Locale $locale Locale d'INTERFACE, `string(5)` — jamais une locale de catalogue.
+ * @property Locale|null $rendered_locale Locale effective atteinte par les quatre chaînes ; NULL = `title_original`. `#[Hidden]`.
  * @property string $choice_1 La chaîne du film CIBLE. `#[Hidden]`.
  * @property string $choice_2 Premier leurre, dans l'ordre de `round.decoy_movie_id_1`. `#[Hidden]`.
  * @property string $choice_3 `#[Hidden]`.
@@ -52,7 +63,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 #[Table('round_choice_set')]
 #[DateFormat('Y-m-d H:i:s.v')]
 #[Fillable([])]
-#[Hidden(['choice_1', 'choice_2', 'choice_3', 'choice_4'])]
+#[Hidden(['choice_1', 'choice_2', 'choice_3', 'choice_4', 'rendered_locale'])]
 class RoundChoiceSet extends Model
 {
     /** @use HasFactory<RoundChoiceSetFactory> */
@@ -64,7 +75,7 @@ class RoundChoiceSet extends Model
      *
      * @var list<string>
      */
-    protected $hidden = ['choice_1', 'choice_2', 'choice_3', 'choice_4'];
+    protected $hidden = ['choice_1', 'choice_2', 'choice_3', 'choice_4', 'rendered_locale'];
 
     /**
      * Get the attributes that should be cast.
@@ -76,6 +87,7 @@ class RoundChoiceSet extends Model
         return [
             'round_id' => 'integer',
             'locale' => Locale::class,
+            'rendered_locale' => Locale::class,
             'composed_at' => 'datetime',
         ];
     }

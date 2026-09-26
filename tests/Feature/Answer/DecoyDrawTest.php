@@ -1,25 +1,38 @@
 <?php
 
 use App\Enums\FrameLevel;
+use App\Enums\InputDifficulty;
 use App\Enums\Locale;
+use App\Enums\RoundIncidentReason;
+use App\Enums\RoundPlayerInputState;
 use App\Enums\RoundStatus;
+use App\Events\Game\InputClosed;
 use App\Models\Game;
 use App\Models\Movie;
 use App\Models\MovieGroup;
 use App\Models\MovieProjection;
+use App\Models\MovieTitle;
 use App\Models\Room;
 use App\Models\Round;
+use App\Models\RoundChoiceSet;
+use App\Models\RoundTier;
 use App\Models\Theme;
 use App\Settings\RoomSettings;
 use App\Settings\RoomSettingsBounds;
 use App\Support\Answers\DecoyPicker;
 use App\Support\Draw\DrawContext;
+use App\Support\Draw\DrawnRound;
 use App\Support\Draw\SeededPrf;
 use App\ValueObjects\Answers\DecoyPick;
 use Carbon\CarbonImmutable;
 use Database\Factories\MovieFactory;
+use Database\Factories\RoundPlayerFactory;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Str;
+use Tests\Support\Answers\ChoiceSetFixtures;
 use Tests\Support\Draw\PoolFixtures;
 
 /*
@@ -39,6 +52,12 @@ use Tests\Support\Draw\PoolFixtures;
 | variantes publiées, projection calculée par le projecteur (`PoolFixtures`),
 | titres inventés ; seuls les tests du masque périmé écrivent la projection à
 | la main, pour simuler un `catalog:reproject` qui n'a pas encore tourné.
+|
+| Les derniers intitulés (L70-8) passent par `ComposeChoiceSets` : moment du
+| tirage (première composition, instant théorique), cas terminal, échecs du
+| calcul et de l'écriture. Leurs manches sont matérialisées par
+| `ChoiceSetFixtures`, paliers compris, pour que `$this->at` soit exactement
+| l'instant d'ouverture du QCM.
 |
 */
 
@@ -765,4 +784,370 @@ it("rejette un candidat dont le movie_group est pris ou dont une chaîne rendue 
             ->and(count(array_intersect($ids, decoyDrawIds(...$sameWork))))->toBe(1)
             ->and(count(array_intersect($ids, decoyDrawIds(...$sameEnglish))))->toBe(1);
     }
+});
+
+/**
+ * Les trois leurres d'une manche relue en base, dans l'ordre des colonnes.
+ *
+ * @return list<int|null>
+ */
+function decoyDrawColumns(Round $round): array
+{
+    $round->refresh();
+
+    return [$round->decoy_movie_id_1, $round->decoy_movie_id_2, $round->decoy_movie_id_3];
+}
+
+/**
+ * Les leurres d'une manche composée, triés — pour comparer des ensembles.
+ *
+ * @return list<int>
+ */
+function decoyDrawComposedSet(Round $round): array
+{
+    $ids = array_map(static fn (?int $id): int => $id ?? 0, decoyDrawColumns($round));
+    sort($ids);
+
+    return $ids;
+}
+
+/**
+ * Les quatre chaînes de chaque ligne de la manche, par locale.
+ *
+ * @return array<string, list<string>>
+ */
+function decoyDrawChoiceStrings(Round $round): array
+{
+    return RoundChoiceSet::query()
+        ->where('round_id', $round->id)
+        ->get()
+        ->mapWithKeys(static fn (RoundChoiceSet $set): array => [
+            $set->locale->value => [$set->choice_1, $set->choice_2, $set->choice_3, $set->choice_4],
+        ])
+        ->sortKeys()
+        ->all();
+}
+
+it('compose les mêmes leurres quand la transition est rattrapée en retard', function () {
+    $settings = ChoiceSetFixtures::settings(noRepeatMovies: true);
+    $target = decoyDrawMovie();
+    $peers = [decoyDrawMovie(), decoyDrawMovie()];
+    $next = decoyDrawMovie();
+
+    // Une partie jumelle par exécution : même graine, même catalogue, même
+    // `sequence_index`. La manche suivante est programmée 30 s après
+    // l'instant théorique de composition.
+    $scene = function () use ($settings, $target, $next): array {
+        $game = ChoiceSetFixtures::game(Room::factory()->create(), $settings, decoyDrawSeeds()[0]);
+        $round = ChoiceSetFixtures::round($game, $target, $this->at);
+        PoolFixtures::round($game, $next, $this->at->addSeconds(30), RoundStatus::Pending);
+
+        return [$game, $round, ChoiceSetFixtures::seat($round, Locale::English)];
+    };
+
+    [, $onTime, $onTimeSeat] = $scene();
+    [$lateGame, $late, $lateSeat] = $scene();
+    [, $third] = $scene();
+
+    // À l'heure.
+    $this->travelTo($this->at);
+    expect(ChoiceSetFixtures::compose($onTime, $this->at))->toBeTrue();
+
+    // En retard de 45 s : la manche suivante a démarré entre-temps.
+    $this->travelTo($this->at->addSeconds(45));
+    expect(ChoiceSetFixtures::compose($late, $this->at))->toBeTrue();
+
+    expect(decoyDrawColumns($late))->toBe(decoyDrawColumns($onTime))
+        ->and(decoyDrawComposedSet($late))->toBe(decoyDrawIds(...$peers, ...[$next]))
+        ->and($late->choices_use_original_title)->toBe($onTime->choices_use_original_title)
+        ->and(decoyDrawChoiceStrings($late))->toBe(decoyDrawChoiceStrings($onTime));
+
+    // Tous les instants écrits sont l'instant théorique, jamais l'heure
+    // d'exécution.
+    foreach ([$onTime, $late] as $round) {
+        foreach (RoundChoiceSet::query()->where('round_id', $round->id)->get() as $set) {
+            expect($set->composed_at->format('Y-m-d H:i:s.v'))->toBe($this->at->format('Y-m-d H:i:s.v'));
+        }
+    }
+
+    foreach ([$onTimeSeat, $lateSeat] as $seat) {
+        expect($seat->refresh()->choices_composed_at?->format('Y-m-d H:i:s.v'))->toBe($this->at->format('Y-m-d H:i:s.v'));
+    }
+
+    // Témoin : tiré à l'heure d'exécution, le vivier aurait perdu le film de
+    // la manche suivante, désormais démarrée — plus que deux leurres.
+    app()->forgetScopedInstances();
+
+    expect(app(DecoyPicker::class)->pick($late, $lateGame, CarbonImmutable::now()))->toBeNull();
+
+    // Et l'heure d'exécution est refusée comme instant de composition.
+    expect(fn () => ChoiceSetFixtures::compose($third, CarbonImmutable::now()))->toThrow(InvalidArgumentException::class)
+        ->and(decoyDrawColumns($third))->toBe([null, null, null]);
+});
+
+it("ne tire les leurres qu'à la première composition et jamais au lancement", function () {
+    // Au lancement : la cible n'a qu'un titre anglais, et trois films ont ce
+    // profil.
+    $target = decoyDrawMovie(decoyDrawEnglishOnly());
+    $englishOnly = [
+        decoyDrawMovie(decoyDrawEnglishOnly()),
+        decoyDrawMovie(decoyDrawEnglishOnly()),
+        decoyDrawMovie(decoyDrawEnglishOnly()),
+    ];
+    $game = ChoiceSetFixtures::game(Room::factory()->create(), ChoiceSetFixtures::settings(), decoyDrawSeeds()[0]);
+    $round = ChoiceSetFixtures::round($game, $target, $this->at);
+    ChoiceSetFixtures::seat($round, Locale::French);
+
+    // La manche lancée et matérialisée ne porte ni leurre ni proposition ; le
+    // résultat du tirage de lancement n'a aucun champ de leurre.
+    expect(decoyDrawColumns($round))->toBe([null, null, null])
+        ->and($round->choices_use_original_title)->toBeFalse()
+        ->and(RoundChoiceSet::query()->where('round_id', $round->id)->exists())->toBeFalse();
+
+    foreach ((new ReflectionClass(DrawnRound::class))->getProperties() as $property) {
+        expect(Str::lower($property->getName()))->not->toContain('decoy');
+    }
+
+    // Entre le lancement et `T_N`, le curateur donne un titre français à la
+    // cible : son profil change, et trois films portent le nouveau.
+    $frenchTitle = decoyDrawTitle();
+    MovieTitle::factory()->create(['movie_id' => $target->id, 'locale' => Locale::French->value, 'title' => $frenchTitle]);
+    MovieFactory::recomputeProjection($target);
+    $bilingual = [decoyDrawMovie(), decoyDrawMovie(), decoyDrawMovie()];
+
+    expect(ChoiceSetFixtures::compose($round, $this->at))->toBeTrue();
+
+    // Le tirage suit le profil À LA COMPOSITION : aucun film « anglais seul ».
+    $first = decoyDrawColumns($round);
+    $strings = decoyDrawChoiceStrings($round);
+
+    expect(decoyDrawComposedSet($round))->toBe(decoyDrawIds(...$bilingual))
+        ->and($round->choices_use_original_title)->toBeFalse()
+        ->and($strings[Locale::French->value][0])->toBe($frenchTitle);
+
+    foreach ($englishOnly as $movie) {
+        expect($first)->not->toContain($movie->id);
+    }
+
+    // Seule la PREMIÈRE composition tire : le catalogue change encore, la
+    // manche ne bouge plus.
+    MovieTitle::query()
+        ->where('movie_id', $target->id)
+        ->where('locale', Locale::French->value)
+        ->update(['title' => decoyDrawTitle()]);
+    decoyDrawMovie();
+    decoyDrawMovie();
+
+    expect(ChoiceSetFixtures::compose($round, $this->at))->toBeTrue()
+        ->and(decoyDrawColumns($round))->toBe($first)
+        ->and(decoyDrawChoiceStrings($round))->toBe($strings);
+});
+
+it('sans trois leurres possibles, ne compose rien et fait passer les sièges text_exhausted en attempts_exhausted', function () {
+    Event::fake([InputClosed::class]);
+
+    // Une cible au titre natif sans translittération : deux pairs seulement au
+    // même profil (R1-R2), aucune autre forme native (R3-R4).
+    $target = decoyDrawMovie(decoyDrawFrenchOnly(), null, '青い猫の庭');
+    decoyDrawMovie(decoyDrawFrenchOnly());
+    decoyDrawMovie(decoyDrawFrenchOnly(), null, '赤い月の森', 'Akai Tsuki No Mori');
+    decoyDrawMovie();
+    decoyDrawMovie();
+
+    $game = ChoiceSetFixtures::game(Room::factory()->create(), ChoiceSetFixtures::settings(InputDifficulty::Normal), decoyDrawSeeds()[0]);
+    $round = ChoiceSetFixtures::round($game, $target, $this->at);
+    $open = ChoiceSetFixtures::seat($round, Locale::English);
+    $exhausted = [
+        ChoiceSetFixtures::seat($round, Locale::English, static fn (RoundPlayerFactory $factory): RoundPlayerFactory => $factory->textExhausted()),
+        ChoiceSetFixtures::seat($round, Locale::French, static fn (RoundPlayerFactory $factory): RoundPlayerFactory => $factory->textExhausted()),
+    ];
+
+    // `InputClosed` est émis dans la transaction de la transition, et délivré
+    // après son commit seulement.
+    DB::transaction(function () use ($round): void {
+        expect(ChoiceSetFixtures::compose($round, $this->at))->toBeFalse();
+
+        Event::assertNotDispatched(InputClosed::class);
+    });
+
+    Event::assertDispatchedTimes(InputClosed::class, count($exhausted));
+
+    foreach ($exhausted as $seat) {
+        Event::assertDispatched(
+            InputClosed::class,
+            static fn (InputClosed $event): bool => $event->roundId === $round->id
+                && $event->playerId === $seat->player_id
+                && $event->state === RoundPlayerInputState::AttemptsExhausted,
+        );
+
+        $wrongAttempts = $seat->wrong_attempts;
+        $seat->refresh();
+
+        // Clos à l'instant THÉORIQUE de composition, compteur intact.
+        expect($seat->input_state)->toBe(RoundPlayerInputState::AttemptsExhausted)
+            ->and($seat->input_closed_at?->format('Y-m-d H:i:s.v'))->toBe($this->at->format('Y-m-d H:i:s.v'))
+            ->and($seat->wrong_attempts)->toBe($wrongAttempts)
+            ->and($seat->choices_locale)->toBeNull();
+    }
+
+    // Rien n'est composé ; en Normal, le cas terminal ne s'écrit dans aucune
+    // colonne de la manche.
+    expect(RoundChoiceSet::query()->where('round_id', $round->id)->exists())->toBeFalse()
+        ->and(decoyDrawColumns($round))->toBe([null, null, null])
+        ->and($round->choices_use_original_title)->toBeFalse()
+        ->and($round->cancel_reason)->toBeNull()
+        ->and($open->refresh()->input_state)->toBe(RoundPlayerInputState::Open)
+        ->and($open->input_closed_at)->toBeNull()
+        ->and($open->choices_locale)->toBeNull();
+
+    // Rappelée, elle recommence et ne trouve toujours rien : aucun événement
+    // de plus.
+    expect(ChoiceSetFixtures::compose($round, $this->at))->toBeFalse();
+    Event::assertDispatchedTimes(InputClosed::class, count($exhausted));
+
+    // Facile : même cas terminal, aucun siège touché ; c'est 60 qui annule la
+    // manche, avec le motif `choices_unavailable`.
+    $easy = ChoiceSetFixtures::game(Room::factory()->create(), ChoiceSetFixtures::settings(InputDifficulty::Easy), decoyDrawSeeds()[1]);
+    $easyRound = ChoiceSetFixtures::round($easy, $target, $this->at);
+    $easySeat = ChoiceSetFixtures::seat($easyRound, Locale::French);
+
+    expect(ChoiceSetFixtures::compose($easyRound, $this->at))->toBeFalse()
+        ->and($easySeat->refresh()->input_state)->toBe(RoundPlayerInputState::Open)
+        ->and($easyRound->refresh()->cancel_reason)->toBeNull()
+        ->and(RoundIncidentReason::ChoicesUnavailable->value)->toBe('choices_unavailable');
+
+    Event::assertDispatchedTimes(InputClosed::class, count($exhausted));
+});
+
+it("une exception de tirage des leurres est traitée comme le cas terminal sans bloquer l'ouverture du palier", function () {
+    Exceptions::fake();
+    Event::fake([InputClosed::class]);
+
+    $secret = 'Le Secret Du Phare Englouti';
+    $target = decoyDrawMovie([
+        Locale::English->value => 'The Sunken Lighthouse Secret',
+        Locale::French->value => $secret,
+    ]);
+
+    for ($index = 0; $index < 4; $index++) {
+        decoyDrawMovie();
+    }
+
+    $game = ChoiceSetFixtures::game(Room::factory()->create(), ChoiceSetFixtures::settings(InputDifficulty::Normal), decoyDrawSeeds()[0]);
+    $round = ChoiceSetFixtures::round($game, $target, $this->at);
+    $exhausted = ChoiceSetFixtures::seat($round, Locale::French, static fn (RoundPlayerFactory $factory): RoundPlayerFactory => $factory->textExhausted());
+    $open = ChoiceSetFixtures::seat($round, Locale::English);
+
+    // Une donnée de catalogue fait lever le calcul — ici, toute lecture de
+    // film —, avec un titre dans le message.
+    $armed = true;
+    Movie::retrieved(static function () use (&$armed, $secret): void {
+        if ($armed) {
+            throw new RuntimeException("titre illisible : {$secret}");
+        }
+    });
+
+    // La transition d'ouverture du palier de 60, simulée : la composition, puis
+    // `served_at(N)` dans la même transaction.
+    $tierIndex = $game->input_difficulty->choicesOpenTierIndex($game->frames_per_round);
+    $composed = DB::transaction(function () use ($round, $tierIndex): bool {
+        $composed = ChoiceSetFixtures::compose($round, $this->at);
+
+        RoundTier::query()
+            ->where('round_id', $round->id)
+            ->where('tier_index', $tierIndex)
+            ->update(['served_at' => (new RoundTier)->fromDateTime($this->at)]);
+
+        return $composed;
+    });
+    $armed = false;
+
+    // Le palier est ouvert, le QCM ne l'est pas : texte seul en Normal.
+    expect($composed)->toBeFalse()
+        ->and(RoundTier::query()->where('round_id', $round->id)->where('tier_index', $tierIndex)->value('served_at'))->not->toBeNull()
+        ->and(RoundChoiceSet::query()->where('round_id', $round->id)->exists())->toBeFalse()
+        ->and(decoyDrawColumns($round))->toBe([null, null, null])
+        ->and($exhausted->refresh()->input_state)->toBe(RoundPlayerInputState::AttemptsExhausted)
+        ->and($exhausted->input_closed_at?->format('Y-m-d H:i:s.v'))->toBe($this->at->format('Y-m-d H:i:s.v'))
+        ->and($open->refresh()->input_state)->toBe(RoundPlayerInputState::Open)
+        ->and($open->choices_locale)->toBeNull();
+
+    Event::assertDispatched(
+        InputClosed::class,
+        static fn (InputClosed $event): bool => $event->playerId === $exhausted->player_id,
+    );
+
+    // Rapportée une fois, SANS titre ni chaîne : ni le message d'origine, ni
+    // l'exception chaînée, seulement sa classe et son emplacement.
+    Exceptions::assertReportedCount(1);
+    Exceptions::assertReported(static function (RuntimeException $reported) use ($secret): bool {
+        $message = $reported->getMessage();
+
+        return str_contains($message, 'ComposeChoiceSets')
+            && str_contains($message, RuntimeException::class)
+            && ! str_contains($message, $secret)
+            && ! str_contains($message, 'Sunken')
+            && ! str_contains($message, 'titre illisible')
+            && $reported->getPrevious() === null;
+    });
+
+    // Témoin : sans la panne, la manche d'une partie jumelle se compose.
+    $twin = ChoiceSetFixtures::game(Room::factory()->create(), ChoiceSetFixtures::settings(InputDifficulty::Normal), decoyDrawSeeds()[0]);
+
+    expect(ChoiceSetFixtures::compose(ChoiceSetFixtures::round($twin, $target, $this->at), $this->at))->toBeTrue();
+});
+
+it("une erreur de base remonte sans laisser de ligne partielle, à l'écriture comme au calcul", function () {
+    Exceptions::fake();
+
+    $target = decoyDrawMovie();
+
+    for ($index = 0; $index < 4; $index++) {
+        decoyDrawMovie();
+    }
+
+    $game = ChoiceSetFixtures::game(Room::factory()->create(), ChoiceSetFixtures::settings(InputDifficulty::Normal), decoyDrawSeeds()[0]);
+    $round = ChoiceSetFixtures::round($game, $target, $this->at);
+    $seat = ChoiceSetFixtures::seat($round, Locale::English);
+
+    // Une ligne occupe déjà (manche, dernière locale activée) : la dernière
+    // insertion viole `round_choice_set_round_locale_uq`, après les autres
+    // écritures.
+    $locales = Locale::cases();
+    $orphan = RoundChoiceSet::factory()->forRound($round)->forLocale($locales[count($locales) - 1])->create();
+
+    expect(fn () => ChoiceSetFixtures::compose($round, $this->at))->toThrow(QueryException::class)
+        ->and(decoyDrawColumns($round))->toBe([null, null, null])
+        ->and($round->choices_use_original_title)->toBeFalse()
+        ->and(RoundChoiceSet::query()->where('round_id', $round->id)->pluck('id')->all())->toBe([$orphan->id])
+        ->and($seat->refresh()->choices_locale)->toBeNull();
+
+    // Une erreur de base pendant le CALCUL remonte de même : un interblocage
+    // MySQL annule la transaction entière, et continuer à écrire serait écrire
+    // hors d'elle.
+    $other = ChoiceSetFixtures::round(
+        ChoiceSetFixtures::game(Room::factory()->create(), ChoiceSetFixtures::settings(InputDifficulty::Normal), decoyDrawSeeds()[1]),
+        $target,
+        $this->at,
+    );
+    $exhausted = ChoiceSetFixtures::seat($other, Locale::English, static fn (RoundPlayerFactory $factory): RoundPlayerFactory => $factory->textExhausted());
+    $armed = true;
+    Movie::retrieved(static function () use (&$armed): void {
+        if ($armed) {
+            throw new QueryException('sqlite', 'select * from "movie"', [], new PDOException('database is locked'));
+        }
+    });
+
+    // Transaction imbriquée : Laravel la requalifie en `DeadlockException`
+    // (un `PDOException`), pour que la transaction englobante la rejoue.
+    expect(fn () => ChoiceSetFixtures::compose($other, $this->at))->toThrow(PDOException::class);
+    $armed = false;
+
+    expect(decoyDrawColumns($other))->toBe([null, null, null])
+        ->and(RoundChoiceSet::query()->where('round_id', $other->id)->exists())->toBeFalse()
+        ->and($exhausted->refresh()->input_state)->toBe(RoundPlayerInputState::TextExhausted);
+
+    // Une erreur de base n'est pas un cas terminal : rien n'est rapporté ni
+    // fermé, la transition de 60 la rejouera.
+    Exceptions::assertNothingReported();
 });

@@ -5,6 +5,7 @@ namespace Database\Factories;
 use App\Enums\Locale;
 use App\Models\Round;
 use App\Models\RoundChoiceSet;
+use App\ValueObjects\Answers\ChoicesPayload;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
@@ -12,11 +13,19 @@ use Illuminate\Database\Eloquent\Factories\Factory;
  * la composition (§ 7.8).
  *
  * **`choice_1` est la bonne réponse en clair**, et l'ordre stocké n'est jamais
- * l'ordre affiché : la permutation est dérivée de
- * `HMAC(game.draw_seed, round_id, player_id)` à l'envoi, rien n'est stocké par
- * joueur. Une fabrique qui « mélangerait » les quatre colonnes casserait donc la
- * règle de jugement — une soumission `source = 'choice'` est jugée par **égalité
- * stricte contre `choice_1`**, et ne consulte jamais `answer_key`.
+ * l'ordre affiché : la permutation est dérivée à l'envoi par
+ * `SeededPrf::forGame(game)->permutation(DrawContext::qcmOrder(sequence_index,
+ * player.public_id), 4)` (E10-54), rien n'est stocké par joueur. Une fabrique
+ * qui « mélangerait » les quatre colonnes casserait donc la règle de jugement —
+ * une soumission `source = 'choice'` est jugée par **égalité stricte contre
+ * `choice_1`**, et ne consulte jamais `answer_key`.
+ *
+ * `rendered_locale` (E10-03) suit par défaut la locale de la ligne — le rang 1
+ * de la chaîne de repli, cas nominal ; {@see self::renderedIn()} pose une autre
+ * locale atteinte (rang 2) ou NULL (titres originaux).
+ *
+ * Les quatre chaînes sont **deux à deux distinctes**, comme la composition les
+ * garantit : {@see ChoicesPayload} refuse un doublon, qui rendrait un clic ambigu.
  *
  * Au plus **une ligne par (manche, locale activée)**, jamais une ligne par joueur,
  * qui coûterait ~720 Mo sur douze mois : `round_choice_set_round_locale_uq` le
@@ -48,24 +57,40 @@ class RoundChoiceSetFactory extends Factory
      */
     public function definition(): array
     {
+        [$correct, $decoy1, $decoy2, $decoy3] = self::distinctTitles();
+
         return [
             'round_id' => Round::factory(),
             'locale' => Locale::English,
-            'choice_1' => self::title(),
-            'choice_2' => self::title(),
-            'choice_3' => self::title(),
-            'choice_4' => self::title(),
+            'rendered_locale' => static fn (array $attributes): mixed => $attributes['locale'],
+            'choice_1' => $correct,
+            'choice_2' => $decoy1,
+            'choice_3' => $decoy2,
+            'choice_4' => $decoy3,
             'composed_at' => now(),
         ];
     }
 
     /**
      * Le jeu d'une autre locale activée — une ligne par locale, jamais plus.
+     * La locale atteinte suit, sauf {@see self::renderedIn()}.
      */
     public function forLocale(Locale $locale): static
     {
         return $this->state(fn (array $attributes): array => [
             'locale' => $locale,
+        ]);
+    }
+
+    /**
+     * Locale EFFECTIVE atteinte par les quatre chaînes : une autre locale
+     * activée (rang 2 de la chaîne de repli), ou NULL quand elles sortent de
+     * `title_original` (rang 3, mode dégradé).
+     */
+    public function renderedIn(?Locale $locale): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'rendered_locale' => $locale,
         ]);
     }
 
@@ -92,6 +117,24 @@ class RoundChoiceSetFactory extends Factory
         return $this->state(fn (array $attributes): array => [
             'round_id' => $round->id,
         ]);
+    }
+
+    /**
+     * Quatre titres inventés de deux mots, deux à deux distincts.
+     *
+     * @return array{string, string, string, string}
+     */
+    private static function distinctTitles(): array
+    {
+        $titles = [];
+
+        while (count($titles) < ChoicesPayload::COUNT) {
+            $titles[self::title()] = true;
+        }
+
+        [$correct, $decoy1, $decoy2, $decoy3] = array_keys($titles);
+
+        return [(string) $correct, (string) $decoy1, (string) $decoy2, (string) $decoy3];
     }
 
     /**
