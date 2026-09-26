@@ -1,8 +1,10 @@
 <?php
 
+use App\Jobs\Ops\ReportBruteForce;
 use App\Jobs\Ops\WorkerHeartbeat;
 use App\Jobs\Retention\RunRetentionPurge;
 use App\Support\Ops\Heartbeat;
+use Carbon\CarbonInterface;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Config;
@@ -42,3 +44,10 @@ Schedule::job(new RunRetentionPurge)
 // rétention, avant le tier chaud.
 Schedule::command('backup:prune-snapshots')
     ->dailyAt(Config::string('backup.prune_at'));
+
+// Rapport de force brute (§ 15, 70 § 13.2) : chaque lundi, sur la file
+// `default`, jamais `game` (la file est posée par le job). Non alertant : une
+// ligne d'information sur le canal `game`, relue au recalibrage d'avant
+// l'onglet Avancé, sans aucune donnée de joueur.
+Schedule::job(new ReportBruteForce)
+    ->weeklyOn(CarbonInterface::MONDAY, Config::string('ops.brute_force.report_at'));

@@ -38,6 +38,18 @@
 | d'incident est un drapeau du cache posé par `purge:suspend`, qui met la
 | sonde `purge` en alerte tant qu'il existe (§ 14).
 |
+| `brute_force.*` : rapport hebdomadaire NON ALERTANT de la sonde de force
+| brute de 70 § 13.2 (`ReportBruteForce`, chaque lundi à `report_at` UTC,
+| file `default`) : bonnes réponses au palier 1 (une par siège gagnant, pas
+| par manche distincte : E74-3), en texte libre, après plus de `k`
+| tentatives fausses, sur les `window_days` derniers jours, manches annulées
+| exclues. `k` est le seuil `K` (valeur de départ : « plus de dix
+| tentatives », 10 § 15), recalibré avec 70 et 50 avant l'onglet Avancé ;
+| jamais noté `N`, qui désigne `frames_per_round`. À `K` = 10, le compte est
+| nul par construction dès que `d₁` ≤ ~10,7 s, preset par défaut compris
+| (au plus onze envois au palier 1 à 1/s) : question ouverte au porteur
+| (E75-3), valeur laissée à la lettre de 100 § 15 d'ici là.
+|
 */
 
 return [
@@ -60,6 +72,12 @@ return [
         'batch_size' => 500,
         'max_batches' => 200,
         'stale_hours' => 48,
+    ],
+
+    'brute_force' => [
+        'k' => 10,
+        'window_days' => 7,
+        'report_at' => '04:10',
     ],
 
 ];
