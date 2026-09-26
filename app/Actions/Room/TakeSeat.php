@@ -188,7 +188,7 @@ final readonly class TakeSeat
         // L50-9.
 
         // S8 — réparation d'une référence d'hôte sans cible valide.
-        if ($repairHost && ! $this->hasValidHost($locked)) {
+        if ($repairHost && ! TransferHost::hasValidHost($locked)) {
             $this->transferHost->automatic($locked, $now);
         }
 
@@ -226,22 +226,6 @@ final readonly class TakeSeat
     private function heldBy(Room $room, PlayerToken $token): ?Player
     {
         return Player::query()->whereBelongsTo($room)->heldByToken($token)->first();
-    }
-
-    /**
-     * Vrai si `host_player_id` désigne un siège de ce salon, ni parti ni
-     * expulsé (§ 11.1) : nul, parti, expulsé ou absent déclenchent un
-     * transfert, jamais une erreur.
-     */
-    private function hasValidHost(Room $room): bool
-    {
-        return $room->host_player_id !== null
-            && Player::query()
-                ->whereKey($room->host_player_id)
-                ->whereBelongsTo($room)
-                ->holdingSeat()
-                ->whereNull('kicked_at')
-                ->exists();
     }
 
     /** `validation.nickname.taken` sous `nickname`, dans la langue de la requête. */

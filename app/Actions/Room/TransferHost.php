@@ -91,6 +91,23 @@ final readonly class TransferHost
     }
 
     /**
+     * Vrai si `host_player_id` désigne un siège de ce salon, ni parti ni
+     * expulsé (§ 11.1). Une référence nulle, partie, expulsée ou absente
+     * n'est jamais une erreur : la lecture qui la constate déclenche
+     * {@see self::automatic()} — prise de siège (S8), lancement (L3).
+     */
+    public static function hasValidHost(Room $room): bool
+    {
+        return $room->host_player_id !== null
+            && Player::query()
+                ->whereKey($room->host_player_id)
+                ->whereBelongsTo($room)
+                ->holdingSeat()
+                ->whereNull('kicked_at')
+                ->exists();
+    }
+
+    /**
      * Le siège non expulsé le plus ancien du salon dans cet état de présence,
      * hôte courant exclu.
      */

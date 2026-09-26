@@ -23,9 +23,11 @@ use App\Models\User;
  *   verrou du salon, l'hôte ayant pu changer entre la requête et le verrou
  *   (spec 50 § 2.5, § 12.6 invariant 2).
  *
- * Les autres gestes de la table du § 17.1 (`launch`, `replay`,
- * `advanceRound`, `kick`, `transferHost`, `leave`) arrivent avec leurs lots ;
- * au lot L50-2, seul `updateSettings` a un appelant.
+ * Les autres gestes de la table du § 17.1 (`replay`, `kick`, `transferHost`,
+ * `leave`) arrivent avec leurs lots (L50-6, L50-7b). `launch` a pour
+ * appelant `room.launch` (L50-7a) ; `advanceRound` est posée au même lot pour
+ * le geste « manche suivante » de `60` (contrat C7 § 2.4), dont l'action
+ * l'évalue sous le verrou du salon.
  */
 class RoomPolicy
 {
@@ -35,6 +37,26 @@ class RoomPolicy
      * si le siège appartient au salon et en est l'hôte.
      */
     public function updateSettings(?User $user, Room $room, ?Player $seat): bool
+    {
+        return self::holdsHostSeat($room, $seat);
+    }
+
+    /**
+     * Lancer la partie (`room.launch`, § 12) : même clause que
+     * {@see self::updateSettings()}. Le lancement relit l'autorité sous le
+     * verrou du salon, après la réparation d'un hôte sans cible (L3).
+     */
+    public function launch(?User $user, Room $room, ?Player $seat): bool
+    {
+        return self::holdsHostSeat($room, $seat);
+    }
+
+    /**
+     * « Manche suivante » pendant la révélation (spec 50 § 11.1, contrat C7
+     * § 2.4) : même clause. Il raccourcit `R`, jamais `D` — effet propre à
+     * `60`, qui l'évalue sous le verrou du salon.
+     */
+    public function advanceRound(?User $user, Room $room, ?Player $seat): bool
     {
         return self::holdsHostSeat($room, $seat);
     }

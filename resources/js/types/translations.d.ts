@@ -1566,6 +1566,7 @@ export type TranslationKey =
     | 'room.create.intro'
     | 'room.create.submit'
     | 'room.create.title'
+    | 'room.errors.launch_failed'
     | 'room.identity.nickname_hint'
     | 'room.identity.nickname_label'
     | 'room.join.full'
@@ -1580,7 +1581,14 @@ export type TranslationKey =
     | 'room.presets.fast.description'
     | 'room.presets.fast.label'
     | 'room.presets.hardcore.description'
-    | 'room.presets.hardcore.label';
+    | 'room.presets.hardcore.label'
+    | 'room.refusal.game_not_ended'
+    | 'room.refusal.not_enough_players'
+    | 'room.refusal.not_host'
+    | 'room.refusal.not_in_lobby'
+    | 'room.refusal.pool_insufficient'
+    | 'room.refusal.room_archived'
+    | 'room.refusal.settings_outdated';
 
 export type TranslationKeyFor<D extends TranslationDomain> = Extract<
     TranslationKey,

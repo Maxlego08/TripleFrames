@@ -3,6 +3,7 @@
 use App\Http\Controllers\Game\ClockController;
 use App\Http\Controllers\Game\FrameServeController;
 use App\Http\Controllers\Game\RoomStateController;
+use App\Http\Controllers\Room\LaunchController;
 use App\Http\Controllers\Room\RoomController;
 use App\Http\Controllers\Room\RoomEntryController;
 use App\Http\Controllers\Room\RoomPresetController;
@@ -117,17 +118,22 @@ Route::get('r/{room}/state', [RoomStateController::class, 'show'])
     ->name('room.state')
     ->middleware(['translations:game,room,legal', 'throttle:game-read']);
 
-// Réglages du salon par l'hôte (spec 50 § 3, § 5.3, § 17.1, § 21 ; contrat
-// C0) : l'onglet Simple et l'application d'un preset. Toute écriture du lobby
-// passe par `seat.active` (contrat C7 : 403 sans siège tenu par le jeton, 409
-// `seat_superseded` pour un onglet supplanté), puis par `throttle:game-write`,
-// dans cet ordre et avant la liaison de `{room}` (liste de priorité de
-// `bootstrap/app.php`). Aucun domaine de traduction : ces routes ne rendent
-// aucune page, elles redirigent vers le lobby.
+// Gestes de l'hôte au lobby (spec 50 § 3, § 5.3, § 12, § 17.1, § 21 ;
+// contrats C0 et C6) : l'onglet Simple, l'application d'un preset et le
+// lancement. Toute écriture du lobby passe par `seat.active` (contrat C7 :
+// 403 sans siège tenu par le jeton, 409 `seat_superseded` pour un onglet
+// supplanté), puis par `throttle:game-write`, dans cet ordre et avant la
+// liaison de `{room}` (liste de priorité de `bootstrap/app.php`). Aucun
+// domaine de traduction : ces routes ne rendent aucune page, elles
+// redirigent vers le lobby, refus et échec technique rendus dans la langue
+// de la requête.
 Route::middleware(['seat.active', 'throttle:game-write'])->group(function (): void {
     Route::patch('r/{room}/settings', [RoomSettingsController::class, 'update'])
         ->name('room.settings.update');
 
     Route::post('r/{room}/settings/preset', [RoomPresetController::class, 'store'])
         ->name('room.settings.preset');
+
+    Route::post('r/{room}/launch', [LaunchController::class, 'store'])
+        ->name('room.launch');
 });

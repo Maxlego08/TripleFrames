@@ -8,8 +8,10 @@ return [
     |--------------------------------------------------------------------------
     |
     | Domaine normatif de la spec 05. Il ne porte que des lignes appelées par
-    | du code livré : les écrans de création et d’entrée (L50-3b) et les huit
-    | lignes des presets — {@see \App\Enums\SettingPresetKey} construit
+    | du code livré : les écrans de création et d’entrée (L50-3b), les refus
+    | de geste de salon — {@see \App\Enums\RoomRefusal} construit
+    | `room.refusal.<valeur>` — et l’échec technique du lancement (L50-7a),
+    | et les huit lignes des presets — {@see \App\Enums\SettingPresetKey} construit
     | `room.presets.<clé>.{label,description}` — : la spec interdit d’inventer
     | des clés pour des écrans absents. `setting_preset` n’a **aucune colonne
     | de libellé** ni table de libellé par locale (spec 10 § 6.3) : un preset
@@ -55,6 +57,32 @@ return [
         'kicked' => 'The host removed you from this room: you cannot come back.',
         'full' => 'This room is full.',
         'in_progress' => 'A game is in progress: you will wait in the room and play the next one.',
+    ],
+
+    /*
+    | Refus d’un geste de salon (spec 50 § 12.5 et § 20.3, contrat C6),
+    | construits par `RoomRefusal::messageKey()` et rendus à l’auteur seul.
+    | Le refus de drainage emploie `common.maintenance.launch_blocked` :
+    | `room.refusal.draining` n’existe pas (R-09).
+    */
+
+    'refusal' => [
+        'not_host' => 'Only the host can do this.',
+        'room_archived' => 'This room has expired.',
+        'not_in_lobby' => 'A game is already running in this room.',
+        'settings_outdated' => 'The settings were updated: check them, then start again.',
+        'not_enough_players' => 'At least :min connected players are needed to start.',
+        'pool_insufficient' => 'Only :playable playable movies for :required rounds.',
+        'game_not_ended' => 'The game is not over yet.',
+    ],
+
+    /*
+    | Échec technique d’un lancement (spec 50 § 12.5) : la transaction est
+    | annulée, le salon reste au lobby, et l’hôte peut recommencer.
+    */
+
+    'errors' => [
+        'launch_failed' => 'Starting the game failed. Please try again in a moment.',
     ],
 
     'presets' => [

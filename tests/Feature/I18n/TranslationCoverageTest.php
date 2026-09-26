@@ -9,7 +9,9 @@ use App\Enums\FrameProcessingFailure;
 use App\Enums\JoinRefusal;
 use App\Enums\LegalPage;
 use App\Enums\Locale;
+use App\Enums\RoomRefusal;
 use App\Enums\SettingPresetKey;
+use App\Http\Controllers\Room\LaunchController;
 use App\Rules\ValidNickname;
 use App\Support\Frames\CropViolation;
 use App\Support\I18n\TranslationDomains;
@@ -450,6 +452,14 @@ it('carries every key built by an enumerable key constructor', function () {
             static fn (JoinRefusal $refusal): ?string => $refusal->messageKey(),
             JoinRefusal::cases(),
         ))),
+        // Refus d'un geste de salon (50 § 12.5, L50-7a) : `room.refusal.<valeur>`,
+        // sauf le drainage, dont la clé unique est `common.maintenance.launch_blocked`
+        // (R-09) ; et l'échec technique du lancement, rendu par sa constante.
+        ...array_map(
+            static fn (RoomRefusal $refusal): string => $refusal->messageKey(),
+            RoomRefusal::cases(),
+        ),
+        LaunchController::KEY_LAUNCH_FAILED,
     ];
 
     $missing = array_values(array_filter(
