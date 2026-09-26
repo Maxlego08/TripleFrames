@@ -23,10 +23,11 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * un format sub-seconde ici ferait écrire des millisecondes dans des colonnes qui
  * n'en ont pas.
  *
- * Le score vivant n'est PAS ici : c'est `SUM(guess.points_total)` sous l'invariant
- * L1 ({@see Guess::counted()}). Les cinq colonnes nullables ci-dessous sont
- * écrites UNIQUEMENT à `game.ended_at`, ce qui fait du gel un événement
- * vérifiable plutôt qu'un état qu'on oublie de déclencher.
+ * Le score vivant n'est pas ici : il se lit par `Scoreboard` sous
+ * `ScoreScope::Own` ou `Publishable` ; les cinq colonnes nullables sont écrites
+ * par `FinalizeGame` seul (spec 80 § 7.4 et § 10.4), UNIQUEMENT à
+ * `game.ended_at`, ce qui fait du gel un événement vérifiable plutôt qu'un état
+ * qu'on oublie de déclencher.
  *
  * Aucune colonne `user_id` : le propriétaire se lit par `player.user_id`, source
  * unique, et l'anonymisation le détache en une seule écriture.

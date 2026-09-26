@@ -2,6 +2,7 @@
 
 namespace Database\Factories;
 
+use App\Actions\Game\FinalizeGame;
 use App\Enums\GameMode;
 use App\Enums\GameStatus;
 use App\Models\Game;
@@ -12,6 +13,7 @@ use App\Support\Answers\AnswerRules;
 use App\Support\Draw\SeededPrf;
 use App\Support\Scoring\ScoringRules;
 use Illuminate\Database\Eloquent\Factories\Factory;
+use Illuminate\Support\Facades\Date;
 
 /**
  * Fabrique de test de {@see Game} — la partie ET la règle appliquée, figée au
@@ -104,8 +106,35 @@ class GameFactory extends Factory
     }
 
     /**
+     * Partie GELÉE par l'action de gel elle-même ({@see FinalizeGame}, spec 80
+     * § 10), après la création de la partie et de ses enfants (`has()`) :
+     * clôture d'office, agrégats de `game_player`, `rounds_completed`,
+     * `ended_at` et statut sont ceux qu'écrirait la production, jamais posés à
+     * la main. `ended_at` = {@see FinalizeGame::lastKnownActivity()} à
+     * l'instant de création, comme une clôture d'office.
+     *
+     * C'est le seul état à employer pour un test qui lit un agrégat ;
+     * {@see self::completed()} et {@see self::interrupted()} ne posent que
+     * `ended_at` et le statut, pour les tests de schéma et de purge.
+     */
+    public function finalized(GameStatus $outcome = GameStatus::Completed): static
+    {
+        return $this->afterCreating(static function (Game $game) use ($outcome): void {
+            app(FinalizeGame::class)->handle(
+                $game,
+                $outcome,
+                FinalizeGame::lastKnownActivity($game, Date::now()->toImmutable()),
+            );
+        });
+    }
+
+    /**
      * Partie menée à son terme : `rounds_completed` vaut alors `M`, et `ended_at`
      * est la **colonne pilote unique** de la fenêtre de 12 mois (§ 11.1).
+     *
+     * Aucun agrégat de `game_player` n'est écrit : pour les tests de schéma et
+     * de purge seulement ; un test qui lit un agrégat emploie
+     * {@see self::finalized()}.
      */
     public function completed(): static
     {
@@ -134,6 +163,9 @@ class GameFactory extends Factory
 
     /**
      * Partie interrompue à la manche `k` sur `M`.
+     *
+     * Même réserve que {@see self::completed()} : aucun agrégat, donc aucun
+     * test qui en lit un ; {@see self::finalized()} gèle par l'action.
      */
     public function interrupted(int $roundsCompleted = 0): static
     {

@@ -517,7 +517,7 @@ Ensuite, à chaque session : **« Implémente l'étape suivante de l'ordre des l
 86. L50-2 (2e temps) — routes sous `seat.active`, `BroadcastLobbyState` → 84, 85 — ✅ livrée le 26/09
 87. L90-6b — chronologie cliente, annonces de manche → 39, 81, 82, 85* — ✅ livrée le 27/09
 88. L80-6 — textes, aide, `tierValueAt` (D29) → 8, 79, 87 — ✅ livrée le 27/09
-89. L80-4 — `FinalizeGame` → 6, 82
+89. L80-4 — `FinalizeGame` → 6, 82 — ✅ livrée le 27/09
 90. L60-5 — matérialisation, programmation, `serve_token`, annulation → 8, 72, 83, 89
 91. L60-6 — transitions de manche, pause → 77, 82, 89, 90
 92. L80-5 — podium, récapitulatif, faits (D25) → 69, 77, 81, 89, 91
