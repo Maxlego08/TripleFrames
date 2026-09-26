@@ -51,10 +51,6 @@ function createAvatar(variant, isCurrent = false) {
     avatarNode.setAttribute('aria-hidden', 'true');
     if (isCurrent) avatarNode.id = 'current-avatar';
 
-    const spark = document.createElement('span');
-    spark.className = 'player-avatar__spark';
-    spark.textContent = '✦';
-    avatarNode.appendChild(spark);
     return avatarNode;
 }
 
@@ -92,7 +88,7 @@ function renderSeats() {
                 previousButton.id = 'previous-avatar';
                 previousButton.type = 'button';
                 previousButton.setAttribute('aria-label', 'Avatar précédent');
-                previousButton.textContent = '←';
+                previousButton.innerHTML = '<img class="icon" src="../svg/icons/chevron-left.svg" alt="">';
                 occupant.appendChild(previousButton);
                 occupant.appendChild(createAvatar(player.avatar, true));
 
@@ -101,7 +97,7 @@ function renderSeats() {
                 nextButton.id = 'next-avatar';
                 nextButton.type = 'button';
                 nextButton.setAttribute('aria-label', 'Avatar suivant');
-                nextButton.textContent = '→';
+                nextButton.innerHTML = '<img class="icon" src="../svg/icons/chevron-right.svg" alt="">';
                 occupant.appendChild(nextButton);
             } else {
                 occupant.appendChild(createAvatar(player.avatar));
@@ -128,7 +124,7 @@ function renderSeats() {
 function updateCurrentAvatar() {
     const variant = avatarVariants[currentAvatarIndex];
     avatar.className = `player-avatar player-avatar--${variant} player-avatar--large`;
-    avatar.innerHTML = '<span class="player-avatar__spark">✦</span>';
+    avatar.replaceChildren();
 }
 
 function updateCodeVisibility() {
@@ -166,7 +162,12 @@ document.querySelector('#leave-game').addEventListener('click', () => {
 });
 
 startButton.addEventListener('click', () => {
-    if (isHost) showToast('La partie va commencer !');
+    if (!isHost) return;
+
+    showToast('La partie va commencer !');
+    window.setTimeout(() => {
+        window.location.href = `game.html?name=${encodeURIComponent(currentPlayerName)}`;
+    }, 450);
 });
 
 document.querySelector('#open-settings').addEventListener('click', () => {

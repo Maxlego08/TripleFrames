@@ -5,8 +5,8 @@
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <meta name="description" content="Connexion à ton compte TripleFrames." />
         <title>Connexion — TripleFrames</title>
-        <link rel="icon" href="brand-logo.svg" type="image/svg+xml" />
-        <link rel="stylesheet" href="auth.css" />
+        <link rel="icon" href="../svg/brand-logo.svg" type="image/svg+xml" />
+        <link rel="stylesheet" href="../css/auth.css" />
     </head>
     <body class="auth-page">
         <a class="skip-link" href="#auth-content">Aller au formulaire</a>
@@ -14,7 +14,7 @@
         <header class="auth-header">
             <div class="auth-header__inner">
                 <a class="brand" href="index.html" aria-label="TripleFrames, retour à l’accueil">
-                    <img class="brand__logo" src="brand-logo.svg" alt="" width="44" height="36" />
+                    <img class="brand__logo" src="../svg/brand-logo.svg" alt="" width="44" height="36" />
                     <span class="brand__name">TripleFrames</span>
                 </a>
                 <div class="auth-header__account-link">
@@ -27,16 +27,16 @@
         <main class="auth-stage" id="auth-content">
             <section class="auth-ticket" aria-labelledby="login-title">
                 <aside class="auth-ticket__brand-panel">
-                    <img class="auth-ticket__logo" src="brand-logo.svg" alt="" width="108" height="88" />
+                    <img class="auth-ticket__logo" src="../svg/brand-logo.svg" alt="" width="108" height="88" />
                     <p class="auth-ticket__tag">Ton espace joueur</p>
                     <h1>Reprends la partie là où tu l’as laissée.</h1>
                     <p class="auth-ticket__description">
                         Retrouve tes statistiques, tes salons et tes meilleurs scores.
                     </p>
                     <ul class="auth-ticket__benefits">
-                        <li><span aria-hidden="true">✓</span> Historique des parties</li>
-                        <li><span aria-hidden="true">✓</span> Réglages sauvegardés</li>
-                        <li><span aria-hidden="true">✓</span> Passkey sans mot de passe</li>
+                        <li><span aria-hidden="true"><img class="icon" src="../svg/icons/check.svg" alt="" /></span> Historique des parties</li>
+                        <li><span aria-hidden="true"><img class="icon" src="../svg/icons/check.svg" alt="" /></span> Réglages sauvegardés</li>
+                        <li><span aria-hidden="true"><img class="icon" src="../svg/icons/check.svg" alt="" /></span> Passkey sans mot de passe</li>
                     </ul>
                 </aside>
 
@@ -95,7 +95,7 @@
 
                         <button class="button button--primary" type="submit">
                             <span>Se connecter</span>
-                            <span aria-hidden="true">✦</span>
+                            <img class="icon" src="../svg/icons/spark.svg" alt="" aria-hidden="true" />
                         </button>
                     </form>
 
@@ -103,15 +103,15 @@
 
                     <div class="auth-providers" aria-label="Autres méthodes de connexion">
                         <button class="provider-button provider-button--passkey" type="button" data-provider="Passkey">
-                            <span class="provider-button__icon" aria-hidden="true">⌘</span>
+                            <span class="provider-button__icon" aria-hidden="true"><img class="icon" src="../svg/icons/passkey.svg" alt="" /></span>
                             <span>Passkey</span>
                         </button>
                         <button class="provider-button" type="button" data-provider="Google">
-                            <span class="provider-button__icon provider-button__icon--letter" aria-hidden="true">G</span>
+                            <span class="provider-button__icon" aria-hidden="true"><img class="icon" src="../svg/icons/google.svg" alt="" /></span>
                             <span>Google</span>
                         </button>
                         <button class="provider-button provider-button--discord" type="button" data-provider="Discord">
-                            <span class="provider-button__icon" aria-hidden="true">◉</span>
+                            <span class="provider-button__icon" aria-hidden="true"><img class="icon" src="../svg/icons/discord.svg" alt="" /></span>
                             <span>Discord</span>
                         </button>
                     </div>
@@ -128,6 +128,6 @@
         </footer>
 
         <div class="toast" id="auth-toast" role="status" aria-live="polite"></div>
-        <script src="auth.js"></script>
+        <script src="../js/auth.js"></script>
     </body>
 </html>

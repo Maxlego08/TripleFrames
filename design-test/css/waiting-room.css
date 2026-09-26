@@ -20,6 +20,12 @@ button {
   font: inherit;
 }
 
+.icon {
+  display: block;
+  width: 1rem;
+  height: 1rem;
+}
+
 a {
   color: inherit;
 }
@@ -167,6 +173,10 @@ a {
   background: oklch(81% 0.13 195deg);
   place-items: center;
   transition: translate 120ms ease, box-shadow 120ms ease;
+}
+.room-code__action-icon .icon {
+  width: 0.85rem;
+  height: 0.85rem;
 }
 #toggle-code[aria-pressed=true] .room-code__action-icon {
   background: oklch(88% 0.16 89deg);
@@ -421,6 +431,10 @@ a {
   cursor: pointer;
   place-items: center;
 }
+.cinema-seat__arrow .icon {
+  width: 1.15rem;
+  height: 1.15rem;
+}
 .cinema-seat__arrow--previous {
   grid-column: 1;
   grid-row: 1;
@@ -525,19 +539,6 @@ a {
   width: 4.15rem;
   box-shadow: 0.28rem 0.28rem 0 oklch(27% 0.08 292deg);
 }
-.player-avatar__spark {
-  position: absolute;
-  top: -0.32rem;
-  right: -0.18rem;
-  display: grid;
-  width: 1.3rem;
-  height: 1.3rem;
-  border: 0.12rem solid oklch(27% 0.08 292deg);
-  border-radius: 50%;
-  background: oklch(98% 0.03 91deg);
-  font-size: 0.65rem;
-  place-items: center;
-}
 
 .lobby-actions {
   display: grid;
@@ -635,6 +636,10 @@ a {
   cursor: pointer;
   place-items: center;
 }
+.settings-dialog__close .icon {
+  width: 1.15rem;
+  height: 1.15rem;
+}
 .settings-dialog__icon {
   display: grid;
   width: 3.5rem;
@@ -645,6 +650,10 @@ a {
   background: oklch(81% 0.13 195deg);
   font-size: 1.5rem;
   place-items: center;
+}
+.settings-dialog__icon .icon {
+  width: 1.6rem;
+  height: 1.6rem;
 }
 
 .toast {
@@ -716,16 +725,16 @@ a {
     height: 12%;
   }
   .cinema-room__tier--back {
-    top: 29%;
+    top: 31%;
     width: 70%;
   }
   .cinema-room__tier--mobile-middle-one {
-    top: 46.7%;
+    top: 48%;
     display: block;
     width: 80%;
   }
   .cinema-room__tier--mobile-middle-two {
-    top: 64.3%;
+    top: 65%;
     display: block;
     width: 90%;
   }
@@ -734,14 +743,14 @@ a {
     width: 98%;
   }
   .cinema-room__seats {
-    top: 29%;
+    top: 31%;
     right: 10%;
     bottom: 6%;
     left: 10%;
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    grid-template-rows: repeat(4, 18.4615%);
-    row-gap: 8.718%;
+    grid-template-rows: repeat(4, 19.0476%);
+    row-gap: 7.9365%;
   }
   .cinema-seat {
     position: relative;
@@ -865,6 +874,11 @@ a {
   }
   .lobby-actions .button--start {
     grid-column: auto;
+  }
+}
+@media (min-width: 55.01rem) and (max-height: 46rem) {
+  .cinema-room__screen {
+    width: min(34vw, 24rem);
   }
 }
 @media (prefers-reduced-motion: reduce) {

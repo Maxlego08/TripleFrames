@@ -23,6 +23,12 @@ button {
     font: inherit;
 }
 
+.icon {
+    display: block;
+    width: 1rem;
+    height: 1rem;
+}
+
 a {
     color: inherit;
 }
@@ -185,6 +191,11 @@ a {
         background: $color-cyan;
         place-items: center;
         transition: translate 120ms ease, box-shadow 120ms ease;
+
+        .icon {
+            width: 0.85rem;
+            height: 0.85rem;
+        }
     }
 
     #toggle-code[aria-pressed='true'] &__action-icon {
@@ -457,6 +468,11 @@ a {
         cursor: pointer;
         place-items: center;
 
+        .icon {
+            width: 1.15rem;
+            height: 1.15rem;
+        }
+
         &--previous {
             grid-column: 1;
             grid-row: 1;
@@ -584,19 +600,6 @@ a {
         box-shadow: 0.28rem 0.28rem 0 $color-ink;
     }
 
-    &__spark {
-        position: absolute;
-        top: -0.32rem;
-        right: -0.18rem;
-        display: grid;
-        width: 1.3rem;
-        height: 1.3rem;
-        border: 0.12rem solid $color-ink;
-        border-radius: 50%;
-        background: $color-paper;
-        font-size: 0.65rem;
-        place-items: center;
-    }
 }
 
 .lobby-actions {
@@ -705,6 +708,11 @@ a {
         font-size: 1.35rem;
         cursor: pointer;
         place-items: center;
+
+        .icon {
+            width: 1.15rem;
+            height: 1.15rem;
+        }
     }
 
     &__icon {
@@ -717,6 +725,11 @@ a {
         background: $color-cyan;
         font-size: 1.5rem;
         place-items: center;
+
+        .icon {
+            width: 1.6rem;
+            height: 1.6rem;
+        }
     }
 }
 
@@ -796,18 +809,18 @@ a {
             height: 12%;
 
             &--back {
-                top: 29%;
+                top: 31%;
                 width: 70%;
             }
 
             &--mobile-middle-one {
-                top: 46.7%;
+                top: 48%;
                 display: block;
                 width: 80%;
             }
 
             &--mobile-middle-two {
-                top: 64.3%;
+                top: 65%;
                 display: block;
                 width: 90%;
             }
@@ -819,14 +832,14 @@ a {
         }
 
         &__seats {
-            top: 29%;
+            top: 31%;
             right: 10%;
             bottom: 6%;
             left: 10%;
             display: grid;
             grid-template-columns: repeat(3, minmax(0, 1fr));
-            grid-template-rows: repeat(4, 18.4615%);
-            row-gap: 8.718%;
+            grid-template-rows: repeat(4, 19.0476%);
+            row-gap: 7.9365%;
         }
     }
 
@@ -972,6 +985,12 @@ a {
         .button--start {
             grid-column: auto;
         }
+    }
+}
+
+@media (min-width: 55.01rem) and (max-height: 46rem) {
+    .cinema-room__screen {
+        width: min(34vw, 24rem);
     }
 }
 

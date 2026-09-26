@@ -29,6 +29,12 @@ button {
   color: inherit;
 }
 
+.icon {
+  display: block;
+  width: 1rem;
+  height: 1rem;
+}
+
 a {
   color: inherit;
 }

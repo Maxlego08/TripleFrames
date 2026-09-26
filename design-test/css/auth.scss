@@ -36,6 +36,12 @@ button {
     color: inherit;
 }
 
+.icon {
+    display: block;
+    width: 1rem;
+    height: 1rem;
+}
+
 .skip-link {
     position: fixed;
     z-index: 20;
@@ -604,6 +610,11 @@ button {
         border-radius: 50%;
         font-size: 0.72rem;
         place-items: center;
+
+        .icon {
+            width: 0.9rem;
+            height: 0.9rem;
+        }
 
         &--letter {
             background: $color-yellow;
