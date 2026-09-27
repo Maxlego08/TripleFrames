@@ -9,6 +9,7 @@ use App\Enums\RoundPlayerInputState;
 use App\Http\Middleware\EnsureActiveSeat;
 use App\Models\Frame;
 use App\Models\Game;
+use App\Models\Guess;
 use App\Models\Movie;
 use App\Models\Player;
 use App\Models\Round;
@@ -32,10 +33,11 @@ use Tests\Support\Room\LobbyWrites;
 use Tests\TestCase;
 
 /**
- * Fixtures de la soumission texte (spec 70 § 7, lot L70-5) : une vraie partie,
- * matérialisée par l'action réelle, sa manche 1 programmée et ouverte par les
- * transitions réelles, des sièges tenus par un `player_token`, onglet actif
- * frappé, et la soumission envoyée PAR LA ROUTE, comme le client l'enverra :
+ * Fixtures de la soumission texte (spec 70 § 7 et § 9, lots L70-5 et
+ * L70-6) : une vraie partie, matérialisée par l'action réelle, sa manche 1
+ * programmée et ouverte par les transitions réelles, des sièges tenus par un
+ * `player_token`, onglet actif frappé, et la soumission envoyée PAR LA
+ * ROUTE, comme le client l'enverra :
  * JSON, cookie `player_token`, en-tête `X-Seat-Token`, horloge figée à
  * l'instant de réception.
  *
@@ -207,6 +209,15 @@ final class SubmissionFixtures
     public static function participation(Round $round, Player $seat): RoundPlayer
     {
         return RoundPlayer::query()->where('round_id', $round->id)->where('player_id', $seat->id)->firstOrFail();
+    }
+
+    /**
+     * La bonne réponse verrouillée d'un siège dans une manche, relue en base
+     * (lot L70-6).
+     */
+    public static function guess(Round $round, Player $seat): Guess
+    {
+        return Guess::query()->where('round_id', $round->id)->where('player_id', $seat->id)->sole();
     }
 
     /**

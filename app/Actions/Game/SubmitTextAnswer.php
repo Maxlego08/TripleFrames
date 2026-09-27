@@ -2,6 +2,7 @@
 
 namespace App\Actions\Game;
 
+use App\Enums\GuessSource;
 use App\Enums\InputDifficulty;
 use App\Enums\RoundPlayerInputState;
 use App\Events\Game\InputClosed;
@@ -14,6 +15,7 @@ use App\Support\Answers\AcceptanceWindow;
 use App\Support\Answers\AnswerMatcher;
 use App\Support\Catalog\AnswerKeyNormalizer;
 use App\Support\Game\ReceptionInstant;
+use App\Support\Game\RoundClock;
 use App\ValueObjects\Answers\SubmissionVerdict;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
@@ -47,8 +49,11 @@ use LogicException;
  *   l'état du QCM, **exactement une** instruction `UPDATE` de `round_player`,
  *   sa relecture verrouillante par clé primaire, et **aucune autre
  *   écriture** (J1) ;
- * - **S8b** — acceptation : la transaction de verrouillage `LockGuess`, lot
- *   L70-6.
+ * - **S8b** — acceptation : la transaction de verrouillage {@see LockGuess}
+ *   (§ 9), qui revérifie sous verrou la recevabilité et l'état de saisie,
+ *   sans réévaluer le verdict, avec `answeredAtMs` =
+ *   {@see RoundClock::offsetMs()} de l'instant de réception, calculé une
+ *   fois.
  *
  * **Interdits** (§ 7.4) : toute lecture conditionnelle, tout cache, toute
  * sortie anticipée du calcul de distance, tout message, journal ou écriture
@@ -66,6 +71,7 @@ final readonly class SubmitTextAnswer
     public function __construct(
         private CatchUpGame $catchUp,
         private AnswerMatcher $matcher,
+        private LockGuess $lock,
     ) {}
 
     /**
@@ -73,7 +79,6 @@ final readonly class SubmitTextAnswer
      * @param  string  $answer  La saisie brute, déjà bornée en longueur par le FormRequest.
      *
      * @throws ValidationException Saisie vide après normalisation (S5) : 422, non comptée.
-     * @throws LogicException Bonne réponse : l'étape S8b arrive avec le lot L70-6.
      */
     public function handle(Player $seat, Game $game, int $roundSequence, string $answer, CarbonImmutable $receivedAt): SubmissionVerdict
     {
@@ -114,8 +119,18 @@ final readonly class SubmitTextAnswer
         $match = $this->matcher->match($round, $submittedNormalized);
 
         if ($match->accepted) {
-            // S8b — la transaction de verrouillage (`LockGuess`, § 9).
-            throw new LogicException('SubmitTextAnswer : l’acceptation (étape S8b, transaction de verrouillage LockGuess) est livrée par le lot L70-6.');
+            // S8b — la transaction de verrouillage (§ 9). L'instant dans la
+            // manche est calculé une fois, depuis l'instant de réception :
+            // l'attente du verrou ne fait jamais changer de palier.
+            return $this->lock->handle(
+                $round,
+                $roundPlayer,
+                $game,
+                $match,
+                GuessSource::Text,
+                $receivedAt,
+                RoundClock::offsetMs($round, $receivedAt),
+            );
         }
 
         // S8a — le refus, quelle qu'en soit la cause.

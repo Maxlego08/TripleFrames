@@ -534,7 +534,7 @@ Ensuite, à chaque session : **« Implémente l'étape suivante de l'ordre des l
 103. L100-14 — bout en bout : partie de 10 manches sur le catalogue de démonstration → 90, 102 — ✅ livrée le 27/09
 104. L70-5 — soumission texte, fenêtre, refus à travail constant → 65, 73, 76, 81, 85, 93, 102 — ✅ livrée le 27/09
 105. L70-14 — limiteur `answer`, ordre des middlewares → 85, 104 — ✅ livrée le 27/09
-106. L70-6 — transaction de verrouillage → 79, 93, 104
+106. L70-6 — transaction de verrouillage → 79, 93, 104 — ✅ livrée le 27/09
 107. L70-9 — clic QCM, `SeatInputView` → 78, 106
 108. L60-11 — crochets de saisie, QCM ciblé, fin de partie → 6, 78, 89, 92, 93, 104, 106, 107
 109. L60-12 — resynchronisation de partie → 77, 78, 82, 85, 92, 93, 94, 107

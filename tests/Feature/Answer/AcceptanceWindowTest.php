@@ -5,6 +5,7 @@ use App\Actions\Game\SubmitTextAnswer;
 use App\Enums\GameStatus;
 use App\Enums\Locale;
 use App\Enums\RoundIncidentReason;
+use App\Enums\RoundPlayerInputState;
 use App\Enums\RoundStatus;
 use App\Jobs\Game\AdvanceRound;
 use App\Jobs\Game\InterruptPausedGame;
@@ -39,8 +40,8 @@ use Tests\Support\Room\SeatEntry;
 | réception ; le rattrapage (`CatchUpGame`) exécute à cet instant les
 | transitions échues, comme en production. « Accepter » se lit ici au sens
 | de la fenêtre : la soumission est JUGÉE (un refus y est compté), et non
-| close. Le crédit d'une bonne réponse au dernier palier arrive avec la
-| transaction de verrouillage (lot L70-6).
+| close ; une bonne réponse reçue au même instant est verrouillée par la
+| transaction de verrouillage (lot L70-6) et créditée au dernier palier.
 |
 */
 
@@ -59,8 +60,11 @@ function windowFirstRefusalLeft(Game $game): int
 }
 
 it('accepte une réponse reçue à D + tier_grace_ms − 1 au dernier palier', function (): void {
+    // Deux sièges reçus au même instant : l'un se trompe, l'autre trouve.
     $token = PlayerToken::mint(Locale::French);
-    [$game, $round, [$seat]] = SubmissionFixtures::openedRound([$token]);
+    $finder = PlayerToken::mint(Locale::English);
+    $target = SubmissionFixtures::movie('Harbour Lights');
+    [$game, $round, [$seat, $finderSeat]] = SubmissionFixtures::openedRound([$token, $finder], target: $target);
 
     $receivedAt = EngineFixtures::durationEnd($round)->addMilliseconds($game->tier_grace_ms - 1);
 
@@ -90,6 +94,28 @@ it('accepte une réponse reçue à D + tier_grace_ms − 1 au dernier palier', f
     // fenêtre en est, la suivante non.
     expect(AcceptanceWindow::admits($round, $game, $receivedAt))->toBeTrue()
         ->and(AcceptanceWindow::admits($round, $game, $receivedAt->addMillisecond()))->toBeFalse();
+
+    // La bonne réponse reçue au même instant est verrouillée, et créditée au
+    // palier N : la grâce la ramène dans la fenêtre du dernier palier, jamais
+    // au-delà de D (lot L70-6).
+    $framesPerRound = $game->frames_per_round;
+    $response = SubmissionFixtures::submit($this, $finderSeat, $finder, 'Harbour Lights', $receivedAt)
+        ->assertOk()
+        ->assertJson([
+            'result' => 'accepted',
+            'inputState' => 'locked',
+            'lockRank' => 1,
+            'tierIndex' => $framesPerRound,
+            'pointsTier' => $lastTier->points,
+        ]);
+
+    $guess = SubmissionFixtures::guess($round, $finderSeat);
+
+    expect($guess->tier_index)->toBe($framesPerRound)
+        ->and($guess->answered_at_ms)->toBe(RoundClock::offsetMs($round, $receivedAt))
+        ->and($guess->answered_at_ms)->toBe($round->duration_ms + $game->tier_grace_ms - 1)
+        ->and($response->json('pointsTotal'))->toBe($guess->points_total)
+        ->and(SubmissionFixtures::participation($round, $finderSeat)->input_state)->toBe(RoundPlayerInputState::Locked);
 });
 
 it('refuse comme manche close une réponse reçue à D + tier_grace_ms, sans la compter', function (): void {

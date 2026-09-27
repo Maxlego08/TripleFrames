@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\GuessMatchKind;
 use App\Enums\Locale;
 use App\Enums\RoundPlayerInputState;
 use App\Enums\SubmissionOutcome;
@@ -31,8 +32,8 @@ use Tests\Support\Room\SeatEntry;
 | d'alias, de nature d'appariement, de forme normalisée ni de distance ; un
 | refus pour préfixe ou sous-titre ambigu a EXACTEMENT le corps d'un refus
 | franc, et aucun texte de refus ne suggère la proximité : jamais de
-| « presque » (décision 13). Le corps d'une acceptation (lot L70-6) est
-| éprouvé avec la transaction de verrouillage.
+| « presque » (décision 13). Une acceptation (lot L70-6) ne porte que son
+| rang et ses points : ni titre, ni nature d'appariement.
 |
 */
 
@@ -112,6 +113,71 @@ it('un refus a le même corps quelle que soit sa cause', function (): void {
 
         expect($refusal)->toBeString()->not->toBe('game.answer.rejected')
             ->and(Str::contains((string) $refusal, ['presque', 'pas tout à fait', 'proche', 'almost', 'nearly', 'not quite', 'close'], ignoreCase: true))->toBeFalse();
+    }
+});
+
+it('une acceptation ne contient ni titre ni nature d\'appariement', function (): void {
+    $target = SubmissionFixtures::movie('Star Wars: A New Hope');
+
+    // Une nature d'appariement par siège, tous reçus au même instant : seule
+    // la nature diffère — clé, forme, distance.
+    $natures = [
+        'titre' => ['Star Wars: A New Hope', GuessMatchKind::Title, 0],
+        'préfixe' => ['Star Wars', GuessMatchKind::Prefix, 0],
+        'sous-titre' => ['A New Hope', GuessMatchKind::Subtitle, 0],
+        'tolérance' => ['Star Wars: A New Hopr', GuessMatchKind::Title, 1],
+    ];
+
+    $tokens = array_map(static fn (): PlayerToken => PlayerToken::mint(Locale::English), $natures);
+    [$game, $round, $seats] = SubmissionFixtures::openedRound(array_values($tokens), target: $target);
+    $seats = array_combine(array_keys($natures), $seats);
+    $at = EngineFixtures::opensAt($round, 1)->addMilliseconds(SubmissionFixtures::cadenceMs($game));
+
+    $bodies = [];
+
+    foreach ($natures as $nature => [$typed]) {
+        $response = SubmissionFixtures::submit($this, $seats[$nature], $tokens[$nature], $typed, $at)->assertOk();
+
+        expect($response->headers->get('Content-Type'))->toBe('application/json');
+
+        $bodies[$nature] = (string) $response->getContent();
+    }
+
+    // Les natures sont bien celles annoncées : l'épreuve n'est pas vacante.
+    foreach ($natures as $nature => [, $kind, $distance]) {
+        $guess = SubmissionFixtures::guess($round, $seats[$nature]);
+
+        expect($guess->match_kind)->toBe($kind, $nature)
+            ->and($guess->edit_distance)->toBe($distance, $nature);
+    }
+
+    // Les clés du contrat, dans son ordre, et elles seules ; hors du rang
+    // d'arrivée, un corps identique octet pour octet, quelle que soit la
+    // nature.
+    $decoded = array_map(static fn (string $body): array => json_decode($body, true, flags: JSON_THROW_ON_ERROR), $bodies);
+
+    foreach ($decoded as $nature => $body) {
+        expect(array_keys($body))->toBe(['result', 'inputState', 'lockRank', 'tierIndex', 'pointsTier', 'pointsBonus', 'pointsTotal'], $nature)
+            ->and($body['result'])->toBe('accepted')
+            ->and($body['inputState'])->toBe(RoundPlayerInputState::Locked->value);
+    }
+
+    expect(array_column($decoded, 'lockRank'))->toBe([1, 2, 3, 4])
+        ->and(array_unique(array_map(
+            static fn (string $body): string => (string) preg_replace('/"lockRank":\d+/', '"lockRank":0', $body),
+            $bodies,
+        )))->toHaveCount(1);
+
+    // Ni titre, ni forme, ni nature, ni distance, ni identifiant de clé.
+    $leaks = [
+        $target->title_original, 'star wars', 'new hope', 'hopr', 'title', 'prefix', 'subtitle', 'alias',
+        'choice', 'match', 'kind', 'distance', 'normalized', 'answerKey', 'answer_key', 'movie',
+    ];
+
+    foreach ($bodies as $nature => $body) {
+        foreach ($leaks as $leak) {
+            expect(Str::contains($body, $leak, ignoreCase: true))->toBeFalse("{$nature} : {$leak}");
+        }
     }
 });
 

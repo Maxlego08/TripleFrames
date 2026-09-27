@@ -61,11 +61,11 @@ function scoringWritersPointColumns(): array
  * Liste d'autorisation nominative des écrivains de `guess.points_*` : fichier
  * → motif.
  *
- * `LockGuess` n'est pas encore livré (L70-6) : son entrée est posée d'avance,
- * pour que la transaction de verrouillage soit soumise à la règle dès sa
- * naissance. Un écrivain autorisé doit appeler `ScoreCalculator::forGuess()`,
- * en affecter le résultat à une variable, et n'écrire chaque colonne que de la
- * propriété homonyme de cette variable (`'points_tier' => $score->pointsTier`).
+ * `LockGuess` (L70-6) y figure depuis avant sa livraison : la transaction de
+ * verrouillage a été soumise à la règle dès sa naissance. Un écrivain autorisé
+ * doit appeler `ScoreCalculator::forGuess()`, en affecter le résultat à une
+ * variable, et n'écrire chaque colonne que de la propriété homonyme de cette
+ * variable (`'points_tier' => $score->pointsTier`).
  *
  * @return array<string, string>
  */

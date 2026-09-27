@@ -3,14 +3,29 @@
 use App\Enums\AnswerKeyKind;
 use App\Enums\ContentAvailability;
 use App\Enums\GuessMatchKind;
+use App\Enums\Locale;
+use App\Enums\RoundPlayerInputState;
+use App\Jobs\Game\AdvanceRound;
+use App\Jobs\Game\InterruptPausedGame;
 use App\Models\AnswerKey;
+use App\Models\Guess;
+use App\Models\Round;
 use App\Support\Answers\AnswerMatcher;
 use App\Support\Answers\AnswerRules;
 use App\Support\Catalog\AnswerKeyNormalizer;
+use App\Support\Identity\PlayerToken;
 use App\ValueObjects\Answers\MatchResult;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Events\QueryExecuted;
+use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Queue;
+use Symfony\Component\HttpFoundation\Response;
 use Tests\Support\Answers\MatchFixtures;
+use Tests\Support\Answers\SubmissionFixtures;
+use Tests\Support\Draw\PoolFixtures;
+use Tests\Support\Game\EngineFixtures;
+use Tests\Support\Room\SeatEntry;
 
 /*
 |--------------------------------------------------------------------------
@@ -22,7 +37,9 @@ use Tests\Support\Answers\MatchFixtures;
 | la forme ; (c) une saisie qui désigne exactement un autre film publié est
 | refusée, même sous le seuil de tolérance ; (d) la tolérance ; (e) le refus.
 | L'ambiguïté se lit sur le catalogue publié ENTIER, à l'instant serveur de
-| réception, par les deux lectures inconditionnelles K et O.
+| réception, par les deux lectures inconditionnelles K et O ; et elle n'est
+| JAMAIS rétroactive : une bonne réponse verrouillée garde l'instantané de la
+| règle qui l'a acceptée (lot L70-6).
 |
 */
 
@@ -353,4 +370,65 @@ it('départage la tolérance par distance, puis nature exacte, prefix, subtitle,
         // elle-même dans O ne compte pas.
         ->and(AnswerMatcher::decide('silver tidq', 7, $keys, [8])->accepted)->toBeFalse()
         ->and(AnswerMatcher::decide('silver tidq', 7, $keys, [7]))->toEqual($exactFirst);
+});
+
+it('ne recalcule jamais un guess existant', function (): void {
+    PoolFixtures::fakeFramesDisk();
+    Queue::fake([AdvanceRound::class, InterruptPausedGame::class]);
+    SeatEntry::isolateCookies();
+    Date::setTestNow(CarbonImmutable::parse('2026-09-27 19:05:00.125'));
+
+    // La manche porte « Harbour Lights: The Long Night » ; « Harbour Lights:
+    // Dawn », qui partage son préfixe, n'est encore qu'un brouillon.
+    $target = SubmissionFixtures::movie('Harbour Lights: The Long Night');
+    $sequel = MatchFixtures::movie('Harbour Lights: Dawn', availability: ContentAvailability::Draft);
+    $early = PlayerToken::mint(Locale::French);
+    $late = PlayerToken::mint(Locale::English);
+    [$game, $round, [$earlySeat, $lateSeat]] = SubmissionFixtures::openedRound([$early, $late], target: $target);
+    $cadence = SubmissionFixtures::cadenceMs($game);
+    $at = EngineFixtures::opensAt($round, 1)->addMilliseconds($cadence);
+
+    // Seul film publié à porter le préfixe : accepté en (b) et verrouillé.
+    SubmissionFixtures::submit($this, $earlySeat, $early, 'Harbour Lights', $at)
+        ->assertOk()
+        ->assertJson(['result' => 'accepted', 'inputState' => 'locked', 'lockRank' => 1]);
+
+    $guess = SubmissionFixtures::guess($round, $earlySeat);
+    $stored = $guess->getAttributes();
+    $closedAt = SubmissionFixtures::participation($round, $earlySeat)->getAttributes();
+
+    expect($guess->match_kind)->toBe(GuessMatchKind::Prefix)
+        ->and($guess->answer_key_id)->toBe(MatchFixtures::key($target, 'harbour lights')->id)
+        ->and($guess->prefix_was_ambiguous)->toBeFalse();
+
+    // Publié en pleine manche : le préfixe devient ambigu dès la soumission
+    // suivante, refusée ; le siège verrouillé qui soumet encore reçoit 409
+    // `closed` et rien n'est rejugé.
+    $queries = SubmissionFixtures::queries(function () use ($sequel, $lateSeat, $late, $earlySeat, $early, $at, $cadence, $game, $target): void {
+        MatchFixtures::publish($sequel);
+
+        SubmissionFixtures::submit($this, $lateSeat, $late, 'Harbour Lights', $at->addMilliseconds($cadence))
+            ->assertOk()
+            ->assertExactJson(SubmissionFixtures::rejectedBody($game->settings_snapshot->attemptsPerRound - 1));
+
+        SubmissionFixtures::submit($this, $earlySeat, $early, $target->title_original, $at->addMilliseconds(2 * $cadence))
+            ->assertStatus(Response::HTTP_CONFLICT)
+            ->assertExactJson(SubmissionFixtures::closedBody(Locale::French, RoundPlayerInputState::Locked));
+    });
+
+    // La règle d'aujourd'hui refuserait la même saisie…
+    expect(MatchFixtures::key($target, 'harbour lights')->is_ambiguous)->toBeTrue()
+        ->and(MatchFixtures::judge($round, 'Harbour Lights'))->toEqual(MatchResult::rejected('harbour lights'));
+
+    // …mais la bonne réponse déjà attribuée n'est ni relue, ni réécrite, ni
+    // doublée : aucune écriture de `guess`, la même ligne à l'octet près, le
+    // même rang, la même saisie close.
+    expect(array_filter(
+        SubmissionFixtures::writes($queries),
+        static fn (string $sql): bool => SubmissionFixtures::touches($sql, 'guess'),
+    ))->toBe([])
+        ->and(Guess::query()->whereKey($guess->id)->firstOrFail()->getAttributes())->toBe($stored)
+        ->and(Guess::query()->where('round_id', $round->id)->count())->toBe(1)
+        ->and(Round::query()->whereKey($round->id)->value('found_count'))->toBe(1)
+        ->and(SubmissionFixtures::participation($round, $earlySeat)->getAttributes())->toBe($closedAt);
 });
