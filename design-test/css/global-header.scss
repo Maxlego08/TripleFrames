@@ -1,0 +1,220 @@
+@use 'scss/tokens' as *;
+@use 'scss/mixins' as *;
+
+.global-header {
+    position: relative;
+    z-index: 20;
+    flex: 0 0 auto;
+    border-bottom: $line-width solid $color-ink;
+    background: $color-paper;
+    color: $color-ink;
+
+    &__inner {
+        width: min(100% - 2rem, 76rem);
+        min-height: 5rem;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        margin-inline: auto;
+    }
+
+    &__brand,
+    &__account-nav,
+    &__account-button,
+    &__logout {
+        display: inline-flex;
+        align-items: center;
+    }
+
+    &__brand {
+        min-width: 0;
+        gap: 0.65rem;
+        color: $color-ink;
+        text-decoration: none;
+    }
+
+    &__brand-logo {
+        width: 2.45rem;
+        height: auto;
+        flex: 0 0 auto;
+    }
+
+    &__brand-name {
+        @include display-type;
+        overflow: hidden;
+        font-size: clamp(1.05rem, 2vw, 1.4rem);
+        letter-spacing: -0.04em;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    &__account-nav {
+        flex: 0 0 auto;
+        gap: 0.45rem;
+
+        &--member {
+            display: none;
+        }
+    }
+
+    &__nav-link,
+    &__nav-pill,
+    &__account-button,
+    &__logout {
+        min-height: 2.75rem;
+        border-radius: 999rem;
+        color: $color-ink;
+        font-size: 0.9rem;
+        font-weight: 900;
+        text-decoration: none;
+        -webkit-tap-highlight-color: transparent;
+    }
+
+    &__nav-link {
+        padding: 0.6rem 0.75rem;
+
+        &:hover {
+            text-decoration: underline;
+            text-underline-offset: 0.2rem;
+        }
+    }
+
+    &__nav-pill {
+        @include hard-shadow(0.1875rem);
+        padding: 0.55rem 1rem;
+        border: 0.125rem solid $color-ink;
+        background: $color-yellow;
+        transition: transform 120ms ease, box-shadow 120ms ease;
+
+        &:hover {
+            transform: translate(-0.1rem, -0.1rem);
+            box-shadow: 0.28rem 0.28rem 0 $color-ink;
+        }
+    }
+
+    &__account-button {
+        gap: 0.55rem;
+        padding: 0.3rem 0.8rem 0.3rem 0.3rem;
+        border: 0.125rem solid $color-ink;
+        background: $color-white;
+    }
+
+    &__account-avatar {
+        width: 2rem;
+        height: 2rem;
+        display: grid;
+        place-items: center;
+        border: 0.125rem solid $color-ink;
+        border-radius: 50%;
+        background: $color-cyan;
+        color: $color-ink;
+        font-size: 0.7rem;
+    }
+
+    &__logout {
+        gap: 0.4rem;
+        padding: 0.45rem 0.75rem;
+        border: 0.125rem solid $color-ink;
+        background: $color-coral;
+
+        img {
+            width: 1.1rem;
+            height: 1.1rem;
+        }
+    }
+}
+
+body[data-authenticated='true'] {
+    .global-header__account-nav--guest {
+        display: none;
+    }
+
+    .global-header__account-nav--member {
+        display: inline-flex;
+    }
+}
+
+.global-header a:focus-visible {
+    @include focus-ring;
+}
+
+@media (max-width: $breakpoint-mobile) {
+    .global-header {
+        &__inner {
+            width: min(100% - 1rem, 76rem);
+            min-height: 4.25rem;
+            gap: 0.5rem;
+        }
+
+        &__brand {
+            gap: 0.45rem;
+        }
+
+        &__brand-logo {
+            width: 2.05rem;
+        }
+
+        &__brand-name {
+            font-size: 0.95rem;
+        }
+
+        &__account-nav {
+            gap: 0.3rem;
+        }
+
+        &__nav-link,
+        &__nav-pill,
+        &__account-button,
+        &__logout {
+            min-height: 2.4rem;
+            font-size: 0.74rem;
+        }
+
+        &__nav-link,
+        &__nav-pill {
+            padding: 0.42rem 0.55rem;
+        }
+
+        &__account-button {
+            padding-right: 0.45rem;
+        }
+
+        &__logout {
+            width: 2.45rem;
+            justify-content: center;
+            padding: 0;
+
+            span {
+                position: absolute;
+                width: 1px;
+                height: 1px;
+                overflow: hidden;
+                clip: rect(0 0 0 0);
+                clip-path: inset(50%);
+            }
+        }
+    }
+}
+
+@media (max-width: 23rem) {
+    .global-header__brand-name,
+    .global-header__account-button > span:last-child {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
+        clip-path: inset(50%);
+    }
+
+    .global-header__account-button {
+        padding-right: 0.3rem;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .global-header * {
+        transition-duration: 0.01ms !important;
+    }
+}

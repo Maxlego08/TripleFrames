@@ -1,0 +1,443 @@
+<!DOCTYPE html><html lang="fr"><head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Salle d’attente — TripleFrames</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://code.iconify.design/iconify-icon/1.0.7/iconify-icon.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Trebuchet+MS:wght@400;700&display=swap');
+        @font-face {
+            font-family: 'Arial Rounded MT Bold';
+            src: local('Arial Rounded MT Bold');
+        }
+
+        /* Core theme variables from tokens */
+        :root {
+            --color-ink: oklch(0.27 0.08 292);
+            --color-violet: oklch(0.4 0.15 295);
+            --color-violet-dark: oklch(0.3 0.11 295);
+            --color-paper: oklch(0.98 0.03 91);
+            --color-white: oklch(1 0 0);
+            --color-coral: oklch(0.7 0.2 25);
+            --color-cyan: oklch(0.81 0.13 195);
+            --color-yellow: oklch(0.88 0.16 89);
+            --color-lavender: oklch(0.86 0.08 296);
+            --color-night: oklch(0.16 0.04 290);
+            --color-muted: oklch(0.47 0.04 295);
+            --font-display: 'Arial Rounded MT Bold', 'Trebuchet MS', sans-serif;
+            --font-body: 'Trebuchet MS', 'Segoe UI', sans-serif;
+            --line-width: 0.1875rem;
+        }
+
+        body {
+            font-family: var(--font-body);
+            color: var(--color-ink);
+            margin: 0;
+            overflow: hidden;
+            background: repeating-linear-gradient(
+                90deg,
+                var(--color-violet) 0 5.5rem,
+                oklch(0.44 0.15 295) 5.5rem 9rem,
+                oklch(0.34 0.14 295) 9rem 13rem
+            );
+        }
+
+        /* Typography Classes */
+        .font-display {
+            font-family: var(--font-display);
+            font-weight: 900;
+        }
+
+        /* Buttons & Surfaces Base Styles */
+        .hard-border {
+            border: var(--line-width) solid var(--color-ink);
+        }
+        .hard-shadow {
+            box-shadow: 0.3125rem 0.3125rem 0 var(--color-ink);
+        }
+        .hard-shadow-night {
+            box-shadow: 0.3125rem 0.3125rem 0 var(--color-night);
+        }
+        .hard-shadow-large {
+            box-shadow: 0.58rem 0.58rem 0 var(--color-night), -0.42rem -0.35rem 0 var(--color-yellow);
+        }
+
+        /* Waiting Room Layout */
+        .waiting-room-container {
+            display: grid;
+            width: min(100% - 2rem, 82rem);
+            height: 100svh;
+            margin: 0 auto;
+            grid-template-rows: auto minmax(0, 1fr) auto;
+            gap: 3rem;
+            padding: 1.1rem 0;
+            position: relative;
+        }
+
+        /* Brand Floating Logo */
+        .brand-pill {
+            position: fixed;
+            z-index: 35;
+            top: 1rem;
+            left: 1.25rem;
+            background: var(--color-paper);
+            border-radius: 999px;
+            padding: 0.38rem 0.8rem 0.38rem 0.48rem;
+            box-shadow: 0.22rem 0.22rem 0 var(--color-night);
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.6rem;
+        }
+
+        /* Cinema Scene Setup */
+        .cinema-room-wrap {
+            position: relative;
+            min-height: 0;
+            overflow: hidden;
+            border-radius: 1.8rem;
+            background: linear-gradient(90deg, oklch(0.18 0.06 293) 0 9%, transparent 18% 82%, oklch(0.18 0.06 293) 91% 100%),
+                        linear-gradient(180deg, oklch(0.2 0.07 293), oklch(0.29 0.12 294));
+        }
+
+        .cinema-scene {
+            position: absolute;
+            inset: 0;
+            perspective: 62rem;
+            perspective-origin: 50% 38%;
+            transform-origin: center 55%;
+            transform-style: preserve-3d;
+        }
+
+        /* Cinema Layers */
+        .cinema-wall {
+            position: absolute;
+            z-index: 0;
+            inset: 0 0 52%;
+            background: radial-gradient(circle at 50% 55%, oklch(0.84 0.1 89 / 0.12), transparent 34%),
+                        repeating-linear-gradient(90deg, transparent 0 8rem, oklch(0.61 0.08 295 / 0.08) 8rem 8.15rem);
+        }
+
+        .cinema-screen {
+            position: absolute;
+            z-index: 4;
+            top: 9%;
+            left: 50%;
+            width: min(48vw, 39rem);
+            height: 25%;
+            border-radius: 0.8rem;
+            background: linear-gradient(135deg, oklch(0.99 0.025 91 / 0.95), oklch(0.89 0.1 195 / 0.9)), var(--color-paper);
+            box-shadow: 0 0 0 0.45rem oklch(0.42 0.12 294), 0 0 2.8rem oklch(0.88 0.13 195 / 0.28), 0 0.8rem 0 var(--color-night);
+            transform: translateX(-50%) rotateX(-3deg);
+            transform-origin: center top;
+            display: grid;
+            place-items: center;
+        }
+
+        .cinema-light-beam {
+            position: absolute;
+            z-index: 1;
+            top: 30%;
+            bottom: 4%;
+            left: 15%;
+            width: 70%;
+            background: linear-gradient(180deg, oklch(0.95 0.08 91 / 0.09), oklch(0.82 0.09 195 / 0.025));
+            clip-path: polygon(32% 0, 68% 0, 100% 100%, 0 100%);
+            pointer-events: none;
+        }
+
+        .cinema-floor {
+            position: absolute;
+            z-index: 2;
+            inset: 35% 3% -22%;
+            background: repeating-linear-gradient(90deg, transparent 0 8rem, oklch(0.81 0.13 195 / 0.12) 8rem 8.12rem),
+                        repeating-linear-gradient(0deg, transparent 0 5rem, oklch(0.88 0.16 89 / 0.1) 5rem 5.12rem),
+                        linear-gradient(180deg, oklch(0.26 0.1 294 / 0.16), oklch(0.18 0.08 294 / 0.42));
+            clip-path: polygon(16% 0, 84% 0, 100% 100%, 0 100%);
+            transform: translateZ(-10rem);
+            pointer-events: none;
+        }
+
+        .cinema-aisle {
+            position: absolute;
+            z-index: 3;
+            top: 38%;
+            bottom: -4%;
+            width: 7%;
+            background: linear-gradient(180deg, oklch(0.81 0.13 195 / 0.08), oklch(0.81 0.13 195 / 0.3));
+            clip-path: polygon(40% 0, 60% 0, 100% 100%, 0 100%);
+            filter: drop-shadow(0 0 0.4rem oklch(0.81 0.13 195 / 0.35));
+        }
+
+        .cinema-seats-layer {
+            position: absolute;
+            z-index: 5;
+            inset: 0;
+            transform: translateZ(5rem);
+            transform-style: preserve-3d;
+        }
+
+        /* Seat Positioning CSS */
+        .seat-base {
+            position: absolute;
+            width: 9rem;
+            height: 7.5rem;
+            transform-origin: center bottom;
+            transform-style: preserve-3d;
+        }
+
+        .seat-row-1 { --seat-depth: -13rem; --seat-scale: 0.68; z-index: 6; top: 43%; }
+        .seat-row-2 { --seat-depth: -3rem; --seat-scale: 0.86; z-index: 10; top: 62%; }
+        .seat-row-3 { --seat-depth: 8rem; --seat-scale: 1.05; z-index: 15; top: 79%; }
+
+        .seat-pos-1 { left: 37%; transform: translate3d(-50%, -50%, var(--seat-depth)) scale(var(--seat-scale)); }
+        .seat-pos-2 { left: 45.5%; transform: translate3d(-50%, -50%, var(--seat-depth)) scale(var(--seat-scale)); }
+        .seat-pos-3 { left: 54.5%; transform: translate3d(-50%, -50%, var(--seat-depth)) scale(var(--seat-scale)); }
+        .seat-pos-4 { left: 63%; transform: translate3d(-50%, -50%, var(--seat-depth)) scale(var(--seat-scale)); }
+        
+        .seat-pos-5 { left: 31%; transform: translate3d(-50%, -50%, var(--seat-depth)) scale(var(--seat-scale)); }
+        .seat-pos-6 { left: 43.5%; transform: translate3d(-50%, -50%, var(--seat-depth)) scale(var(--seat-scale)); }
+        .seat-pos-7 { left: 56.5%; transform: translate3d(-50%, -50%, var(--seat-depth)) scale(var(--seat-scale)); }
+        .seat-pos-8 { left: 69%; transform: translate3d(-50%, -50%, var(--seat-depth)) scale(var(--seat-scale)); }
+
+        .seat-pos-9 { left: 23%; transform: translate3d(-50%, -50%, var(--seat-depth)) scale(var(--seat-scale)); }
+        .seat-pos-10 { left: 41%; transform: translate3d(-50%, -50%, var(--seat-depth)) scale(var(--seat-scale)); }
+        .seat-pos-11 { left: 59%; transform: translate3d(-50%, -50%, var(--seat-depth)) scale(var(--seat-scale)); }
+        .seat-pos-12 { left: 77%; transform: translate3d(-50%, -50%, var(--seat-depth)) scale(var(--seat-scale)); }
+
+        .seat-chair {
+            position: absolute;
+            z-index: 1;
+            right: 0.7rem;
+            bottom: 0.8rem;
+            left: 0.7rem;
+            height: 4.25rem;
+            border-radius: 1.35rem 1.35rem 0.62rem 0.62rem;
+            background: var(--color-coral);
+            box-shadow: 0 0.55rem 0 var(--color-ink);
+        }
+        .seat-empty .seat-chair {
+            background: oklch(0.48 0.08 296);
+            opacity: 0.43;
+        }
+        .seat-current .seat-chair {
+            background: var(--color-cyan);
+            box-shadow: 0 0 0 0.2rem var(--color-yellow), 0 0.55rem 0 var(--color-ink);
+        }
+
+        .avatar-base {
+            position: relative;
+            width: 3.6rem;
+            aspect-ratio: 1;
+            border-radius: 50%;
+            box-shadow: 0.18rem 0.18rem 0 var(--color-ink);
+        }
+        .avatar-large {
+            width: 5.15rem;
+            box-shadow: 0.28rem 0.28rem 0 var(--color-ink);
+        }
+
+        .avatar-spark {
+            position: absolute;
+            top: -0.32rem;
+            right: -0.18rem;
+            width: 1.3rem;
+            height: 1.3rem;
+            background: var(--color-paper);
+            border-radius: 50%;
+            display: grid;
+            place-items: center;
+            font-size: 0.65rem;
+        }
+
+        /* UI Action Buttons */
+        .btn-action {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.55rem;
+            min-height: 3.45rem;
+            border-radius: 0.85rem;
+            padding: 0.65rem 1rem;
+            font-weight: 900;
+            cursor: pointer;
+            transition: translate 120ms ease, box-shadow 120ms ease;
+        }
+        .btn-action:hover {
+            translate: 0 -0.1rem;
+            box-shadow: 0.34rem 0.36rem 0 var(--color-night);
+        }
+    </style>
+</head>
+<body>
+    <div class="waiting-room-container" data-sd-id="1">
+        
+        <!-- Floating Brand -->
+        <a id="home-link" href="#" class="brand-pill hard-border" data-sd-id="2">
+            <img src="https://vgbujcuwptvheqijyjbe.supabase.co/storage/v1/object/public/hmac-uploads/projects/710e23fa-b801-40cf-b0be-a28fc414ec96/brand-assets/design-test-html-brand-logo.svg/brand-logo.svg" alt="TripleFrames Logo" width="44" height="36" data-sd-id="3">
+            <span class="font-display text-[1.25rem] tracking-[-0.04em]" data-sd-id="4">TripleFrames</span>
+        </a>
+
+        <!-- Room Code Control Surface -->
+        <section class="mx-auto grid w-[min(100%,39rem)] min-h-[4.1rem] grid-cols-[6.5rem_1fr_6.5rem] items-center gap-[0.8rem] rounded-[1.1rem] bg-[var(--color-paper)] px-[0.65rem] hard-border hard-shadow-night" data-sd-id="5">
+            <button id="copy-code-btn" type="button" class="group grid h-full place-content-center gap-[0.12rem] bg-transparent p-[0.45rem] text-[0.68rem] font-[900]" data-sd-id="6">
+                <span class="grid h-[1.55rem] w-[1.55rem] place-items-center rounded-[0.45rem] bg-[var(--color-cyan)] hard-border transition-all group-hover:-translate-y-[0.1rem] group-hover:shadow-[0_0.16rem_0_var(--color-ink)]" data-sd-id="7">
+                    <iconify-icon icon="lucide:copy" class="text-sm"></iconify-icon>
+                </span>
+                <span data-sd-id="8">Copier</span>
+            </button>
+
+            <div class="grid place-content-center self-stretch border-x-[0.125rem] border-dashed border-[var(--color-lavender)] text-center" data-sd-id="9">
+                <p class="mb-[0.08rem] text-[0.67rem] font-[800] text-[var(--color-muted)]" data-sd-id="10">Code de la partie</p>
+                <output class="font-display text-[1.55rem] tracking-[0.24em] leading-none">****</output>
+            </div>
+
+            <button id="toggle-code-btn" type="button" class="group grid h-full place-content-center gap-[0.12rem] bg-transparent p-[0.45rem] text-[0.68rem] font-[900]" data-sd-id="11">
+                <span class="grid h-[1.55rem] w-[1.55rem] place-items-center rounded-[0.45rem] bg-[var(--color-cyan)] hard-border transition-all group-hover:-translate-y-[0.1rem] group-hover:shadow-[0_0.16rem_0_var(--color-ink)]" data-sd-id="12">
+                    <iconify-icon icon="lucide:eye" class="text-sm"></iconify-icon>
+                </span>
+                <span data-sd-id="13">Afficher</span>
+            </button>
+        </section>
+
+        <!-- Cinema Room Layout -->
+        <section class="cinema-room-wrap hard-border hard-shadow-large" data-sd-id="14">
+            <header class="absolute inset-x-[1.25rem] top-[1rem] z-25 flex items-start justify-between text-[var(--color-paper)] pointer-events-none" data-sd-id="15">
+                <h1 class="font-display text-[clamp(1.45rem,2vw,2rem)] leading-[1.02] tracking-[-0.045em] max-w-[30rem] m-0" data-sd-id="16">
+                    La salle se remplit
+                </h1>
+                <p class="m-0 rounded-full bg-[var(--color-yellow)] px-[0.72rem] py-[0.42rem] text-[0.72rem] font-[900] text-[var(--color-ink)] hard-border" data-sd-id="17">
+                    7 / 12 joueurs
+                </p>
+            </header>
+
+            <div class="cinema-scene" data-sd-id="18">
+                <div class="cinema-wall" data-sd-id="19"></div>
+                
+                <div class="cinema-screen hard-border" data-sd-id="20">
+                    <div class="flex flex-col items-center text-[var(--color-ink)]" data-sd-id="21">
+                        <img src="https://vgbujcuwptvheqijyjbe.supabase.co/storage/v1/object/public/hmac-uploads/projects/710e23fa-b801-40cf-b0be-a28fc414ec96/brand-assets/design-test-html-brand-logo.svg/brand-logo.svg" alt="" width="72" height="59" class="drop-shadow-[0.16rem_0.16rem_0_var(--color-lavender)]" data-sd-id="22">
+                        <strong class="font-display text-[1.25rem] mt-[0.15rem]">TripleFrames</strong>
+                        <span class="text-[0.68rem] font-[900] text-[var(--color-muted)] mt-[0.08rem]" data-sd-id="23">La séance va commencer</span>
+                    </div>
+                </div>
+
+                <div class="cinema-light-beam" data-sd-id="24"></div>
+                <div class="cinema-floor" data-sd-id="25"></div>
+                <span class="cinema-aisle left-[12%]" data-sd-id="26"></span>
+                <span class="cinema-aisle right-[12%]" data-sd-id="27"></span>
+
+                <!-- Seats Layer -->
+                <div class="cinema-seats-layer" data-sd-id="28">
+                    <!-- ROW 1 (back) -->
+                    <div class="seat-base seat-row-1 seat-pos-1" data-sd-id="29">
+                        <span class="seat-chair hard-border before:absolute before:inset-x-[-0.7rem] before:bottom-[-0.08rem] before:z-4 before:h-[1.25rem] before:rounded-[0.55rem] before:bg-[oklch(0.58_0.2_28)] before:border-[0.16rem] before:border-[var(--color-ink)] after:absolute after:inset-x-[1rem] after:bottom-[-0.92rem] after:h-[0.8rem] after:rounded-b-[0.45rem] after:bg-[var(--color-yellow)] after:border-[0.15rem] after:border-t-0 after:border-[var(--color-ink)]" data-sd-id="30"></span>
+                    </div>
+                    <div class="seat-base seat-row-1 seat-pos-2" data-sd-id="31">
+                        <span class="seat-chair hard-border before:absolute before:inset-x-[-0.7rem] before:bottom-[-0.08rem] before:z-4 before:h-[1.25rem] before:rounded-[0.55rem] before:bg-[oklch(0.58_0.2_28)] before:border-[0.16rem] before:border-[var(--color-ink)] after:absolute after:inset-x-[1rem] after:bottom-[-0.92rem] after:h-[0.8rem] after:rounded-b-[0.45rem] after:bg-[var(--color-yellow)] after:border-[0.15rem] after:border-t-0 after:border-[var(--color-ink)]" data-sd-id="32"></span>
+                        <div class="absolute bottom-[1.1rem] left-1/2 z-3 grid -translate-x-1/2 justify-items-center" data-sd-id="33">
+                            <span class="avatar-base hard-border bg-[oklch(0.77_0.17_340)] [border-radius:60%_40%_45%_55%] col-start-1 row-start-1" data-sd-id="34">
+                                <span class="avatar-spark hard-border" data-sd-id="35">✦</span>
+                            </span>
+                            <strong class="relative z-5 -mt-[0.15rem] min-w-[6.4rem] max-w-[8.5rem] col-start-1 overflow-hidden whitespace-nowrap text-ellipsis rounded-full bg-[var(--color-yellow)] px-[0.65rem] py-[0.26rem] text-center text-[0.74rem] font-[900] leading-none hard-border shadow-[0.14rem_0.14rem_0_var(--color-ink)] scale-[1.32] origin-bottom">Sofia</strong>
+                        </div>
+                    </div>
+                    <div class="seat-base seat-row-1 seat-pos-3" data-sd-id="36">
+                        <span class="seat-chair hard-border before:absolute before:inset-x-[-0.7rem] before:bottom-[-0.08rem] before:z-4 before:h-[1.25rem] before:rounded-[0.55rem] before:bg-[oklch(0.58_0.2_28)] before:border-[0.16rem] before:border-[var(--color-ink)] after:absolute after:inset-x-[1rem] after:bottom-[-0.92rem] after:h-[0.8rem] after:rounded-b-[0.45rem] after:bg-[var(--color-yellow)] after:border-[0.15rem] after:border-t-0 after:border-[var(--color-ink)]" data-sd-id="37"></span>
+                         <div class="absolute bottom-[1.1rem] left-1/2 z-3 grid -translate-x-1/2 justify-items-center" data-sd-id="38">
+                            <span class="avatar-base hard-border bg-[var(--color-yellow)] [border-radius:38%_62%_52%_48%] col-start-1 row-start-1" data-sd-id="39">
+                                <span class="avatar-spark hard-border" data-sd-id="40">✦</span>
+                            </span>
+                            <strong class="relative z-5 -mt-[0.15rem] min-w-[6.4rem] max-w-[8.5rem] col-start-1 overflow-hidden whitespace-nowrap text-ellipsis rounded-full bg-[var(--color-yellow)] px-[0.65rem] py-[0.26rem] text-center text-[0.74rem] font-[900] leading-none hard-border shadow-[0.14rem_0.14rem_0_var(--color-ink)] scale-[1.32] origin-bottom">Théo</strong>
+                        </div>
+                    </div>
+                    <div class="seat-base seat-row-1 seat-pos-4 seat-empty" data-sd-id="41">
+                        <span class="seat-chair hard-border before:absolute before:inset-x-[-0.7rem] before:bottom-[-0.08rem] before:z-4 before:h-[1.25rem] before:rounded-[0.55rem] before:bg-[oklch(0.39_0.1_296)] before:border-[0.16rem] before:border-[var(--color-ink)] after:absolute after:inset-x-[1rem] after:bottom-[-0.92rem] after:h-[0.8rem] after:rounded-b-[0.45rem] after:bg-[oklch(0.31_0.09_296)] after:border-[0.15rem] after:border-t-0 after:border-[var(--color-ink)]" data-sd-id="42"></span>
+                    </div>
+
+                    <!-- ROW 2 (middle) -->
+                    <div class="seat-base seat-row-2 seat-pos-5" data-sd-id="43">
+                         <span class="seat-chair hard-border before:absolute before:inset-x-[-0.7rem] before:bottom-[-0.08rem] before:z-4 before:h-[1.25rem] before:rounded-[0.55rem] before:bg-[oklch(0.58_0.2_28)] before:border-[0.16rem] before:border-[var(--color-ink)] after:absolute after:inset-x-[1rem] after:bottom-[-0.92rem] after:h-[0.8rem] after:rounded-b-[0.45rem] after:bg-[var(--color-yellow)] after:border-[0.15rem] after:border-t-0 after:border-[var(--color-ink)]" data-sd-id="44"></span>
+                         <div class="absolute bottom-[1.1rem] left-1/2 z-3 grid -translate-x-1/2 justify-items-center" data-sd-id="45">
+                            <span class="avatar-base hard-border bg-[var(--color-cyan)] [border-radius:50%] col-start-1 row-start-1" data-sd-id="46">
+                                <span class="avatar-spark hard-border" data-sd-id="47">✦</span>
+                            </span>
+                            <strong class="relative z-5 -mt-[0.15rem] min-w-[6.4rem] max-w-[8.5rem] col-start-1 overflow-hidden whitespace-nowrap text-ellipsis rounded-full bg-[var(--color-yellow)] px-[0.65rem] py-[0.26rem] text-center text-[0.74rem] font-[900] leading-none hard-border shadow-[0.14rem_0.14rem_0_var(--color-ink)] scale-[1.12] origin-bottom">Inès</strong>
+                        </div>
+                    </div>
+                    <div class="seat-base seat-row-2 seat-pos-6 seat-empty" data-sd-id="48">
+                         <span class="seat-chair hard-border before:absolute before:inset-x-[-0.7rem] before:bottom-[-0.08rem] before:z-4 before:h-[1.25rem] before:rounded-[0.55rem] before:bg-[oklch(0.39_0.1_296)] before:border-[0.16rem] before:border-[var(--color-ink)] after:absolute after:inset-x-[1rem] after:bottom-[-0.92rem] after:h-[0.8rem] after:rounded-b-[0.45rem] after:bg-[oklch(0.31_0.09_296)] after:border-[0.15rem] after:border-t-0 after:border-[var(--color-ink)]" data-sd-id="49"></span>
+                    </div>
+                    <div class="seat-base seat-row-2 seat-pos-7" data-sd-id="50">
+                         <span class="seat-chair hard-border before:absolute before:inset-x-[-0.7rem] before:bottom-[-0.08rem] before:z-4 before:h-[1.25rem] before:rounded-[0.55rem] before:bg-[oklch(0.58_0.2_28)] before:border-[0.16rem] before:border-[var(--color-ink)] after:absolute after:inset-x-[1rem] after:bottom-[-0.92rem] after:h-[0.8rem] after:rounded-b-[0.45rem] after:bg-[var(--color-yellow)] after:border-[0.15rem] after:border-t-0 after:border-[var(--color-ink)]" data-sd-id="51"></span>
+                         <div class="absolute bottom-[1.1rem] left-1/2 z-3 grid -translate-x-1/2 justify-items-center" data-sd-id="52">
+                            <span class="avatar-base hard-border bg-[oklch(0.8_0.17_145)] [border-radius:46%_54%_35%_65%] col-start-1 row-start-1" data-sd-id="53">
+                                <span class="avatar-spark hard-border" data-sd-id="54">✦</span>
+                            </span>
+                            <strong class="relative z-5 -mt-[0.15rem] min-w-[6.4rem] max-w-[8.5rem] col-start-1 overflow-hidden whitespace-nowrap text-ellipsis rounded-full bg-[var(--color-yellow)] px-[0.65rem] py-[0.26rem] text-center text-[0.74rem] font-[900] leading-none hard-border shadow-[0.14rem_0.14rem_0_var(--color-ink)] scale-[1.12] origin-bottom">Lucas</strong>
+                        </div>
+                    </div>
+                    <div class="seat-base seat-row-2 seat-pos-8" data-sd-id="55">
+                         <span class="seat-chair hard-border before:absolute before:inset-x-[-0.7rem] before:bottom-[-0.08rem] before:z-4 before:h-[1.25rem] before:rounded-[0.55rem] before:bg-[oklch(0.58_0.2_28)] before:border-[0.16rem] before:border-[var(--color-ink)] after:absolute after:inset-x-[1rem] after:bottom-[-0.92rem] after:h-[0.8rem] after:rounded-b-[0.45rem] after:bg-[var(--color-yellow)] after:border-[0.15rem] after:border-t-0 after:border-[var(--color-ink)]" data-sd-id="56"></span>
+                         <div class="absolute bottom-[1.1rem] left-1/2 z-3 grid -translate-x-1/2 justify-items-center" data-sd-id="57">
+                            <span class="avatar-base hard-border bg-[var(--color-lavender)] [border-radius:55%_45%_58%_42%] col-start-1 row-start-1" data-sd-id="58">
+                                <span class="avatar-spark hard-border" data-sd-id="59">✦</span>
+                            </span>
+                            <strong class="relative z-5 -mt-[0.15rem] min-w-[6.4rem] max-w-[8.5rem] col-start-1 overflow-hidden whitespace-nowrap text-ellipsis rounded-full bg-[var(--color-yellow)] px-[0.65rem] py-[0.26rem] text-center text-[0.74rem] font-[900] leading-none hard-border shadow-[0.14rem_0.14rem_0_var(--color-ink)] scale-[1.12] origin-bottom">Jade</strong>
+                        </div>
+                    </div>
+
+                    <!-- ROW 3 (front) -->
+                    <div class="seat-base seat-row-3 seat-pos-9 seat-empty" data-sd-id="60">
+                         <span class="seat-chair hard-border before:absolute before:inset-x-[-0.7rem] before:bottom-[-0.08rem] before:z-4 before:h-[1.25rem] before:rounded-[0.55rem] before:bg-[oklch(0.39_0.1_296)] before:border-[0.16rem] before:border-[var(--color-ink)] after:absolute after:inset-x-[1rem] after:bottom-[-0.92rem] after:h-[0.8rem] after:rounded-b-[0.45rem] after:bg-[oklch(0.31_0.09_296)] after:border-[0.15rem] after:border-t-0 after:border-[var(--color-ink)]" data-sd-id="61"></span>
+                    </div>
+                    <!-- Current Player Seat -->
+                    <div class="seat-base seat-row-3 seat-pos-10 seat-current" data-sd-id="62">
+                         <span class="seat-chair hard-border before:absolute before:inset-x-[-0.7rem] before:bottom-[-0.08rem] before:z-4 before:h-[1.25rem] before:rounded-[0.55rem] before:bg-[oklch(0.58_0.2_28)] before:border-[0.16rem] before:border-[var(--color-ink)] after:absolute after:inset-x-[1rem] after:bottom-[-0.92rem] after:h-[0.8rem] after:rounded-b-[0.45rem] after:bg-[var(--color-yellow)] after:border-[0.15rem] after:border-t-0 after:border-[var(--color-ink)]" data-sd-id="63"></span>
+                         <div class="absolute bottom-[1.1rem] left-1/2 z-3 grid -translate-x-1/2 grid-cols-[2.35rem_auto_2.35rem] gap-x-[0.38rem] justify-items-center" data-sd-id="64">
+                             <button type="button" class="col-start-1 row-start-1 grid h-[2.35rem] w-[2.35rem] self-center place-items-center rounded-full bg-[var(--color-paper)] text-[1rem] font-[900] hard-border shadow-[0.14rem_0.14rem_0_var(--color-ink)] hover:bg-[var(--color-yellow)] hover:-translate-y-[0.08rem] z-7" data-sd-id="65">←</button>
+                            <span class="avatar-base avatar-large hard-border bg-[var(--color-coral)] [border-radius:48%_52%_46%_54%] col-start-2 row-start-1" data-sd-id="66">
+                                <span class="avatar-spark hard-border" data-sd-id="67">✦</span>
+                            </span>
+                            <button type="button" class="col-start-3 row-start-1 grid h-[2.35rem] w-[2.35rem] self-center place-items-center rounded-full bg-[var(--color-paper)] text-[1rem] font-[900] hard-border shadow-[0.14rem_0.14rem_0_var(--color-ink)] hover:bg-[var(--color-yellow)] hover:-translate-y-[0.08rem] z-7" data-sd-id="68">→</button>
+                            <div class="col-span-3 flex flex-col items-center mt-[-0.15rem]" data-sd-id="69">
+                                <strong class="relative z-5 min-w-[6.4rem] max-w-[8.5rem] overflow-hidden whitespace-nowrap text-ellipsis rounded-full bg-[var(--color-yellow)] px-[0.65rem] py-[0.26rem] text-center text-[0.74rem] font-[900] leading-none hard-border shadow-[0.14rem_0.14rem_0_var(--color-ink)]">Marty</strong>
+                                <span class="z-5 mt-1 rounded-full bg-[var(--color-cyan)] px-2 py-0.5 text-[0.6rem] font-[900] hard-border" data-sd-id="70">Ta place</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="seat-base seat-row-3 seat-pos-11" data-sd-id="71">
+                         <span class="seat-chair hard-border before:absolute before:inset-x-[-0.7rem] before:bottom-[-0.08rem] before:z-4 before:h-[1.25rem] before:rounded-[0.55rem] before:bg-[oklch(0.58_0.2_28)] before:border-[0.16rem] before:border-[var(--color-ink)] after:absolute after:inset-x-[1rem] after:bottom-[-0.92rem] after:h-[0.8rem] after:rounded-b-[0.45rem] after:bg-[var(--color-yellow)] after:border-[0.15rem] after:border-t-0 after:border-[var(--color-ink)]" data-sd-id="72"></span>
+                         <div class="absolute bottom-[1.1rem] left-1/2 z-3 grid -translate-x-1/2 justify-items-center" data-sd-id="73">
+                            <span class="avatar-base hard-border bg-[var(--color-coral)] [border-radius:48%_52%_46%_54%] col-start-1 row-start-1" data-sd-id="74">
+                                <span class="avatar-spark hard-border" data-sd-id="75">✦</span>
+                            </span>
+                            <strong class="relative z-5 -mt-[0.15rem] min-w-[6.4rem] max-w-[8.5rem] col-start-1 overflow-hidden whitespace-nowrap text-ellipsis rounded-full bg-[var(--color-yellow)] px-[0.65rem] py-[0.26rem] text-center text-[0.74rem] font-[900] leading-none hard-border shadow-[0.14rem_0.14rem_0_var(--color-ink)] origin-bottom">Nora</strong>
+                        </div>
+                    </div>
+                    <div class="seat-base seat-row-3 seat-pos-12 seat-empty" data-sd-id="76">
+                         <span class="seat-chair hard-border before:absolute before:inset-x-[-0.7rem] before:bottom-[-0.08rem] before:z-4 before:h-[1.25rem] before:rounded-[0.55rem] before:bg-[oklch(0.39_0.1_296)] before:border-[0.16rem] before:border-[var(--color-ink)] after:absolute after:inset-x-[1rem] after:bottom-[-0.92rem] after:h-[0.8rem] after:rounded-b-[0.45rem] after:bg-[oklch(0.31_0.09_296)] after:border-[0.15rem] after:border-t-0 after:border-[var(--color-ink)]" data-sd-id="77"></span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Lobby Actions Footer -->
+        <div class="grid grid-cols-[minmax(8rem,0.7fr)_minmax(18rem,2fr)_minmax(8rem,0.7fr)] gap-[1.25rem]" data-sd-id="78">
+            <button id="btn-leave" type="button" class="btn-action bg-[var(--color-paper)] hard-border hard-shadow-night" data-sd-id="79">
+                <span data-sd-id="80">←</span>
+                <span data-sd-id="81">Quitter</span>
+            </button>
+            <button id="btn-start" type="button" class="btn-action bg-[var(--color-coral)] text-[1rem] hard-border hard-shadow-night" data-sd-id="82">
+                <span data-sd-id="83">Lancer la partie</span>
+                <span data-sd-id="84">▶</span>
+            </button>
+            <button id="btn-settings" type="button" class="btn-action bg-[var(--color-cyan)] hard-border hard-shadow-night" data-sd-id="85">
+                <span data-sd-id="86">⚙</span>
+                <span data-sd-id="87">Configurer</span>
+            </button>
+        </div>
+
+    </div>
+
+</body></html>

@@ -39,6 +39,23 @@ security workflows.
 - Desktop breakpoint: settings navigation on the left, content on the right.
 - Mobile breakpoint: settings navigation becomes a compact horizontal tab row.
 
+## Game results page
+
+- The end-of-game screen belongs to the immersive game flow: no public header
+  and no footer. Keep the compact TripleFrames brand pill at the top-left.
+- The primary job is to reveal the winner, then make the complete ranking of up
+  to 12 players easy to scan.
+- Use a cinematic end-credit composition rather than a generic dashboard: a
+  three-place podium is the single celebratory focal point, followed by a dense
+  ranking surface for the remaining players.
+- Every player keeps the same colorful face avatar, visible nickname and score
+  language used during the game. The current player is explicitly identified.
+- Desktop content must fit inside a 1920 × 1080 viewport without scrolling.
+- Mobile may scroll vertically, but the winner and the current player's result
+  must be visible near the top. Ranking rows remain large enough to tap and read.
+- Primary action: play again. Secondary action: return to the home page.
+- Celebration motion is brief and purposeful; respect reduced-motion settings.
+
 ## Account functionality
 
 - Profile: edit name and e-mail, show e-mail verification status, resend the

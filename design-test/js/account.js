@@ -292,7 +292,7 @@
         input.addEventListener('change', () => applyAppearance(input.value, true));
     });
 
-    document.querySelector('[data-account-logout]').addEventListener('click', () => {
+    document.querySelector('[data-account-logout]')?.addEventListener('click', () => {
         showToast('Déconnexion prête à être reliée à Laravel.');
     });
 })();

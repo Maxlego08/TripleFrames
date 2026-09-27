@@ -7,38 +7,38 @@
         <title>Inscription — TripleFrames</title>
         <link rel="icon" href="../svg/brand-logo.svg" type="image/svg+xml" />
         <link rel="stylesheet" href="../css/auth.css" />
+            <link rel="stylesheet" href="../css/global-header.css" />
     </head>
     <body class="auth-page auth-page--register">
         <a class="skip-link" href="#auth-content">Aller au formulaire</a>
 
-        <header class="auth-header">
-            <div class="auth-header__inner">
-                <a class="brand" href="index.html" aria-label="TripleFrames, retour à l’accueil">
-                    <img class="brand__logo" src="../svg/brand-logo.svg" alt="" width="44" height="36" />
-                    <span class="brand__name">TripleFrames</span>
-                </a>
-                <div class="auth-header__account-link">
-                    <span>Déjà inscrit ?</span>
-                    <a class="button button--small button--yellow" href="login.html">Se connecter</a>
-                </div>
-            </div>
-        </header>
+        <header class="global-header">
+    <div class="global-header__inner">
+        <a class="global-header__brand" href="index.html" aria-label="TripleFrames, accueil">
+            <img class="global-header__brand-logo" src="../svg/brand-logo.svg" alt="" width="44" height="36" />
+            <span class="global-header__brand-name">TripleFrames</span>
+        </a>
+
+        <nav class="global-header__account-nav global-header__account-nav--guest" aria-label="Compte">
+            <a class="global-header__nav-link" href="login.html">Connexion</a>
+            <a class="global-header__nav-pill" href="register.html">S’inscrire</a>
+        </nav>
+
+        <nav class="global-header__account-nav global-header__account-nav--member" aria-label="Compte connecté">
+            <a class="global-header__account-button" href="account.html">
+                <span class="global-header__account-avatar" aria-hidden="true">MC</span>
+                <span>Mon compte</span>
+            </a>
+            <a class="global-header__logout" href="login.html">
+                <img src="../svg/icons/logout.svg" alt="" />
+                <span>Déconnexion</span>
+            </a>
+        </nav>
+    </div>
+</header>
 
         <main class="auth-stage" id="auth-content">
             <section class="auth-ticket" aria-labelledby="register-title">
-                <aside class="auth-ticket__brand-panel">
-                    <img class="auth-ticket__logo" src="../svg/brand-logo.svg" alt="" width="108" height="88" />
-                    <p class="auth-ticket__tag">Crée ton profil</p>
-                    <h1>Garde une trace de tes victoires.</h1>
-                    <p class="auth-ticket__description">
-                        Un compte suffit pour héberger tes parties et défier tes amis.
-                    </p>
-                    <div class="auth-ticket__score-card" aria-hidden="true">
-                        <span>Ton prochain record</span>
-                        <strong>12 500 pts</strong>
-                    </div>
-                </aside>
-
                 <div class="auth-ticket__form-panel">
                     <div class="auth-heading">
                         <p class="auth-heading__step">Nouveau joueur</p>
@@ -169,5 +169,6 @@
 
         <div class="toast" id="auth-toast" role="status" aria-live="polite"></div>
         <script src="../js/auth.js"></script>
+            <script src="../js/global-header.js"></script>
     </body>
 </html>

@@ -10,34 +10,35 @@
         <title>TripleFrames — Devine le film</title>
         <link rel="icon" href="../svg/brand-logo.svg" type="image/svg+xml" />
         <link rel="stylesheet" href="../css/styles.css" />
+            <link rel="stylesheet" href="../css/global-header.css" />
     </head>
     <body>
         <a class="skip-link" href="#main-content">Aller au contenu</a>
 
-        <header class="site-header">
-            <div class="site-header__inner">
-                <a class="site-header__brand" href="#" aria-label="TripleFrames, accueil">
-                    <img class="site-header__brand-logo" src="../svg/brand-logo.svg" alt="" width="44" height="36" />
-                    <span class="site-header__brand-name">TripleFrames</span>
-                </a>
+        <header class="global-header">
+    <div class="global-header__inner">
+        <a class="global-header__brand" href="index.html" aria-label="TripleFrames, accueil">
+            <img class="global-header__brand-logo" src="../svg/brand-logo.svg" alt="" width="44" height="36" />
+            <span class="global-header__brand-name">TripleFrames</span>
+        </a>
 
-                <nav class="site-header__account-nav site-header__account-nav--guest" aria-label="Compte">
-                    <a class="site-header__nav-link" href="login.html">
-                        Connexion
-                    </a>
-                    <a class="site-header__nav-pill" href="register.html">
-                        S’inscrire
-                    </a>
-                </nav>
+        <nav class="global-header__account-nav global-header__account-nav--guest" aria-label="Compte">
+            <a class="global-header__nav-link" href="login.html">Connexion</a>
+            <a class="global-header__nav-pill" href="register.html">S’inscrire</a>
+        </nav>
 
-                <nav class="site-header__account-nav site-header__account-nav--member" aria-label="Compte connecté">
-                    <a class="site-header__account-button" href="account.html">
-                        <span class="site-header__account-avatar" aria-hidden="true">MC</span>
-                        <span>Mon compte</span>
-                    </a>
-                </nav>
-            </div>
-        </header>
+        <nav class="global-header__account-nav global-header__account-nav--member" aria-label="Compte connecté">
+            <a class="global-header__account-button" href="account.html">
+                <span class="global-header__account-avatar" aria-hidden="true">MC</span>
+                <span>Mon compte</span>
+            </a>
+            <a class="global-header__logout" href="login.html">
+                <img src="../svg/icons/logout.svg" alt="" />
+                <span>Déconnexion</span>
+            </a>
+        </nav>
+    </div>
+</header>
 
         <main id="main-content">
             <section class="home-stage" aria-labelledby="hero-title">
@@ -130,5 +131,6 @@
         <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
         <script src="../js/script.js"></script>
+            <script src="../js/global-header.js"></script>
     </body>
 </html>

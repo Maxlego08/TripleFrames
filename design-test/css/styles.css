@@ -361,6 +361,19 @@ h1 {
 .create-game__copy p {
   margin: 0;
 }
+.create-game .button--secondary {
+  transition: background-color 120ms ease, box-shadow 120ms ease;
+}
+.create-game .button--secondary:hover {
+  background: oklch(98% 0.025 89deg);
+  box-shadow: 0.375rem 0.375rem 0 oklch(27% 0.08 292deg);
+  transform: none;
+}
+.create-game .button--secondary:active {
+  background: oklch(88% 0.16 89deg);
+  box-shadow: 0.125rem 0.125rem 0 oklch(27% 0.08 292deg);
+  transform: none;
+}
 
 .site-footer {
   border-top: 0.1875rem solid oklch(27% 0.08 292deg);

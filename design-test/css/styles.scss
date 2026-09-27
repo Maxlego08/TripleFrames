@@ -409,6 +409,22 @@ h1 {
             margin: 0;
         }
     }
+
+    .button--secondary {
+        transition: background-color 120ms ease, box-shadow 120ms ease;
+
+        &:hover {
+            background: oklch(98% 0.025 89deg);
+            box-shadow: 0.375rem 0.375rem 0 $color-ink;
+            transform: none;
+        }
+
+        &:active {
+            background: $color-yellow;
+            box-shadow: 0.125rem 0.125rem 0 $color-ink;
+            transform: none;
+        }
+    }
 }
 
 .site-footer {

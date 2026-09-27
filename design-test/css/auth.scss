@@ -36,6 +36,10 @@ button {
     color: inherit;
 }
 
+[hidden] {
+    display: none !important;
+}
+
 .icon {
     display: block;
     width: 1rem;
@@ -176,6 +180,11 @@ button {
         width: 100%;
         background: $color-coral;
     }
+
+    &--secondary {
+        width: 100%;
+        background: $color-cyan;
+    }
 }
 
 .auth-stage {
@@ -190,135 +199,13 @@ button {
     position: relative;
     display: grid;
     overflow: hidden;
-    width: min(100%, 69rem);
-    grid-template-columns: minmax(18rem, 0.78fr) minmax(32rem, 1.22fr);
+    width: min(100%, 50rem);
     border: $line-width solid $color-ink;
     border-radius: 1.65rem;
     background: $color-paper;
     box-shadow:
         0.85rem 0.85rem 0 $color-night,
         -0.75rem -0.65rem 0 $color-yellow;
-
-    &::after {
-        position: absolute;
-        top: 50%;
-        left: calc(36.5% - 0.65rem);
-        width: 1.3rem;
-        height: 2.6rem;
-        border: $line-width solid $color-ink;
-        border-left: 0;
-        border-radius: 0 1.5rem 1.5rem 0;
-        background: $color-violet;
-        content: '';
-        translate: 0 -50%;
-    }
-
-    &__brand-panel {
-        position: relative;
-        display: flex;
-        min-width: 0;
-        flex-direction: column;
-        justify-content: center;
-        padding: clamp(2rem, 4vw, 3.6rem);
-        background:
-            linear-gradient(145deg, oklch(1 0 0 / 0.08), transparent 42%),
-            $color-violet-dark;
-        color: $color-paper;
-
-        &::after {
-            position: absolute;
-            inset: 1rem 0 1rem auto;
-            border-right: 0.16rem dashed oklch(0.98 0.03 91 / 0.48);
-            content: '';
-        }
-
-        h1 {
-            max-width: 11ch;
-            margin: 0.85rem 0 0.8rem;
-            font-family: $font-display;
-            font-size: clamp(2.1rem, 3.6vw, 3.35rem);
-            line-height: 0.98;
-            letter-spacing: -0.055em;
-        }
-    }
-
-    &__logo {
-        display: block;
-        width: 6.75rem;
-        height: auto;
-        margin-bottom: 0.85rem;
-        filter: drop-shadow(0.28rem 0.28rem 0 $color-ink);
-    }
-
-    &__tag {
-        align-self: flex-start;
-        margin: 0;
-        border: 0.125rem solid $color-paper;
-        border-radius: 999px;
-        padding: 0.35rem 0.65rem;
-        background: $color-violet;
-        font-size: 0.76rem;
-        font-weight: 900;
-    }
-
-    &__description {
-        max-width: 28rem;
-        margin: 0;
-        font-size: 1rem;
-        line-height: 1.5;
-    }
-
-    &__benefits {
-        display: grid;
-        margin: 1.5rem 0 0;
-        padding: 0;
-        gap: 0.65rem;
-        list-style: none;
-
-        li {
-            display: flex;
-            align-items: center;
-            gap: 0.55rem;
-            font-size: 0.9rem;
-            font-weight: 700;
-        }
-
-        span {
-            display: grid;
-            width: 1.5rem;
-            height: 1.5rem;
-            flex: 0 0 auto;
-            border: 0.125rem solid $color-ink;
-            border-radius: 50%;
-            background: $color-cyan;
-            color: $color-ink;
-            place-items: center;
-        }
-    }
-
-    &__score-card {
-        @include mix.hard-shadow(0.3rem);
-        display: grid;
-        align-self: flex-start;
-        margin-top: 1.55rem;
-        rotate: -2deg;
-        border: 0.125rem solid $color-ink;
-        border-radius: $radius-medium;
-        padding: 0.7rem 0.85rem;
-        background: $color-cyan;
-        color: $color-ink;
-        gap: 0.15rem;
-
-        span {
-            font-size: 0.72rem;
-            font-weight: 700;
-        }
-
-        strong {
-            font-family: $font-display;
-            font-size: 1.5rem;
-        }
-    }
 
     &__form-panel {
         display: flex;
@@ -327,7 +214,20 @@ button {
         justify-content: center;
         padding: clamp(1.75rem, 3.5vw, 3.25rem);
         background: $color-paper;
+
+        &--centered {
+            align-items: center;
+            text-align: center;
+        }
     }
+}
+
+.auth-page--compact .auth-ticket {
+    width: min(100%, 42rem);
+}
+
+.auth-page--register .auth-ticket {
+    width: min(100%, 56rem);
 }
 
 .auth-heading {
@@ -357,6 +257,47 @@ button {
         color: $color-muted;
         font-size: 0.92rem;
     }
+
+    &--centered {
+        max-width: 34rem;
+        text-align: center;
+    }
+}
+
+.auth-alert {
+    margin: 0 0 1rem;
+    border: 0.125rem solid $color-ink;
+    border-radius: $radius-small;
+    padding: 0.75rem 0.85rem;
+    color: $color-ink;
+    font-size: 0.78rem;
+    font-weight: 800;
+    line-height: 1.4;
+    text-align: left;
+    box-shadow: 0.2rem 0.2rem 0 $color-ink;
+
+    &--success {
+        background: $color-cyan;
+    }
+}
+
+.auth-state-icon {
+    display: grid;
+    width: 4rem;
+    height: 4rem;
+    margin-bottom: 1rem;
+    rotate: -3deg;
+    border: $line-width solid $color-ink;
+    border-radius: 1.1rem;
+    background: $color-yellow;
+    box-shadow: 0.28rem 0.28rem 0 $color-ink;
+    place-items: center;
+
+    img {
+        display: block;
+        width: 2rem;
+        height: 2rem;
+    }
 }
 
 .auth-form {
@@ -371,6 +312,10 @@ button {
 
     &--register {
         gap: 0.75rem;
+    }
+
+    &--compact {
+        width: 100%;
     }
 }
 
@@ -424,6 +369,17 @@ button {
         &[aria-invalid='true'] {
             border-color: $color-error;
             box-shadow: 0.22rem 0.22rem 0 $color-coral;
+        }
+
+        &[readonly] {
+            background: oklch(0.93 0.02 290);
+            color: $color-muted;
+            cursor: not-allowed;
+        }
+
+        &--code {
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
         }
     }
 
@@ -561,6 +517,108 @@ button {
     }
 }
 
+.auth-passkey {
+    .provider-button__icon {
+        background: $color-white;
+    }
+}
+
+.auth-return {
+    margin: 1.15rem 0 0;
+    color: $color-muted;
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-align: center;
+
+    a,
+    &--link {
+        color: $color-ink;
+        font-weight: 900;
+        text-decoration: underline;
+        text-underline-offset: 0.18rem;
+    }
+
+    &--link {
+        display: inline-block;
+    }
+}
+
+.auth-text-button {
+    border: 0;
+    padding: 0;
+    background: transparent;
+    color: $color-ink;
+    font-size: inherit;
+    font-weight: 900;
+    text-decoration: underline;
+    text-underline-offset: 0.18rem;
+    cursor: pointer;
+
+    &:focus-visible {
+        @include mix.focus-ring;
+        border-radius: 0.2rem;
+    }
+}
+
+.auth-mode {
+    display: grid;
+    gap: 1rem;
+}
+
+.auth-otp {
+    min-width: 0;
+    margin: 0;
+    border: 0;
+    padding: 0;
+
+    &__legend {
+        position: absolute;
+        overflow: hidden;
+        width: 1px;
+        height: 1px;
+        clip: rect(0 0 0 0);
+        white-space: nowrap;
+        clip-path: inset(50%);
+    }
+
+    &__inputs {
+        display: grid;
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+        gap: 0.5rem;
+    }
+
+    &__input {
+        width: 100%;
+        min-width: 0;
+        aspect-ratio: 0.86;
+        border: $line-width solid $color-ink;
+        border-radius: $radius-medium;
+        outline: none;
+        background: $color-white;
+        color: $color-ink;
+        font-family: $font-display;
+        font-size: clamp(1.2rem, 3vw, 1.75rem);
+        font-weight: 900;
+        text-align: center;
+        transition: box-shadow 120ms ease, border-color 120ms ease;
+
+        &:focus {
+            border-color: $color-violet;
+            box-shadow: 0.2rem 0.2rem 0 $color-cyan;
+        }
+
+        &[aria-invalid='true'] {
+            border-color: $color-error;
+            box-shadow: 0.2rem 0.2rem 0 $color-coral;
+        }
+    }
+
+    &__error {
+        margin-top: 0.4rem;
+        text-align: center;
+    }
+}
+
 .auth-providers {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -687,37 +745,6 @@ button {
 
     .auth-ticket {
         max-width: 38rem;
-        grid-template-columns: 1fr;
-
-        &::after {
-            display: none;
-        }
-
-        &__brand-panel {
-            padding: 1.7rem 2rem;
-
-            &::after {
-                display: none;
-            }
-
-            h1 {
-                max-width: 18ch;
-                font-size: 2.35rem;
-            }
-        }
-
-        &__logo {
-            position: absolute;
-            top: 1.85rem;
-            right: 2.25rem;
-            scale: 0.72;
-            transform-origin: top right;
-        }
-
-        &__benefits,
-        &__score-card {
-            display: none;
-        }
 
         &__form-panel {
             padding: 2rem;
@@ -753,26 +780,6 @@ button {
         border-radius: 1.2rem;
         box-shadow: 0.45rem 0.5rem 0 $color-night;
 
-        &__brand-panel {
-            padding: 1.5rem;
-
-            h1 {
-                max-width: 12ch;
-                margin-bottom: 0.5rem;
-                font-size: 2rem;
-            }
-        }
-
-        &__logo {
-            right: 1.4rem;
-            scale: 0.58;
-        }
-
-        &__description {
-            max-width: 22rem;
-            font-size: 0.88rem;
-        }
-
         &__form-panel {
             padding: 1.5rem;
         }
@@ -780,6 +787,16 @@ button {
 
     .auth-heading h2 {
         font-size: 2rem;
+    }
+
+    .auth-state-icon {
+        width: 3.4rem;
+        height: 3.4rem;
+
+        img {
+            width: 1.65rem;
+            height: 1.65rem;
+        }
     }
 
     .auth-form__grid {
@@ -793,6 +810,15 @@ button {
     .provider-button {
         justify-content: flex-start;
         padding-inline: 1rem;
+    }
+
+    .auth-otp__inputs {
+        gap: 0.3rem;
+    }
+
+    .auth-otp__input {
+        border-width: 0.125rem;
+        border-radius: $radius-small;
     }
 
     .auth-footer {
@@ -817,10 +843,6 @@ button {
 
     .auth-ticket__form-panel {
         padding-block: 1.5rem;
-    }
-
-    .auth-ticket__brand-panel {
-        padding-block: 2rem;
     }
 
     .auth-heading {

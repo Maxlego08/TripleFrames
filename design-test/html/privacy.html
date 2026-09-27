@@ -7,28 +7,35 @@
         <title>Politique de confidentialité — TripleFrames</title>
         <link rel="icon" href="../svg/brand-logo.svg" type="image/svg+xml" />
         <link rel="stylesheet" href="../css/info-pages.css" />
+            <link rel="stylesheet" href="../css/global-header.css" />
     </head>
     <body id="top">
         <a class="skip-link" href="#main-content">Aller au contenu</a>
 
-        <header class="info-header">
-            <div class="info-header__inner">
-                <a class="info-header__brand" href="index.html" aria-label="TripleFrames, accueil">
-                    <img class="info-header__brand-logo" src="../svg/brand-logo.svg" alt="" width="44" height="36" />
-                    <span class="info-header__brand-name">TripleFrames</span>
-                </a>
-                <nav class="info-header__account-nav info-header__account-nav--guest" aria-label="Compte">
-                    <a class="info-header__nav-link" href="login.html">Connexion</a>
-                    <a class="info-header__nav-pill" href="register.html">S’inscrire</a>
-                </nav>
-                <nav class="info-header__account-nav info-header__account-nav--member" aria-label="Compte connecté">
-                    <a class="info-header__account-button" href="account.html">
-                        <span class="info-header__account-avatar" aria-hidden="true">MC</span>
-                        <span>Mon compte</span>
-                    </a>
-                </nav>
-            </div>
-        </header>
+        <header class="global-header">
+    <div class="global-header__inner">
+        <a class="global-header__brand" href="index.html" aria-label="TripleFrames, accueil">
+            <img class="global-header__brand-logo" src="../svg/brand-logo.svg" alt="" width="44" height="36" />
+            <span class="global-header__brand-name">TripleFrames</span>
+        </a>
+
+        <nav class="global-header__account-nav global-header__account-nav--guest" aria-label="Compte">
+            <a class="global-header__nav-link" href="login.html">Connexion</a>
+            <a class="global-header__nav-pill" href="register.html">S’inscrire</a>
+        </nav>
+
+        <nav class="global-header__account-nav global-header__account-nav--member" aria-label="Compte connecté">
+            <a class="global-header__account-button" href="account.html">
+                <span class="global-header__account-avatar" aria-hidden="true">MC</span>
+                <span>Mon compte</span>
+            </a>
+            <a class="global-header__logout" href="login.html">
+                <img src="../svg/icons/logout.svg" alt="" />
+                <span>Déconnexion</span>
+            </a>
+        </nav>
+    </div>
+</header>
 
         <main class="info-main" id="main-content">
             <header class="info-hero">
@@ -224,5 +231,6 @@
         </footer>
 
         <script src="../js/info-pages.js"></script>
+            <script src="../js/global-header.js"></script>
     </body>
 </html>

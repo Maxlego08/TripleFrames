@@ -14,6 +14,8 @@ Ouvrir `html/index.html` directement dans un navigateur.
 - Salle d’attente en tant qu’hôte : `html/waiting-room.html?host=1`
 - Salle d’attente en tant que joueur : `html/waiting-room.html?host=0&name=Camille&code=M8K2`
 - Partie en cours : `html/game.html` ou `html/game.html?name=Camille`
+- Classement de fin de partie : `html/game-results.html` ou
+  `html/game-results.html?name=Camille`
 - Pages d’erreur : `html/error-400.html`, `html/error-401.html`,
   `html/error-403.html`, `html/error-404.html`, `html/error-408.html`,
   `html/error-419.html`, `html/error-422.html`, `html/error-429.html`,
@@ -44,9 +46,11 @@ Les sources sont écrites en SCSS avec une convention BEM et une palette OKLCH :
 - `css/auth.scss` → `css/auth.css`
 - `css/waiting-room.scss` → `css/waiting-room.css`
 - `css/game.scss` → `css/game.css`
+- `css/game-results.scss` → `css/game-results.css`
 - `css/errors.scss` → `css/errors.css`
 - `css/account.scss` → `css/account.css`
 - `css/info-pages.scss` → `css/info-pages.css`
+- `css/global-header.scss` → `css/global-header.css` (header partagé)
 - `css/scss/_tokens.scss` et `css/scss/_mixins.scss` sont partagés
 - `svg/brand-logo.svg` est la source unique du logo et du favicon
 
@@ -54,7 +58,7 @@ Compilation :
 
 Depuis `design-test/` :
 
-`npx sass css/styles.scss:css/styles.css css/auth.scss:css/auth.css css/waiting-room.scss:css/waiting-room.css css/game.scss:css/game.css css/errors.scss:css/errors.css css/account.scss:css/account.css css/info-pages.scss:css/info-pages.css --no-source-map`
+`npx sass css/styles.scss:css/styles.css css/auth.scss:css/auth.css css/waiting-room.scss:css/waiting-room.css css/game.scss:css/game.css css/game-results.scss:css/game-results.css css/errors.scss:css/errors.css css/account.scss:css/account.css css/info-pages.scss:css/info-pages.css css/global-header.scss:css/global-header.css --no-source-map`
 
 La page de compte reprend les réglages Laravel du projet : profil et vérification
 de l’e-mail, mot de passe, authentification à deux facteurs, codes de

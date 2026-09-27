@@ -1,0 +1,176 @@
+.global-header {
+  position: relative;
+  z-index: 20;
+  flex: 0 0 auto;
+  border-bottom: 0.1875rem solid oklch(27% 0.08 292deg);
+  background: oklch(98% 0.03 91deg);
+  color: oklch(27% 0.08 292deg);
+}
+.global-header__inner {
+  width: min(100% - 2rem, 76rem);
+  min-height: 5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-inline: auto;
+}
+.global-header__brand, .global-header__account-nav, .global-header__account-button, .global-header__logout {
+  display: inline-flex;
+  align-items: center;
+}
+.global-header__brand {
+  min-width: 0;
+  gap: 0.65rem;
+  color: oklch(27% 0.08 292deg);
+  text-decoration: none;
+}
+.global-header__brand-logo {
+  width: 2.45rem;
+  height: auto;
+  flex: 0 0 auto;
+}
+.global-header__brand-name {
+  font-family: "Arial Rounded MT Bold", "Trebuchet MS", sans-serif;
+  font-weight: 900;
+  overflow: hidden;
+  font-size: clamp(1.05rem, 2vw, 1.4rem);
+  letter-spacing: -0.04em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.global-header__account-nav {
+  flex: 0 0 auto;
+  gap: 0.45rem;
+}
+.global-header__account-nav--member {
+  display: none;
+}
+.global-header__nav-link, .global-header__nav-pill, .global-header__account-button, .global-header__logout {
+  min-height: 2.75rem;
+  border-radius: 999rem;
+  color: oklch(27% 0.08 292deg);
+  font-size: 0.9rem;
+  font-weight: 900;
+  text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.global-header__nav-link {
+  padding: 0.6rem 0.75rem;
+}
+.global-header__nav-link:hover {
+  text-decoration: underline;
+  text-underline-offset: 0.2rem;
+}
+.global-header__nav-pill {
+  box-shadow: 0.1875rem 0.1875rem 0 oklch(27% 0.08 292deg);
+  padding: 0.55rem 1rem;
+  border: 0.125rem solid oklch(27% 0.08 292deg);
+  background: oklch(88% 0.16 89deg);
+  transition: transform 120ms ease, box-shadow 120ms ease;
+}
+.global-header__nav-pill:hover {
+  transform: translate(-0.1rem, -0.1rem);
+  box-shadow: 0.28rem 0.28rem 0 oklch(27% 0.08 292deg);
+}
+.global-header__account-button {
+  gap: 0.55rem;
+  padding: 0.3rem 0.8rem 0.3rem 0.3rem;
+  border: 0.125rem solid oklch(27% 0.08 292deg);
+  background: oklch(100% 0 0deg);
+}
+.global-header__account-avatar {
+  width: 2rem;
+  height: 2rem;
+  display: grid;
+  place-items: center;
+  border: 0.125rem solid oklch(27% 0.08 292deg);
+  border-radius: 50%;
+  background: oklch(81% 0.13 195deg);
+  color: oklch(27% 0.08 292deg);
+  font-size: 0.7rem;
+}
+.global-header__logout {
+  gap: 0.4rem;
+  padding: 0.45rem 0.75rem;
+  border: 0.125rem solid oklch(27% 0.08 292deg);
+  background: oklch(70% 0.2 25deg);
+}
+.global-header__logout img {
+  width: 1.1rem;
+  height: 1.1rem;
+}
+
+body[data-authenticated=true] .global-header__account-nav--guest {
+  display: none;
+}
+body[data-authenticated=true] .global-header__account-nav--member {
+  display: inline-flex;
+}
+
+.global-header a:focus-visible {
+  outline: 0.1875rem solid oklch(81% 0.13 195deg);
+  outline-offset: 0.1875rem;
+}
+
+@media (max-width: 35rem) {
+  .global-header__inner {
+    width: min(100% - 1rem, 76rem);
+    min-height: 4.25rem;
+    gap: 0.5rem;
+  }
+  .global-header__brand {
+    gap: 0.45rem;
+  }
+  .global-header__brand-logo {
+    width: 2.05rem;
+  }
+  .global-header__brand-name {
+    font-size: 0.95rem;
+  }
+  .global-header__account-nav {
+    gap: 0.3rem;
+  }
+  .global-header__nav-link, .global-header__nav-pill, .global-header__account-button, .global-header__logout {
+    min-height: 2.4rem;
+    font-size: 0.74rem;
+  }
+  .global-header__nav-link, .global-header__nav-pill {
+    padding: 0.42rem 0.55rem;
+  }
+  .global-header__account-button {
+    padding-right: 0.45rem;
+  }
+  .global-header__logout {
+    width: 2.45rem;
+    justify-content: center;
+    padding: 0;
+  }
+  .global-header__logout span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+  }
+}
+@media (max-width: 23rem) {
+  .global-header__brand-name,
+  .global-header__account-button > span:last-child {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+  }
+  .global-header__account-button {
+    padding-right: 0.3rem;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .global-header * {
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -1,0 +1,365 @@
+{
+  "schemaVersion": 1,
+  "targets": {
+    "design-test/game-results": {
+      "targetKind": "new-ui",
+      "projectId": "710e23fa-b801-40cf-b0be-a28fc414ec96",
+      "activeDraftId": "e2ea0429-61e9-42cb-8a39-4b106d13522f",
+      "designSystemPath": ".superdesign/design-system.md",
+      "referenceIds": [
+        "design-test-html-brand-logo.svg"
+      ],
+      "brandAssets": {
+        "logo": {
+          "assetKey": "design-test-html-brand-logo.svg",
+          "url": "https://vgbujcuwptvheqijyjbe.supabase.co/storage/v1/object/public/hmac-uploads/projects/710e23fa-b801-40cf-b0be-a28fc414ec96/brand-assets/design-test-html-brand-logo.svg/brand-logo.svg",
+          "sourcePath": "design-test/svg/brand-logo.svg"
+        }
+      },
+      "contextFiles": [
+        ".superdesign/design-system.md",
+        "design-test/html/game.html",
+        "design-test/css/game.scss",
+        "design-test/js/game.js",
+        "design-test/css/scss/_tokens.scss",
+        "design-test/css/scss/_mixins.scss"
+      ],
+      "fingerprints": {
+        ".superdesign/design-system.md": "f95de62db01bd087d43fbd06be75d31df3b322ef5719890a680c28b77217fce6",
+        "design-test/html/game.html": "762874ad5631b6ad39093d58d1d2e63ce88d63c45ec4cd0296c4af324e06478a",
+        "design-test/css/game.scss": "1f13492a5c0a102629e0134fd7d69d8f1645c0b99f0e96534b3e83570b667d59",
+        "design-test/js/game.js": "e1e9b9e5c6b1eb18fb323607b0a3dc861e2373e7c6c1648f788cd1b55f4f3d17",
+        "design-test/css/scss/_tokens.scss": "c6686927247fb7a0637cbfa6c8cb4fb18c9638d2375c2c81c3fc2dbeb021df98",
+        "design-test/css/scss/_mixins.scss": "655cdcc61d408cf0b2c7b0a1aace82c0223ac09379052c4616ed4e99c69c4dad"
+      },
+      "components": [
+        {
+          "name": "MockBrand",
+          "id": "6ca9d459-1b29-47ca-ac44-8eee89d1d0ab",
+          "sourcePath": "design-test/html/waiting-room.html",
+          "logoAssetKey": "design-test-html-brand-logo.svg"
+        }
+      ],
+      "drafts": {
+        "e2ea0429-61e9-42cb-8a39-4b106d13522f": {
+          "title": "Résultats de Fin de Séance",
+          "visualDirection": "podium cinématographique et classement façon générique de fin",
+          "currentVersion": 1
+        }
+      },
+      "updatedAt": "2026-09-27T20:17:50.7705023+02:00"
+    },
+    "design-test/auth": {
+      "targetKind": "existing-ui",
+      "projectId": "710e23fa-b801-40cf-b0be-a28fc414ec96",
+      "baselineDraftId": "dcac6479-bd04-4d61-ac77-721dba467d00",
+      "activeDraftId": "dcac6479-bd04-4d61-ac77-721dba467d00",
+      "designSystemPath": ".superdesign/design-system.md",
+      "referenceIds": [
+        "design-test-html-brand-logo.svg"
+      ],
+      "brandAssets": {
+        "logo": {
+          "assetKey": "design-test-html-brand-logo.svg",
+          "url": "https://vgbujcuwptvheqijyjbe.supabase.co/storage/v1/object/public/hmac-uploads/projects/710e23fa-b801-40cf-b0be-a28fc414ec96/brand-assets/design-test-html-brand-logo.svg/brand-logo.svg",
+          "sourcePath": "design-test/svg/brand-logo.svg"
+        }
+      },
+      "contextFiles": [
+        ".superdesign/design-system.md",
+        "design-test/html/login.html",
+        "design-test/css/auth.scss",
+        "design-test/css/global-header.scss",
+        "design-test/css/scss/_tokens.scss",
+        "design-test/css/scss/_mixins.scss"
+      ],
+      "fingerprints": {
+        ".superdesign/design-system.md": "f95de62db01bd087d43fbd06be75d31df3b322ef5719890a680c28b77217fce6",
+        "design-test/html/login.html": "c24b0735f9863702fff04f8d1c1975c616cd3a92b485c2fa64d2871f6553c81e",
+        "design-test/css/auth.scss": "fc1bea70ca9efe96c749e3d493bc33bcd40a474a597bf69ce4b8cb9eacfcb815",
+        "design-test/css/global-header.scss": "03ac6c75e899222e22a2b7dc141abe657b18911e97d8825a2ca76b8381c7c518",
+        "design-test/css/scss/_tokens.scss": "c6686927247fb7a0637cbfa6c8cb4fb18c9638d2375c2c81c3fc2dbeb021df98",
+        "design-test/css/scss/_mixins.scss": "655cdcc61d408cf0b2c7b0a1aace82c0223ac09379052c4616ed4e99c69c4dad"
+      },
+      "drafts": {
+        "dcac6479-bd04-4d61-ac77-721dba467d00": {
+          "title": "TripleFrames Login",
+          "visualDirection": "reproduction fidèle du shell d’authentification existant",
+          "currentVersion": 1,
+          "preview": "https://p.superdesign.dev/draft/dcac6479-bd04-4d61-ac77-721dba467d00"
+        }
+      },
+      "updatedAt": "2026-09-27T23:13:50.5373088+02:00"
+    },
+    "design-test/auth/forgot-password": {
+      "targetKind": "new-ui",
+      "projectId": "710e23fa-b801-40cf-b0be-a28fc414ec96",
+      "activeDraftId": "2d3b8d79-71bc-4560-a46d-a913c695a669",
+      "sourceTarget": "design-test/auth",
+      "sourceDraftId": "dcac6479-bd04-4d61-ac77-721dba467d00",
+      "designSystemPath": ".superdesign/design-system.md",
+      "referenceIds": [
+        "design-test-html-brand-logo.svg"
+      ],
+      "brandAssets": {
+        "logo": {
+          "assetKey": "design-test-html-brand-logo.svg",
+          "url": "https://vgbujcuwptvheqijyjbe.supabase.co/storage/v1/object/public/hmac-uploads/projects/710e23fa-b801-40cf-b0be-a28fc414ec96/brand-assets/design-test-html-brand-logo.svg/brand-logo.svg",
+          "sourcePath": "design-test/svg/brand-logo.svg"
+        }
+      },
+      "contextFiles": [
+        ".superdesign/design-system.md",
+        "design-test/html/login.html",
+        "design-test/css/auth.scss",
+        "design-test/css/global-header.scss",
+        "design-test/css/scss/_tokens.scss",
+        "design-test/css/scss/_mixins.scss",
+        "resources/js/pages/auth/forgot-password.tsx",
+        "resources/js/pages/auth/reset-password.tsx",
+        "resources/js/pages/auth/verify-email.tsx",
+        "resources/js/pages/auth/confirm-password.tsx",
+        "resources/js/pages/auth/two-factor-challenge.tsx"
+      ],
+      "fingerprints": {
+        ".superdesign/design-system.md": "f95de62db01bd087d43fbd06be75d31df3b322ef5719890a680c28b77217fce6",
+        "design-test/html/login.html": "c24b0735f9863702fff04f8d1c1975c616cd3a92b485c2fa64d2871f6553c81e",
+        "design-test/css/auth.scss": "fc1bea70ca9efe96c749e3d493bc33bcd40a474a597bf69ce4b8cb9eacfcb815",
+        "design-test/css/global-header.scss": "03ac6c75e899222e22a2b7dc141abe657b18911e97d8825a2ca76b8381c7c518",
+        "design-test/css/scss/_tokens.scss": "c6686927247fb7a0637cbfa6c8cb4fb18c9638d2375c2c81c3fc2dbeb021df98",
+        "design-test/css/scss/_mixins.scss": "655cdcc61d408cf0b2c7b0a1aace82c0223ac09379052c4616ed4e99c69c4dad",
+        "resources/js/pages/auth/forgot-password.tsx": "c0a2cff08e7b37b7cf7992efa967e4aa4a1f347bf68209df78ef397bb2534372",
+        "resources/js/pages/auth/reset-password.tsx": "d19f7991955ba8b01e5639c5bfa2c6734f1436f7d39c1fd67e1ed77d3b93954c",
+        "resources/js/pages/auth/verify-email.tsx": "4116f85ef96f96ed742693498c94812f5a0e8c2e1328a3e48a514a7ff3ac2556",
+        "resources/js/pages/auth/confirm-password.tsx": "3942fb8ab9d2f43317140665b16007a7972eb0d83fbda494f445f3482fd4740c",
+        "resources/js/pages/auth/two-factor-challenge.tsx": "582d18e847a21c677b3a7dea480c07e38930b3343835705ca8fca9ef6c496413"
+      },
+      "drafts": {
+        "2d3b8d79-71bc-4560-a46d-a913c695a669": {
+          "title": "Mot de passe oublié",
+          "visualDirection": "authentification Laravel, récupération de mot de passe",
+          "parentDraftId": "dcac6479-bd04-4d61-ac77-721dba467d00",
+          "currentVersion": 1,
+          "preview": "https://p.superdesign.dev/draft/2d3b8d79-71bc-4560-a46d-a913c695a669"
+        }
+      },
+      "updatedAt": "2026-09-27T23:24:38.7455794+02:00"
+    },
+    "design-test/auth/reset-password": {
+      "targetKind": "new-ui",
+      "projectId": "710e23fa-b801-40cf-b0be-a28fc414ec96",
+      "activeDraftId": "6aaadb6b-6b38-496e-8a26-6eddd979b8dc",
+      "sourceTarget": "design-test/auth",
+      "sourceDraftId": "dcac6479-bd04-4d61-ac77-721dba467d00",
+      "designSystemPath": ".superdesign/design-system.md",
+      "referenceIds": [
+        "design-test-html-brand-logo.svg"
+      ],
+      "brandAssets": {
+        "logo": {
+          "assetKey": "design-test-html-brand-logo.svg",
+          "url": "https://vgbujcuwptvheqijyjbe.supabase.co/storage/v1/object/public/hmac-uploads/projects/710e23fa-b801-40cf-b0be-a28fc414ec96/brand-assets/design-test-html-brand-logo.svg/brand-logo.svg",
+          "sourcePath": "design-test/svg/brand-logo.svg"
+        }
+      },
+      "contextFiles": [
+        ".superdesign/design-system.md",
+        "design-test/html/login.html",
+        "design-test/css/auth.scss",
+        "design-test/css/global-header.scss",
+        "design-test/css/scss/_tokens.scss",
+        "design-test/css/scss/_mixins.scss",
+        "resources/js/pages/auth/forgot-password.tsx",
+        "resources/js/pages/auth/reset-password.tsx",
+        "resources/js/pages/auth/verify-email.tsx",
+        "resources/js/pages/auth/confirm-password.tsx",
+        "resources/js/pages/auth/two-factor-challenge.tsx"
+      ],
+      "fingerprints": {
+        ".superdesign/design-system.md": "f95de62db01bd087d43fbd06be75d31df3b322ef5719890a680c28b77217fce6",
+        "design-test/html/login.html": "c24b0735f9863702fff04f8d1c1975c616cd3a92b485c2fa64d2871f6553c81e",
+        "design-test/css/auth.scss": "fc1bea70ca9efe96c749e3d493bc33bcd40a474a597bf69ce4b8cb9eacfcb815",
+        "design-test/css/global-header.scss": "03ac6c75e899222e22a2b7dc141abe657b18911e97d8825a2ca76b8381c7c518",
+        "design-test/css/scss/_tokens.scss": "c6686927247fb7a0637cbfa6c8cb4fb18c9638d2375c2c81c3fc2dbeb021df98",
+        "design-test/css/scss/_mixins.scss": "655cdcc61d408cf0b2c7b0a1aace82c0223ac09379052c4616ed4e99c69c4dad",
+        "resources/js/pages/auth/forgot-password.tsx": "c0a2cff08e7b37b7cf7992efa967e4aa4a1f347bf68209df78ef397bb2534372",
+        "resources/js/pages/auth/reset-password.tsx": "d19f7991955ba8b01e5639c5bfa2c6734f1436f7d39c1fd67e1ed77d3b93954c",
+        "resources/js/pages/auth/verify-email.tsx": "4116f85ef96f96ed742693498c94812f5a0e8c2e1328a3e48a514a7ff3ac2556",
+        "resources/js/pages/auth/confirm-password.tsx": "3942fb8ab9d2f43317140665b16007a7972eb0d83fbda494f445f3482fd4740c",
+        "resources/js/pages/auth/two-factor-challenge.tsx": "582d18e847a21c677b3a7dea480c07e38930b3343835705ca8fca9ef6c496413"
+      },
+      "drafts": {
+        "6aaadb6b-6b38-496e-8a26-6eddd979b8dc": {
+          "title": "Réinitialiser le mot de passe",
+          "visualDirection": "authentification Laravel, nouveau mot de passe",
+          "parentDraftId": "dcac6479-bd04-4d61-ac77-721dba467d00",
+          "currentVersion": 1,
+          "preview": "https://p.superdesign.dev/draft/6aaadb6b-6b38-496e-8a26-6eddd979b8dc"
+        }
+      },
+      "updatedAt": "2026-09-27T23:24:38.7455794+02:00"
+    },
+    "design-test/auth/verify-email": {
+      "targetKind": "new-ui",
+      "projectId": "710e23fa-b801-40cf-b0be-a28fc414ec96",
+      "activeDraftId": "bf2ad15b-aad8-4603-8b6e-84d790decba7",
+      "sourceTarget": "design-test/auth",
+      "sourceDraftId": "dcac6479-bd04-4d61-ac77-721dba467d00",
+      "designSystemPath": ".superdesign/design-system.md",
+      "referenceIds": [
+        "design-test-html-brand-logo.svg"
+      ],
+      "brandAssets": {
+        "logo": {
+          "assetKey": "design-test-html-brand-logo.svg",
+          "url": "https://vgbujcuwptvheqijyjbe.supabase.co/storage/v1/object/public/hmac-uploads/projects/710e23fa-b801-40cf-b0be-a28fc414ec96/brand-assets/design-test-html-brand-logo.svg/brand-logo.svg",
+          "sourcePath": "design-test/svg/brand-logo.svg"
+        }
+      },
+      "contextFiles": [
+        ".superdesign/design-system.md",
+        "design-test/html/login.html",
+        "design-test/css/auth.scss",
+        "design-test/css/global-header.scss",
+        "design-test/css/scss/_tokens.scss",
+        "design-test/css/scss/_mixins.scss",
+        "resources/js/pages/auth/forgot-password.tsx",
+        "resources/js/pages/auth/reset-password.tsx",
+        "resources/js/pages/auth/verify-email.tsx",
+        "resources/js/pages/auth/confirm-password.tsx",
+        "resources/js/pages/auth/two-factor-challenge.tsx"
+      ],
+      "fingerprints": {
+        ".superdesign/design-system.md": "f95de62db01bd087d43fbd06be75d31df3b322ef5719890a680c28b77217fce6",
+        "design-test/html/login.html": "c24b0735f9863702fff04f8d1c1975c616cd3a92b485c2fa64d2871f6553c81e",
+        "design-test/css/auth.scss": "fc1bea70ca9efe96c749e3d493bc33bcd40a474a597bf69ce4b8cb9eacfcb815",
+        "design-test/css/global-header.scss": "03ac6c75e899222e22a2b7dc141abe657b18911e97d8825a2ca76b8381c7c518",
+        "design-test/css/scss/_tokens.scss": "c6686927247fb7a0637cbfa6c8cb4fb18c9638d2375c2c81c3fc2dbeb021df98",
+        "design-test/css/scss/_mixins.scss": "655cdcc61d408cf0b2c7b0a1aace82c0223ac09379052c4616ed4e99c69c4dad",
+        "resources/js/pages/auth/forgot-password.tsx": "c0a2cff08e7b37b7cf7992efa967e4aa4a1f347bf68209df78ef397bb2534372",
+        "resources/js/pages/auth/reset-password.tsx": "d19f7991955ba8b01e5639c5bfa2c6734f1436f7d39c1fd67e1ed77d3b93954c",
+        "resources/js/pages/auth/verify-email.tsx": "4116f85ef96f96ed742693498c94812f5a0e8c2e1328a3e48a514a7ff3ac2556",
+        "resources/js/pages/auth/confirm-password.tsx": "3942fb8ab9d2f43317140665b16007a7972eb0d83fbda494f445f3482fd4740c",
+        "resources/js/pages/auth/two-factor-challenge.tsx": "582d18e847a21c677b3a7dea480c07e38930b3343835705ca8fca9ef6c496413"
+      },
+      "drafts": {
+        "bf2ad15b-aad8-4603-8b6e-84d790decba7": {
+          "title": "Vérification de l’adresse e-mail",
+          "visualDirection": "authentification Laravel, vérification de l’adresse e-mail",
+          "parentDraftId": "dcac6479-bd04-4d61-ac77-721dba467d00",
+          "currentVersion": 1,
+          "preview": "https://p.superdesign.dev/draft/bf2ad15b-aad8-4603-8b6e-84d790decba7"
+        }
+      },
+      "updatedAt": "2026-09-27T23:24:38.7455794+02:00"
+    },
+    "design-test/auth/confirm-password": {
+      "targetKind": "new-ui",
+      "projectId": "710e23fa-b801-40cf-b0be-a28fc414ec96",
+      "activeDraftId": "03eafa5b-27c3-4773-9287-8e8d24d01826",
+      "sourceTarget": "design-test/auth",
+      "sourceDraftId": "dcac6479-bd04-4d61-ac77-721dba467d00",
+      "designSystemPath": ".superdesign/design-system.md",
+      "referenceIds": [
+        "design-test-html-brand-logo.svg"
+      ],
+      "brandAssets": {
+        "logo": {
+          "assetKey": "design-test-html-brand-logo.svg",
+          "url": "https://vgbujcuwptvheqijyjbe.supabase.co/storage/v1/object/public/hmac-uploads/projects/710e23fa-b801-40cf-b0be-a28fc414ec96/brand-assets/design-test-html-brand-logo.svg/brand-logo.svg",
+          "sourcePath": "design-test/svg/brand-logo.svg"
+        }
+      },
+      "contextFiles": [
+        ".superdesign/design-system.md",
+        "design-test/html/login.html",
+        "design-test/css/auth.scss",
+        "design-test/css/global-header.scss",
+        "design-test/css/scss/_tokens.scss",
+        "design-test/css/scss/_mixins.scss",
+        "resources/js/pages/auth/forgot-password.tsx",
+        "resources/js/pages/auth/reset-password.tsx",
+        "resources/js/pages/auth/verify-email.tsx",
+        "resources/js/pages/auth/confirm-password.tsx",
+        "resources/js/pages/auth/two-factor-challenge.tsx"
+      ],
+      "fingerprints": {
+        ".superdesign/design-system.md": "f95de62db01bd087d43fbd06be75d31df3b322ef5719890a680c28b77217fce6",
+        "design-test/html/login.html": "c24b0735f9863702fff04f8d1c1975c616cd3a92b485c2fa64d2871f6553c81e",
+        "design-test/css/auth.scss": "fc1bea70ca9efe96c749e3d493bc33bcd40a474a597bf69ce4b8cb9eacfcb815",
+        "design-test/css/global-header.scss": "03ac6c75e899222e22a2b7dc141abe657b18911e97d8825a2ca76b8381c7c518",
+        "design-test/css/scss/_tokens.scss": "c6686927247fb7a0637cbfa6c8cb4fb18c9638d2375c2c81c3fc2dbeb021df98",
+        "design-test/css/scss/_mixins.scss": "655cdcc61d408cf0b2c7b0a1aace82c0223ac09379052c4616ed4e99c69c4dad",
+        "resources/js/pages/auth/forgot-password.tsx": "c0a2cff08e7b37b7cf7992efa967e4aa4a1f347bf68209df78ef397bb2534372",
+        "resources/js/pages/auth/reset-password.tsx": "d19f7991955ba8b01e5639c5bfa2c6734f1436f7d39c1fd67e1ed77d3b93954c",
+        "resources/js/pages/auth/verify-email.tsx": "4116f85ef96f96ed742693498c94812f5a0e8c2e1328a3e48a514a7ff3ac2556",
+        "resources/js/pages/auth/confirm-password.tsx": "3942fb8ab9d2f43317140665b16007a7972eb0d83fbda494f445f3482fd4740c",
+        "resources/js/pages/auth/two-factor-challenge.tsx": "582d18e847a21c677b3a7dea480c07e38930b3343835705ca8fca9ef6c496413"
+      },
+      "drafts": {
+        "03eafa5b-27c3-4773-9287-8e8d24d01826": {
+          "title": "Confirmer le mot de passe",
+          "visualDirection": "authentification Laravel, confirmation sensible avec passkey",
+          "parentDraftId": "dcac6479-bd04-4d61-ac77-721dba467d00",
+          "currentVersion": 1,
+          "preview": "https://p.superdesign.dev/draft/03eafa5b-27c3-4773-9287-8e8d24d01826"
+        }
+      },
+      "updatedAt": "2026-09-27T23:24:38.7455794+02:00"
+    },
+    "design-test/auth/two-factor-challenge": {
+      "targetKind": "new-ui",
+      "projectId": "710e23fa-b801-40cf-b0be-a28fc414ec96",
+      "activeDraftId": "4bfe5edf-3967-4aea-961e-e486dfd92420",
+      "sourceTarget": "design-test/auth",
+      "sourceDraftId": "dcac6479-bd04-4d61-ac77-721dba467d00",
+      "designSystemPath": ".superdesign/design-system.md",
+      "referenceIds": [
+        "design-test-html-brand-logo.svg"
+      ],
+      "brandAssets": {
+        "logo": {
+          "assetKey": "design-test-html-brand-logo.svg",
+          "url": "https://vgbujcuwptvheqijyjbe.supabase.co/storage/v1/object/public/hmac-uploads/projects/710e23fa-b801-40cf-b0be-a28fc414ec96/brand-assets/design-test-html-brand-logo.svg/brand-logo.svg",
+          "sourcePath": "design-test/svg/brand-logo.svg"
+        }
+      },
+      "contextFiles": [
+        ".superdesign/design-system.md",
+        "design-test/html/login.html",
+        "design-test/css/auth.scss",
+        "design-test/css/global-header.scss",
+        "design-test/css/scss/_tokens.scss",
+        "design-test/css/scss/_mixins.scss",
+        "resources/js/pages/auth/forgot-password.tsx",
+        "resources/js/pages/auth/reset-password.tsx",
+        "resources/js/pages/auth/verify-email.tsx",
+        "resources/js/pages/auth/confirm-password.tsx",
+        "resources/js/pages/auth/two-factor-challenge.tsx"
+      ],
+      "fingerprints": {
+        ".superdesign/design-system.md": "f95de62db01bd087d43fbd06be75d31df3b322ef5719890a680c28b77217fce6",
+        "design-test/html/login.html": "c24b0735f9863702fff04f8d1c1975c616cd3a92b485c2fa64d2871f6553c81e",
+        "design-test/css/auth.scss": "fc1bea70ca9efe96c749e3d493bc33bcd40a474a597bf69ce4b8cb9eacfcb815",
+        "design-test/css/global-header.scss": "03ac6c75e899222e22a2b7dc141abe657b18911e97d8825a2ca76b8381c7c518",
+        "design-test/css/scss/_tokens.scss": "c6686927247fb7a0637cbfa6c8cb4fb18c9638d2375c2c81c3fc2dbeb021df98",
+        "design-test/css/scss/_mixins.scss": "655cdcc61d408cf0b2c7b0a1aace82c0223ac09379052c4616ed4e99c69c4dad",
+        "resources/js/pages/auth/forgot-password.tsx": "c0a2cff08e7b37b7cf7992efa967e4aa4a1f347bf68209df78ef397bb2534372",
+        "resources/js/pages/auth/reset-password.tsx": "d19f7991955ba8b01e5639c5bfa2c6734f1436f7d39c1fd67e1ed77d3b93954c",
+        "resources/js/pages/auth/verify-email.tsx": "4116f85ef96f96ed742693498c94812f5a0e8c2e1328a3e48a514a7ff3ac2556",
+        "resources/js/pages/auth/confirm-password.tsx": "3942fb8ab9d2f43317140665b16007a7972eb0d83fbda494f445f3482fd4740c",
+        "resources/js/pages/auth/two-factor-challenge.tsx": "582d18e847a21c677b3a7dea480c07e38930b3343835705ca8fca9ef6c496413"
+      },
+      "drafts": {
+        "4bfe5edf-3967-4aea-961e-e486dfd92420": {
+          "title": "Authentification à deux facteurs",
+          "visualDirection": "authentification Laravel, code OTP et récupération",
+          "parentDraftId": "dcac6479-bd04-4d61-ac77-721dba467d00",
+          "currentVersion": 1,
+          "preview": "https://p.superdesign.dev/draft/4bfe5edf-3967-4aea-961e-e486dfd92420"
+        }
+      },
+      "updatedAt": "2026-09-27T23:24:38.7455794+02:00"
+    }
+  }
+}

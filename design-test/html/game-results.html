@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="fr">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <meta name="description" content="Classement de fin de partie sur TripleFrames." />
+        <title>Classement — TripleFrames</title>
+        <link rel="icon" href="../svg/brand-logo.svg" type="image/svg+xml" />
+        <link rel="stylesheet" href="../css/game-results.css" />
+    </head>
+    <body class="results-page">
+        <a class="skip-link" href="#results-content">Aller au classement</a>
+
+        <main class="results" id="results-content">
+            <a class="brand results__brand" href="index.html" aria-label="TripleFrames, retour à l’accueil">
+                <img class="brand__logo" src="../svg/brand-logo.svg" alt="" width="44" height="36" />
+                <span class="brand__name">TripleFrames</span>
+            </a>
+
+            <section class="results__celebration" aria-labelledby="results-title">
+                <header class="results__heading">
+                    <h1 id="results-title">Fin de la séance&nbsp;!</h1>
+                    <p>Bravo à tous pour cette partie.</p>
+                </header>
+
+                <div class="podium" id="podium" aria-label="Podium de la partie"></div>
+
+                <aside class="current-result" id="current-result" aria-label="Votre résultat"></aside>
+
+                <div class="results-actions results-actions--desktop">
+                    <button class="results-button results-button--primary" type="button" data-replay-game>
+                        <img class="icon" src="../svg/icons/play.svg" alt="" aria-hidden="true" />
+                        <span>Rejouer</span>
+                    </button>
+                    <a class="results-button results-button--secondary" href="index.html">
+                        <img class="icon" src="../svg/icons/arrow-left.svg" alt="" aria-hidden="true" />
+                        <span>Retour à l’accueil</span>
+                    </a>
+                </div>
+            </section>
+
+            <section class="ranking" aria-labelledby="ranking-title">
+                <div class="ranking__heading">
+                    <img class="icon" src="../svg/icons/star.svg" alt="" aria-hidden="true" />
+                    <h2 id="ranking-title">Générique de fin</h2>
+                </div>
+                <ol class="ranking__list" id="ranking-list" start="4"></ol>
+            </section>
+        </main>
+
+        <nav class="results-actions results-actions--mobile" aria-label="Actions de fin de partie">
+            <button class="results-button results-button--primary" type="button" data-replay-game>
+                <img class="icon" src="../svg/icons/play.svg" alt="" aria-hidden="true" />
+                <span>Rejouer</span>
+            </button>
+            <a class="results-button results-button--secondary" href="index.html">
+                <img class="icon" src="../svg/icons/arrow-left.svg" alt="" aria-hidden="true" />
+                <span>Accueil</span>
+            </a>
+        </nav>
+
+        <script src="../js/game-results.js"></script>
+    </body>
+</html>
