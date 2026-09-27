@@ -1,6 +1,8 @@
 # Reprise — TripleFrames
 
-**Dernière session : 24-25/09/2026 — phases A et B implémentées (étapes 6 à 25 et 33 à 53), back-office de curation du J1 complet ; phase C en cours.** Les écarts relevés pendant l'implémentation (journal des écarts, entrées « E<étape>-<n> ») sont reportés dans les specs propriétaires, marqués « amendé le 25/09 » ; les gestes du porteur qu'ils ajoutent sont au § 3, ses questions au § 4. Restent dus avant la porte du pilote (56), outre la phase 0 : les étapes 26 à 30, 32, 54 et 55, gestes du porteur ou préparation de la mise en service — amendé le 25/09.
+**Dernière session : 24-28/09/2026 — phases A, B et C implémentées : back-office de curation et moteur de jeu complets sur develop (≈ 4 300 tests) ; reste la phase D, qui attend les gestes du porteur.** Étapes IA livrées : 6 à 25, 33 à 53, 62, 63 et 65 à 125. Les écarts relevés pendant l'implémentation (journal des écarts, entrées « E<étape>-<n> ») sont reportés dans les specs propriétaires : marqués « amendé le 25/09 » pour les phases A et B, « amendé le 28/09 » pour la phase C (étapes 62 à 125). Les gestes du porteur qu'ils ajoutent sont au § 3, ses questions au § 4. Restent dus, outre la phase 0 : avant la porte du pilote (56), les étapes 26 à 30, 32, 54 et 55, gestes du porteur ou préparation de la mise en service ; l'étape 64 (licence du pack d'avatars) ; puis la curation (57 à 61) et la phase D (126 à 134) — amendé le 28/09.
+
+**Session du 24-25/09/2026 — phases A et B implémentées (étapes 6 à 25 et 33 à 53), back-office de curation du J1 complet.** Écarts reportés dans les specs, marqués « amendé le 25/09 ».
 
 **Session du 23/09/2026 — specs du jalon 1 écrites.** `20`, `30`, `50`, `60`, `70` et `80` sont complètes ; `40`, `90` et `100` ont leur section du jalon 1 ; `00`, `05`, `10`, `questions-ouvertes.md` et `CLAUDE.md` sont amendés. Aux 19 décisions du 22/09 s'ajoutent les décisions du 23/09 : **S1 à S4** pour le cadre, **D1 à D37** pour le fond. Le lot 10 (D35 à D37) a fixé le périmètre et le rythme : **jalon 1 complet, sans aucune coupe** ; **développement confié à l'IA** ; **ordre « curation d'abord »**. Aucune ligne de code métier n'a été écrite pendant cette session : la suite est l'implémentation, dans l'ordre donné en annexe.
 
@@ -18,63 +20,65 @@ Il est réécrit à chaque fin de session. Il a été réécrit en entier à la 
 
 ## 1. Où en est le projet
 
-**Phase : implémentation du jalon 1.** Toutes les specs nécessaires au jalon 1 sont écrites. La section « Jalon 2 — à écrire » de `40`, de `90` et de `100` attend l'après-jalon 1 (S1 du 23/09). Le schéma est en base. Modèles, factories et seeders existent. Le socle i18n est complet, l'import TMDB fonctionne contre l'API réelle et un début de panel admin est en place. Le lot 0 (dette du starter) est purgé.
+**Phase : implémentation IA du jalon 1 terminée ; phase D à venir.** Toutes les specs nécessaires au jalon 1 sont écrites, puis amendées les 25/09 et 28/09 par le report des écarts d'implémentation. La section « Jalon 2 — à écrire » de `40`, de `90` et de `100` attend l'après-jalon 1 (S1 du 23/09). Tous les lots IA du J1 des phases A, B et C sont livrés sur `develop` : back-office de curation complet, moteur de partie temps réel, salons, lobby, saisie et validation des réponses, score et podium, mode solo, accueil, pages publiques et recette portrait automatisée. Ce qui reste du J1 est dans l'annexe : gestes du porteur (phase 0, mise en service, pilote, curation), étape 54, et phase D (déploiement du moteur, recette sur appareil réel, restauration chronométrée, charge, première partie) — amendé le 28/09.
 
 ### Documents
 
-| Fichier | Rôle | État au 23/09 | Taille |
+| Fichier | Rôle | État au 23/09 | Taille au 28/09 |
 |---|---|---|---|
 | `docs/specs/00-overview.md` | Vue d'ensemble : concept, réglages, vocabulaire, principes, exploitation, jalons, carte des specs | v3, à jour des 19 décisions et de D1 à D37 du 23/09. § Jalons est recalculé : taille du J1, chemin humain, ordre « curation d'abord » | 498 l., 157 Ko |
-| `docs/specs/05-i18n-et-langues.md` | Seul propriétaire de la règle de langue | écrite le 22/09, amendée le 23/09 | 382 l., 59 Ko |
-| `docs/specs/10-catalogue-et-modele-de-donnees.md` | **Seul propriétaire du schéma** : 35 tables de domaine + `users` altérée, rétention, purge | écrite le 22/09, amendée le 23/09. Les 35 tables sont inchangées ; au J1, 4 colonnes nouvelles (`users.real_name`, `player.kicked_at`, `player.solo_token_hash`, `round_choice_set.rendered_locale`) arrivent par des migrations additives portées par leurs lots, plus l'élargissement de `game_player.final_rank` (`10` § 12, n° 43 à 47 ; voie selon I-12) — amendé le 23/09 | 1 505 l., 311 Ko |
-| `docs/specs/20-back-office-curation.md` | Rôles et matrice, import, frame servable, recadreur, grille, revue, publication, lot pilote, modération | écrite le 23/09, complète, jalons marqués. § 14 tranche les 24 questions du panel admin. Lots J1 : L20-1 à L20-18 | 1 350 l., 246 Ko |
-| `docs/specs/30-themes-vivier-et-tirage-des-variantes.md` | Thèmes, vivier, tirage des films et des variantes | écrite le 23/09, complète. Lots J1 : L30-1 à L30-7 | 1 091 l., 147 Ko |
-| `docs/specs/40-comptes-auth-sociale-et-avatars.md` | Identité, connexion, avatars | **partielle** : la section [J1] « identité invitée » est écrite (D2 du 23/09) ; J2 à écrire. Lots J1 : L40-1 à L40-7 | 870 l., 116 Ko |
-| `docs/specs/50-salon-reglages-presets-et-lobby.md` | Salon, réglages, presets, lobby | écrite le 23/09, complète, onglet Avancé du J2 compris. Lots J1 : L50-1 à L50-9 | 1 933 l., 200 Ko |
-| `docs/specs/60-moteur-de-partie-temps-reel-et-mode-solo.md` | Moteur de partie, temps réel, solo | écrite le 23/09 **sous hypothèse root** (S2 du 23/09). Lots J1 : L60-1 à L60-16 | 1 308 l., 218 Ko |
-| `docs/specs/70-validation-des-reponses.md` | Saisie et validation des réponses | écrite le 23/09. Lots J1 : L70-1 à L70-11 et L70-14 ; L70-12 et L70-13 au J2 | 1 097 l., 155 Ko |
-| `docs/specs/80-scoring-podium-et-fin-de-partie.md` | Score, podium, fin de partie | écrite le 23/09. Lots J1 : L80-1 à L80-7 | 1 139 l., 127 Ko |
-| `docs/specs/90-ecrans-etats-et-structure.md` | Écrans, états, structure, pages publiques | **partielle** : la section J1 (pages publiques et socle de coquille de jeu, D3 du 23/09) est écrite ; J2 à écrire. Lots J1 : L90-1 à L90-9, dont L90-3b, L90-6a et L90-6b | 999 l., 162 Ko |
-| `docs/specs/100-qualite-tests-et-ci.md` | Qualité, tests, CI, production | **partielle** : la section [J1] (socle minimal de production) est écrite sous hypothèse root (D30 et S2 du 23/09) ; J2 à écrire. Lots J1 : L100-1 à L100-14 | 1 044 l., 188 Ko |
+| `docs/specs/05-i18n-et-langues.md` | Seul propriétaire de la règle de langue | écrite le 22/09, amendée le 23/09 | 384 l., 61 Ko |
+| `docs/specs/10-catalogue-et-modele-de-donnees.md` | **Seul propriétaire du schéma** : 35 tables de domaine + `users` altérée, rétention, purge | écrite le 22/09, amendée le 23/09. Les 35 tables sont inchangées ; au J1, 4 colonnes nouvelles (`users.real_name`, `player.kicked_at`, `player.solo_token_hash`, `round_choice_set.rendered_locale`) arrivent par des migrations additives portées par leurs lots, plus l'élargissement de `game_player.final_rank` (`10` § 12, n° 43 à 47 ; voie selon I-12) — amendé le 23/09 | 1 518 l., 323 Ko |
+| `docs/specs/20-back-office-curation.md` | Rôles et matrice, import, frame servable, recadreur, grille, revue, publication, lot pilote, modération | écrite le 23/09, complète, jalons marqués. § 14 tranche les 24 questions du panel admin. Lots J1 : L20-1 à L20-18 | 1 427 l., 321 Ko |
+| `docs/specs/30-themes-vivier-et-tirage-des-variantes.md` | Thèmes, vivier, tirage des films et des variantes | écrite le 23/09, complète. Lots J1 : L30-1 à L30-7 | 1 129 l., 167 Ko |
+| `docs/specs/40-comptes-auth-sociale-et-avatars.md` | Identité, connexion, avatars | **partielle** : la section [J1] « identité invitée » est écrite (D2 du 23/09) ; J2 à écrire. Lots J1 : L40-1 à L40-7 | 905 l., 137 Ko |
+| `docs/specs/50-salon-reglages-presets-et-lobby.md` | Salon, réglages, presets, lobby | écrite le 23/09, complète, onglet Avancé du J2 compris. Lots J1 : L50-1 à L50-9 | 2 045 l., 235 Ko |
+| `docs/specs/60-moteur-de-partie-temps-reel-et-mode-solo.md` | Moteur de partie, temps réel, solo | écrite le 23/09 **sous hypothèse root** (S2 du 23/09). Lots J1 : L60-1 à L60-16 | 1 464 l., 298 Ko |
+| `docs/specs/70-validation-des-reponses.md` | Saisie et validation des réponses | écrite le 23/09. Lots J1 : L70-1 à L70-11 et L70-14 ; L70-12 et L70-13 au J2 | 1 167 l., 207 Ko |
+| `docs/specs/80-scoring-podium-et-fin-de-partie.md` | Score, podium, fin de partie | écrite le 23/09. Lots J1 : L80-1 à L80-7 | 1 176 l., 152 Ko |
+| `docs/specs/90-ecrans-etats-et-structure.md` | Écrans, états, structure, pages publiques | **partielle** : la section J1 (pages publiques et socle de coquille de jeu, D3 du 23/09) est écrite ; J2 à écrire. Lots J1 : L90-1 à L90-9, dont L90-3b, L90-6a et L90-6b | 1 028 l., 206 Ko |
+| `docs/specs/100-qualite-tests-et-ci.md` | Qualité, tests, CI, production | **partielle** : la section [J1] (socle minimal de production) est écrite sous hypothèse root (D30 et S2 du 23/09) ; J2 à écrire. Lots J1 : L100-1 à L100-14 | 1 084 l., 246 Ko |
 | `docs/specs/questions-ouvertes.md` | Journal des décisions : 19 du 22/09, S1-S4 et D1-D37 du 23/09, « Laissé ouvert le 23/09 », déjà tranché, risques | questionnaire clos, sauf le nom de domaine | 517 l., 148 Ko |
-| `CLAUDE.md` | Mémoire projet chargée automatiquement à chaque session | **versionné désormais** (D9 du 23/09) : la ligne a été retirée de `.gitignore` et le fichier est exclu d'oxfmt dans `vite.config.ts`. Amendé le 23/09 | 164 l., 48 Ko |
+| `CLAUDE.md` | Mémoire projet chargée automatiquement à chaque session | **versionné désormais** (D9 du 23/09) : la ligne a été retirée de `.gitignore` et le fichier est exclu d'oxfmt dans `vite.config.ts`. Amendé le 23/09 | 165 l., 48 Ko |
 
 Les heures des sections « Lots d'implémentation » sont des **mesures de taille, jamais un calendrier** (D36 du 23/09). Les lots J1 des neuf specs mesurent **404,5 à 581,5 h brutes**. L'arithmétique vit dans `00` § Jalons, nulle part ailleurs.
 
-**Commit.** Quand ce fichier a été rédigé, le travail documentaire du 23/09 n'était pas encore commité sur `develop`. Il comprend les neuf specs nouvelles, `CLAUDE.md`, les amendements, `.gitignore` et `vite.config.ts`. Premier geste de la session suivante : `git status`, puis commit si ce n'est pas fait.
+**Commit.** Le travail documentaire du 23/09 et chaque lot livré du 24 au 27/09 sont commités sur `develop`, un commit par lot ; le report des écarts de la phase C l'est par le commit « :memo: Report des écarts d'implémentation de la phase C ». Aucun lot de la phase C ne rejoint la branche que tire Plesk avant l'étape 126 (règle de branche, § A.2) — amendé le 28/09.
 
 ### État du code
 
-Le code n'a **pas changé pendant la session du 23/09**. Aucune ligne de code métier n'a été écrite. Seuls `.gitignore` et `vite.config.ts` ont été touchés, pour D9 du 23/09. Le dernier commit de code est `d167a6a` (« Admin »). Ce qui existe :
+Le code des phases A, B et C a été écrit du 24 au 27/09, un commit par lot sur `develop`. Le dernier commit de lot est `2dc258f` (L90-9, étape 125). Chaque lot a été livré « terminé » au sens du § A.1 de l'annexe ; ses écarts à la spec sont reportés dans la spec propriétaire. Ce qui existe au 28/09 — amendé le 28/09 :
 
 | Zone | Contenu | Écrit |
 |---|---|---|
-| `database/migrations/` | 37 migrations de domaine + les 5 du starter (42 fichiers, 35 tables de domaine) | 22/09 |
-| `app/Models/` | 35 modèles de domaine + `User` amendé + un pivot typé | 22/09 |
-| `app/Enums/`, `app/Settings/`, `app/Casts/`, `app/Support/` | 44 enums, `RoomSettings` avec ses bornes et limites, cast versionné, grille d'exclusion, préfixes de stockage | 22/09 |
-| `database/factories/`, `database/seeders/` | 36 factories et 4 seeders. Catalogue de démonstration de 16 films jouables à N = 2 à 5 (78 `.webp` réels). `DemoCatalogueChainTest` prouve la chaîne des données, **pas encore une partie lancée** : c'est L100-14 qui le fera (étape 103) | 22/09 |
-| `lang/{fr,en}`, `lang/{fr,en}.json`, `lang:types`, `lang:hash` | Socle i18n complet | 22/09 |
-| `app/Console/Commands/` | `catalog:import-discover` et `catalog:import-ids`, sur une base commune `CatalogImportCommand` ; `admin:first-admin`, `lang:types`, `lang:hash` | 22-23/09 |
-| `routes/admin.php`, `resources/js/pages/admin/` | Début de panel : tableau de bord, catalogue, import (`discover`, collage d'identifiants, reprise) | 23/09, avant la session de specs |
-| `tests/Feature/` | Schema (172 tests de balayage), Admin, Architecture, Auth, Catalog, I18n, Settings, Tmdb | 22-23/09 |
+| `database/migrations/` | 47 fichiers : les 42 du 22/09, plus `users.real_name` (n° 43), `player.kicked_at` (n° 44), `player.solo_token_hash` (n° 45), `round_choice_set.rendered_locale` (n° 46) et le réalignement de l'ordre des thèmes de plateforme ; `final_rank` élargi dans la migration de création (n° 47, I-12) | 22-27/09 |
+| `app/Models/`, `app/Enums/` | 37 modèles ; 57 énumérations | 22-27/09 |
+| `app/Actions/`, `app/Jobs/`, `app/Events/`, `app/Policies/` | 54 actions (curation, salon, partie, solo, réponses, score), 11 jobs (dont `AdvanceRound`, un par frontière de palier, `BroadcastLobbyState` et `ProcessFrameImage`), 24 événements Reverb, 6 policies | 24-27/09 |
+| `app/Console/Commands/` | 19 commandes, dont `catalog:*`, `admin:first-admin`, `backup:snapshot`, `deploy:{guard,drain,release}`, `game:reschedule`, `purge:{run,suspend,resume}`, `room:archive-idle`, `answers:collisions` | 22-27/09 |
+| `app/Http/Controllers/`, `resources/js/pages/` | 60 contrôleurs ; 32 pages Inertia : back-office de curation complet, accueil, pages légales en squelette, pages d'erreur, création et entrée de salon, salon expiré, `game/lobby` (du lobby au podium), `room/solo` et `game/solo` | 24-27/09 |
+| `resources/js/components/{game,room}/` | 33 composants de jeu et de salon, découplés de leur habillage (règle 5) | 24-27/09 |
+| `database/factories/`, `database/seeders/` | Catalogue de démonstration de 16 films jouables à N = 2 à 5 (78 `.webp` réels) ; la partie de 10 manches de bout en bout est prouvée par L100-14 (étape 103) | 22-27/09 |
+| `tests/` | 209 fichiers Pest (201 `Feature`, 7 `Concurrency` joués sur MySQL par le job `mysql-redis`, 1 `Unit`) et 23 fichiers Vitest | 22-27/09 |
 
 **Catalogue réel de la base de dev.** Trois films sont importés depuis TMDB : Fight Club, Parasite et Le Labyrinthe de Pan. Tous sont en `draft` et `is_import_exception` (dont 2 pour `exception_for_language`). Aucune frame n'est curée, donc le vivier est vide à tout N. C'est normal : au jalon 1, la curation réelle naît **en production** (D1 du 23/09). Aucun film réel n'y est curé avant la **porte du pilote** (étape 56 de l'annexe, `20` § 10.3).
 
-**Suite de tests, dernier état vérifié le 23/09.** `composer ci:check` est vert de bout en bout :
+**Suite de tests, dernier état vérifié le 28/09** (suite par défaut de `composer test`, SQLite, sans les groupes `mysql` et `locks-timing`) — amendé le 28/09 :
 
 - Pint passé ;
 - PHPStan niveau 7 : 0 erreur ;
-- **Pest : 491 tests / 4 433 assertions** ;
-- `npm run check` passé, script anti-couleur compris ;
-- `tsc --noEmit` : 0 erreur ;
-- `npm run build` OK ;
-- `migrate` et `migrate:rollback` : 42/42.
+- **Pest : 4 313 tests passés sur 4 313, 99 061 assertions**, en 428 s sur le poste Windows.
 
-**Contre-vérification du 23/09 au soir, avec un serveur Vite actif.** `php artisan test` a été relancé pendant que `npm run dev` tournait (`public/hot` présent, port 5173 à l'écoute). Résultat : **428 tests sur 491 passent, 63 échouent** (3 518 assertions). Les 63 échecs sont tous des rendus de page Inertia : 500, « Not a valid Inertia response » ou « The response is not a view ». La cause relevée est `Attempted request to [http://[::1]:5173/__inertia_ssr] without a matching fake` : avec `public/hot`, Inertia tente un rendu SSR vers le serveur Vite, et la suite refuse cette requête. Aucun code n'a changé depuis l'état vert. **Premier geste avant l'étape 6** : arrêter `npm run dev`, relancer `composer ci:check` et confirmer le vert. Si des échecs persistent, les traiter avant tout lot — amendé le 23/09.
+Trois réserves :
+
+- **`composer test` dépasse le délai de processus de Composer** (300 s) sur ce poste : Pint et PHPStan passent, puis Composer tue Pest. Lancer la dernière commande du script directement (`php -d memory_limit=1536M artisan test --exclude-group=mysql --exclude-group=locks-timing`), ou poser `COMPOSER_PROCESS_TIMEOUT=0`.
+- **La suite `Concurrency` sur MySQL n'est pas verte** : `EarlyEndHookTest` y est rouge (E116-10, § 4). Le job `mysql-redis` de la CI le verrait.
+- **Un test est instable** : « re-signe le player_token avec l'avatar choisi » échoue environ une fois sur 24 (E122-7, § 4). Il est passé le 28/09.
+
+`npm run check`, `tsc --noEmit` et `npm run build` font partie de la définition de « terminé » de chaque lot (§ A.1) ; ils n'ont pas été rejoués pour ce relevé. Le piège du 23/09 demeure : un `npm run dev` actif (`public/hot`) fait échouer les rendus de page Inertia de la suite (tentative de rendu SSR vers Vite). Toujours arrêter le serveur Vite avant de lancer les tests.
 
 ### Dettes encore ouvertes, vérifiées dans le code le 23/09
 
-`100` § 17 les tient à jour. Chacune est soldée par un lot de l'annexe.
+`100` § 17 les tient à jour. Chacune est soldée par un lot de l'annexe. **Au 28/09, toutes sont soldées sauf la dernière, qui relève du J2** : `.env.example` porte `BROADCAST_CONNECTION=reverb`, `REDIS_CLIENT=predis`, `ACCOUNTS_*` et `REVERB_ALLOWED_ORIGINS` ; `composer dev` lance Reverb et la file `game` ; `ForceAdminAppearance` et `profile.destroy` sont retirés ; `symfony/polyfill-intl-normalizer` est une dépendance directe ; `public/avatars/` existe — amendé le 28/09.
 
 | Dette | Soldée par |
 |---|---|
@@ -187,11 +191,11 @@ Le développement ne borne plus rien : **ce qui fixe la date de la première vra
 | 1 | **Acheter le domaine** (décision 5), **avant la semaine 4** (D1 du 23/09). Environ dix euros par an, seul achat du chemin critique. Le nom ne vit que dans le `.env` de production et les réglages Plesk ; le dépôt garde `<DOMAINE>` pour toujours (`100` § 7.2, `NoLiteralDomainTest` ; écart D-2 ci-dessous). Aucun compte de production ni aucune passkey avant l'achat ; aucune passkey au J1 | la mise en service (27), donc toute la curation | 1 |
 | 2 | **Relever le VPS**, puis le **monter en root**. Le relevé : `ssh root@`, `free -m`, `nproc`, `uptime`, `ss -ltnp`, `/opt/plesk/php/8.3/bin/php -m`, abonnements servis, version de Plesk, **région UE**. Seuil défendable : 4 Go de RAM, 2 vCPU. Sans root, pas de Redis dédié, pas de workers systemd, pas de Reverb : **arrêt et question au porteur**. Le repli sans root (second VPS, contraire à la décision 16) est ouvert | la préparation des gabarits `ops/` (26) et la mise en service (27) | 2, 27 |
 | 3 | **Constituer la liste d'amorçage** : environ 200 identifiants TMDB, relue une fois, 4 à 6 h hors réserve. Peut commencer tout de suite | la porte du pilote (54, 56) | 3 |
-| 4 | **Vérifier la licence du pack d'avatars** Kenney au téléchargement et la consigner dans `public/avatars/LICENSE.md` (D27 du 23/09) | la clôture de L40-5 et la première partie (133), pas les lots suivants | 64 |
+| 4 | **Vérifier la licence du pack d'avatars** Kenney au téléchargement et la consigner dans `public/avatars/LICENSE.md` (D27 du 23/09). Le pack s'appelle aujourd'hui « Animal Pack Remastered » ; le fichier est encore à `[À FOURNIR]`. Vérifier aussi la lisibilité à 32 px et trancher l'élan `preset-13` (E63-1 à E63-3, § 4) — amendé le 28/09 | la clôture de L40-5 et la première partie (133), pas les lots suivants | 64 |
 | 5 | **Choisir les fournisseurs UE du J1** : stockage objet de sauvegarde chez un fournisseur **distinct** de l'hébergeur du VPS, supervision externe, second canal d'alerte ; ouvrir les comptes | la sauvegarde active avant la première image curée (30), donc le pilote | 4 |
 | 6 | **Nommer les sous-traitants UE (J2)** : un par catégorie branchée (hébergeur, SMTP, sauvegarde, supervision, second canal, suivi d'erreurs s'il est branché), plus le registrar | la page de confidentialité, donc l'ouverture du J2 | — |
 | 7 | **Commander les textes légaux (J2)** (décision 4). Délai externe de 2 à 6 semaines, **à lancer pendant le J1**. Poser au même conseil la question de la **licéité de la capture** (liste fermée des sources autorisées) | l'ouverture du J2 et la voie capture (L20-33, J2) | 5 |
-| 8 | **Rafraîchir la base de dev** : `php artisan backup:snapshot` (code 0 exigé, règle 12), puis `php artisan migrate:fresh --seed`. La base de dev a joué l'ancienne migration de création de `game_player` et garde `final_rank` en `tinyint` (I-12) ; `migrate:fresh` recrée toute la base, catalogue compris (`10` § 13.2, n° 47, E25-1) — amendé le 25/09 | la parité du schéma de dev avec celui des tests et de la production | tout de suite |
+| 8 | **Rafraîchir la base de dev** : `php artisan backup:snapshot` (code 0 exigé, règle 12), puis `php artisan migrate:fresh --seed`. La base de dev a joué l'ancienne migration de création de `game_player` et garde `final_rank` en `tinyint` (I-12) ; `migrate:fresh` recrée toute la base, catalogue compris (`10` § 13.2, n° 47, E25-1) — amendé le 25/09. Il joue aussi les migrations additives de la phase C (n° 44 à 46), dont la n° 46, livrée sans avoir été jouée sur la base MySQL de dev (E78-1) — amendé le 28/09 | la parité du schéma de dev avec celui des tests et de la production | tout de suite |
 | 9 | **Nom réel complet du titulaire dans `LICENSE`**. Le fichier a été livré par L100-2 avec le nom d'auteur git (« Maxence »), faute de saisie possible par une porte non interactive ; `LicenseTest` n'écrit aucun nom en dur (`100` § 7.6, E7-6, E7-15) — amendé le 25/09 | tout push vers la forge | avant le premier push |
 | 10 | **Déposer le logo officiel TMDB** dans `public/brand/tmdb.svg` et **dater ses conditions d'usage** dans `public/brand/LICENSE.md` ; dans le même commit, passer sa ligne dans « Actifs livrés » de `THIRD_PARTY_NOTICES.md` (`90` § 3.2 et point resté ouvert n° 13, E15-2) — amendé le 25/09 | la mise en service (27), au plus tard | 27 au plus tard |
 | 11 | **Vérifications manuelles au navigateur**, qu'aucune porte automatisée n'a pu jouer : (a) le back-office **à 375 px** — parcours clavier et affichage de la coquille mobile et d'`admin/two-factor-required` (`20`, L20-2, E18-9) ; (b) le **recadreur au clavier et à la souris sur la vraie page de l'éditeur** (L20-9a, L20-9b, L20-10) ; (c) sur **iOS Safari, l'appui long** sur une image de jeu, qui ne doit ouvrir aucun menu (`-webkit-touch-callout: none`, `90`, L90-6a, E39-6) — amendé le 25/09 | la porte du pilote (56) ; (c) est rejouée à la recette sur appareil réel (127) | avant 56 |
@@ -227,7 +231,7 @@ Points secondaires, sans effet sur la date du J1 :
 | **Liste fermée des sources autorisées** pour une capture personnelle (licéité, décision 7) | conseil du porteur | bloque L20-33 (J2) ; au J1, voie TMDB seule |
 | **N100-2** — passage du tier froid en **quotidien**. Proposé, non appliqué : il reste hebdomadaire jusqu'à accord | `100` § 13.3 | avant la première image curée (étape 30), idéalement |
 | **Typographie française** commune à tous les dictionnaires (U+00A0 ou U+202F avant « : ; ! ? % » et dans « »), signalée par `80` § 15.1 | `05` | aucun lot du J1 |
-| **Reformulation de `game.help.prefix`** : « jouables » y désigne le vivier au lexique de `00` | `90` point 3 ↔ `70` § 7.7, arbitrage du porteur | avant L70-10 et L90-7 |
+| **Reformulation de `game.help.prefix`** : « jouables » y désigne le vivier au lexique de `00`. Proposition appliquée par L90-7 (« Quand le site compte plusieurs films d'une même saga… ») : la confirmer, ou rétablir le texte de `70` (E99-1) — amendé le 28/09 | `90` point 3 ↔ `70` § 7.7 et § 17, arbitrage du porteur | texte livré ; aucun lot bloqué |
 | **Plancher de recadrage** : défaut 80 %, double borne, à calibrer au pilote et plafonné à 83 ; EN20-4 propose de ramener à 83 la borne haute du contrat | `20` § 5.2 | étape 59, avant la curation de masse |
 | **Heures déclarées du pilote** (`weekly_curation_hours`, `horizon_weeks`) ; seuils de D10 à revérifier sans les modifier | `20` § 10.3-10.4 | étape 55, porte du pilote |
 | Barème de tolérance v2 éventuel, après `answers:collisions` sur le catalogue réel | `70` § 13.1 | étape 132, avant la première partie |
@@ -251,7 +255,7 @@ Points ouverts signalés au porteur dans les sections « Ce que cette spec ne d�
   - `ensure()` après les refus ;
   - précision d'A-67.
 - **`50`**, points restés ouverts 0 à 16 (le 4 est tranché par D35) :
-  - **n° 15, remède « nouveau salon » : aucune lecture retenue, décision produit à prendre avant L50-5** ;
+  - **n° 15, remède « nouveau salon » : aucune lecture retenue, décision produit toujours due** ; L50-4 et L50-5 ont livré le remède tel quel (E120-8, amendé le 28/09) ;
   - n° 0, page unique `game/lobby` : à confirmer ;
   - n° 13 : cycle L50-2 ↔ L60-4 (voir I-1) ;
   - n° 14 : règle du retardataire citée par `60` § 13.7 — alignée (renvoi à `50` § 15.2, remplaçante comprise) ; point à clore dans `50` — amendé le 23/09 ;
@@ -295,17 +299,50 @@ Points ouverts signalés au porteur dans les sections « Ce que cette spec ne d�
 | **E40-6** — les aperçus admin en `<img>` écrivent `_previous.url` et `url.intended` : passer par `fetch`, ou accepter le risque ? Non tranché par L20-10 | `20` | aucun lot bloqué |
 | **E46-12** — le `game_url` de l'éditeur (`bankFrame()`, `sequencePreview`) n'est pas versionné : un rendu refait peut rester affiché sous l'ancienne adresse. Quel marqueur choisir ? | `20` | aucun lot bloqué |
 | **E18-5** — défaut hors lot, non corrigé : `import/show.tsx` affiche `worker_missing` sans le délai de grâce de 60 s | `20` | à corriger ; aucun lot ne le porte |
-| **E36-1** — salon ouvert pendant un déploiement qui **resserre une borne** : (a) le remède `reduce_rounds_count` propose une valeur que l'éditeur refuse (`count > MAX`) — plafonner `value`, ou garder la lecture littérale de `30` § 4.3 ? (b) la garde de `N` de `PoolScope` lève hors bornes et fait échouer l'état du lobby et ses diffusions (`RoomSettingsPresenter::state()`) — tolérer un `N` périmé au lobby, ou garder la garde ? | `30`, `50` point ouvert n° 17 | avant L50-2 (84) |
+| **E36-1** — salon ouvert pendant un déploiement qui **resserre une borne** : (a) le remède `reduce_rounds_count` propose une valeur que l'éditeur refuse (`count > MAX`) — plafonner `value`, ou garder la lecture littérale de `30` § 4.3 ? (b) la garde de `N` de `PoolScope` lève hors bornes et fait échouer l'état du lobby et ses diffusions (`RoomSettingsPresenter::state()`) — tolérer un `N` périmé au lobby, ou garder la garde ? L50-2 a livré le code inchangé, sans tolérance (E84-4, amendé le 28/09) | `30`, `50` point ouvert n° 17 | sans effet tant que `VERSION = 1` ; avant tout resserrement de borne |
 | **E9-7** — le test « garde VERSION à 1 tant que FIELDS est inchangé » est livré à la lettre, sans instantané des bornes. Valider la proposition de le renommer | `50` point ouvert n° 8 | aucun lot bloqué |
-| **Constat de l'étape 14** (L40-7) — l'accueil du starter (`welcome.tsx`) montre « Se connecter » et « Créer un compte » à tout invité jusqu'à L90-8 : avancer leur retrait avant la mise en service, ou accepter un lien d'inscription qui mène à une 404 en production ? | `40`, `90` point ouvert n° 14 | avant la mise en service (27) |
-| **E16-3** — quatre affirmations des partiels légaux de L90-4 sont à relire : trois reposent sur des règles pas encore codées (pseudo unique dans un salon, liste noire, source déclarée de chaque image), la quatrième porte sur l'adresse IP en session | `90` point ouvert n° 15, `40` | avant l'ouverture du J2 |
-| **E39-1** — avant qu'une URL d'objet existe, `GameFrame` n'a que `null` et affiche « indisponible » au lieu du chargement : ne monter le cadre qu'une fois l'URL connue, ou ajouter une prop `pending?` (écart consigné à C16 § 2.5) | `60` § 24, `90` point ouvert n° 12 | à trancher par L60-9 (95) |
+| **Constat de l'étape 14** (L40-7) — **soldé** par L90-8 : l'accueil réécrit ne rend plus aucun lien de connexion, d'inscription ni de tableau de bord ; ils ne vivent plus que dans l'en-tête public, sous `accountsOpen` (E124-1, amendé le 28/09) | `40`, `90` point ouvert n° 14 | plus rien à trancher |
+| **E16-3** — quatre affirmations des partiels légaux de L90-4 sont à relire : trois reposaient sur des règles pas encore codées (pseudo unique dans un salon, liste noire, source déclarée de chaque image), la quatrième porte sur l'adresse IP en session. Le pseudo unique et la liste noire sont codés depuis L40-3, L40-4 et L50-3b ; seule la relecture reste due (E68-4, amendé le 28/09) | `90` point ouvert n° 15, `40` | avant l'ouverture du J2 |
+| **E39-1** — **fermé** par L60-9 : `GameFrame` reçoit la prop facultative `pending` (défaut faux, aperçu admin inchangé). L'écart reste à consigner à C16 § 2.5 (E95-1, amendé le 28/09) | `60` § 24, `90` point ouvert n° 12 | plus rien à trancher |
 | **E10-1** — le retour à Guzzle 8 attend une version de `laravel/reverb` compatible avec `guzzlehttp/psr7 ^3` (Guzzle rétrogradé de 8.2 à 7.15 par L60-1) | `60` § 24 | rien au J1 |
 | **E10-8** — (a) ajouter au § 19.1 de `60` une note : les gardes de débit bornent le pic d'une fenêtre fixe (39 lectures, 30 chargements), pas la moyenne ; (b) activer ou non `REVERB_APP_RATE_LIMITING_ENABLED` en production (défaut du paquet : faux) | `60` § 24, `100` | (b) après la séance de charge (131) |
 | **E7-11** — les icônes héritées du starter (`public/favicon.ico`, `public/favicon.svg`, `public/apple-touch-icon.png`, logo Laravel) : les remplacer par une icône du projet, ou les relever avec leur licence dans `THIRD_PARTY_NOTICES.md` | `100` | avant l'ouverture publique (J2) |
 | **E11-8** — le job `artifacts` est livré scindé en un job `build` en lecture seule puis un job `artifacts`, seul détenteur du jeton d'écriture. La retenir, et amender alors `100` § 2.5 | `100` § 2.5 | livré ; à ratifier |
 
 Les gestes du porteur relevés par ce report (nom réel dans `LICENSE`, logo TMDB, base de dev, vérifications au navigateur) sont au § 3, lignes 8 à 11.
+
+**Questions relevées par le report des écarts de la phase C** (étapes 62 à 125, — amendé le 28/09). Chacune est écrite dans la spec propriétaire, sous son identifiant `E<étape>-<n>` (section « Ce que cette spec ne décide pas », ou « points restés ouverts » de `50` et de `90`). La règle est la même que pour les phases A et B : **le code livré fait foi** tant que le porteur ne s'est pas prononcé. Aucune décision antérieure n'est rouverte. La spec `30` n'ajoute aucune question : ses points E71-3 et E72-2 sont résolus par le code livré (E72-1, E90-2).
+
+| Question | Propriétaire | Quand, et ce qu'elle bloque |
+|---|---|---|
+| **E116-10** — `EarlyEndHookTest` › « deux derniers verrouillages concurrents clôturent la manche une seule fois » (suite `Concurrency`) est **rouge sur MySQL réel** : l'écouteur `DB::listen` relève la lecture de contrôle qui suit l'instruction bloquée. Remède proposé : un drapeau autour du seul `answerAccepted()` du second verrouillage (patron de `LaunchConcurrencyTest`). Non corrigé | `60` § 24, lot correctif | avant le déploiement du moteur (126) : le job `mysql-redis` doit être vert |
+| **E122-7** — le test « re-signe le player_token avec l'avatar choisi » est **instable** : il échoue environ une fois sur 24, à cause de l'avatar tiré au hasard pour l'hôte. Il faut fixer cet avatar | `40` | lot correctif ; une CI rouge au hasard |
+| **E63-1, E63-2, E63-3** — étape 64 : vérifier le nom du pack (aujourd'hui « Animal Pack Remastered » de Kenney), sa licence CC0 et la lisibilité à 32 px, vérifiée par l'IA seulement. `public/avatars/LICENSE.md` est encore à `[À FOURNIR]`. Accepter l'élan (`preset-13`) aux bois rognés, ou le remplacer sous la même clé | `40` § 6, geste 4 du § 3 | étape 64, donc la première partie (133) |
+| **E68-2** — liste noire des pseudos : valider les sept entrées retirées, trancher le retrait de « xx » et « xxx », relire les faux positifs conservés | `40` § 5.7 | aucun lot bloqué |
+| **E67-8** — ajouter le modificateur `D` à `ValidNickname::ALLOWED_PATTERN` (contrat C5), ou garder seule l'application du motif caractère par caractère | `40` § 5.4 | aucun lot bloqué |
+| **E111-7, E101-6** — aucun lot du J1 ne livre de changement d'avatar ou de pseudo hors prise de siège. Nommer le lot qui rebranchera la route de test `…/resign` de `PlayerTokenTest` et l'en-tête périmé de `NicknameBlocklistTest` | `40`, `50` point n° 28 | aucun lot bloqué |
+| **E65-2** — domaine du cookie `locale` : le tenir « hôte seul » comme le `player_token` (construction directe du cookie), ou lui laisser le domaine de session (`SESSION_DOMAIN`) | `05` | sans effet tant que `SESSION_DOMAIN` est vide |
+| **E62-6** — pour un curateur, trois erreurs du back-office tombent sur la page `error` joueur : 404 d'un film inconnu, 429 de `throttle:admin-*`, 419. L'accepter, ou étendre la règle `admin/error` aux routes `admin.*` pour tout visiteur au moins curateur | `20` § 13.2, `90` point n° 16 | aucun lot bloqué |
+| **Ordre et verrous du salon**, lectures livrées à confirmer : salon archivé refusé **avant** la réparation d'hôte, au lancement et à « Rejouer », contre la lettre de C6 § 3 (E102-1, E115-1) ; « Rejouer » déjà fait pendant un drainage rend `null` sans message (E115-1, lecture du § 14) ; verrou de la partie à l'admission d'un retardataire (E116-1) | `50` points n° 18, 19 et 21 | appliquées ; aucun lot bloqué |
+| **403 `not_host` d'un hôte déchu** entre l'affichage et le clic : page `error` (livré), ou interception par une relecture (E110-5, E111-7) | `50` point n° 25 | aucun lot bloqué |
+| **Rattrapage au rendu de page** : appeler `CatchUpGame` aussi dans `room.show` et `solo.show`, au prix d'écritures sur un GET de page ; aujourd'hui, seules `room.state` et `solo.state` rattrapent (E109-2) | `60` § 24, `50` point n° 24 | aucun lot bloqué |
+| **Textes et clés à valider** : créer `room.errors.replay_failed` (E115-3) ; formulations de `room.identity.*` et de `validation.attributes.publicId` (E101-4, E111-3) ; textes FR/EN des clés posées par `60` : `game.errors.{not_revealing, round_not_running}`, `game.round.*`, `game.reveal.*`, `game.pause.*`, `game.solo.*` et `room.solo.*` (E112-4, E119-3, E121-7, E123-6) ; textes de l'accueil `common.home.*` (E124-2) | `50` points n° 20 et 23, `60` § 24, `90` point n° 22 | textes livrés en FR et EN ; aucun lot bloqué |
+| **Mention des CGU** : le texte `legal.terms_notice` sert de texte au lien vers `legal.terms` (livré), ou un texte suivi d'un lien `legal.footer.terms` (E101-5) | `50` point n° 22, `90` point n° 17 | livré ; à confirmer |
+| **Purge et échéances** : `purge:suspend` doit-il suspendre aussi le balayage `stale_lobby` (E113-2) ? Un seuil de fraîcheur propre à `stale_lobby`, par exemple 1 h, au lieu de 48 h (E114-2) ? Les durées d'archivage d'un salon et d'effacement d'un siège solo doivent-elles pouvoir diverger (E122-3) ? Refus défensif d'effacer un siège solo dont une partie n'est pas figée, ou `last_seen_at = now` à la reprise dans `StartSoloGame` (E122-2) ? | `100` § 14, `50` points n° 26 et 29, `60` § 24 | aucun lot bloqué |
+| **E122-4** — la purge quotidienne efface un siège solo inactif entre 24 h et environ 48 h après sa dernière activité : publier « au plus 48 h », ou exécuter la branche solo plus souvent | `100` § 14, `90` point n° 21 | avant la publication du tableau de conservation (J2) |
+| **Preuves MySQL `locks-timing`** non nommées : sérialisation de l'archivage, du battement et de la prise de siège (E113-6) ; absence d'interblocage entre battement et balayage, et geste « manche suivante » contre un transfert d'hôte concurrent (E112-6, E112-7) | `50` point n° 27, `60` § 24, avec `100` (C18) | aucun lot bloqué |
+| **Lectures du moteur appliquées, à confirmer** : E90-1 (`ServeUrl`, `frame.serve` et un contrôleur fermé avancés à L60-5) ; E91-1 (l'ouverture d'un palier 1 attend la fin de toute révélation de la partie) ; E91-3 (`InterruptPausedGame` réveillé tôt attend en processus) ; E93-1 (au rattrapage, `round.scheduled` compte comme l'étape de sa manche) ; E109-1 (`round.reveal` exige la phase `revealing`) ; E112-2 (balayage de présence réarmé à la seconde supérieure) ; E116-10 (`OpenTier` prend le salon en partagé) ; E119-2 (lecture côté client de la phase `running`) ; E121-3 (« un double clic ne crée qu'une partie » lu « une seule partie en cours ») ; E123-2 (un geste solo refusé reste un battement) | `60` § 24 | appliquées ; aucun lot bloqué |
+| **`REVERB_MAX_REQUEST_SIZE`** à 512 Kio, plancher utile (pire cas mesuré de `game.ended` : 495 481 octets), ou 1 Mio si les charges de fin de partie doivent grossir (E83-5, E108-4) | `60` § 19.5, `100` | à valider avec la mémoire réelle du VPS (relevé, geste 2) |
+| **Écarts de contrat du moteur** : retirer `Vary: X-Inertia` et `X-RateLimit-*` des réponses `/f/` (E94-3) ; ajouter `maxAnswerLength` à la charge de `game.launched` (E95-3, contrat C7 § 2.3) ; instant de fin anticipée quand deux clôtures se croisent (E108-3, C7 § 4.6) ; une partie en pause n'est jamais tenue pour bloquée (E96-6, lecture livrée) | `60` § 24 | aucun lot bloqué |
+| **Résidus du moteur** : un battement reçu pendant un passage du balayage peut retarder une transition (E112-2) ; un battement en vol au clic de « Quitter le salon » peut ramener le siège à `connected` (E112-8) ; re-signature du jeton non courue après l'échec d'un premier siège solo (E121-13) ; cause `skipped` à ajouter à `game.round_closed` (E123-7) | `60` § 24 | E112-2 et E123-7 après la séance de charge (131) ; les autres, aucun lot bloqué |
+| **Source de `attemptsLeft`** tant que `self.input` est nul : `GameStatePacket.attemptsPerRound` (voie recommandée) ou `attemptsLeft: number \| null` (écart à C10 § 2). Au J1, la lecture livrée ne touche aucun contrat (E117-5, E119-4, E123-3) | `60` § 24, `70` § 16 | rien au J1 |
+| **Écran de saisie** : confirmer les props et le retour ajoutés, tous facultatifs sauf les options du hook, et leur report dans C10 § 2 et C11 § 2 (E117-1) ; après un refus, sélectionner le texte envoyé (livré) ou vider le champ (E117-2) | `70` § 16, `90` | livré ; à confirmer |
+| **Budget vertical clavier ouvert** : l'image passe sous 40 % de la hauteur visible, jusqu'à une vignette en Normal après `T_N` ou sous deux bandeaux. Quatre voies de présentation, dont l'amendement de `90` § 7.2 (E119-6, E125-3) | `90` point n° 18, `60` § 19.3, `70` § 16 | après la mesure sur téléphone réel (127) |
+| **E125-4b** — quand clôture, révélation et manche suivante arrivent d'un seul lot, la fin de la manche vue ouverte n'est pas annoncée et la révélation n'est pas vue. Correctif proposé côté client (`90` § 7.4) et côté `60` (rattrapage d'une révélation échue) | `90` point n° 19, `60` § 24 | non corrigé ; aucun lot bloqué |
+| **E123-11** — `N` de l'aide du barème sur l'écran de relance solo : celui de la dernière partie (livré, faute de source), ou une prop `presets` enrichie du `N` de chaque preset, qui change la forme de `50` § 5.3, `60` § 16.4 et `90` § 7.7 | `50` point n° 30, `60` § 24, `90` point n° 20 | invisible au J1 ; visible en passe 2 |
+| **Force brute et cadence** : à `K` = 10, le rapport de force brute est nul par construction au preset par défaut ; choisir un `K` sous le budget du palier 1 (par exemple 5) ou un seuil relatif à `d₁ × attemptsPerSecond` (E75-3). Le limiteur `answer` n'est pas atomique contre un script parallèle : variante atomique dès le J1, ou « accepter et sonder » (E105-6) | `70` § 8 et § 13.2, `100` § 15 | aucun lot bloqué ; `config/ops.php` garde 10 d'ici là |
+| **Réponses traitées après la révélation** : confirmer la transaction du clic faux (`round FOR SHARE`, fenêtre relue sous ce verrou, E107-1). Le refus texte, lui, ne relit pas la fenêtre et compte encore un texte faux traité après `RevealRound` : appliquer le correctif proposé au § 7.5 (409 `closed`), par une reprise de L70-5 ou un lot correctif (E107-5) | `70` § 7.5 et § 7.6 | E107-5 : lot correctif à planifier |
+| **Informations sans décision attendue** : vocabulaire anglais « image » dans les textes d'aide de `80` contre « frame » dans les clés de `90` (E88-6) ; « n manches jouées » ajoute une ligne sous chaque pseudo au podium en portrait (E118-6) | `80`, `90` point n° 23 | aucune |
 
 L'ordre d'exécution relève aussi des **correctifs de dépendances** (I-1 à I-13, annexe § A.3). Ils sont déjà appliqués dans l'ordre, mais pas encore reportés dans les specs propriétaires. **I-12** est appliqué depuis le 24/09 : `final_rank` élargi dans la migration de création (étape 25, accord du porteur ; `10` § 13.2, n° 47). Attendent encore l'accord du porteur : **I-13** (drainage livré en deux déploiements) et la **règle de branche pendant la curation** (§ A.2) — amendé le 25/09.
 
@@ -320,34 +357,34 @@ Deux écarts documentaires restent à corriger :
 
 L'ordre complet est en **annexe** : 134 étapes, humaines et IA. C'est la seule copie versionnée de l'ordre établi le 23/09. Le numéro d'une étape donne un ordre de démarrage, pas un calendrier. Une étape IA dont les prérequis sont livrés avance pendant qu'un geste humain antérieur attend.
 
-**Tout de suite, en parallèle :**
+**État au 28/09.** Les phases A, B et C sont livrées pour leur part IA : étapes 6 à 25, 33 à 53, 62, 63 et 65 à 125. **Plus aucune étape IA de l'annexe n'a tous ses prérequis livrés** : chacune attend un geste du porteur, directement ou par ses prérequis. C'est désormais le chemin humain du § 3 qui fixe la date de la première partie — amendé le 28/09.
 
-- **Porteur (phase 0)** :
-  - (1) acheter le domaine ;
-  - (2) relever le VPS ;
-  - (3) constituer la liste d'amorçage ;
+**Tout de suite, porteur, en parallèle :**
+
+- **Phase 0**, pour ce qui n'est pas encore fait :
+  - (1) acheter le domaine : il bloque la mise en service (27), donc le pilote et toute la phase D ;
+  - (2) relever le VPS, confirmer root et région UE : il débloque les gabarits `ops/` (26) ;
+  - (3) constituer la liste d'amorçage : elle débloque l'étape 54 ;
   - (4) choisir le stockage de sauvegarde, la supervision et le second canal ;
   - (5) commander les textes légaux, non bloquant.
-- **IA (phase A, étapes 6 à 25)**, sans domaine ni VPS :
-  1. **Étape 6** — L100-1 : groupes Pest, suites, job CI `mysql-redis`.
-  2. **Étape 7** — L100-2 : gardes du dépôt (`ZeroSecretTest`, `NoLiteralDomainTest`, `NoRealFixtureTest`, `LicenseTest`), méta-vérification des tokens.
-  3. **Étape 8** — L100-3 : Vitest, `RoomSettingsMatrixTest`, correctif de `translateChoice` (I-10).
-  4. **Étape 9** — L50-1 : `config/game.php`, `PlatformLimits` (`B_max` selon D22).
-  5. **Étape 10** — L60-1 : Reverb, `predis`, `laravel-echo`, `pusher-js`, `EngineConstants`.
-  6. **Étape 11** — L100-4 : environnement, `SITE_INDEXABLE`, `robots.txt`, `composer dev`.
-  7. **Étapes 12 à 16** — L90-1 (tokens, retrait du forçage clair), L90-2 (`noindex`), L40-7 (comptes fermés en production), L90-3 (coquille publique), L90-4 (pages légales en squelette).
-  8. **Étapes 17 et 18** — L20-1 (journal, nom réel, `admin:first-admin`), puis L20-2 (porte `/admin`, `admin.2fa`).
-  9. **Étapes 19 et 20** — L30-7 (`PlatformDataSeeder`), puis L100-6 (hook **sans drainage**, `backup:snapshot`, `catalog:reproject`).
-  10. **Étapes 21 et 22** — L20-4 (géométrie 16:9, plancher), puis L20-5 (chaîne Imagick).
-  11. **Étapes 23 et 24** — premiers temps de L100-7 (sondes, battements) et de L100-8 (purge des seuls périmètres sans jeu).
-  12. En fin de phase A, l'IA déclare au porteur **« prêt pour la mise en service »**.
-- **Puis la phase B (26 à 56)** :
-  - L'IA prépare les gabarits `ops/` (26).
-  - Le porteur fait la mise en service root (27), crée le premier admin (28) et lance le premier déploiement (29).
-  - Viennent ensuite la sauvegarde active (30), son contrôle de lisibilité (31) et la supervision (32).
-  - Pendant ces gestes, l'IA livre **tous les lots J1 de `20`** et leurs prérequis (33 à 53).
-  - L'étape 56 est la **porte du pilote**. Le porteur cure alors (57 à 61) pendant que l'IA construit le moteur (phase C, 62 à 125).
-- **Phase D (126 à 134)** : déploiement du moteur, recette sur appareil réel, restauration chronométrée, test de charge, puis **première vraie partie**.
+- **Étape 64** : licence, nom et lisibilité du pack d'avatars (§ 3, geste 4).
+- **Gestes 8 à 11 du § 3** : base de dev rafraîchie, nom réel dans `LICENSE`, logo TMDB, vérifications au navigateur.
+- **Questions du § 4**, en priorité celles qui décident d'un lot correctif : E116-10 et E122-7 (tests), E107-5 (refus texte après la révélation).
+
+**IA, dès l'accord du porteur** : un lot correctif de tests, sans décision produit, pour que le job `mysql-redis` soit vert avant le déploiement du moteur : `EarlyEndHookTest` rouge sur MySQL (E116-10) et test instable de re-signature du jeton (E122-7).
+
+**Puis, dans l'ordre de l'annexe :**
+
+- **IA** : gabarits `ops/` ajustés au relevé (26), dès le relevé ; liste d'amorçage versionnée (54), dès la liste.
+- **Porteur, avec l'IA** : mise en service root (27), premier admin (28), premier déploiement (29) ; sauvegarde active (30), contrôle de lisibilité (31), supervision (32).
+- **Porteur** : heures du pilote (55), **porte du pilote** (56), puis curation (57 à 61). Si l'outil est disqualifié, l'IA re-livre en priorité (60).
+- **Phase D (126 à 134)**, qui attend les gestes du porteur :
+  - déploiement du moteur par la transition du drainage (126 ; I-13 et la règle de branche du § A.2 attendent son accord) ;
+  - recette sur téléphone et lecteur d'écran réels (127), où se tranche le budget vertical clavier ouvert (E125-3) ;
+  - restauration chronométrée (128) ;
+  - outillage de charge (129), répétition à deux salons (130) et séance de charge (131) ;
+  - clôture de L70-11 sur le catalogue publié (132) ;
+  - vérification des conditions (133), puis **première vraie partie entre invités** (134).
 
 Tailles de chaque phase, en mesures de taille et non en calendrier :
 
@@ -369,12 +406,12 @@ Tailles de chaque phase, en mesures de taille et non en calendrier :
 
 ## 6. Pour relancer la session
 
-Dire à Claude : **« Lis `docs/REPRISE.md`, puis implémente l'étape 6 de l'ordre des lots J1 (annexe). »** Avant la première étape, deux vérifications (§ 1) :
+Dire à Claude : **« Lis `docs/REPRISE.md`, puis reprends la prochaine action du § 5. »** Avant tout lot, deux vérifications (§ 1) :
 
-1. `git status` : le travail documentaire du 23/09 est-il commité ?
+1. `git status` : le travail précédent est-il commité ?
 2. `composer ci:check`, serveur Vite arrêté : la suite est-elle verte ?
 
-Ensuite, à chaque session : **« Implémente l'étape suivante de l'ordre des lots J1. »** Claude suit la section « Lots d'implémentation » de la spec du lot : fichiers, tests Pest nommés, dépendances. En fin de lot, il marque l'étape livrée dans l'annexe et met à jour ce fichier.
+Ensuite, à chaque session : **« Implémente l'étape suivante de l'ordre des lots J1. »** — amendé le 28/09. Claude suit la section « Lots d'implémentation » de la spec du lot : fichiers, tests Pest nommés, dépendances. En fin de lot, il marque l'étape livrée dans l'annexe et met à jour ce fichier.
 
 `CLAUDE.md` se charge tout seul, avec les règles de jeu, la stack, les commandes, les conventions et les pièges. Inutile de les redonner.
 

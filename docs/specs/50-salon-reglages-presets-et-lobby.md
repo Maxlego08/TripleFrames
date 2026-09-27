@@ -232,6 +232,7 @@ Le constructeur prend ses quinze arguments dans l'ordre du tableau ci-dessus, `s
 - Sa forme est celle du contrat C0 § 3.4, à la lettre : `changes: Record<RoomSettingsFieldKey, RoomSettingsChangeCode>`. Élargir la clé à `string` aplatirait le type en `Record<string, …>` et supprimerait le typage des clés du rapport.
 - Seul `normalize()` pourrait y mettre une clé hors de `RoomSettingsFieldKey`, avec `dropped`, pour un champ retiré par une version ultérieure. Aucun n'existe à `VERSION = 1` ; l'élargissement éventuel de la forme est signalé au porteur (points restés ouverts, n° 9).
 - Il est **ciblé** vers l'auteur, dans la réponse HTTP, par `Inertia::flash('settingsChanges', $changes)`. **Il ne part jamais au salon.**
+- Le flash est posé à chaque écriture acceptée, **même vide** (`[]`, un preset au J1) : l'événement `flash` d'Inertia ne part que si la clé existe, et un rapport vide efface côté client le rapport précédent. Le JSON d'un rapport vide est un tableau, lu comme `{}` ; le client type le flash `Partial<Record<RoomSettingsFieldKey, RoomSettingsChangeCode>>` — amendé le 28/09 (E86-3, E86-5).
 - Les clés `themeIds` qu'il contient sont réécrites en `themeKeys`.
 - Le libellé d'un champ retiré par une version ultérieure reste au dictionnaire tant qu'une charge de version antérieure peut être chargée.
 
@@ -412,11 +413,12 @@ Ce partage corrige 10 § 6.1, qui refusait aussi les bornes 4 et 5 (E10-26).
 Le serveur reste seul juge.
 - **Quand l'hôte augmente `N`** et que `D < minRoundDuration(N)`, le client remonte `D` à ce minimum dans le même envoi. Il l'annonce par `room.settings.roundDuration.raised` (`:seconds`), dans la région `aria-live` de la page (`GameAnnouncer`, contrat C16).
 - Le curseur de `D` affiche le **minimum effectif**, soit 25 s à N = 5 au réglage par défaut des bornes (00 § Réglages du salon).
-- **Parité serveur / client.** Le fichier `tests/Fixtures/room/derivations.json` est committé et ne contient que des entiers. Il porte :
+- **Parité serveur / client.** Le fichier `tests/Fixtures/room/derivations.json` est committé et ne contient que des entiers et des codes : aucune chaîne à afficher, les avertissements y figurant par leur code. Il porte — amendé le 28/09 (E120-1) :
   - `bounds` = `toClient()` ;
-  - une liste de cas `{ n, d, tierDurations, tierPoints, attemptsPerRound, warnings }`.
+  - `cases`, une liste de cas `{ n, d, r, tierDurations, tierPoints, attemptsPerRound, warnings }`. Chacun est une entrée Simple `(N, D, R)` passée par le chemin de l'hôte : `RoomSettingsEditor::simple()` depuis les défauts, puis `fromInput()`. `r` y figure parce que `warnings()` dépend de `R`, dont le défaut n'est pas dans `RoomSettingsBoundsPayload` ;
+  - `warningCases`, une liste `{ revealDuration, tierDurations, tierPoints, warnings }` passée par `fromInput()` : barèmes non décroissants ou à zéro, paliers inégaux. L'onglet Simple ne les atteint pas au J1, mais `warnings()` du client doit les rendre comme le serveur.
 
-  Il est produit par `php artisan room:derivations-fixture` (`App\Console\Commands\RoomDerivationsFixtureCommand` [nouveau], enregistrée hors de l'environnement `production`). La commande n'est lancée qu'à la main, après un changement voulu de `RoomSettingsBounds`, et son diff est relu dans la PR. Un test Pest vérifie que le serveur rend exactement ces valeurs ; un test Vitest vérifie que `lib/room-settings.ts` les rend aussi. Une divergence casse l'un des deux. **Aucun test n'écrit le fichier** : un test qui le régénérerait avant de le comparer serait tautologique.
+  Il est produit par `php artisan room:derivations-fixture` (`App\Console\Commands\RoomDerivationsFixtureCommand` [nouveau], désactivée en `production` par `isEnabled()`). La commande n'est lancée qu'à la main, après un changement voulu de `RoomSettingsBounds`, et son diff est relu dans la PR. Son option `--check` compare le rendu au fichier versionné sans rien écrire : c'est elle que le test Pest emploie — amendé le 28/09 (E120-1). Un test Pest vérifie que le serveur rend exactement ces valeurs ; un test Vitest vérifie que `lib/room-settings.ts` les rend aussi. Une divergence casse l'un des deux. **Aucun test n'écrit le fichier** : un test qui le régénérerait avant de le comparer serait tautologique.
 
 ### 4.4 Découpage du temps
 
@@ -513,7 +515,7 @@ D19 du 23/09 : le joueur choisit l'un des quatre presets. Si son `N` n'est pas j
   - `nickname: { min, max }`, par `NicknameNormalizer::MIN_LENGTH` et `MAX_LENGTH`.
 
   Le front n'écrit jamais ces bornes en dur.
-- **Mention des CGU** : sous le bouton d'envoi, la mention `legal.terms_notice` suivie d'un lien Wayfinder vers `legal.terms` (clé et page livrées par `90`, composition de 90 § 10 ; exigence de 90 aux specs voisines, demandée par 40 § 2.1). Le lien s'ouvre en nouvel onglet (`target="_blank" rel="noopener"`, suffixé de `legal.new_tab` en `sr-only`, comme les liens du pied replié de 90 § 3.1) : une visite dans le même onglet perdrait le pseudo et l'avatar déjà saisis. **Rien n'est stocké** : le jeton ne porte aucun consentement (40 § 2.1), et l'acceptation horodatée des CGU n'existe qu'avec les comptes (`40`, J2).
+- **Mention des CGU** : sous le bouton d'envoi, le texte `legal.terms_notice` **sert lui-même de texte** au lien Wayfinder vers `legal.terms`, sans second libellé (clé et page livrées par `90`, composition de 90 § 10 ; exigence de 90 aux specs voisines, demandée par 40 § 2.1). La clé est rédigée pour tenir seule sous le bouton comme pour servir de texte au lien (E16-5) : un texte suivi d'un second lien répéterait les mêmes mots — amendé le 28/09 (E101-5 ; composition à confirmer par le porteur, points restés ouverts, n° 22). Le lien s'ouvre en nouvel onglet (`target="_blank" rel="noopener"`, suffixé de `legal.new_tab` en `sr-only`, comme les liens du pied replié de 90 § 3.1) : une visite dans le même onglet perdrait le pseudo et l'avatar déjà saisis. **Rien n'est stocké** : le jeton ne porte aucun consentement (40 § 2.1), et l'acceptation horodatée des CGU n'existe qu'avec les comptes (`40`, J2).
 - **`StoreRoomRequest`** utilise le trait `PlayerIdentityValidationRules` (contrat C5) : `prepareForValidation()` canonicalise le pseudo, puis la requête applique `nicknameRules()` et `avatarPresetRules()`.
 - `room.create` est déclarée **avant** `room.show`, et `{room}` est contraint au motif du code (§ 6.3) : `new` ne peut pas être un code.
 
@@ -525,14 +527,14 @@ D19 du 23/09 : le joueur choisit l'un des quatre presets. Si son `N` n'est pas j
 |---|---|---|
 | `ALPHABET` | `ABCDEFGHJKLMNPQRSTUVWXYZ23456789` (32 signes, ni I, ni O, ni 0, ni 1) | 00 § Vocabulaire (« 6 caractères non ambigus ») ; déplacé de `RoomFactory::CODE_ALPHABET` |
 | `LENGTH` | 6 | `room.room_code char(6)` (10 § 6.2) |
-| `generate(): string` | `LENGTH` tirages `random_int(0, 31)` | CSPRNG ; hors de tout chemin seedé (contrat C3, qui ne s'applique qu'à `App\Support\Draw`) |
-| `normalize(string): string` | majuscules, espaces et tirets retirés | saisie tolérante ; `Room::normalizeCode()` [modifié] délègue |
+| `generate(?Closure $draw = null): string` | au plus `MAX_ATTEMPTS` candidats de `LENGTH` tirages `random_int(0, 31)`, et le premier absent de `room_code_active` est rendu (une lecture `exists` par candidat) ; au-delà, `RuntimeException`. `$draw` (source de candidats) est réservé aux tests, `null` en production : l'aléa CSPRNG ne se force pas, et il faut une collision pour prouver le recyclage. Un candidat injecté non canonique lève `LogicException` — amendé le 28/09 (E100-1) | CSPRNG ; hors de tout chemin seedé (contrat C3, qui ne s'applique qu'à `App\Support\Draw`) |
+| `normalize(string): string` | majuscules ASCII seules ; espace, tabulation, sauts de ligne et de page, retour chariot et tiret-moins retirés. Rien d'Unicode, pour la parité du miroir client : `ß`, un espace insécable, un tiret typographique ou un signe pleine chasse restent en place, et le code est mal formé — amendé le 28/09 (E100-2) | saisie tolérante ; `Room::normalizeCode()` [modifié] délègue |
 | `isWellFormed(string): bool` | `LENGTH` signes de `ALPHABET` après normalisation | un code mal formé répond 404 **sans requête** |
 | `ROUTE_PATTERN` | `'[A-Za-z0-9 -]{6,12}'` | motif **tolérant** du paramètre `{room}` : la casse, les espaces et les tirets d'un lien saisi à la main passent le routeur, et la validation stricte a lieu à la liaison |
 | `MAX_ATTEMPTS` | 8 | garde de boucle, pas une valeur de jeu |
 
 - **Motif de route.** `Route::pattern('room', RoomCode::ROUTE_PATTERN)` est déclaré en tête de `routes/game.php`, avant toute route qui porte `{room}`, contrats C7 et C10 compris. Un motif strict tiré de `ALPHABET` renverrait 404 **avant** la liaison pour tout lien saisi en minuscules ou avec un tiret, ce qui contredirait `normalize()`. `Room::resolveRouteBinding()` [modifié] applique `normalize()` puis `isWellFormed()`, et répond 404 sans requête si le code est mal formé. `new` (trois signes) n'atteint jamais le motif.
-- **Le code est recyclé à l'archivage, et par lui seul** (10 § 6.2 et § 11.1 ; 00 § Vocabulaire du projet ; contrat C7 § 2.1). Le générateur tire jusqu'à obtenir un code absent de `room_code_active` (`room_active_code_uq`, une lecture de clé) : l'archivage, qui remet ce créneau à NULL, est l'unique événement qui rend un code réattribuable.
+- **Le code est recyclé à l'archivage, et par lui seul** (10 § 6.2 et § 11.1 ; 00 § Vocabulaire du projet ; contrat C7 § 2.1). Le générateur rend le premier de ses candidats absent de `room_code_active` (une lecture de clé par candidat, au plus `MAX_ATTEMPTS`). L'absence est lue, pas réservée : la course est tranchée par `room_active_code_uq` à l'insertion (« Course », ci-dessous) — amendé le 28/09 (E100-1). L'archivage, qui remet ce créneau à NULL, est l'unique événement qui rend un code réattribuable.
   - Tant qu'aucun salon actif ne porte le code, un vieux lien mène à la page « salon expiré » du salon archivé le plus récent (`room_code_idx`, seconde lecture de `resolveRouteBinding()`).
   - **Résidu assumé** : après recyclage, un lien antérieur mène au salon actif qui porte désormais ce code. À un instant donné, la probabilité qu'un code archivé soit porté par un salon actif est de l'ordre de (salons actifs) / 32⁶. Ce lien n'ouvre rien de plus qu'un code saisi au hasard (entrée libre, § 7.1), et `game-read` borne l'énumération (§ 17.3).
   - L'espace des codes (32⁶, environ 10⁹) rend ce tirage quasi immédiat.
@@ -547,7 +549,7 @@ D19 du 23/09 : le joueur choisit l'un des quatre presets. Si son `N` n'est pas j
 
 ### 6.4 `CreateRoom`
 
-`App\Actions\Room\CreateRoom` [nouveau], `handle(PlayerToken $token, string $nickname, string $avatarPreset, Locale $locale, ?User $user): Room`. Le contrôleur a d'abord appelé `PlayerTokenManager::ensure()` : **c'est l'un des deux seuls gestes qui frappent un jeton**, avec `room.join` (contrat C4 I4.1). Tout se passe dans une transaction :
+`App\Actions\Room\CreateRoom` [nouveau], `handle(Request $request, string $nickname, string $avatarPreset, Locale $locale, ?User $user): Room`. **C'est l'un des deux seuls gestes qui frappent un jeton**, avec `room.join` (contrat C4 I4.1). Aucun contrôleur n'appelle `PlayerTokenManager::ensure()` : c'est la prise de siège (§ 7.3) qui frappe, après tout refus et juste avant d'écrire le siège. 40 § 2.1 étape 4, propriétaire du jeton, l'emporte sur la lettre de la signature d'origine (`handle(PlayerToken $token, …)`, jeton frappé par le contrôleur avant l'action) : une prise de siège refusée ne pose aucun `Set-Cookie` — amendé le 28/09 (E101-1). Tout se passe dans une transaction :
 
 1. `$now` ;
 2. `$settings = RoomSettings::defaults()` ([J2] ou la configuration par défaut normalisée, § 18.3) ;
@@ -602,7 +604,7 @@ Pourquoi deux routes, `room.show` et `room.entry` :
 
 **Page `room/join`**, props : `room: { code }`, `entry`, `avatars: { options, taken, suggested }`, `nickname: { min, max }`.
 - `taken` = les `avatar_preset` des sièges `holdingSeat()`. Aucun pseudo, aucun `public_id` : un visiteur sans siège ne voit pas qui est dans le salon.
-- **Mention des CGU** sous le bouton d'envoi, identique à celle de `room/create` (§ 6.2) : `legal.terms_notice` et lien Wayfinder vers `legal.terms` en nouvel onglet, sans rien stocker (90 § 10). Elle n'accompagne que le formulaire : les états `kicked` et `full`, qui n'en ont pas, ne l'affichent pas.
+- **Mention des CGU** sous le bouton d'envoi, identique à celle de `room/create` (§ 6.2) : le texte `legal.terms_notice` sert de texte au lien Wayfinder vers `legal.terms`, en nouvel onglet, sans rien stocker (90 § 10) — amendé le 28/09 (E101-5). Elle n'accompagne que le formulaire : les états `kicked` et `full`, qui n'en ont pas, ne l'affichent pas.
 - `entry` vaut, dans cet ordre de priorité :
 
 | `entry` | Condition | Formulaire | Message |
@@ -617,7 +619,14 @@ Pourquoi deux routes, `room.show` et `room.entry` :
 
 ### 7.3 `TakeSeat` : la séquence normative
 
-`App\Actions\Room\TakeSeat` [nouveau], `handle(Room $room, PlayerToken $token, string $nickname, string $avatarPreset, Locale $locale, bool $repairHost = true): Player`. Elle est appelée par `CreateRoom` (avec `repairHost: false`) et par `room.join`, après `PlayerTokenManager::ensure()`. Elle s'exécute dans une transaction, sous l'ordre de verrouillage global `room → player → game → round → round_player` (E10-51).
+`App\Actions\Room\TakeSeat` [nouveau], `handle(Room $room, Request $request, ?string $nickname, ?string $avatarPreset, Locale $locale, bool $repairHost = true): Player|JoinRefusal`. Pseudo et avatar sont nuls pour une reprise, que `JoinRoomRequest` ne valide pas. Elle est appelée par `CreateRoom` (avec `repairHost: false`) et par `room.join`. Elle s'exécute dans une transaction, sous l'ordre de verrouillage global `room → player → game → round → round_player` (E10-51).
+
+**Elle frappe elle-même le jeton, jamais le contrôleur** — amendé le 28/09 (E101-1) :
+- S3 lit le jeton par `PlayerTokenManager::current()`, sans frappe ; à la reprise, `ensure()` fait glisser le cookie ;
+- un jeton neuf n'est frappé par `ensure()` qu'après S4 et S5, juste avant l'INSERT de S6 ;
+- la re-signature avec l'avatar choisi a lieu après la validation (S10).
+
+Un refus (salon archivé, expulsé, complet, pseudo pris) ne pose donc aucun `Set-Cookie` (40 § 2.1 étape 4).
 
 | Étape | Action |
 |---|---|
@@ -635,7 +644,8 @@ Pourquoi deux routes, `room.show` et `room.entry` :
 - **Collision résiduelle.** Une `UniqueConstraintViolationException` est interceptée et suivie d'une relecture.
   - Si un siège de ce jeton existe désormais dans le salon (double envoi), c'est une reprise.
   - Sinon, c'est `validation.nickname.taken`. **Jamais une 1062 brute** (10 § 7.1).
-- **Refus** : `JoinRefusal` [nouveau], enum backed (`Archived = 'archived'`, `Kicked = 'kicked'`, `Full = 'full'`).
+  - **Résidu nommé** : cette collision (course hors verrou, impossible sous le verrou du salon en MySQL) survient après la frappe de S6, si bien que le `Set-Cookie` du jeton frappé part avec le refus `taken`. Le docblock de `TakeSeat` l'écrit — amendé le 28/09 (E101-1).
+- **Refus** : `JoinRefusal` [nouveau], enum backed (`Archived = 'archived'`, `Kicked = 'kicked'`, `Full = 'full'`), rendu **en données** par le retour `Player|JoinRefusal`, jamais par exception. Le pseudo pris reste une `ValidationException` sous `nickname` (S5) — amendé le 28/09 (E101-1).
   - `Kicked` et `Full` : le contrôleur répond `back()->withErrors(['room' => __($refusal->messageKey())])`, où `messageKey(): ?string` rend `room.join.<valeur>`.
   - `Archived` : redirection 303 vers `room.show`, sans erreur, qui rend la page « salon expiré » (410, § 16.3). `messageKey()` rend `null` pour ce cas : aucun message ne double la page.
 - **Conséquences assumées**, écrites pour ne pas être découvertes :
@@ -689,10 +699,13 @@ type LobbyPageProps = {
 
 Tous voient le code, le lien de partage et le nombre de joueurs (`room.lobby.players`, `:count`, `:capacity`).
 
-**Le bouton « Lancer la partie »** est désactivé, avec son motif affiché, quand le vivier est bloqué, quand moins de `launch.minConnected` sièges sont connectés, ou quand la prop partagée `maintenance` est vraie. C'est une aide d'affichage : le serveur relit tout sous verrou (§ 12).
+**Le bouton « Lancer la partie »** est désactivé, avec son motif affiché, quand le vivier est bloqué, quand moins de `launch.minConnected` sièges sont connectés, ou quand la prop partagée `maintenance` est vraie. C'est une aide d'affichage : le serveur relit tout sous verrou (§ 12). **« Rejouer »** l'est de même pendant un drainage (prop `maintenance`), avec le motif `common.maintenance.launch_blocked` lié par `aria-describedby`. Au retour au lobby, un focus perdu avec l'état de partie démonté revient au titre `h1` (`tabIndex=-1`), sans être volé à un contrôle qui l'a gardé — amendé le 28/09 (E115-4, E115-6).
 
 **États obligatoires**, barre « terminé » :
-- **chargement** : `processing` des boutons, curseurs désactivés pendant l'envoi ;
+- **chargement** — amendé le 28/09 (E120-3) :
+  - `processing` des boutons ;
+  - la section des réglages est occupée (`aria-busy`) pendant un envoi, et un seul envoi est en vol. Un geste fait pendant l'envoi est mis en file, fusionné avec les suivants, puis part seul à la réponse ; un refus (validation, 409, réseau, annulation) abandonne la file et rend l'affichage au serveur ;
+  - les contrôles **ne sont jamais désactivés par l'envoi** et gardent le focus : Radix retire de la tabulation une poignée désactivée. Seuls les désactivent le rôle (non-hôte), l'onglet supplanté et la déconnexion ;
 - **erreur** : erreurs de validation liées au champ par `aria-describedby` ; refus de réglages, de gestes d'hôte, de lancement ou de « Rejouer » (erreur `room`, § 12.5) rendus **dans la page** en `Alert` au rôle `note` (`room.refusal.*`, `room.lobby.cannot_kick_self`, `room.errors.launch_failed` ou `common.maintenance.launch_blocked`) et annoncés par `announce()` ; **jamais de toast** : aucun `Toaster` n'est monté sous `GameLayout`, pour qu'une page de jeu n'ait qu'une région `aria-live` (90 § 2.3, contrat C16 § 4), si bien qu'un toast ne s'afficherait pas ;
 - **déconnexion** : `ConnectionBanner` de `90`, contrôles d'hôte désactivés tant que l'état n'est pas `connected` ;
 - **onglet supplanté** : réponse 409 `seat_superseded` du middleware `seat.active` (contrat C7), interceptée par le rappel `onHttpException` de chaque requête du lobby ; le lobby passe en lecture seule (`ReadOnlyNotice`). Sans cette interception, Inertia ouvrirait sa fenêtre d'erreur brute (§ 12.5).
@@ -725,7 +738,7 @@ Ce document fixe le **contenu en données** de chaque message de lobby. `60` en 
 | Message ou déclencheur | Réaction |
 |---|---|
 | `game.launched` | **Aucune visite** : le magasin de `60` passe à l'état de manche, dans la même page `game/lobby` (§ 7.2). |
-| `room.replayed` | **Aucune visite** : le magasin de `60` repasse à l'état de lobby, `settings` est pris dans la charge (`RoomSettingsState`), et le client recharge les props qui ne voyagent pas dans l'événement par `router.reload({ only: ['settings', 'presets'] })`, sous l'en-tête `X-Seat-Token`. |
+| `room.replayed` | **Aucune visite** : le magasin de `60` repasse à l'état de lobby, et `settings` est pris dans la charge (`RoomSettingsState`). Le client relit ensuite `room.state` (motif `replayed`), puis recharge les props qui ne voyagent pas dans l'événement par `router.reload({ only: ['settings', 'presets'] })`, sous l'en-tête `X-Seat-Token`, jamais depuis un onglet supplanté. La relecture vient de ce que `room.replayed` ne porte aucun siège : ceux que garde le magasin sont les sièges gelés de la partie, qui omettent un siège entré sans participation. « Joueurs (n sur c) » et `room.lobby.need_players` seraient alors faux, alors que le paquet relu porte les sièges du salon. Un paquet de relecture qui ramène lui-même au lobby n'en déclenche pas une seconde — amendé le 28/09 (E110-8). |
 | Reconnexion d'Echo, retour de visibilité ou en ligne, en état de lobby (y compris après un paquet qui ramène au lobby) | Après la resynchronisation `room.state` de `60` (60 § 12.6), `router.reload({ only: ['settings', 'presets'] })` sous l'en-tête `X-Seat-Token`. Pourquoi : `GameStatePacket` ne porte pas `RoomSettingsState` (60 § 12.1), et un `settings.changed` ou un `room.replayed` manqué pendant la coupure n'est jamais rejoué ; sans ce rechargement, le compteur de vivier, le blocage et les presets grisés resteraient périmés jusqu'au déclencheur suivant. |
 | `room.archived` | Visite de `room.show`, qui rend « salon expiré » : le joueur quitte le salon, une nouvelle page est attendue. |
 | `seat.kicked` | Le client quitte les canaux, puis visite `room.show`, qui redirige vers `room/join` en état `kicked`. |
@@ -740,8 +753,15 @@ Un curseur ne doit pas produire une rafale d'événements (00 § Déroulé d'une
 
 1. **L'écriture est immédiate**, et c'est la **diffusion** qui est coalescée par salon.
 2. Après validation de chaque écriture de réglages, l'action dispatche `App\Jobs\Game\BroadcastLobbyState` (nom et forme de `60`, contrat C7 § 2.5) :
-   - `BroadcastLobbyState::dispatch($room->id)->delay($now->addMilliseconds(PlatformLimits::lobbyBroadcastDebounceMs())->ceilSecond())->afterCommit()` ;
+   - `DB::afterCommit(fn () => BroadcastLobbyState::dispatch($room->id)->delay($availableAt))`, avec `$availableAt = $now->addMilliseconds(PlatformLimits::lobbyBroadcastDebounceMs())->ceilSecond()` calculé dans la transaction, `$now` pris après le verrou ;
    - file `game`, unique par salon jusqu'à son traitement.
+
+   **Le dispatch entier est différé à la validation**, et non la seule mise en file par `->afterCommit()` sur le job — amendé le 28/09 (E86-6) :
+   - `->afterCommit()` ne diffère que la mise en file, alors que le verrou d'unicité est pris à la destruction du `PendingDispatch`, donc **dans** la transaction ;
+   - un job déjà en attente pouvait alors être traité avant la validation d'une écriture qui avait sauté son dispatch (verrou tenu) : il relisait l'état validé sans elle, et plus rien n'était en file ;
+   - avec l'enveloppe, la prise du verrou suit toujours la validation.
+
+   La formule est écrite une fois, dans `UpdateRoomSettings::dispatchLobbyBroadcast()` [nom libre]. L'appellent `UpdateRoomSettings`, `ApplyRoomPreset` et, après la transaction de lancement, `LaunchController` (`settings_outdated`, `pool_insufficient`), où le dispatch est immédiat faute de transaction ouverte (E86-2).
 
    **Jamais `->delay(<entier>)`** : Laravel lit un entier en **secondes** (`InteractsWithTime::availableAt()`, vérifié dans `vendor/`), et 300 deviendrait cinq minutes. `availableAt()` tronque en outre tout instant à la seconde (`getTimestamp()`, relevé aussi par l'encadré d'état réel de `60`) : l'arrondi à la seconde supérieure garantit une fenêtre effective comprise entre `lobbyBroadcastDebounceMs()` et `lobbyBroadcastDebounceMs()` + 1 s, jamais plus courte. La lettre du contrat C7 § 2.5 (`delay(PlatformLimits::lobbyBroadcastDebounceMs())`) est signalée au porteur (points restés ouverts, n° 11).
 3. Toute écriture qui survient pendant la fenêtre ne dispatche rien, puisque le verrou d'unicité est tenu. Le job **relit l'état au moment d'émettre** (`RoomSettingsPresenter::state()`) : le dernier état est toujours celui qui part.
@@ -752,7 +772,11 @@ Un curseur ne doit pas produire une rafale d'événements (00 § Déroulé d'une
 
 L'auteur n'attend pas la diffusion : sa réponse HTTP (redirection `back()`) recharge les props `settings` du lobby, et le flash `settingsChanges` porte son rapport. La diffusion qui lui revient ensuite est idempotente.
 
-Le client envoie un curseur **à la validation du geste** (`onValueCommit`), jamais à chaque pas, par `router.patch()` avec `preserveState`, `preserveScroll` et l'en-tête `X-Seat-Token`. Les autres champs passent par `<Form>` (`CLAUDE.md` §5).
+Le client envoie un curseur **à la validation du geste**, jamais à chaque pas, par `router.patch()` avec `preserveState`, `preserveScroll` et l'en-tête `X-Seat-Token`. Le geste est validé à `onValueCommit` au pointeur, et au clavier au relâchement de la touche ou à la perte du focus : Radix appelle `onValueCommit` à chaque touche, et une flèche tenue épuiserait le limiteur `game-write`, partagé avec les battements — amendé le 28/09 (E120-3).
+
+Les autres champs de l'onglet Simple (`N`, difficulté, retardataires) écrivent aussi au geste par `router.patch()`, et `<Form>` sert les presets : un clic, un envoi, le bouton cliqué portant la clé (`CLAUDE.md` §5) — amendé le 28/09 (E120-2). Deux raisons :
+- aucun bouton d'envoi n'existe, puisque l'écriture est immédiate ;
+- le corps JSON garde entiers et booléens, là où un `FormData` enverrait `framesPerRound` en chaîne et un booléen faux par absence.
 
 ---
 
@@ -816,7 +840,7 @@ Aucun avertissement. La marge de substitution se tire dans la limite du vivier e
   - Pourquoi la troisième clause : la garde ne refuse jamais le plafond `roomSeats()`, plus haute valeur que le value object accepte ; le refuser ne laisserait aucune capacité valide.
   - Cette lecture précise l'invariant 3 de C0 § 4 sans le changer pour un hôte qui règle la capacité ; elle est signalée au porteur (points restés ouverts, n° 12).
 - **Aucun joueur n'est jamais expulsé par un changement de capacité.** L'expulsion reste un geste explicite de l'hôte (§ 11.3).
-- Côté client, le minimum du curseur vaut `max(bounds.byFramesPerRound[String(settings.settings.framesPerRound)].capacity.min, min(effectif présent, settings.settings.capacity))`. L'effectif est lu dans `state.seats` (sièges dont `connection ≠ 'left'`).
+- Côté client, le minimum du curseur vaut `min(capacity.max, max(capacity.min, min(effectif présent, settings.settings.capacity)))`, `capacity` étant lu dans `bounds.byFramesPerRound[String(settings.settings.framesPerRound)]`. La borne par `capacity.max` (le plafond `roomSeats()`) évite `min > max` quand un plafond de plateforme abaissé passe sous une capacité ancienne — amendé le 28/09 (E120-7). L'effectif est lu dans `state.seats` (sièges dont `connection ≠ 'left'`).
 - **Plafond de plateforme abaissé.** La borne haute de `capacity` est `PlatformLimits::roomSeats()`, surchargeable par `game.platform.room_seats` sans commit, donc hors de `VERSION` (§ 2.1, règle 4). Si elle descend sous la capacité stockée d'un salon ouvert, `RoomSettingsEditor::simple()` ramène la capacité **non postée** à `roomSeats()` et la rapporte `clamped` ; un preset la pose de toute façon à `roomSeats()`. Ce rattrapage n'est pas un geste de l'hôte : la garde ne le refuse jamais (troisième clause), l'effectif peut ensuite dépasser la capacité comme au § 7.3, et aucun joueur n'est expulsé. Sans lui, `fromInput()` refuserait sous `capacity` toute écriture de réglages de ce salon.
 - [J2] Au chargement d'une configuration, la capacité est **relevée** à l'effectif présent, dans la limite de `roomSeats()`, et rapportée `raised`. Ce n'est jamais un refus (§ 18.3).
 - **Aucun compteur dénormalisé** (10 § 6.2).
@@ -875,8 +899,8 @@ Action `App\Actions\Room\KickSeat` [nouveau], `handle(Room $room, Player $host, 
 1. verrou du salon, puis `$now` ;
 2. autorité d'hôte relue (`not_host`, 403) ;
 3. la cible est l'hôte lui-même → `back()->withErrors(['room' => __('room.lobby.cannot_kick_self')])`, jamais un 422 brut (§ 12.5) ; l'interface ne l'offre jamais ;
-4. la cible est déjà expulsée → **aucune écriture** (idempotent) ;
-5. verrou de la ligne `player` de la cible ;
+4. verrou de la ligne `player` de la cible, **relue dans ce salon** (404 sinon) ;
+5. la cible, **lue sur cette ligne verrouillée**, est déjà expulsée → **aucune écriture** (idempotent). L'instance reçue est chargée par le contrôleur avant le verrou du salon : deux expulsions concurrentes s'y sérialisent, et la seconde, lisant `kicked_at` nul sur son instance périmée, réécrirait `kicked_at` à un instant postérieur (contre C4 I4.9). Aucune écriture n'a lieu avant ce test, et l'ordre `room → player` est inchangé — amendé le 28/09 (E111-2 : étapes 4 et 5 permutées) ;
 6. `connection_state = left`, `left_at = kicked_at = $now` (même instant, en millisecondes, contrat C4 I4.9, E10-01) ;
 7. **dernière partie du salon, relue en `lockForUpdate`** après le verrou du siège (ordre global `room → player → game`, E10-51). Si son `ended_at` est NULL **sous ce verrou** : `game_player.status = kicked`, **points conservés**, par mise à jour ciblée. Sinon, aucune écriture sur `game_player` : l'issue figée par `FinalizeGame` (qui gèle sous le verrou de `game`, 80 § 10) n'est jamais réécrite, et sans ce verrou un gel concurrent validé entre la lecture de `ended_at` et l'écriture serait réécrit après coup ;
 8. `room.last_activity_at = $now`.
@@ -895,9 +919,10 @@ Action `App\Actions\Room\KickSeat` [nouveau], `handle(Room $room, Player $host, 
 - **Départ** : `room.leave`, `POST /r/{room}/leave`, action `App\Actions\Room\LeaveRoom` [nouveau], `handle(Room $room, Player $seat): void`. Sous verrou du salon puis du siège, `$now` pris après les verrous :
   - `connection_state = left`, `left_at = $now` ;
   - dernière partie du salon relue en `lockForUpdate` après le verrou du siège, comme à l'étape 7 de `KickSeat` : si son `ended_at` est NULL sous ce verrou, `game_player.status = left`, points conservés ; sinon, aucune écriture sur `game_player` ;
-  - si c'était l'hôte, `TransferHost::automatic()`.
+  - si c'était l'hôte, `TransferHost::automatic()` ;
+  - **idempotent** : un siège déjà `left` (ou expulsé) n'est pas réécrit, `left_at` reste l'instant du premier départ, aucun message ; un salon archivé : rien — amendé le 28/09 (E111-3).
 
-  Après validation : `seat.updated` et `host.changed` le cas échéant ; puis la réévaluation de la fin anticipée (§ 8.2). Réponse : 303 vers `home`. Le partant peut revenir par le lien : c'est une reprise, dont l'effet en partie appartient à `60`.
+  Après validation : `host.changed` le cas échéant, puis `seat.updated`, dont la vue est composée après le transfert (le partant n'y est plus `isHost`) : les deux messages s'accordent dans quelque ordre que le client les applique — amendé le 28/09 (E111-3). Puis la réévaluation de la fin anticipée (§ 8.2). Réponse : 303 vers `home`. Le partant peut revenir par le lien : c'est une reprise, dont l'effet en partie appartient à `60`.
 - **Transfert manuel** : `room.host.transfer`, `POST /r/{room}/host`, corps `{ publicId }`. La confirmation se fait côté client (`room.lobby.transfer_confirm`). Action `App\Actions\Room\HandOverHost` [nouveau] (nom libre pour `50`, contrat C6 § 8), `handle(Room $room, Player $host, string $targetPublicId): void`, dans une transaction :
   1. verrou du salon, puis `$now` ;
   2. autorité d'hôte relue sous verrou (`not_host`, 403 ; § 11.1) ;
@@ -941,8 +966,8 @@ Action `App\Actions\Room\KickSeat` [nouveau], `handle(Room $room, Player $host, 
 |---|---|
 | L1 | `Room::whereKey(id)->lockForUpdate()` : **premier verrou**, ordre imposé `room → player → game → round → round_player`. |
 | L2 | `$now = Date::now()`, **pris après le verrou**, en millisecondes. |
-| L3 | Si `host_player_id` ne désigne aucun siège non parti : `TransferHost::automatic()`. Ensuite, si l'hôte ≠ `$requester` → `not_host` (403). |
-| L4 | Statut `archived` → `room_archived`. Statut `playing` → `not_in_lobby` : le contrôleur redirige vers `room.show` **sans erreur**, ce qui rend le double clic idempotent. |
+| L3 | **Statut `archived` → `room_archived` d'abord, sans écriture.** Ensuite, si `host_player_id` ne désigne aucun siège non parti (`TransferHost::hasValidHost()`) : `TransferHost::automatic()`. Ensuite, si l'hôte ≠ `$requester` → `not_host` (403). Le refus du salon archivé passe en tête parce que l'archivage vide l'hôte (§ 16.2) : la réparation écrirait sinon un hôte sur un salon archivé, et `room_archived` ne serait atteignable que par l'hôte réparé — amendé le 28/09 (E102-1 ; écart d'ordre à la lettre de C6 § 3, points restés ouverts, n° 18). |
+| L4 | Statut `playing` → `not_in_lobby` : le contrôleur redirige vers `room.show` **sans erreur**, ce qui rend le double clic idempotent. Le statut `archived` est refusé en tête de L3 — amendé le 28/09 (E102-1). |
 | L5 | Si `settings_version ≠ RoomSettings::VERSION` : `normalize(raw, version, PoolQuery::publishedThemeIds())`, où `raw` = `json_decode($room->getRawOriginal('settings'), true)` ; puis `WriteRoomSettings` ; puis refus `settings_outdated` avec `changes`. **C'est la seule branche de refus qui écrit.** Après validation, le contrôleur dispatche `BroadcastLobbyState` (§ 8.3), comme après O3 : sans lui, seul l'hôte verrait les réglages normalisés (par `settingsChanges`), et les autres sièges garderaient la vue périmée jusqu'au déclencheur suivant, contre la promesse du § 8.2 (« après toute écriture de réglages »). |
 | L6 | `$seats` = sièges avec `connection_state ∈ {connected, disconnected}`, ce qui exclut l'expulsé, `left` (D15 du 23/09). Si le nombre de sièges `connected` est inférieur à `MIN_CONNECTED_PLAYERS_TO_LAUNCH` → `not_enough_players` (`:min`). |
 | L7 | `OpenGame(Multiplayer, $room, $room->settings, $seats, $now)`. Un refus est renvoyé tel quel. |
@@ -989,7 +1014,9 @@ Elles ont un destinataire unique, et sont donc résolues dans la langue de la re
 - `not_in_lobby` : 303 vers `room.show`, sans erreur. `room.show` rend la même page `game/lobby`, dans son état de partie (§ 7.2).
 - Lancement réussi : 303 vers `room.show`.
 - Autres refus : `back()->withErrors(['room' => __($refusal->messageKey(), $replace)])`, plus `settingsChanges` en flash pour `settings_outdated`.
-- **Échec technique.** Toute exception levée dans la transaction de lancement ou de « Rejouer » (`PoolTooSmallException` de `30`, échec de `MaterializeDraw` ou de `ScheduleRound`, `QueryException`, délai d'attente de verrou dépassé) annule tout (invariant 1, § 12.6). Elle est journalisée sur le canal `game` de `100` (§ 10.9), sans donnée personnelle. La réponse est `back()->withErrors(['room' => __('room.errors.launch_failed')])` : un texte traduit, jamais une erreur 500 brute en anglais (règle 4). L'exception n'est **jamais** traduite en `pool_insufficient`, dont le rapport affirmerait le contraire (30 § 4.6) ; aucun événement n'est émis, le salon garde son statut (`lobby` pour un lancement, `playing` pour un « Rejouer ») et l'hôte peut recommencer. `RoomRefusal` n'est pas étendu : ce n'est pas un refus de règle.
+- **Échec technique.** Toute exception levée dans la transaction de lancement ou de « Rejouer » (`PoolTooSmallException` de `30`, échec de `MaterializeDraw` ou de `ScheduleRound`, `QueryException`, délai d'attente de verrou dépassé) annule tout (invariant 1, § 12.6). Elle est journalisée sur le canal `game` de `100` (§ 10.9), sans donnée personnelle. La réponse est `back()->withErrors(['room' => __('room.errors.launch_failed')])` : un texte traduit, jamais une erreur 500 brute en anglais (règle 4). « Rejouer » reçoit le même message (formulation à relire par le porteur, points restés ouverts, n° 20). L'exception n'est **jamais** traduite en `pool_insufficient`, dont le rapport affirmerait le contraire (30 § 4.6) ; aucun événement n'est émis, le salon garde son statut (`lobby` pour un lancement, `playing` pour un « Rejouer ») et l'hôte peut recommencer. `RoomRefusal` n'est pas étendu : ce n'est pas un refus de règle.
+  - **Journal** : lignes `room.launch_failed` et `room.replay_failed` [libellés libres]. Leur contexte est `{ exception, code, file, line, previous, roomPlaying }` pour un lancement, `roomLobby` au lieu de `roomPlaying` pour un « Rejouer » : classe et code de l'exception, fichier relatif à la racine du projet, ligne, classe de la cause. **Jamais le message ni la trace**, car une `QueryException` cite ses valeurs, pseudo gelé compris ; `report()` n'est pas appelé, le journal par défaut garderait le message — amendé le 28/09 (E102-3, E102-7, E115-3).
+  - **Échec après la validation.** Une exception levée par un rappel `afterCommit` (poussée du job de la manche 1 sur une file en panne, par exemple) remonte **après** le COMMIT : la partie est née, ou le salon est revenu au lobby. Le contrôleur relit alors le statut du salon, par une relecture qui ne lève jamais. `playing` après un lancement, ou `lobby` après un « Rejouer », répond 303 vers `room.show` **sans erreur**, comme un geste réussi ; sinon, `room.errors.launch_failed`. Les rappels suivants ne partent pas, et la manche 1, `pending` et programmée sans job, est rattrapée par `CatchUpGame` (60 § 4.4) — amendé le 28/09 (E102-7, E115-3).
 
 **Aucun geste de `50` ne répond 409 ni 422 à une visite Inertia.** Inertia n'interprète un 409 qu'avec un en-tête `x-inertia-location` ou `x-inertia-redirect` ; sans lui, comme pour un 422 brut, il ouvre sa fenêtre d'erreur (`handleNonInertiaResponse()`, `@inertiajs/core` 3.7, vérifié dans `node_modules/`). Un refus de règle passe donc par `back()->withErrors()` ou par une redirection 303. Seul `seat.active` emploie 409 (`seat_superseded`, contrat C7), que le client du lobby intercepte par `onHttpException` pour passer en lecture seule (§ 8.1).
 
@@ -1022,9 +1049,9 @@ Elles ont un destinataire unique, et sont donc résolues dans la langue de la re
 
 | Étape | Action |
 |---|---|
-| R1 à R3 | Comme L1 à L3. |
-| R4 | Statut `archived` → `room_archived`. Statut `lobby` → `null` (idempotent). |
-| R5 | Dernière partie du salon (`game_room_started_idx`) : si `ended_at` est NULL → `game_not_ended`. |
+| R1 à R3 | Comme L1 à L3 : le salon archivé est refusé `room_archived` en tête de R3, avant toute réparation d'hôte — amendé le 28/09 (E115-1 ; même écart d'ordre qu'E102-1, points restés ouverts, n° 18). |
+| R4 | Statut `lobby` → `null` (idempotent). R4 précède la garde de drainage R6 : un « Rejouer » déjà fait rend `null` même sous drapeau, sans écriture ni diffusion — amendé le 28/09 (E115-1 ; lecture du § 14 à confirmer par le porteur, points restés ouverts, n° 19). |
+| R5 | Dernière partie du salon (`game_room_started_idx`, `started_at` puis `id` décroissants), **relue `FOR UPDATE` après le verrou du salon** (ordre `room → game`) : un gel concurrent est attendu, jamais lu périmé. Si `ended_at` est NULL → `game_not_ended`. Un salon `playing` sans aucune partie, état impossible puisque le lancement pose les deux dans la même transaction, n'est pas refusé : le geste le ramène au lobby, seule sortie d'un état incohérent — amendé le 28/09 (E115-1). |
 | R6 | `DeployDrain::isDraining()` → `draining` (D32 du 23/09). |
 | R7 | `room.status = lobby`, `last_activity_at = $now`. |
 | R8 | Après validation : `room.replayed` avec `RoomSettingsState` recalculé, puisque la non-répétition a réduit le vivier. |
@@ -1063,8 +1090,11 @@ Le drapeau est posé et levé par les seules commandes `deploy:*` de `100` (cont
 ### 15.2 Admission (`TakeSeat`, étape S7)
 
 1. Partie en cours = dernière partie du salon à `ended_at` NULL. S'il n'y en a pas (podium), ou si `allow_late_join` est faux → **attente** : aucune ligne `game_player`.
+   - La dernière partie est relue **`FOR UPDATE` après l'écriture du siège** (ordre `room → player → game`), et `ended_at` NULL est lu sous ce verrou. Pourquoi : une partie **interrompue** (gel en pause, clôture forcée) garde des manches numérotées `pending` (80 § 10.3). Sans ce verrou, une admission concurrente de son gel insérerait une participation dans une partie figée, sans agrégats, et le podium lèverait au rendu. C'est le patron de l'étape 7 de `KickSeat` et de R5 — amendé le 28/09 (E116-1 ; à confirmer par le porteur, points restés ouverts, n° 21).
 2. Sinon, on cherche la **prochaine manche dans l'ordre de jeu** (« manche suivante à jouer », 60 § 1.2 ; 60 § 13.7 renvoie la règle à ce document) : `round` de la partie, `round_number` non nul, `status = pending`, `started_at` nul ou postérieur à `$now`, triée par `round_number` croissant, puis `sequence_index` croissant. Le moteur joue les manches par `round_number` : un tri par `sequence_index` donnerait la manche `k + 1` à un retardataire alors que la remplaçante de `k`, de `sequence_index` plus grand, se joue d'abord.
-   - La première candidate est verrouillée (`lockForUpdate`, après `player` dans l'ordre global), puis le prédicat est **relu sous verrou**.
+   - La candidate est lue **par une lecture verrouillante** (`Round::lateJoinableAt($now)` avec `lockForUpdate()`, après `game` dans l'ordre global), qui la lit dans sa dernière version validée. Le prédicat est ensuite **relu** en PHP sur la ligne rendue (`Round::isLateJoinableAt()`) — amendé le 28/09 (E116-2).
+   - Pourquoi une lecture verrouillante plutôt que « lecture, puis verrou » : sous `REPEATABLE READ` (InnoDB), une lecture simple lirait l'instantané pris à S3. Une remplaçante numérotée par un `CancelRound` validé entre-temps y serait invisible, et le retardataire manquerait la remplaçante, qui se joue d'abord.
+   - `started_at` postérieur s'entend strictement : à `T₁` pile, la manche est jouée (60 § 1.2). La même définition sert l'état indicatif `late_join` de la page d'entrée, en lecture simple.
    - Si `OpenTier(1)` de `60` l'a ouverte entre-temps, on passe à la suivante. La boucle est bornée par le nombre de manches.
 3. Aucune candidate → attente.
 4. Sinon, INSERT `game_player` : `status = playing`, `first_round_number` = son `round_number`, `display_*` gelés.
@@ -1099,12 +1129,13 @@ D17 du 23/09 faisait des retardataires la troisième variable d'ajustement du J1
 | **Clôture de partie** | 15 min sans joueur connecté (`game.paused_at`) | `60` |
 | **Archivage anticipé du lobby** | lobby jamais lancé (`launched_at` NULL), `last_activity_at < now − RoomExpiry::LOBBY_IDLE_MINUTES` (2 h), périmètre `stale_lobby` | `50`, seul exécutant du périmètre, dont il écrit la ligne `purge_run` (§ 16.2) ; `100` le surveille ; **archivage forcé, jamais suppression** (E10-30) |
 | **Archivage du salon** | `last_activity_at < now − RoomExpiry::ROOM_IDLE_MINUTES` (24 h) | `50` |
-| Filet `stale_room` | 48 h (`RetentionWindows::STALE_ROOM_HOURS`, déjà livrée par `100` et lue par la sonde n° 2 — amendé le 25/09, E24-7), pour un job d'archivage qui n'a jamais tourné | purge de `10` / `100`, gestionnaire livré après L50-8 |
+| Filet `stale_room` | 48 h (`RetentionWindows::STALE_ROOM_HOURS`, déjà livrée par `100` et lue par la sonde n° 2 — amendé le 25/09, E24-7), pour un job d'archivage qui n'a jamais tourné | purge de `10` / `100`, gestionnaire `StaleRoomHandler` livré à l'étape 114 (L100-8, 2e temps), qui appelle `ArchiveRoom` — amendé le 28/09 (E114-4) |
 
 `App\Support\Room\RoomExpiry` [nouveau] porte :
 - `LOBBY_IDLE_MINUTES = 120` et `ROOM_IDLE_MINUTES = 1440`, valeurs de 10 § 11.1 ;
-- `SWEEP_EVERY_MINUTES = 10`, cadence du balayage ;
-- `BATCH_SIZE = 100`, taille du lot borné.
+- `SWEEP_EVERY_MINUTES = 10`, cadence du balayage, diviseur de 60 et au moins 2 (le verrou d'unicité du job dure une cadence moins une minute, § 16.2) ;
+- `BATCH_SIZE = 100`, taille du lot borné ;
+- `lobbyIdleBefore($now)`, `roomIdleBefore($now)` et `sweepCron()` (`*/10 * * * *`, bâtie sur `SWEEP_EVERY_MINUTES`), seules sources des bornes des deux passes et de la cadence planifiée — amendé le 28/09 (E113-2, E113-3, E113-7).
 
 Ce ne sont pas des valeurs de jeu : ce sont des durées de conservation, publiées par `90` depuis ces constantes et jamais recopiées. `RetentionWindows` de `100` lit ces durées ici, jamais une seconde constante (100 § 14).
 
@@ -1129,11 +1160,20 @@ Ce ne sont pas des valeurs de jeu : ce sont des durées de conservation, publié
 Après validation : `room.archived`. **Aucune ligne n'est supprimée** : les lignes `room` et `player` partent plus tard, par dépendance (10 § 11.1, `orphan_player`).
 
 **Balayage.**
-- La commande `room:archive-idle` (`App\Console\Commands\RoomArchiveIdleCommand`) est planifiée toutes les `SWEEP_EVERY_MINUTES` dans `routes/console.php`, par `Schedule`.
+- La commande `room:archive-idle` (`App\Console\Commands\RoomArchiveIdleCommand`) est planifiée toutes les `SWEEP_EVERY_MINUTES` dans `routes/console.php`, par `Schedule` (`->cron(RoomExpiry::sweepCron())`). Elle dépose le job et rend 0, **sans aucune sortie** : aucune clé `admin.console.*` n'est prévue (règle 4), et la trace d'un passage est sa ligne `purge_run` — amendé le 28/09 (E113-3).
 - Elle dispatche `App\Jobs\Room\ArchiveIdleRooms` sur la **file `default`**, **jamais `game`**.
+- **Unicité du job** — amendé le 28/09 (E113-2, E113-7). Le job est `ShouldBeUnique`, avec `$tries = 1`, et son verrou d'unicité dure **strictement moins qu'une cadence** : `$uniqueFor = (SWEEP_EVERY_MINUTES − 1) × 60`. Posé au dépôt, un verrou orphelin (worker tué, file arrêtée) est donc toujours expiré au dépôt suivant, et l'archivage reste au plus une cadence après l'échéance. Une file arrêtée accumule au plus un balayage par cadence, rejoués de façon idempotente.
+- **Instant et curseur** — amendé le 28/09 (E113-2) :
+  - `$now` est pris une fois par passage, **à la seconde**, comme les colonnes pilotes ;
+  - chaque passe avance par un **curseur `(last_activity_at, id)`**, jamais par resélection : un salon que l'action refuse (redevenu actif, partie non figée) resterait sinon éligible, et la passe ne progresserait plus ;
+  - les lots font `BATCH_SIZE` salons, sans plafond du nombre de lots : « lots bornés » s'entend de leur taille.
 - Deux passes, par lots bornés du plus ancien au plus récent, sur `room_archived_activity_idx` (`archived_at`, `last_activity_at`) :
-  1. **`stale_lobby`**, par `ArchiveRoom($room, $now − LOBBY_IDLE_MINUTES, lobbyOnly: true)`. Ce balayage est le **seul exécutant** du périmètre (10 § 11.1) : `RetentionPurger` ne l'exécute jamais (100 § 14, test « n'exécute jamais stale_lobby, confié au balayage de 50 »), puisqu'une exécution quotidienne de plus ferait deux exécutants d'un même périmètre et porterait la fenêtre annoncée de 2 h à 26 h si le balayage s'arrêtait. Il journalise **une ligne `purge_run` par passage**, de scope `PurgeScope::StaleLobby` [existant] et de `status = completed`, **même à zéro salon archivé** : l'absence de ligne est une panne, et sans elle la sonde `purge` de `100` (§ 15) ne distinguerait pas un balayage arrêté d'un balayage sans travail. `rows_deleted` porte le nombre de salons archivés, conformément au compteur générique du journal.
-  2. **archivage à 24 h**, par `ArchiveRoom($room, $now − ROOM_IDLE_MINUTES)` : c'est une action, pas une purge (10 § 11.1), et elle ne journalise aucune ligne `purge_run`. Le filet `stale_room` à 48 h, lui, est un gestionnaire du `RetentionPurger` de `100`, qui appelle la même action `ArchiveRoom`, unique chemin d'archivage (100 § 14).
+  1. **`stale_lobby`**, par `ArchiveRoom($room, $now − LOBBY_IDLE_MINUTES, lobbyOnly: true)`. Ce balayage est le **seul exécutant** du périmètre (10 § 11.1) : `RetentionPurger` ne l'exécute jamais (100 § 14, test « n'exécute jamais stale_lobby, confié au balayage de 50 »), puisqu'une exécution quotidienne de plus ferait deux exécutants d'un même périmètre et porterait la fenêtre annoncée de 2 h à 26 h si le balayage s'arrêtait. Il journalise **une ligne `purge_run` par passage**, de scope `PurgeScope::StaleLobby` [existant] et de `status = completed`, **même à zéro salon archivé** : l'absence de ligne est une panne, et sans elle la sonde `purge` de `100` (§ 15) ne distinguerait pas un balayage arrêté d'un balayage sans travail. `rows_deleted` porte le nombre de salons archivés, conformément au compteur générique du journal. La ligne suit la sémantique du moteur de purge (10 § 11.3), et « `status = completed` » en décrit le cas nominal — amendé le 28/09 (E113-2) :
+     - elle est écrite `running` avant le premier lot, avec `started_at = ran_at =` l'instant du passage ;
+     - elle passe ensuite `completed`, même avec des salons en échec : ceux-ci sont comptés, et `error` porte la classe de la dernière exception, jamais son message ;
+     - elle passe `failed` sur une exception levée hors d'un salon.
+  2. **archivage à 24 h**, par `ArchiveRoom($room, $now − ROOM_IDLE_MINUTES)` : c'est une action, pas une purge (10 § 11.1), et elle ne journalise aucune ligne `purge_run`. Ses salons en échec sont comptés et journalisés (classe et code) ; une exception hors d'un salon fait échouer le job, la passe `stale_lobby` ayant déjà écrit sa ligne — amendé le 28/09 (E113-2). Le filet `stale_room` à 48 h, lui, est un gestionnaire du `RetentionPurger` de `100`, qui appelle la même action `ArchiveRoom`, unique chemin d'archivage (100 § 14).
+- **`purge:suspend` n'est pas lu par le balayage.** C'est l'interrupteur d'incident de `RetentionPurger` (100 § 14), non celui de ce balayage, et suspendre l'archivage garderait des identifiants d'invité au-delà de la durée annoncée. La sonde `purge` reste de toute façon en alerte pendant une suspension — amendé le 28/09 (E113-2 ; question au porteur, points restés ouverts, n° 26).
 - Le planificateur tourne par le `cron` de `100`. **L'archivage effectif intervient au plus `SWEEP_EVERY_MINUTES` après l'échéance** : `90` publie l'échéance augmentée de cet intervalle, pour que la durée annoncée reste un plafond vrai (décision 19).
 
 ### 16.3 Vu du joueur
@@ -1332,6 +1372,8 @@ Dans `room.settings.change.*`, `:attribute` reçoit côté client le libellé tr
 | `room.join.late_join` | — | Une partie est en cours : vous entrerez à la manche suivante, sans aucun point. | A game is in progress: you will join from the next round, with no points yet. |
 | `room.join.title` / `room.join.submit` | — | Rejoindre le salon / Entrer | Join the room / Join |
 | `room.create.title` / `room.create.intro` / `room.create.submit` | — | Créer un salon / Choisissez un pseudo et un avatar : vous réglerez la partie dans le salon. / Créer le salon | Create a room / Pick a nickname and an avatar: you will set up the game in the room. / Create room |
+| `room.identity.nickname_label` | — | Pseudo | Nickname |
+| `room.identity.nickname_hint` | `:min`, `:max` | Entre :min et :max caractères, unique dans le salon. | Between :min and :max characters, unique in the room. |
 | `room.lobby.title` | — | Salon | Room |
 | `room.lobby.code_label` / `copy_link` / `link_copied` / `share_hint` | — | Code / Copier le lien / Lien copié / Partagez ce lien ou ce code avec vos amis. | Code / Copy link / Link copied / Share this link or code with your friends. |
 | `room.lobby.share` | — | Partager | Share |
@@ -1359,6 +1401,8 @@ Dans `room.settings.change.*`, `:attribute` reçoit côté client le libellé tr
 
 Chaque cellule « a / b » représente plusieurs clés, dans l'ordre indiqué.
 
+Les deux clés `room.identity.*` donnent au champ de pseudo de `room/create` et `room/join` son libellé visible et son aide, que ce tableau ne donnait pas. Aucune clé existante ne convenait : `validation.attributes.nickname` n'est pas expédié au client, et `common.avatar.picker.label` est la légende du sélecteur d'avatar. Les bornes restent des props (§ 6.2), formatées par `Intl.NumberFormat` — amendé le 28/09 (E101-4 ; formulation au porteur, points restés ouverts, n° 23).
+
 ### 20.4 Validation
 
 | Clé | Placeholders | FR | EN |
@@ -1367,6 +1411,9 @@ Chaque cellule « a / b » représente plusieurs clés, dans l'ordre indiqué.
 | `validation.room_settings.theme_keys` | `:attribute` | Le réglage :attribute contient un thème inconnu ou retiré du site. | The :attribute setting contains an unknown or withdrawn theme. |
 | `validation.room_settings.capacity_below_headcount` | `:count` | Le salon compte déjà :count joueurs : les places ne peuvent pas descendre en dessous. | The room already has :count players: seats cannot go below that. |
 | `validation.attributes.themeKeys` | — | thèmes | themes |
+| `validation.attributes.publicId` | — | joueur | player |
+
+`validation.attributes.publicId` nomme la cible d'un transfert manuel (§ 11.4) dans le message d'un corps sans cible, validé par `HandOverHostRequest` — amendé le 28/09 (E111-3 ; formulation au porteur, points restés ouverts, n° 23). `validation.attributes.preset` (« preset », FR et EN) est livrée par `60` (L60-15, 60 § 19.4) ; elle nomme aussi le champ `preset` de `ApplyRoomPresetRequest`, qui retombait jusque-là sur le mot brut — amendé le 28/09 (E86-3, E121-7).
 
 **Retraits** (A-37 : aucun libellé snake_case sans consommateur) : `validation.attributes.frames_per_round`, `validation.attributes.rounds_count` et `validation.attributes.room_code`. Le code de salon voyage dans l'URL et n'est jamais un champ posté : un code mal formé répond 404 (§ 7.2), et le champ de code de l'accueil (`90`) navigue vers `/r/{code}` par Wayfinder. Si un formulaire poste un jour un code, le champ s'appellera `roomCode`. `validation.attributes.nickname` reste, avec ses consommateurs (`StoreRoomRequest`, `JoinRoomRequest`).
 
@@ -1568,6 +1615,7 @@ Chaque estimation inclut la barre « terminé » : tests verts, textes FR et EN,
 **Fichiers :**
 - `app/Settings/RoomSettingsEditor.php` [complété] : `simple()`, et `advanced()` qui lève tant que `ADVANCED_TAB_AVAILABLE` est faux ;
 - `app/Actions/Room/{WriteRoomSettings,UpdateRoomSettings,ApplyRoomPreset}.php` [nouveaux] ;
+- `app/Enums/RoomRefusal.php` [nouveau, avancé de L50-7a] et `app/ValueObjects/Room/SettingsWriteOutcome.php` [nouveau, nom libre] : les deux actions d'écriture rendent leurs refus `not_host` et `not_in_lobby` en données, dans le vocabulaire de C6, et la parité du miroir `RoomRefusalCode` se prouve dès ce lot. Les clés `room.refusal.*` restent à L50-7a — amendé le 28/09 (E84-2) ;
 - `app/Support/Room/RoomSettingsPresenter.php` [nouveau] ;
 - `resources/js/types/room-settings.ts` [nouveau, types seuls, dans `WATCHED`, § 2.6] : livré ici et non avec la page du lobby, parce que le fil de `60` l'importe (dépendances à lire avant d'ordonner) ;
 - `app/Casts/RoomSettingsCast.php` [modifié : `ComparesCastableAttributes`] ;
@@ -1667,9 +1715,11 @@ Chaque estimation inclut la barre « terminé » : tests verts, textes FR et EN,
 **Fichiers :**
 - `resources/js/pages/game/lobby.tsx` [nouveau] : page unique du salon, état de lobby composé par `50`, états de partie délégués aux composants de `60` et `80` selon le magasin (§ 7.2, § 8.1) ; refus rendus en `Alert` au rôle `note` et annoncés, jamais en toast (§ 8.1) ;
 - `resources/js/components/room/{seat-list,share-code}.tsx` [nouveaux] ;
+- `resources/js/components/room/pool-status.tsx` [nouveau, avancé de L50-5] : compteur, blocage nommant le réglage fautif, `room.pool.themes_pruned` et les cinq remèdes, hôte seul. Le bouton « Lancer la partie » de ce lot est désactivé avec son motif quand le vivier est bloqué (§ 8.1), et le blocage doit nommer sa cause pour tous (§ 9.2) — amendé le 28/09 (E110-1) ;
 - `resources/js/hooks/game/use-lobby-state.ts` [nouveau] : réactions du § 8.2, dont le rechargement partiel `settings` et `presets` après une resynchronisation au lobby ;
 - `RoomController@show` [complété : rendu de `game/lobby` dans tout statut non archivé, `$game` résolu selon 60 § 12.2, réparation d'hôte] ;
-- `lang/{fr,en}/room.php` : `room.lobby.*` hors gestes d'hôte.
+- `lang/{fr,en}/room.php` : `room.lobby.*` hors gestes d'hôte, limité aux clés qu'appelle le code du lot (les clés des composants de L50-5 arrivent avec eux), et `room.pool.*` [avancé de L50-5] — amendé le 28/09 (E110-1, E110-2) ;
+- `tests/Feature/I18n/TranslationCoverageTest.php` : la part de l'extension de L50-5 qui porte sur `PoolFault` et `PoolRemedyKind` [avancée de L50-5] — amendé le 28/09 (E110-1).
 
 `resources/js/types/room-settings.ts` est consommé ici, livré par L50-2.
 
@@ -1689,15 +1739,17 @@ Chaque estimation inclut la barre « terminé » : tests verts, textes FR et EN,
 ### L50-5 — Formulaire Simple, presets, vivier, avertissements (client) (J1, 6,5–8 h)
 
 **Fichiers :**
-- `resources/js/components/room/{room-settings-form,preset-picker,pool-status,settings-warnings,settings-changes}.tsx` [nouveaux] ; `pool-status.tsx` rend les cinq `PoolRemedyKind`, dont `clear_themes` (`PATCH { themeKeys: [] }`), atteignable au J1 par une clé de thème postée (30 § 1.4) — seul `disable_no_repeat` est retiré au J1, par le présentateur —, et le message `room.pool.themes_pruned` quand `pool.themesPruned` est vrai (§ 9.2) ;
+- `resources/js/components/room/{preset-picker,settings-warnings,settings-changes}.tsx` [nouveaux] ; `room-settings-form.tsx` [complété] : né en L50-9 avec son seul interrupteur `allowLateJoin` (E116-6), il reçoit ici les autres champs Simple — amendé le 28/09 (E116-6, E120-10) ;
+- `pool-status.tsx` : **livré par L50-4**, rien à compléter. Il rend les cinq `PoolRemedyKind`, dont `clear_themes` (`PATCH { themeKeys: [] }`), atteignable au J1 par une clé de thème postée (30 § 1.4) — seul `disable_no_repeat` est retiré au J1, par le présentateur —, et le message `room.pool.themes_pruned` quand `pool.themesPruned` est vrai (§ 9.2) — amendé le 28/09 (E110-1, E120-7) ;
 - `resources/js/lib/room-settings.ts` [nouveau] ;
-- `tests/Fixtures/room/derivations.json` [nouveau] et `app/Console/Commands/RoomDerivationsFixtureCommand.php` [nouveau : `room:derivations-fixture`, enregistrée hors `production`, lancée à la main, § 4.3] ;
+- `resources/js/hooks/game/use-lobby-state.ts` et `resources/js/pages/game/lobby.tsx` [complétés, fichiers de L50-4] : le rapport de changements est lu du flash `settingsChanges` (`router.on('flash')`), effacé au départ de toute visite qui écrit (`router.on('start')`), annoncé s'il n'est pas vide — amendé le 28/09 (E120-6) ;
+- `tests/Fixtures/room/derivations.json` [nouveau] et `app/Console/Commands/RoomDerivationsFixtureCommand.php` [nouveau : `room:derivations-fixture`, désactivée en `production`, lancée à la main, option `--check`, § 4.3 — amendé le 28/09, E120-1] ;
 - `tests/Frontend/room/room-settings.test.ts` [nouveau] ;
-- `lang/{fr,en}/room.php` : `room.settings.*`, `room.warnings.*`, `room.pool.*` (dont `room.pool.themes_pruned`), presets du lobby.
+- `lang/{fr,en}/room.php` : `room.settings.*` (sauf `room.settings.advanced_active`, J2, L50-10), `room.warnings.*`, presets du lobby (`room.lobby.{presets_title, changes_title, preset_grayed, preset_unplayable}`). `room.pool.*` est livré par L50-4 — amendé le 28/09 (E110-1, E120-5).
 
 **Tests :**
 - `tests/Feature/Room/RoomSettingsDerivationParityTest.php` : « le jeu de dérivations partagé avec le client correspond au serveur » (il lit le fixture et ne l'écrit jamais)
-- `tests/Feature/I18n/TranslationCoverageTest.php`, extension du test existant « carries every key built by an enumerable key constructor » : une clé par cas de `PoolFault` et de `PoolRemedyKind`, par code `CHANGE_*` et `WARNING_*`, et un libellé et une aide par clé de `SIMPLE_KEYS ∪ ADVANCED_KEYS`. `room.pool.themes_pruned`, clé fixe, est couverte par les tests existants de symétrie FR/EN et d'existence des clés appelées.
+- `tests/Feature/I18n/TranslationCoverageTest.php`, extension du test existant « carries every key built by an enumerable key constructor » : une clé par code `CHANGE_*` et `WARNING_*` (lus par réflexion sur `RoomSettings`), un libellé et une aide par clé de `SIMPLE_KEYS ∪ ADVANCED_KEYS`, et une option par cas d'`InputDifficulty` [ajout]. La part `PoolFault` / `PoolRemedyKind` est livrée par L50-4 — amendé le 28/09 (E110-1, E120-5). `room.pool.themes_pruned`, clé fixe, est couverte par les tests existants de symétrie FR/EN et d'existence des clés appelées.
 - Vitest, `tests/Frontend/room/room-settings.test.ts` :
   - « dérive comme le serveur chaque cas du jeu partagé »
   - « remonte D au minimum du nouveau N et l'annonce »
@@ -1711,7 +1763,12 @@ Chaque estimation inclut la barre « terminé » : tests verts, textes FR et EN,
 - `app/Policies/RoomPolicy.php` [complété : `kick`, `transferHost`, `leave`] ;
 - `app/Http/Controllers/Room/{KickController,HostTransferController,LeaveRoomController}.php` [nouveaux] ; route `room.players.kick` sur `{target}` ;
 - `resources/js/components/room/seat-actions.tsx` [nouveau] ;
-- `lang` : gestes d'hôte.
+- `lang` : gestes d'hôte, et `validation.attributes.publicId` (§ 20.4) ;
+- hors liste, noms libres — amendé le 28/09 (E111-3, E111-7) :
+  - `app/Actions/Room/SeatDeparture.php` [nouveau] : `markParticipation()` (étape 7 du § 11.3, reprise par le § 11.4) et `reevaluateAfterCommit()` (réévaluation de la fin anticipée, § 8.2), partagés par l'expulsion et le départ, puis par le balayage de présence de `60` ;
+  - `app/Http/Requests/Room/HandOverHostRequest.php` [nouveau] : `publicId` requis, chaîne ;
+  - `SeatViewPresenter::ofSeat()` [ajout, fichier de `60`] : vue de `seat.updated`, en partie si le siège y a une participation, au lobby sinon ;
+  - `tests/Support/Room/HostGestures.php` [nouveau].
 
 La migration `add_kicked_at_to_player_table`, `Player::wasKicked()` et l'état `PlayerFactory::kicked()` appartiennent au lot L40-1 de `40`, dont ce lot dépend.
 
@@ -1750,8 +1807,8 @@ Le prédicat de fin anticipée lui-même est prouvé par `EarlyEndTest` de `60` 
 
 **Fichiers :**
 - `app/Actions/Room/LaunchGame.php` et `app/Actions/Game/OpenGame.php` [nouveaux] ;
-- `app/ValueObjects/Room/LaunchOutcome.php` et `app/Enums/RoomRefusal.php` [nouveaux] ;
-- `database/factories/GameFactory.php` [modifié : constantes de version supprimées ; le test « fixe speedBonusMaxPercent… » de `PlatformLimitsTest` lit alors `ScoringRules::VERSION`, bascule attribuée à L80-1 — amendé le 25/09, E9-3] ;
+- `app/ValueObjects/Room/LaunchOutcome.php` [nouveau] ; `app/Enums/RoomRefusal.php` est livré par L50-2 (E84-2), et ce lot n'en ajoute que les clés — amendé le 28/09 (E102-4) ;
+- `database/factories/GameFactory.php` [modifié : constantes de version supprimées ; le test « fixe speedBonusMaxPercent… » de `PlatformLimitsTest` lit alors `ScoringRules::VERSION`, bascule attribuée à L80-1 — amendé le 25/09, E9-3 ; déjà livré par L80-1, rien à faire dans ce lot — amendé le 28/09, E102-4] ;
 - `app/Http/Controllers/Room/LaunchController.php` [nouveau], échec technique compris (§ 12.5) ;
 - `RoomPolicy` [complété : `launch`, `advanceRound`] ;
 - `lang` : `room.refusal.*`, `room.errors.launch_failed`.
@@ -1787,7 +1844,11 @@ Le prédicat de fin anticipée lui-même est prouvé par `EarlyEndTest` de `60` 
 - `RoomPolicy` [complété : `replay`] ;
 - `resources/js/components/room/replay-button.tsx` [nouveau] ;
 - `lang` : `room.replay.*` ;
-- `tests/Concurrency/.gitkeep` [supprimé] : posé par L100-1 pour que la suite `Concurrency` ait un répertoire, il se retire dans le commit du premier test de `tests/Concurrency`, `LaunchConcurrencyTest` si aucun lot antérieur n'en a écrit — amendé le 25/09 (E6-4).
+- `tests/Concurrency/.gitkeep` [supprimé] : posé par L100-1 pour que la suite `Concurrency` ait un répertoire, il se retire dans le commit du premier test de `tests/Concurrency`, `LaunchConcurrencyTest` si aucun lot antérieur n'en a écrit — amendé le 25/09 (E6-4). Déjà retiré par L80-4, premier test `locks-timing` (E89-3) — amendé le 28/09 (E115-6) ;
+- hors liste — amendé le 28/09 (E115-2, E115-3, E115-6) :
+  - `app/Http/Controllers/Room/Concerns/AnswersRoomGesture.php` [nouveau, nom libre] : `backToRoom()`, `rereadStatus()` et `journalGestureFailure()`, extraits de `LaunchController` (retouché, comportement inchangé) et partagés avec `ReplayController` ;
+  - `tests/Feature/Answer/DecoyDrawTest.php` et `tests/Feature/Game/FrameServeTest.php` : deux fixtures qui réécrivaient une colonne figée de `game` par `save()` la posent désormais en base par requête directe, sans changer d'intitulé ni d'assertion ;
+  - `tests/Feature/Room/RoomPolicyTest.php` [complété] : « Rejouer » parmi les gestes relus sous verrou et refusés à l'administrateur.
 
 **Tests :**
 - `tests/Feature/Room/ReplayRoomTest.php` :
@@ -1815,7 +1876,9 @@ Le prédicat de fin anticipée lui-même est prouvé par `EarlyEndTest` de `60` 
 - `TransferHost` [complété : `clear()`] ;
 - `routes/console.php` [modifié] ;
 - `resources/js/pages/game/room-expired.tsx` [nouveau] ;
-- `lang` : `room.expired.*`.
+- `lang` : `room.expired.*` ;
+- `RoomExpiry::{lobbyIdleBefore, roomIdleBefore, sweepCron}` (§ 16.1) — amendé le 28/09 (E113-6) ;
+- hors liste : `app/Models/PurgeRun.php` [modifié : `ERROR_LENGTH` et `MAX_BATCHES` publics, `describeFailure()` et `summarizeFailure()` statiques] et `app/Support/Retention/RetentionPurger.php` [retouché, comportement inchangé]. Les deux écrivains de `purge_run` lisent ainsi un seul jeu de règles ; le cycle `running` → `completed` / `failed` reste écrit par les deux, et tout changement de 10 § 11.3 les touche ensemble — amendé le 28/09 (E113-7).
 
 **Tests :**
 - `tests/Feature/Room/RoomArchiveTest.php` :
@@ -1828,8 +1891,10 @@ Le prédicat de fin anticipée lui-même est prouvé par `EarlyEndTest` de `60` 
   - « émet room.archived après validation »
   - « affiche la page de salon expiré en 410 pour un lien archivé »
   - « balaie sur la file default et jamais sur la file game »
+  - [ajouté, titre sans marqueur] « refuse d'archiver un salon dont la dernière partie n'est pas figée, sans bloquer le balayage » — amendé le 28/09 (E113-5, E113-6)
+- `tests/Feature/Room/RoomEntryPageTest.php` [complété, fichier de L50-3b] : la page `game/room-expired` existe désormais — amendé le 28/09 (E113-5, E113-6).
 
-**Ce qui attend ce lot, côté `100`** — amendé le 25/09 (E23-1, E23-2, E24-4, E24-7, E24-9). La purge de L100-8 est livrée sur les seuls périmètres sans jeu ; trois pièces de `100` n'attendent que `ArchiveRoom` et le balayage de ce lot, et suivent ce lot sans en faire partie :
+**Ce qui attend ce lot, côté `100`** — amendé le 25/09 (E23-1, E23-2, E24-4, E24-7, E24-9). La purge de L100-8 est livrée sur les seuls périmètres sans jeu ; trois pièces de `100` n'attendent que `ArchiveRoom` et le balayage de ce lot, et suivent ce lot sans en faire partie. **Toutes trois sont livrées à l'étape 114** (L100-8 2e temps, L100-7 3e temps : `StaleRoomHandler`, son test, la vérification `stale_lobby` de la sonde) — amendé le 28/09 (E114-4) :
 - le gestionnaire `stale_room`, qui implémente `PurgeHandler` (contrat étendu par L100-8 : `nextBatch()`, `purge()`, `connection()`), entre dans `PurgeHandlers::CLASSES` et dans `PurgeScope::implemented()`, lit la fenêtre dans `RetentionWindows::STALE_ROOM_HOURS` (déjà livrée) et appelle `ArchiveRoom`, unique chemin d'archivage (§ 16.2) ;
 - son test de `RetentionPurgeTest`, « archive un salon oublié depuis 48 h par l'action d'archivage de 50, jamais par suppression », et le jeu de lignes du périmètre dans `tests/Support/Retention/RetentionRows.php`, sans lequel `PurgePerimeterTest` échoue dès que `stale_room` entre dans `implemented()` ;
 - la vérification `stale_lobby` de la sonde `purge` (L100-7), qui lit la ligne `purge_run` que ce balayage écrit à chaque passage (§ 16.2).
@@ -1839,8 +1904,12 @@ Le prédicat de fin anticipée lui-même est prouvé par `EarlyEndTest` de `60` 
 **Fichiers :**
 - `TakeSeat` [complété : admission, § 15.2] ;
 - `RoomEntryController` [complété : état `late_join`] ;
-- `room-settings-form.tsx` [complété] : interrupteur `allowLateJoin` ;
-- `lang` : `room.join.late_join`, `room.lobby.waiting_next_game`.
+- `resources/js/components/room/room-settings-form.tsx` [nouveau] : section « Réglages » et son seul interrupteur `allowLateJoin`, rendu si `editor.lateJoinAvailable`. Le fichier naît ici et non en L50-5, livré après ce lot ; L50-5 le complète sans le recréer — amendé le 28/09 (E116-6, E116-10) ;
+- `lang` : `room.join.late_join`, `room.settings.allowLateJoin.{label,help}` et `room.lobby.settings_title` ; `room.lobby.waiting_next_game` est déjà livrée par L50-4 — amendé le 28/09 (E116-6, E116-9) ;
+- hors liste — amendé le 28/09 (E116-3, E116-5, E116-7, E116-9) :
+  - `app/Models/Round.php` : scope `lateJoinableAt($now)` et `isLateJoinableAt()`, définition unique partagée par la prise de siège (sous verrou) et l'état indicatif de la page d'entrée ;
+  - `resources/js/pages/room/join.tsx` : état `late_join` ;
+  - `resources/js/pages/game/lobby.tsx` : attente de la partie suivante = siège absent des sièges de la partie, ou présent avec `firstRoundNumber` nul (vue de lobby reçue en partie).
 
 **Tests :**
 - `tests/Feature/Room/LateJoinTest.php` :
@@ -1857,7 +1926,7 @@ D17 du 23/09 est sans effet depuis D35 du 23/09 : ces fichiers et ces tests sont
 
 **Fichiers :**
 - `RoomSettingsEditor::advanced()` et `ADVANCED_TAB_AVAILABLE = true` ;
-- `components/room/{advanced-settings-form,advanced-active-banner}.tsx` [nouveaux] ;
+- `components/room/{advanced-settings-form,advanced-active-banner}.tsx` [nouveaux] et la clé `room.settings.advanced_active` (§ 20.2), que L50-5 n'a pas introduite, faute d'appelant au J1. Les curseurs de paliers et de points peuvent réutiliser `SettingSlider` de `room-settings-form.tsx` (à exporter) et `crossBoundErrors()`, dont la borne 2 est déjà écrite côté client — amendé le 28/09 (E120-5, E120-10) ;
 - onglets `tabs` et feuille mobile, avec les clés du § 20.6 ;
 - remède `disable_no_repeat` rendu au présentateur ;
 - rapport `overwritten` des presets.
@@ -1873,7 +1942,7 @@ D17 du 23/09 est sans effet depuis D35 du 23/09 : ces fichiers et ces tests sont
 
 ### L50-11 — Sélecteur de thèmes (J2, 2,5–3,5 h)
 
-**Fichiers :** prop `themes`, `components/room/theme-picker.tsx` [nouveau]. Le remède `clear_themes` est déjà rendu depuis le J1 (L50-5).
+**Fichiers :** prop `themes`, `components/room/theme-picker.tsx` [nouveau]. Le remède `clear_themes` est déjà rendu depuis le J1 (L50-4, E110-1), et les clés `room.settings.themeKeys.{label,help}` sont livrées par L50-5 — amendé le 28/09 (E120-10). Au J1, `RoomController@show` pose `editor.themeSelectorVisible = false` en dur, faute de `PoolReporter::themeSelectorVisible()` : ce lot le lit (E110-5).
 
 **Tests :**
 - `tests/Feature/Room/ThemeSelectorTest.php` :
@@ -1949,12 +2018,28 @@ La ligne « salon onglet Simple et bornes croisées serveur 12 h » de 00 § Jal
 8. **Seconde clause de la règle 4 (§ 2.1)** : un resserrement de borne de `RoomSettingsBounds` incrémente `VERSION`. Elle rend faux, au premier resserrement, le test de C0 § 7 « garde VERSION à 1 tant que FIELDS est inchangé », repris à la lettre en L50-1. Proposition : renommer le test « garde VERSION à 1 tant que FIELDS et les bornes de RoomSettingsBounds sont inchangés », avec un instantané des bornes dans le test. L50-1 a livré le test à la lettre, sans instantané : la proposition reste à valider par le porteur — amendé le 25/09 (E9-7).
 9. **Forme du rapport de changements** (§ 2.6) : `normalize()` peut rapporter `dropped` sous la clé d'un champ retiré par une version ultérieure, hors de `RoomSettingsFieldKey`. Faut-il élargir la forme `Record<RoomSettingsFieldKey, RoomSettingsChangeCode>` du contrat C0 § 3.4 ?
 10. **Placeholders définis clé par clé** pour `room.pool.remedy.*` (`:count` partout, `:value` pour `lower_frames_per_round` et `reduce_rounds_count` seulement) et pour `room.warnings.*` (`:seconds` pour `short_reveal` et `long_round` seulement), écart de forme à C0 § 2, qui donne les mêmes placeholders à toute la famille (§ 9.2, § 20.2).
-11. **Délai de `BroadcastLobbyState`** : la lettre du contrat C7 § 2.5, `delay(PlatformLimits::lobbyBroadcastDebounceMs())`, programmerait la diffusion en **secondes**. `50` dispatche avec un instant, comme 60 § 11.2 (écart (n) de 60 § 22 bis), et l'arrondit à la seconde supérieure (§ 8.3) : la fenêtre effective n'est jamais plus courte que `lobbyBroadcastDebounceMs()`, là où 60 § 11.2 décrit une fenêtre de 0 à 1 s sans cet arrondi.
+11. **Délai de `BroadcastLobbyState`** : la lettre du contrat C7 § 2.5, `delay(PlatformLimits::lobbyBroadcastDebounceMs())`, programmerait la diffusion en **secondes**. `50` dispatche avec un instant, comme 60 § 11.2 (écart (n) de 60 § 22 bis), et l'arrondit à la seconde supérieure (§ 8.3) : la fenêtre effective n'est jamais plus courte que `lobbyBroadcastDebounceMs()`, là où 60 § 11.2 décrit une fenêtre de 0 à 1 s sans cet arrondi. Le code livré s'écarte aussi de `->afterCommit()`, lettre de C7 § 2.5 et de 60 § 11.2 : il enveloppe le dispatch entier dans `DB::afterCommit()`, pour que le verrou d'unicité soit pris après la validation (§ 8.3) — amendé le 28/09 (E86-6).
 12. **Garde de capacité** (§ 10) : elle ne refuse qu'une capacité **abaissée** sous l'effectif présent, jamais le plafond `roomSeats()`. C'est une lecture de l'invariant 3 de C0 § 4 (« capacité ≥ `COUNT(player holdingSeat)` »), qui, prise à la lettre, refuserait toute écriture de réglages dès que l'effectif dépasse la capacité par le retour d'un siège parti (§ 7.3, test de 10 § 6.2).
-13. **Dépendance croisée L50-2 ↔ L60-4.** L60-4 dépend du `RoomSettingsPresenter` de L50-2 ; L50-2 dépend de L60-4 non seulement pour le dispatch de `BroadcastLobbyState` (seul point que 60 § 22 bis signale), mais aussi pour `seat.active`, que portent ses routes. Ordre proposé : L50-2 livre d'abord l'éditeur, le présentateur et les actions, puis ferme ses routes et son dispatch après L60-4 (section « Lots »).
+13. **Dépendance croisée L50-2 ↔ L60-4.** L60-4 dépend du `RoomSettingsPresenter` de L50-2 ; L50-2 dépend de L60-4 non seulement pour le dispatch de `BroadcastLobbyState` (seul point que 60 § 22 bis signale), mais aussi pour `seat.active`, que portent ses routes. Ordre proposé : L50-2 livre d'abord l'éditeur, le présentateur et les actions, puis ferme ses routes et son dispatch après L60-4 (section « Lots »). Appliqué : L50-2a à l'étape 84, L60-4 à l'étape 85, L50-2b (routes, contrôleurs, `RoomPolicy::updateSettings`, dispatch) à l'étape 86 — amendé le 28/09 (E84-1).
 14. **Règle du retardataire citée par `60` : alignée.** 60 § 13.7 résumait l'ancienne règle de ce document (« par `sequence_index` croissant, remplaçantes exclues »), alors que 60 § 1.2 joue les manches par `round_number`. La règle arrêtée ici (§ 15.2) suit l'ordre de jeu : `round_number` croissant, remplaçante comprise tant qu'elle n'a pas démarré. 60 § 13.7 est aligné : il renvoie à la règle du § 15.2 (`round_number` croissant, remplaçante comprise tant qu'elle n'a pas démarré) — amendé le 23/09.
-15. **Remède « nouveau salon » et promesse « débloque à lui seul ».** 30 § 4.3 compte `open_new_room` aux réglages courants sans la non-répétition, alors que le geste crée un salon aux réglages par défaut (§ 6.1). Le texte le dit désormais (« avec ces réglages », § 20.3), mais la promesse « chaque remède débloque à lui seul » ne vaut pour ce remède qu'une fois les réglages reportés à la main dans le nouveau salon ; depuis le preset `fast` (N = 2, M = 8, § 5.1), le nouveau salon naît à N = 3 et M = 10 au réglage par défaut, et peut s'y bloquer sur `framesPerRound` ou `roundsCount` alors que `:count` promettait assez de films. L'alternative, créer le nouveau salon avec les réglages courants, relève du produit : à trancher par le porteur.
+15. **Remède « nouveau salon » et promesse « débloque à lui seul ».** 30 § 4.3 compte `open_new_room` aux réglages courants sans la non-répétition, alors que le geste crée un salon aux réglages par défaut (§ 6.1). Le texte le dit désormais (« avec ces réglages », § 20.3), mais la promesse « chaque remède débloque à lui seul » ne vaut pour ce remède qu'une fois les réglages reportés à la main dans le nouveau salon ; depuis le preset `fast` (N = 2, M = 8, § 5.1), le nouveau salon naît à N = 3 et M = 10 au réglage par défaut, et peut s'y bloquer sur `framesPerRound` ou `roundsCount` alors que `:count` promettait assez de films. L'alternative, créer le nouveau salon avec les réglages courants, relève du produit : à trancher par le porteur. **Toujours ouvert au 28/09** : aucune décision n'est consignée, et L50-4 comme L50-5 ont livré le remède tel quel, lien vers `room.create` et texte « … avec ces réglages ». L'alternative toucherait `CreateRoom` et la page `room/create` — amendé le 28/09 (E120-8).
 16. **Import de `RoomSettingsState` par le fil de `60`.** `types/room-settings.ts` naît en L50-2 (section « Lots ») ; 60 § 11.4 l'importe dans `types/game-wire.ts`, que L60-2 crée, alors que L50-2 dépend de L60-2 (`game-write`). À `60` de poser cet import au plus tôt dans le lot qui type `settings.changed` et `room.replayed` pour le magasin (L60-9), qui dépend alors de L50-2.
-17. **Salon à version de réglages périmée après un resserrement de borne** (E36-1, signalé au porteur le 24/09 par L30-3). Le lobby calcule le vivier sur les réglages **bruts** du salon (`RoomSettingsPresenter::state()`, § 2.6 ; grisage des presets ; `BroadcastLobbyState`), et seule l'étape L5 du lancement normalise (§ 12.2). `PoolReporter` prend désormais `M` tel quel, pour que le rapport se calcule sur un `M` hors des nouvelles bornes. Deux questions restent au porteur, non tranchées ici :
+17. **Salon à version de réglages périmée après un resserrement de borne** (E36-1, signalé au porteur le 24/09 par L30-3 ; code de L50-2 livré inchangé, sans tolérance ajoutée à la garde de `N`, et sans effet tant que `VERSION = 1` — amendé le 28/09, E84-4). Le lobby calcule le vivier sur les réglages **bruts** du salon (`RoomSettingsPresenter::state()`, § 2.6 ; grisage des presets ; `BroadcastLobbyState`), et seule l'étape L5 du lancement normalise (§ 12.2). `PoolReporter` prend désormais `M` tel quel, pour que le rapport se calcule sur un `M` hors des nouvelles bornes. Deux questions restent au porteur, non tranchées ici :
     - la garde de `N` de `PoolScope` (L30-2) lève hors bornes : un resserrement des bornes de `N` ferait donc échouer `state()` et chaque diffusion du lobby de tout salon ouvert pendant le déploiement ;
     - pour un `M` périmé au-dessus d'une nouvelle `MAX_ROUNDS_COUNT` et un vivier compris entre les deux, le remède `reduce_rounds_count` porte une valeur que l'éditeur refuserait (30 § 4.3 fixe `value = count` sans plafond), jusqu'à la normalisation du lancement.
+
+**Points ajoutés le 28/09, relevés à l'implémentation de la phase C** (journal des écarts, entrées E84 à E123). Le code livré est décrit dans le corps de la spec ; chaque point attend une décision ou une confirmation du porteur, sans être tranché ici.
+
+18. **Salon archivé refusé avant la réparation d'hôte** (E102-1, E115-1). Le lancement (L3, § 12.2) et « Rejouer » (R3, § 13) refusent `room_archived` en tête, sans écriture, puis réparent l'hôte. La lettre de C6 § 3 place la réparation d'abord : elle écrirait un hôte sur un salon que l'archivage a vidé du sien (§ 16.2), et `room_archived` ne serait atteignable que par l'hôte réparé. Par HTTP, `seat.active` intercepte déjà ce cas, sauf archivage entre la policy et le verrou. À confirmer, et à reporter dans C6 § 3.
+19. **« Rejouer » déjà fait pendant un drainage** (E115-1). R4 (`lobby` → `null`) précède R6 (drainage) : un double clic sous drapeau rend `null`, sans message. Le § 14 dit « refusé quel que soit son effet » ; lu ici comme « même s'il ne crée aucune partie », un geste déjà accompli n'ayant plus d'effet à refuser. Si la phrase voulait l'inverse, le second clic recevrait le message de maintenance.
+20. **Message d'échec technique de « Rejouer »** (E115-3). Le § 12.5 nomme `room.errors.launch_failed` pour les deux gestes : l'hôte lit alors « Le lancement a échoué » sur le podium. Une clé `room.errors.replay_failed` serait plus juste ; elle n'est pas ajoutée faute de spec.
+21. **Verrou de la partie à l'admission d'un retardataire** (E116-1). S7 relit la dernière partie `FOR UPDATE` avant la candidate (§ 15.2), contre le gel concurrent d'une partie interrompue. À confirmer, si la lettre du § 15.2 voulait exclure ce verrou.
+22. **Composition de la mention des CGU** (E101-5). Le texte `legal.terms_notice` sert de texte au lien vers `legal.terms` (§ 6.2, § 7.2), ce que 90 § 10 permet. L'autre voie est un texte suivi d'un lien libellé `legal.footer.terms`.
+23. **Formulations** des clés ajoutées par la phase C : `room.identity.nickname_label` et `room.identity.nickname_hint` (§ 20.3, E101-4), `validation.attributes.publicId` (§ 20.4, E111-3).
+24. **Prop `state` de `room.show` construite sans rattrapage** (E109-2). Seules `room.state` et `solo.state` appellent `CatchUpGame` avant de construire le paquet (60 § 12.1). Un job de frontière en retard fait donc décrire à `room.show` l'état en base (phase `scheduled` au lieu de `running`, par exemple) jusqu'à la première resynchronisation du magasin. Ajouter le rattrapage à `room.show` (et à `solo.show`) rendrait la prop initiale toujours échue, au prix d'écritures sur un GET de page.
+25. **403 `not_host` d'un hôte déchu entre l'affichage et le clic** (E110-5, E111-7). Il suit le traitement ordinaire (page `error`), pour le lancement comme pour les gestes d'hôte, alors que `host.changed` retire aussitôt les gestes. L'intercepter par une relecture garderait l'hôte déchu sur la page du salon.
+26. **`purge:suspend` et le balayage `stale_lobby`** (E113-2). L'interrupteur d'incident de `RetentionPurger` ne suspend pas le balayage de ce document (§ 16.2). Doit-il le suspendre aussi ? La sonde `purge` est de toute façon en alerte pendant une suspension.
+27. **Preuve MySQL des sérialisations du salon** (E113-6). Aucun test `tests/Concurrency` (`locks-timing`) n'est nommé pour la sérialisation de l'archivage, du battement et de la prise de siège sous le verrou du salon ; SQLite ne la prouve que par injection de course. À inscrire dans une passe `locks-timing` si voulu.
+28. **Passations de tests d'identité sans lot** (E101-6, E111-7). La route de test `…/resign` de `PlayerTokenTest` (changement d'avatar hors siège) et l'en-tête de `NicknameBlocklistTest` (rebranchement sur les FormRequest de `50`) attendaient un geste de changement d'avatar ou de pseudo en L50-6, qui n'en contient aucun. Reste à nommer le lot qui livrera ce geste, ou une passe de dette de tests.
+29. **Durée d'effacement des sièges solo lue dans `RoomExpiry`** (E122-3). `RetentionWindows::SOLO_SEAT_IDLE_MINUTES` lit `RoomExpiry::ROOM_IDLE_MINUTES` (une durée annoncée, deux déclencheurs) : changer l'échéance d'archivage du salon changerait donc celle des sièges solo. Si les deux durées doivent pouvoir diverger, la constante de `100` devient un littéral propre.
+30. **Forme de la prop `presets`** (E123-11). Elle ne porte que `nearestPlayableFramesPerRound` (§ 5.3), nul pour un preset jouable tel quel : la relance solo de `game/solo` n'a aucune source du `N` d'un preset non grisé et affiche le `B_max` du `N` de la dernière partie. Si la prop est enrichie du `N` de chaque preset, la forme du § 5.3 change, avec 60 § 16.4 et 90 § 7.7.
