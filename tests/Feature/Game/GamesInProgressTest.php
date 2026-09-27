@@ -1,10 +1,12 @@
 <?php
 
 use App\Actions\Game\FinalizeGame;
+use App\Actions\Game\RecordHeartbeat;
 use App\Actions\Game\SeatInputClosed;
 use App\Enums\ContentAvailability;
 use App\Enums\GameMode;
 use App\Enums\GameStatus;
+use App\Enums\Locale;
 use App\Enums\PlayerConnectionState;
 use App\Enums\RoundIncidentReason;
 use App\Enums\RoundPlayerInputState;
@@ -12,6 +14,7 @@ use App\Enums\RoundStatus;
 use App\Events\Game\GameFinalized;
 use App\Jobs\Game\AdvanceRound;
 use App\Jobs\Game\InterruptPausedGame;
+use App\Jobs\Game\SweepSeatPresence;
 use App\Models\Game;
 use App\Models\Player;
 use App\Models\Room;
@@ -20,9 +23,11 @@ use App\Models\RoundPlayer;
 use App\Settings\EngineConstants;
 use App\Settings\PlatformLimits;
 use App\Settings\RoomSettingsBounds;
+use App\Support\Deploy\DeployDrain;
 use App\Support\Game\GameJournal;
 use App\Support\Game\GamesInProgress;
 use App\Support\Game\RoundStep;
+use App\Support\Identity\PlayerToken;
 use App\Support\Realtime\GameRef;
 use App\Support\Realtime\WireTime;
 use App\ValueObjects\Catalog\FrameLevelCoverage;
@@ -37,18 +42,19 @@ use Illuminate\Support\Sleep;
 use Tests\Support\Draw\PoolFixtures;
 use Tests\Support\Game\EngineFixtures;
 use Tests\Support\Game\GameJournalRecorder;
+use Tests\Support\Room\LobbyWrites;
 
 /*
 |--------------------------------------------------------------------------
-| Prédicat « partie en cours » et game:reschedule — spec 60 § 14.4 et § 17 (lot L60-10, contrat C17)
+| Prédicat « partie en cours » et game:reschedule — spec 60 § 14.4 et § 17 (lots L60-10, L60-13 ; contrat C17)
 |--------------------------------------------------------------------------
 |
 | Le prédicat (`Game::inProgress()`, compté et résumé par `GamesInProgress`)
 | est ce que le drainage de 100 attend ; `game:reschedule` est ce qu'il
 | appelle avant d'attendre, pour qu'aucune partie aux jobs perdus ne le
 | bloque jusqu'à l'échéance. L'intitulé « la reprise d'une partie en pause
-| reste permise pendant un drainage » se joue en L60-13, qui dispose de
-| `ResumeGame` et de `DeployDrain`.
+| reste permise pendant un drainage » est de L60-13, qui livre `ResumeGame`
+| et le battement qui l'appelle.
 |
 | La terminaison bornée se prouve par un WORKER SIMULÉ de la file `game` :
 | les jobs réellement dispatchés par le moteur (file simulée), dépilés dans
@@ -590,6 +596,61 @@ test('toute partie en cours a au moins un job programmé sur la file game', func
     expect(gamesInProgressWrites(static fn () => app()->call([$last, 'handle'])))->toBe(0)
         ->and($game->refresh()->ended_at?->equalTo($endedAt))->toBeTrue();
 })->with(gamesInProgressJourneys());
+
+test('la reprise d\'une partie en pause reste permise pendant un drainage', function (): void {
+    Queue::fake([AdvanceRound::class, InterruptPausedGame::class, SweepSeatPresence::class]);
+
+    // Deux parties en pause, un siège déconnecté chacune : multijoueur, dont
+    // le siège revient par la route du battement, et solo, par l'action
+    // partagée du battement (la route `solo.heartbeat` arrive avec L60-16).
+    $token = PlayerToken::mint(Locale::French);
+    $game = EngineFixtures::game(EngineFixtures::settings());
+    $seat = EngineFixtures::seat($game, [
+        'player_token_hash' => $token->hash(),
+        'connection_state' => PlayerConnectionState::Disconnected,
+        'disconnected_at' => Date::now(),
+    ]);
+    EngineFixtures::materialize($game);
+    $first = EngineFixtures::round($game, 1);
+    EngineFixtures::schedule($first, Date::now()->toImmutable()->addMilliseconds(EngineConstants::launchCountdownMs()));
+    EngineFixtures::play($first);
+
+    $solo = EngineFixtures::game(EngineFixtures::settings(), solo: true);
+    $soloSeat = EngineFixtures::seat($solo, ['connection_state' => PlayerConnectionState::Disconnected, 'disconnected_at' => Date::now()]);
+    EngineFixtures::materialize($solo);
+    $soloFirst = EngineFixtures::round($solo, 1);
+    EngineFixtures::schedule($soloFirst, Date::now()->toImmutable()->addMilliseconds(EngineConstants::launchCountdownMs()));
+    EngineFixtures::play($soloFirst);
+
+    expect($game->refresh()->status)->toBe(GameStatus::Paused)
+        ->and($solo->refresh()->status)->toBe(GameStatus::Paused);
+
+    // Le drainage commence : il bloque les lancements, jamais une reprise.
+    $drain = app(DeployDrain::class);
+    $drain->start(DeployDrain::defaultTimeoutMinutes());
+
+    expect($drain->isDraining())->toBeTrue()
+        ->and(GamesInProgress::count())->toBe(2);
+
+    $backAt = ($game->paused_at ?? throw new LogicException('Partie sans instant de pause.'))->addSeconds(3);
+    Date::setTestNow($backAt);
+    LobbyWrites::actAs($this, $token);
+    $this->postJson(route('room.heartbeat', $game->room ?? throw new LogicException('Partie sans salon.')))->assertNoContent();
+
+    Date::setTestNow($backAt->addSecond());
+    app(RecordHeartbeat::class)->handle($soloSeat, null);
+
+    $countdown = EngineConstants::launchCountdownMs();
+
+    expect($game->refresh()->status)->toBe(GameStatus::Running)
+        ->and($seat->refresh()->connection_state)->toBe(PlayerConnectionState::Connected)
+        ->and(EngineFixtures::round($game, 2)->started_at?->equalTo($backAt->addMilliseconds($countdown)))->toBeTrue()
+        ->and($solo->refresh()->status)->toBe(GameStatus::Running)
+        ->and(EngineFixtures::round($solo, 2)->started_at?->equalTo($backAt->addSecond()->addMilliseconds($countdown)))->toBeTrue()
+        // Le drapeau n'a pas bougé, et les deux parties restent en cours.
+        ->and($drain->isDraining())->toBeTrue()
+        ->and(GamesInProgress::count())->toBe(2);
+});
 
 test('game:reschedule redonne un job à une partie en cours qui n\'en a plus et reste idempotent', function (): void {
     // B, solo : lancée d'abord, palier 1 ouvert ; son palier 2 sera échu au

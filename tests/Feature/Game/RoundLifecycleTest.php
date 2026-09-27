@@ -17,11 +17,13 @@ use App\Enums\RoundIncidentReason;
 use App\Enums\RoundPlayerInputState;
 use App\Enums\RoundStatus;
 use App\Events\Game\GameFinalized;
+use App\Http\Middleware\EnsureActiveSeat;
 use App\Jobs\Game\AdvanceRound;
 use App\Jobs\Game\InterruptPausedGame;
 use App\Models\Frame;
 use App\Models\Game;
 use App\Models\Guess;
+use App\Models\Player;
 use App\Models\Room;
 use App\Models\Round;
 use App\Models\RoundPlayer;
@@ -30,10 +32,12 @@ use App\Settings\EngineConstants;
 use App\Support\Game\GameJournal;
 use App\Support\Game\NextRoundOutcome;
 use App\Support\Game\RoundStep;
+use App\Support\Identity\PlayerToken;
 use App\Support\Realtime\GameRef;
 use App\Support\Realtime\WireTime;
 use App\ValueObjects\Catalog\FrameLevelCoverage;
 use Carbon\CarbonImmutable;
+use Illuminate\Auth\Access\Events\GateEvaluated;
 use Illuminate\Broadcasting\BroadcastException;
 use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Queue\Jobs\SyncJob;
@@ -42,14 +46,19 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Sleep;
+use Illuminate\Testing\TestResponse;
+use Symfony\Component\HttpFoundation\Response;
 use Tests\Support\Draw\PoolFixtures;
 use Tests\Support\Game\EngineFixtures;
 use Tests\Support\Game\GameJournalRecorder;
 use Tests\Support\Realtime\RecordingBroadcaster;
+use Tests\Support\Room\HostGestures;
+use Tests\Support\Room\LobbyWrites;
+use Tests\TestCase;
 
 /*
 |--------------------------------------------------------------------------
-| Cycle de vie d'une manche — spec 60 § 3.2, § 4, § 5.3, § 6.3 et § 9 (lots L60-6, L60-7)
+| Cycle de vie d'une manche — spec 60 § 3.2, § 4, § 5.3, § 5.4, § 6.3 et § 9 (lots L60-6, L60-7, L60-13)
 |--------------------------------------------------------------------------
 |
 | Les transitions réelles, chacune appelée à son instant théorique, horloge
@@ -60,8 +69,10 @@ use Tests\Support\Realtime\RecordingBroadcaster;
 | `rounds_completed` ; ceux de L60-7 sur le job de frontière (réveil
 | anticipé, échec), le rattrapage (`CatchUpGame` : ordre, diffusion de
 | l'état courant, partie close ou en pause) et le journal `game` (retard
-| réel des diffusions de frontière). Ceux de la « manche suivante » (route
-| de l'hôte, L60-13) arrivent avec leur lot.
+| réel des diffusions de frontière) ; ceux de L60-13 sur la « manche
+| suivante », par la route de l'hôte (`room.round.next`) : raccourcir `R`
+| sans descendre sous `preload_lead_ms` plus la marge, 409 hors révélation,
+| refus à un non-hôte, hôte relu sous le verrou du salon.
 |
 | Parties matérialisées par l'action réelle (`EngineFixtures`), vraies
 | variantes à fichier réel ; aucune valeur de jeu en littéral : durées,
@@ -1241,4 +1252,181 @@ test('la manche suivante n\'agit qu\'avec l\'autorité évaluée sur le salon re
     expect(app(AdvanceToNextRound::class)->handle($game, $gestureAt, static fn (Room $room): bool => true))->toBe(NextRoundOutcome::Advanced)
         ->and($first->refresh()->reveal_ends_at?->equalTo($newEnd))->toBeTrue()
         ->and(lifecycleBoundaries($first))->toContain([RoundStep::EndReveal->value, null, WireTime::iso($newEnd)]);
+});
+
+/**
+ * Un salon en partie, sa manche 1 jouée jusqu'à sa révélation : l'hôte et un
+ * autre siège, tenus par des jetons, onglets actifs frappés.
+ *
+ * @return array{room: Room, game: Game, first: Round, host: Player, hostToken: PlayerToken, seat: Player, seatToken: PlayerToken}
+ */
+function lifecycleRevealingRoom(): array
+{
+    [$room, $host, $hostToken] = HostGestures::room();
+    [$seat, $seatToken] = HostGestures::seat($room);
+    [$game, $first] = HostGestures::runningGame($room, [$host, $seat]);
+
+    foreach (range(2, $game->frames_per_round) as $tierIndex) {
+        EngineFixtures::openTier($first, $tierIndex);
+    }
+
+    EngineFixtures::close($first);
+    EngineFixtures::reveal($first);
+
+    return [
+        'room' => $room->refresh(),
+        'game' => $game->refresh(),
+        'first' => $first->refresh(),
+        'host' => $host,
+        'hostToken' => $hostToken,
+        'seat' => $seat,
+        'seatToken' => $seatToken,
+    ];
+}
+
+/**
+ * « Manche suivante » par la route, telle que le client l'envoie : JSON,
+ * cookie du jeton, onglet actif, reçue à `$at`.
+ *
+ * @return TestResponse<Response>
+ */
+function lifecycleNextRound(TestCase $test, Room $room, Player $seat, PlayerToken $token, CarbonImmutable $at): TestResponse
+{
+    Date::setTestNow($at);
+    LobbyWrites::actAs($test, $token);
+
+    return $test->postJson(route('room.round.next', $room), [], [EnsureActiveSeat::HEADER => (string) $seat->active_seat_token]);
+}
+
+test('la manche suivante raccourcit R sans descendre sous preload_lead_ms plus la marge et répond 409 hors révélation', function (): void {
+    $recorder = RecordingBroadcaster::install();
+    $scene = lifecycleRevealingRoom();
+    ['room' => $room, 'game' => $game, 'first' => $first, 'host' => $host, 'hostToken' => $token] = $scene;
+    $second = EngineFixtures::round($game, 2);
+    $revealStartsAt = ($first->ended_at ?? throw new LogicException('Manche 1 non close.'))->addMilliseconds($game->tier_grace_ms);
+    $revealEndsAt = $first->reveal_ends_at ?? throw new LogicException('Manche 1 sans fin de révélation.');
+    $margin = $game->preload_lead_ms + EngineConstants::nextRoundMarginMs();
+
+    // Une seconde après le début de la révélation, l'hôte avance la manche
+    // suivante : la révélation finit à `now + preload_lead_ms + marge`, et
+    // la manche suivante part à cet instant, `round.scheduled` réémis.
+    $recorder->sent = [];
+    $gestureAt = $revealStartsAt->addMilliseconds(1_137);
+    $newEnd = $gestureAt->addMilliseconds($margin);
+
+    expect($newEnd->lessThan($revealEndsAt))->toBeTrue();
+
+    lifecycleNextRound($this, $room, $host, $token, $gestureAt)->assertNoContent();
+
+    expect($first->refresh()->reveal_ends_at?->equalTo($newEnd))->toBeTrue()
+        ->and($first->status)->toBe(RoundStatus::Revealing)
+        // `D` n'est jamais touché, ni l'instant de clôture de la manche révélée.
+        ->and($first->duration_ms)->toBe($scene['first']->duration_ms)
+        ->and($first->ended_at?->equalTo($scene['first']->ended_at))->toBeTrue()
+        ->and($second->refresh()->started_at?->equalTo($newEnd))->toBeTrue()
+        ->and(lifecycleBoundaries($first))->toContain([RoundStep::EndReveal->value, null, WireTime::iso($newEnd)])
+        ->and(array_column($recorder->sent, 'event'))->toBe(['round.scheduled'])
+        ->and($recorder->sent[0]['payload']['round']['startsAt'])->toBe(WireTime::iso($newEnd));
+
+    // Un second geste aussitôt : la fin est déjà plus proche que la marge,
+    // rien ne bouge — jamais sous `preload_lead_ms + marge`.
+    $recorder->sent = [];
+    lifecycleNextRound($this, $room, $host, $token, $gestureAt->addMilliseconds(200))->assertNoContent();
+
+    expect($first->refresh()->reveal_ends_at?->equalTo($newEnd))->toBeTrue()
+        ->and($second->refresh()->started_at?->equalTo($newEnd))->toBeTrue()
+        ->and($recorder->sent)->toBe([]);
+
+    // À la fin de révélation, et après : 409 `not_revealing`. Le geste
+    // rattrape d'abord la partie — la fin de révélation échue est appliquée.
+    lifecycleNextRound($this, $room, $host, $token, $newEnd)
+        ->assertConflict()
+        ->assertExactJson(['code' => 'not_revealing']);
+
+    expect($first->refresh()->status)->toBe(RoundStatus::Completed)
+        ->and($first->reveal_ends_at?->equalTo($newEnd))->toBeTrue();
+
+    // Pendant une manche en cours : 409, `D` intact.
+    $runningAt = EngineFixtures::opensAt($second, 1)->addSeconds(2);
+    $durationEnd = EngineFixtures::durationEnd($second);
+
+    lifecycleNextRound($this, $room, $host, $token, $runningAt)
+        ->assertConflict()
+        ->assertExactJson(['code' => 'not_revealing']);
+
+    expect($second->refresh()->status)->toBe(RoundStatus::Running)
+        ->and($second->ended_at)->toBeNull()
+        ->and(EngineFixtures::durationEnd($second)->equalTo($durationEnd))->toBeTrue();
+
+    // Sans partie en cours (salon au lobby) : 409 aussi.
+    [$lobby, $lobbyHost, $lobbyToken] = HostGestures::room();
+
+    lifecycleNextRound($this, $lobby, $lobbyHost, $lobbyToken, $runningAt)
+        ->assertConflict()
+        ->assertExactJson(['code' => 'not_revealing']);
+});
+
+test('la manche suivante est refusée à un siège qui n\'est pas l\'hôte', function (): void {
+    $scene = lifecycleRevealingRoom();
+    ['room' => $room, 'game' => $game, 'first' => $first] = $scene;
+    $revealEndsAt = $first->reveal_ends_at ?? throw new LogicException('Manche 1 sans fin de révélation.');
+    $gestureAt = ($first->ended_at ?? throw new LogicException('Manche 1 non close.'))->addMilliseconds($game->tier_grace_ms + 1_000);
+
+    // Un siège du salon qui n'est pas l'hôte : 403, rien ne bouge.
+    lifecycleNextRound($this, $room, $scene['seat'], $scene['seatToken'], $gestureAt)->assertForbidden();
+
+    expect($first->refresh()->reveal_ends_at?->equalTo($revealEndsAt))->toBeTrue()
+        ->and(EngineFixtures::round($game, 2)->started_at?->equalTo($revealEndsAt))->toBeTrue();
+
+    // Un jeton sans siège dans ce salon : 403 dès `seat.active`.
+    [, $stranger, $strangerToken] = HostGestures::room();
+
+    lifecycleNextRound($this, $room, $stranger, $strangerToken, $gestureAt)->assertForbidden();
+
+    // L'hôte, depuis un onglet supplanté : 409 `seat_superseded`.
+    $superseded = clone $scene['host'];
+    $superseded->active_seat_token = 'onglet-supplante';
+
+    lifecycleNextRound($this, $room, $superseded, $scene['hostToken'], $gestureAt)
+        ->assertConflict()
+        ->assertExactJson(['code' => 'seat_superseded']);
+
+    expect($first->refresh()->reveal_ends_at?->equalTo($revealEndsAt))->toBeTrue();
+});
+
+test('la manche suivante relit l\'hôte sous le verrou du salon', function (): void {
+    $scene = lifecycleRevealingRoom();
+    ['room' => $room, 'game' => $game, 'first' => $first, 'host' => $host, 'seat' => $seat] = $scene;
+    $revealEndsAt = $first->reveal_ends_at ?? throw new LogicException('Manche 1 sans fin de révélation.');
+    $gestureAt = ($first->ended_at ?? throw new LogicException('Manche 1 non close.'))->addMilliseconds($game->tier_grace_ms + 1_000);
+
+    // Un transfert d'hôte concurrent se valide juste après la première garde
+    // (la policy du contrôleur) : l'action relit le salon sous son verrou et
+    // refuse, 403, sans rien raccourcir.
+    $evaluations = [];
+    Event::listen(GateEvaluated::class, static function (GateEvaluated $event) use (&$evaluations, $room, $seat): void {
+        if ($event->ability !== 'advanceRound') {
+            return;
+        }
+
+        $evaluated = $event->arguments[0] ?? null;
+        $evaluations[] = [$evaluated instanceof Room ? $evaluated->host_player_id : null, $event->result];
+
+        if (count($evaluations) === 1) {
+            Room::query()->whereKey($room->id)->update(['host_player_id' => $seat->id]);
+        }
+    });
+
+    lifecycleNextRound($this, $room, $host, $scene['hostToken'], $gestureAt)->assertForbidden();
+
+    expect($evaluations)->toBe([[$host->id, true], [$seat->id, false]])
+        ->and($first->refresh()->reveal_ends_at?->equalTo($revealEndsAt))->toBeTrue()
+        ->and(EngineFixtures::round($game, 2)->started_at?->equalTo($revealEndsAt))->toBeTrue();
+
+    // Le nouvel hôte, lui, avance la manche.
+    $handedAt = $gestureAt->addMilliseconds(300);
+
+    lifecycleNextRound($this, $room, $seat, $scene['seatToken'], $handedAt)->assertNoContent();
+
+    expect($first->refresh()->reveal_ends_at?->equalTo($handedAt->addMilliseconds($game->preload_lead_ms + EngineConstants::nextRoundMarginMs())))->toBeTrue();
 });

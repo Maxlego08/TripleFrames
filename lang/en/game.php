@@ -43,8 +43,11 @@ return [
         'kicked' => 'The host removed you from the room.',
     ],
 
+    // Spec 60 § 5.4 (lot L60-13) : `not_revealing`, code du 409 du geste
+    // « manche suivante » de l’hôte hors révélation, rendu par le client.
     'errors' => [
         'seat_superseded' => 'This tab is no longer in control: you are playing in another tab. Reload the page to take over here.',
+        'not_revealing' => 'The next round can only be brought forward during the reveal.',
     ],
 
     // Spec 70 § 17 (lot L70-5) : la saisie en texte libre. `rejected`,

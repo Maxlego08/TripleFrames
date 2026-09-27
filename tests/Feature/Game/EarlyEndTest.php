@@ -3,11 +3,13 @@
 use App\Actions\Game\CatchUpGame;
 use App\Actions\Game\SeatInputClosed;
 use App\Enums\GameMode;
+use App\Enums\Locale;
 use App\Enums\PlayerConnectionState;
 use App\Enums\RoundPlayerInputState;
 use App\Enums\RoundStatus;
 use App\Jobs\Game\AdvanceRound;
 use App\Jobs\Game\InterruptPausedGame;
+use App\Jobs\Game\SweepSeatPresence;
 use App\Models\Game;
 use App\Models\Guess;
 use App\Models\Player;
@@ -15,6 +17,7 @@ use App\Models\Round;
 use App\Models\RoundPlayer;
 use App\Models\RoundTier;
 use App\Support\Game\RoundStep;
+use App\Support\Identity\PlayerToken;
 use App\Support\Realtime\WireTime;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Date;
@@ -22,11 +25,13 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
 use Tests\Support\Draw\PoolFixtures;
 use Tests\Support\Game\EngineFixtures;
+use Tests\Support\Game\PresenceFixtures;
 use Tests\Support\Realtime\RecordingBroadcaster;
+use Tests\Support\Room\HostGestures;
 
 /*
 |--------------------------------------------------------------------------
-| Fin anticipée — spec 60 § 8.2, § 9.1 à § 9.3 ; 10 § 7.7 (lot L60-7)
+| Fin anticipée — spec 60 § 8.2, § 9.1 à § 9.3, § 13.2 et § 13.4 ; 10 § 7.7 (lots L60-7, L60-13)
 |--------------------------------------------------------------------------
 |
 | Le prédicat de 10 § 7.7 amendé par D20 du 23/09 (E10-53) : fin anticipée si
@@ -37,7 +42,8 @@ use Tests\Support\Realtime\RecordingBroadcaster;
 | le départ et l'expulsion (50) appellent avec l'instant ÉCRIT de
 | l'événement déclencheur. Les intitulés de 10 § 7.7 sont conservés ; ceux de
 | la déconnexion du dernier participant et du départ ou de l'expulsion
-| arrivent avec L60-13, qui livre le balayage et reçoit les gestes de 50.
+| (L60-13) passent par le vrai balayage, armé par les vrais battements, et
+| par les vraies routes de 50.
 |
 | Les clôtures de saisie de 70 (verrouillage, clic faux, tentatives
 | épuisées) sont écrites ici comme 70 les écrit — état, `input_closed_at` —,
@@ -365,3 +371,82 @@ test('l\'écouteur d\'une clôture de saisie passe au crochet l\'instant écrit,
         ->and(array_column($recorder->sent, 'event'))->toBe(['round.revealed', 'round.scheduled'])
         ->and($recorder->sent[0]['payload']['serverNow'])->toBe(WireTime::iso($late));
 });
+
+test('la déconnexion du dernier participant à saisie ouverte déclenche la fin anticipée', function (): void {
+    Queue::fake([AdvanceRound::class, InterruptPausedGame::class, SweepSeatPresence::class]);
+    $recorder = RecordingBroadcaster::install();
+    $tokens = ['trouveur' => PlayerToken::mint(Locale::French), 'muet' => PlayerToken::mint(Locale::French)];
+
+    [$game, $round, $seats] = earlyEndOpenedRound([
+        'trouveur' => ['player' => ['player_token_hash' => $tokens['trouveur']->hash()]],
+        'muet' => ['player' => ['player_token_hash' => $tokens['muet']->hash()]],
+    ]);
+    $room = $game->room ?? throw new LogicException('Partie sans salon.');
+    $t1 = EngineFixtures::opensAt($round, 1);
+
+    // Les deux sièges battent après T₁ ; le balayage s'arme sur l'échéance
+    // du premier.
+    PresenceFixtures::beat($this, $room, $tokens['muet'], $t1->addSecond())->assertNoContent();
+    PresenceFixtures::beat($this, $room, $tokens['trouveur'], $t1->addSecond()->addMilliseconds(500))->assertNoContent();
+
+    // Le trouveur clôt sa saisie ; le muet, saisie ouverte, empêche la fin
+    // anticipée tant qu'il est participant.
+    earlyEndCloseInput($round, $seats['trouveur'], RoundPlayerInputState::AttemptsExhausted, $t1->addMilliseconds(4_321));
+
+    expect($round->refresh()->ended_at)->toBeNull();
+
+    // Le trouveur bat encore ; le muet se tait.
+    PresenceFixtures::beat($this, $room, $tokens['trouveur'], $t1->addSeconds(15))->assertNoContent();
+
+    $sweep = PresenceFixtures::lastSweep();
+
+    expect(PresenceFixtures::dueAt($sweep)->lessThan(EngineFixtures::durationEnd($round)))->toBeTrue();
+
+    $recorder->sent = [];
+    PresenceFixtures::run($sweep);
+
+    // À son échéance, le muet passe `disconnected` : il sort des
+    // participants, et la manche se clôt à l'instant de transition ÉCRIT.
+    $muet = $seats['muet']->refresh();
+    $disconnectedAt = $muet->disconnected_at ?? throw new LogicException('Siège resté connecté.');
+
+    expect($muet->connection_state)->toBe(PlayerConnectionState::Disconnected)
+        ->and($seats['trouveur']->refresh()->connection_state)->toBe(PlayerConnectionState::Connected)
+        ->and($round->refresh()->ended_at?->equalTo($disconnectedAt))->toBeTrue()
+        ->and($round->status)->toBe(RoundStatus::Running)
+        ->and(earlyEndParticipation($round, $muet)->input_state)->toBe(RoundPlayerInputState::Open)
+        // Sur le fil : la déconnexion, puis la clôture qu'elle déclenche.
+        ->and(array_column($recorder->sent, 'event'))->toBe(['seat.updated', 'round.closed'])
+        ->and($recorder->sent[1]['payload']['endedAt'])->toBe(WireTime::iso($disconnectedAt));
+});
+
+test('le départ volontaire ou l\'expulsion du dernier participant à saisie ouverte déclenche la fin anticipée', function (string $gesture): void {
+    $recorder = RecordingBroadcaster::install();
+    [$room, $host, $hostToken] = HostGestures::room();
+    [$seat, $seatToken] = HostGestures::seat($room);
+    [$game, $round] = HostGestures::runningGame($room, [$host, $seat]);
+    $t1 = EngineFixtures::opensAt($round, 1);
+
+    // L'hôte, participant, clôt sa saisie ; l'autre siège l'a encore ouverte.
+    earlyEndCloseInput($round, $host, RoundPlayerInputState::AttemptsExhausted, $t1->addMilliseconds(2_468));
+
+    expect($round->refresh()->ended_at)->toBeNull();
+
+    $recorder->sent = [];
+    Date::setTestNow($t1->addMilliseconds(5_137));
+
+    match ($gesture) {
+        'départ' => HostGestures::leave($this, $room, $seatToken, $seat)->assertRedirect(),
+        'expulsion' => HostGestures::kick($this, $room, $hostToken, $host, $seat->public_id)->assertRedirect(),
+    };
+
+    $seat->refresh();
+    $leftAt = $seat->left_at ?? throw new LogicException('Siège resté dans le salon.');
+
+    // La manche se clôt au `left_at` écrit par le geste — l'instant
+    // d'expulsion, à la milliseconde, pour une expulsion.
+    expect($round->refresh()->ended_at?->equalTo($leftAt))->toBeTrue()
+        ->and($gesture === 'expulsion' ? $seat->kicked_at?->equalTo($leftAt) : $seat->kicked_at === null)->toBeTrue()
+        ->and(array_slice(array_column($recorder->sent, 'event'), -1))->toBe(['round.closed'])
+        ->and($recorder->sent[array_key_last($recorder->sent)]['payload']['endedAt'])->toBe(WireTime::iso($leftAt));
+})->with(['départ', 'expulsion']);

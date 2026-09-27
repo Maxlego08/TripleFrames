@@ -4,6 +4,8 @@ use App\Http\Controllers\Game\AnswerController;
 use App\Http\Controllers\Game\ChoiceController;
 use App\Http\Controllers\Game\ClockController;
 use App\Http\Controllers\Game\FrameServeController;
+use App\Http\Controllers\Game\NextRoundController;
+use App\Http\Controllers\Game\RoomHeartbeatController;
 use App\Http\Controllers\Game\RoomStateController;
 use App\Http\Controllers\Room\HostTransferController;
 use App\Http\Controllers\Room\KickController;
@@ -124,16 +126,29 @@ Route::get('r/{room}/state', [RoomStateController::class, 'show'])
     ->name('room.state')
     ->middleware(['translations:game,room,legal', 'throttle:game-read']);
 
+// Battement de présence d'un siège de salon (§ 13.1) : écrit `last_seen_at`,
+// ramène un siège déconnecté ou parti (non expulsé) à `connected`, nourrit
+// `room.last_activity_at`, reprend une partie en pause et arme le balayage
+// de présence. Ni `seat.active` — la présence est celle du SIÈGE ; c'est le
+// client qui cesse de battre dans un onglet supplanté (§ 12.7) —, ni domaine
+// de traduction : 204, ou 403 sans siège tenu par le jeton, siège expulsé ou
+// salon archivé.
+Route::post('r/{room}/heartbeat', [RoomHeartbeatController::class, 'store'])
+    ->name('room.heartbeat')
+    ->middleware('throttle:game-write');
+
 // Gestes de l'hôte (spec 50 § 3, § 5.3, § 11, § 12, § 17.1, § 21 ;
 // contrats C0 et C6) : l'onglet Simple, l'application d'un preset, le
 // lancement, l'expulsion et le transfert du rôle ; et le départ, geste de
-// tout joueur. Toute écriture du lobby passe par `seat.active` (contrat C7 :
-// 403 sans siège tenu par le jeton, 409 `seat_superseded` pour un onglet
-// supplanté), puis par `throttle:game-write`, dans cet ordre et avant la
-// liaison de `{room}` (liste de priorité de `bootstrap/app.php`). Aucun
-// domaine de traduction : ces routes ne rendent aucune page, elles
-// redirigent vers le lobby (le départ, vers l'accueil), refus et échec
-// technique rendus dans la langue de la requête.
+// tout joueur ; en partie, « manche suivante » (spec 60 § 5.4). Toute
+// écriture du salon passe par `seat.active` (contrat C7 : 403 sans siège
+// tenu par le jeton, 409 `seat_superseded` pour un onglet supplanté), puis
+// par `throttle:game-write`, dans cet ordre et avant la liaison de `{room}`
+// (liste de priorité de `bootstrap/app.php`). Aucun domaine de traduction :
+// ces routes ne rendent aucune page — elles redirigent vers le lobby (le
+// départ, vers l'accueil), refus et échec technique rendus dans la langue de
+// la requête ; « manche suivante » répond en JSON, par un code que le client
+// traduit.
 Route::middleware(['seat.active', 'throttle:game-write'])->group(function (): void {
     Route::patch('r/{room}/settings', [RoomSettingsController::class, 'update'])
         ->name('room.settings.update');
@@ -156,6 +171,13 @@ Route::middleware(['seat.active', 'throttle:game-write'])->group(function (): vo
 
     Route::post('r/{room}/leave', [LeaveRoomController::class, 'store'])
         ->name('room.leave');
+
+    // « Manche suivante » (spec 60 § 5.4), le seul pouvoir de l'hôte en
+    // partie : raccourcit la révélation, jamais une manche. JSON à
+    // destinataire unique — 204 ; 409 `not_revealing` hors révélation ; 403
+    // pour un siège qui n'est pas l'hôte, relu sous le verrou du salon.
+    Route::post('r/{room}/round/next', [NextRoundController::class, 'store'])
+        ->name('room.round.next');
 });
 
 // Soumission d'une réponse en texte libre (spec 70 § 7.1, contrat C10 § 2) :

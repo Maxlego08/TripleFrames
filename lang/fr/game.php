@@ -34,8 +34,11 @@ return [
         'kicked' => 'L’hôte vous a retiré du salon.',
     ],
 
+    // Spec 60 § 5.4 (lot L60-13) : `not_revealing`, code du 409 du geste
+    // « manche suivante » de l’hôte hors révélation, rendu par le client.
     'errors' => [
         'seat_superseded' => 'Cet onglet n’a plus la main : vous jouez dans un autre onglet. Rechargez la page pour la reprendre ici.',
+        'not_revealing' => 'La manche suivante ne peut être avancée que pendant la révélation.',
     ],
 
     // Spec 70 § 17 (lot L70-5) : la saisie en texte libre. `rejected`,

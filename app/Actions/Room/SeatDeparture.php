@@ -20,7 +20,11 @@ use LogicException;
  * Ce que partagent l'expulsion ({@see KickSeat}) et le départ volontaire
  * ({@see LeaveRoom}) — spec 50 § 11.3 (étape 7), § 11.4 et § 8.2 ; 60 § 13.4,
  * contrat C7 § 2.5 et § 4.7. Un départ forcé a, sur les participants, l'effet
- * de tout départ (00 § Cycle de vie et cas limites).
+ * de tout départ (00 § Cycle de vie et cas limites). Le balayage de présence
+ * de 60 (`SweepSeatPresence`, § 13.2) s'en sert aussi : un siège qui passe
+ * `left` faute de battement marque sa participation comme un départ, et
+ * toute sortie des participants — `disconnected` compris — réévalue la fin
+ * anticipée avec l'instant de transition écrit.
  *
  * - {@see self::markParticipation()} — **dans la transaction du geste**, salon
  *   puis siège déjà verrouillés : la dernière partie du salon est relue en
@@ -38,9 +42,11 @@ use LogicException;
  *   siège a une ligne `round_player`, s'il y en a une, est reprise
  *   `FOR UPDATE` dans une SECONDE transaction, puis
  *   `SeatInputClosed::handle($round, $roundPlayer, null, $leftAt)` — `$leftAt`
- *   étant le `left_at` écrit, jamais l'heure d'exécution. Le geste de 50 ne
- *   tient donc jamais le verrou de manche dans sa propre transaction, et le
- *   moteur réévalue la fin anticipée sous le sien. Aucun événement de domaine
+ *   étant le `left_at` écrit (pour le balayage de présence, l'instant de sa
+ *   transition : `disconnected_at` ou `left_at`), jamais l'heure
+ *   d'exécution. Le geste de 50 ne tient donc jamais le verrou de manche
+ *   dans sa propre transaction, et le moteur réévalue la fin anticipée sous
+ *   le sien. Aucun événement de domaine
  *   n'est ajouté ; avec `$guess` nul, aucun `player.locked` n'est émis.
  */
 final readonly class SeatDeparture

@@ -107,6 +107,7 @@ export type ResyncReason =
     | 'frame_unavailable'
     | 'frame_expired'
     | 'solo_poll'
+    | 'heartbeat_refused'
     | 'retry';
 
 /** Réponse d'une resynchronisation, telle que la fonction de la page la rend. */

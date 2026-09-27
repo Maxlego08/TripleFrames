@@ -1,12 +1,13 @@
-import type { HttpExceptionResponse } from '@inertiajs/core';
+import type { HttpExceptionResponse, PendingVisit } from '@inertiajs/core';
 import { router } from '@inertiajs/react';
-import { useEffect, useEffectEvent, useRef } from 'react';
+import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import { useGameState } from '@/hooks/game/use-game-state';
 import type { GameStateView } from '@/hooks/game/use-game-state';
+import { useHeartbeat } from '@/hooks/game/use-heartbeat';
 import { useTranslations } from '@/hooks/use-translations';
 import { announce } from '@/lib/game/announcer';
 import { fetchGameState } from '@/lib/game/store';
-import { show, state as roomState } from '@/routes/room';
+import { heartbeat, leave, show, state as roomState } from '@/routes/room';
 import type { GameStatePacket } from '@/types/game-wire';
 import type { RoomSettingsState } from '@/types/room-settings';
 
@@ -21,6 +22,11 @@ import type { RoomSettingsState } from '@/types/room-settings';
  * `room.show` : `room.archived` (« salon expiré ») et `seat.kicked` (la
  * page d'entrée, en état `kicked`) — et un 403 de resynchronisation, le
  * jeton ne tenant plus de siège ici.
+ *
+ * Le **battement de présence** de 60 (§ 13.1, `useHeartbeat`) part d'ici,
+ * vers `room.heartbeat`, tant que la page reste celle du salon et que
+ * l'onglet tient le siège — jamais d'un onglet supplanté, qui n'écrit plus
+ * (§ 12.7), ni pendant « Quitter le salon ».
  *
  * Réactions du § 8.2, écrites ici et nulle part ailleurs :
  *
@@ -133,6 +139,48 @@ export function isSeatSupersededResponse(
     );
 }
 
+/**
+ * « Quitter le salon » (`room.leave`, 50 § 11.4) est-il en cours ? Vrai du
+ * départ de la visite (`start`, jamais `before`, qu'un autre écouteur peut
+ * annuler) à sa fin (`finish` de la même visite). Un départ réussi quitte la
+ * page : Inertia rend l'accueil par `flushSync` avant `finish`, et le lobby
+ * est déjà démonté ; un départ refusé rend la main au battement.
+ *
+ * `router.on` est global : seule la visite POST vers le départ de CE salon
+ * compte, reconnue à son chemin.
+ */
+function useLeaveInFlight(code: string): boolean {
+    const [leaving, setLeaving] = useState(false);
+
+    useEffect(() => {
+        const leavePath = leave.url({ room: code });
+        let pending: PendingVisit | null = null;
+
+        const offStart = router.on('start', (event) => {
+            const visit = event.detail.visit;
+
+            if (visit.method === 'post' && visit.url.pathname === leavePath) {
+                pending = visit;
+                setLeaving(true);
+            }
+        });
+        const offFinish = router.on('finish', (event) => {
+            if (pending !== null && event.detail.visit === pending) {
+                pending = null;
+                setLeaving(false);
+            }
+        });
+
+        // Retirés au démontage : `strictMode` monte deux fois.
+        return () => {
+            offFinish();
+            offStart();
+        };
+    }, [code]);
+
+    return leaving;
+}
+
 export function useLobbyState(options: UseLobbyStateOptions): LobbyStateView {
     const { code } = options;
     const { t } = useTranslations();
@@ -160,6 +208,33 @@ export function useLobbyState(options: UseLobbyStateOptions): LobbyStateView {
             return false;
         }
     };
+
+    // --- Battement de présence (60 § 13.1) ----------------------------------
+    //
+    // Du lobby au podium, tant que la page reste celle du salon : il nourrit
+    // `room.last_activity_at` (échéances de 50 § 16), ramène le siège à
+    // `connected` et reprend une partie en pause.
+    //
+    // - Un onglet supplanté n'écrit plus (§ 12.7) : il ne bat pas. Un siège
+    //   dont il ne reste que lui sort des participants — il ne peut rien
+    //   saisir, il ne bloque donc ni la fin anticipée ni le transfert d'hôte —,
+    //   et le budget `game-write`, commun aux onglets du jeton, ne porte
+    //   qu'un flux de battements (§ 19.1). Recharger reprend la main.
+    // - Suspendu pendant « Quitter le salon » : un battement traité après le
+    //   départ ramènerait le siège parti à `connected` (§ 13.1).
+    //
+    // Un 403 — plus de siège tenu ici — se lit par une resynchronisation,
+    // dont le 403 pose `exit` et fait quitter le salon.
+    const leaving = useLeaveInFlight(code);
+    const heartbeatStatus = useHeartbeat(
+        active && !leaving ? heartbeat.url({ room: code }) : null,
+    );
+
+    useEffect(() => {
+        if (heartbeatStatus === 'refused') {
+            store.requestResync('heartbeat_refused');
+        }
+    }, [heartbeatStatus, store]);
 
     // --- Rechargement partiel des réglages et des presets (§ 8.2) -----------
 

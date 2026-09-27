@@ -1505,6 +1505,7 @@ export type TranslationKey =
     | 'game.choices.invalid'
     | 'game.choices.label'
     | 'game.choices.wrong'
+    | 'game.errors.not_revealing'
     | 'game.errors.seat_superseded'
     | 'game.frame.alt'
     | 'game.frame.loading'

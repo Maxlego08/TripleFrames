@@ -7,11 +7,16 @@ use App\Enums\RoundStatus;
 use App\Events\Game\GameFinalized;
 use App\Jobs\Game\AdvanceRound;
 use App\Jobs\Game\InterruptPausedGame;
+use App\Jobs\Game\SweepSeatPresence;
 use App\Models\Game;
+use App\Models\GamePlayer;
 use App\Models\Player;
+use App\Models\Room;
 use App\Models\Round;
 use App\Models\RoundPlayer;
 use App\Settings\EngineConstants;
+use App\Support\Game\RoundStep;
+use App\Support\Identity\PlayerToken;
 use App\Support\Realtime\WireTime;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Queue\ShouldQueueAfterCommit;
@@ -21,11 +26,12 @@ use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Sleep;
 use Tests\Support\Draw\PoolFixtures;
 use Tests\Support\Game\EngineFixtures;
+use Tests\Support\Game\PresenceFixtures;
 use Tests\Support\Realtime\RecordingBroadcaster;
 
 /*
 |--------------------------------------------------------------------------
-| Pause et clôture à 15 minutes — spec 60 § 9.6, § 14.1 et § 14.3 (lot L60-6)
+| Pause, reprise et clôture à 15 minutes — spec 60 § 9.6, § 14.1 à § 14.3 (lots L60-6, L60-13)
 |--------------------------------------------------------------------------
 |
 | `EndReveal(k)` met la partie en pause quand une manche reste à jouer et
@@ -34,8 +40,10 @@ use Tests\Support\Realtime\RecordingBroadcaster;
 | déprogrammée, et `InterruptPausedGame` gèle la partie à `paused_at +
 | pauseTimeoutMs`, l'instant prévu. Les intitulés de ce lot portent sur la
 | pause, sa déprogrammation, l'interruption programmée, le gel à l'instant
-| prévu et le retardataire qui empêche la pause ; la reprise et le battement
-| tardif (L60-13) et la partie solo quittée (L60-16) arrivent avec leurs lots.
+| prévu et le retardataire qui empêche la pause ; ceux de L60-13 sur la
+| reprise par le battement d'un siège revenu (`ResumeGame`, § 14.2) et sur
+| le battement tardif, qui gèle à l'échéance au lieu de reprendre ; la partie
+| solo quittée (L60-16) arrive avec son lot.
 |
 */
 
@@ -337,4 +345,175 @@ test('un retardataire admis à la manche suivante et connecté empêche la pause
     EngineFixtures::endReveal($otherFirst);
 
     expect($other->refresh()->status)->toBe(GameStatus::Paused);
+});
+
+/**
+ * Les jobs de frontière poussés pour une manche, dans l'ordre : étape, palier,
+ * instant théorique.
+ *
+ * @return list<array{string, int|null, string}>
+ */
+function pauseBoundaries(Round $round): array
+{
+    return Queue::pushed(AdvanceRound::class, static fn (AdvanceRound $job): bool => $job->roundId === $round->id)
+        ->map(static fn (AdvanceRound $job): array => [$job->step->value, $job->tierIndex, $job->dueAt])
+        ->values()
+        ->all();
+}
+
+/**
+ * Une partie multijoueur mise en pause en fin de révélation de la manche 1 :
+ * deux sièges tenus par des jetons, tous deux passés `disconnected` pendant
+ * la révélation. Rend la partie, son salon, les sièges et leurs jetons.
+ *
+ * @return array{Game, Room, Round, list<Player>, list<PlayerToken>}
+ */
+function pauseHeldPausedGame(): array
+{
+    $held = [];
+
+    [$game, $first, $second] = pauseRevealedGame(function (Game $game) use (&$held): void {
+        $held[] = PresenceFixtures::heldSeat($game);
+        $held[] = PresenceFixtures::heldSeat($game);
+    });
+
+    $seats = array_column($held, 0);
+
+    foreach ($seats as $seat) {
+        pauseDisconnect($seat);
+    }
+
+    EngineFixtures::endReveal($first);
+
+    $room = $game->refresh()->room ?? throw new LogicException('Partie sans salon.');
+
+    expect($game->status)->toBe(GameStatus::Paused);
+
+    return [$game, $room, $second->refresh(), $seats, array_column($held, 1)];
+}
+
+test('le retour d\'un siège reprend la partie et reprogramme la manche après le décompte', function (): void {
+    Queue::fake([AdvanceRound::class, InterruptPausedGame::class, SweepSeatPresence::class]);
+    $recorder = RecordingBroadcaster::install();
+
+    [$game, $room, $second, $seats, $tokens] = pauseHeldPausedGame();
+    $pausedAt = $game->paused_at ?? throw new LogicException('Partie sans instant de pause.');
+    $token = EngineFixtures::tier($second, 1)->serve_token;
+    $interruption = Queue::pushed(InterruptPausedGame::class, static fn (InterruptPausedGame $job): bool => $job->gameId === $game->id)->first();
+    $boundaries = pauseBoundaries($second);
+    $recorder->sent = [];
+
+    // Un siège revient 7,3 s après la pause : son battement reprend la partie.
+    $backAt = $pausedAt->addMilliseconds(7_300);
+    PresenceFixtures::beat($this, $room, $tokens[0], $backAt)->assertNoContent();
+
+    $game->refresh();
+    $second->refresh();
+    $startsAt = $backAt->addMilliseconds(EngineConstants::launchCountdownMs());
+
+    expect($game->status)->toBe(GameStatus::Running)
+        ->and($game->paused_at)->toBeNull()
+        ->and($game->ended_at)->toBeNull()
+        // Le trou d'horloge, en millisecondes entières.
+        ->and($game->total_paused_ms)->toBe(7_300)
+        // La manche déprogrammée repart après le décompte de reprise, avec le
+        // jeton du palier 1 frappé avant la pause.
+        ->and($second->started_at?->equalTo($startsAt))->toBeTrue()
+        ->and(EngineFixtures::tier($second, 1)->serve_token)->toBe($token)
+        // Un job d'ouverture neuf, au nouveau T₁ ; celui d'avant la pause
+        // se réveillera sur une étape périmée.
+        ->and(pauseBoundaries($second))->toBe([...$boundaries, [RoundStep::OpenTier->value, 1, WireTime::iso($startsAt)]]);
+
+    // Sur le fil : le siège revenu, puis la reprise, puis la programmation.
+    expect(array_column($recorder->sent, 'event'))->toBe(['seat.updated', 'game.resumed', 'round.scheduled'])
+        ->and($recorder->sent[1]['payload']['resumedAt'])->toBe(WireTime::iso($backAt))
+        ->and($recorder->sent[2]['payload']['round']['startsAt'])->toBe(WireTime::iso($startsAt));
+
+    // Le battement de l'autre siège ne reprend rien une seconde fois.
+    $recorder->sent = [];
+    PresenceFixtures::beat($this, $room, $tokens[1], $backAt->addSecond())->assertNoContent();
+
+    expect($game->refresh()->total_paused_ms)->toBe(7_300)
+        ->and($second->refresh()->started_at?->equalTo($startsAt))->toBeTrue()
+        ->and(array_column($recorder->sent, 'event'))->toBe(['seat.updated']);
+
+    // L'interruption armée par la pause, à son échéance, ne gèle plus rien.
+    expect($interruption)->toBeInstanceOf(InterruptPausedGame::class);
+    Date::setTestNow($interruption->interruptsAt());
+    app()->call([$interruption, 'handle']);
+
+    expect($game->refresh()->status)->toBe(GameStatus::Running)
+        ->and($game->ended_at)->toBeNull();
+
+    // La manche reprise s'ouvre à son nouveau T₁, les deux sièges y prenant part.
+    EngineFixtures::openTier($second, 1);
+
+    expect($second->refresh()->status)->toBe(RoundStatus::Running)
+        ->and(RoundPlayer::query()->where('round_id', $second->id)->pluck('player_id')->all())
+        ->toEqualCanonicalizing(array_map(static fn (Player $seat): int => $seat->id, $seats));
+});
+
+test('un battement reçu après paused_at + pauseTimeoutMs ne reprend pas la partie et la gèle à l\'instant prévu', function (): void {
+    Queue::fake([AdvanceRound::class, InterruptPausedGame::class, SweepSeatPresence::class]);
+    $recorder = RecordingBroadcaster::install();
+
+    // Le battement arrive 42 s après l'échéance, avant que le job
+    // d'interruption, en retard en tête de file, ne l'ait constatée. Il vient
+    // d'un siège PARTI pendant la pause : la partie close à l'échéance le
+    // compte parti, quel que soit le retard du job.
+    [$game, $room, $second, $seats, $tokens] = pauseHeldPausedGame();
+    $interruptsAt = ($game->paused_at ?? throw new LogicException('Partie sans instant de pause.'))
+        ->addMilliseconds(EngineConstants::pauseTimeoutMs());
+    $gone = $seats[1];
+    $gone->forceFill([
+        'connection_state' => PlayerConnectionState::Left,
+        'left_at' => $interruptsAt->subMinute(),
+    ])->save();
+    GamePlayer::query()->whereBelongsTo($game)->where('player_id', $gone->id)
+        ->update(['status' => GamePlayerStatus::Left->value]);
+    $boundaries = pauseBoundaries($second);
+    $recorder->sent = [];
+
+    PresenceFixtures::beat($this, $room, $tokens[1], $interruptsAt->addSeconds(42))->assertNoContent();
+
+    $game->refresh();
+
+    expect($game->status)->toBe(GameStatus::Interrupted)
+        ->and($game->ended_at?->equalTo($interruptsAt))->toBeTrue()
+        ->and($game->total_paused_ms)->toBe(0)
+        ->and($second->refresh()->started_at)->toBeNull()
+        ->and($second->status)->toBe(RoundStatus::Pending)
+        ->and(pauseBoundaries($second))->toBe($boundaries)
+        ->and(array_column($recorder->sent, 'event'))->toBe(['seat.updated', 'game.ended'])
+        // Le siège revient au salon, mais sa participation à la partie close
+        // à l'échéance reste `left` : le podium figé ne le montre pas présent.
+        ->and($gone->refresh()->connection_state)->toBe(PlayerConnectionState::Connected)
+        ->and(GamePlayer::query()->whereBelongsTo($game)->where('player_id', $gone->id)->value('status'))
+        ->toBe(GamePlayerStatus::Left);
+
+    // À l'échéance exacte, déjà trop tard ; une milliseconde avant, la reprise.
+    [$atDeadline, $deadlineRoom, , , $deadlineTokens] = pauseHeldPausedGame();
+    $deadline = ($atDeadline->paused_at ?? throw new LogicException('Partie sans instant de pause.'))
+        ->addMilliseconds(EngineConstants::pauseTimeoutMs());
+    PresenceFixtures::beat($this, $deadlineRoom, $deadlineTokens[0], $deadline)->assertNoContent();
+
+    expect($atDeadline->refresh()->status)->toBe(GameStatus::Interrupted)
+        ->and($atDeadline->ended_at?->equalTo($deadline))->toBeTrue();
+
+    [$justInTime, $justRoom, , , $justTokens] = pauseHeldPausedGame();
+    $justDeadline = ($justInTime->paused_at ?? throw new LogicException('Partie sans instant de pause.'))
+        ->addMilliseconds(EngineConstants::pauseTimeoutMs());
+    PresenceFixtures::beat($this, $justRoom, $justTokens[0], $justDeadline->subMillisecond())->assertNoContent();
+
+    expect($justInTime->refresh()->status)->toBe(GameStatus::Running)
+        ->and($justInTime->ended_at)->toBeNull()
+        ->and($justInTime->total_paused_ms)->toBe(EngineConstants::pauseTimeoutMs() - 1);
+
+    // Le job d'interruption, parti ensuite, ne regèle pas : le gel est
+    // idempotent, le premier gagne.
+    $job = Queue::pushed(InterruptPausedGame::class, static fn (InterruptPausedGame $job): bool => $job->gameId === $game->id)->first();
+    Date::setTestNow($interruptsAt->addMinute());
+    app()->call([$job, 'handle']);
+
+    expect($game->refresh()->ended_at?->equalTo($interruptsAt))->toBeTrue();
 });
