@@ -548,7 +548,7 @@ Ensuite, à chaque session : **« Implémente l'étape suivante de l'ordre des l
 117. L70-10 — écran de saisie, grille QCM → 8, 39, 95, 99, 104, 105, 107, 109 — ✅ livrée le 27/09
 118. L80-7 — composants de classement, récapitulatif, podium → 8, 62, 69, 82, 88, 92, 95, 99 — ✅ livrée le 27/09
 119. L60-14 — états de manche, de révélation et de pause → 15, 39, 95, 99, 109, 110, 112, 117, 118 — ✅ livrée le 27/09
-120. L50-5 — formulaire Simple, presets, vivier, avertissements → 8, 12, 36, 86, 110
+120. L50-5 — formulaire Simple, presets, vivier, avertissements → 8, 12, 36, 86, 110 — ✅ livrée le 27/09
 121. L60-15 — démarrage solo, page d'entrée (E10-N3) → 6, 15, 16, 36, 63, 65, 67, 86, 93, 97, 102
 122. L100-8 (3e temps) — branche solo d'`orphan_player` → 24, 121
 123. L60-16 — partie solo, gestes (D18, D19) → 94, 109, 112, 119, 121

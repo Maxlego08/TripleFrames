@@ -16,7 +16,10 @@ return [
     | la page du salon expiré (L50-8 : `room.expired.*`), « Rejouer » sur le
     | podium (L50-7b : `room.replay.*`), les retardataires (L50-9 :
     | `room.join.late_join`, l’interrupteur `room.settings.allowLateJoin.*` et
-    | le titre `room.lobby.settings_title`),
+    | le titre `room.lobby.settings_title`), le formulaire Simple, ses
+    | presets et ses avertissements (L50-5 : `room.settings.*` de chaque clé
+    | éditable ou rapportable, `room.warnings.*`, `room.lobby.{presets_title,
+    | changes_title,preset_grayed,preset_unplayable}`),
     | et les huit lignes des presets — {@see \App\Enums\SettingPresetKey} construit
     | `room.presets.<clé>.{label,description}` — : la spec interdit d’inventer
     | des clés pour des écrans absents. `setting_preset` n’a **aucune colonne
@@ -68,17 +71,117 @@ return [
     ],
 
     /*
-    | Réglages du salon (spec 50 § 20.1) : libellé et aide de chaque champ,
-    | `room.settings.<champ>.{label,help}`. Seul l’interrupteur des
-    | retardataires est livré (L50-9) ; les autres champs de l’onglet Simple
-    | arrivent avec leur formulaire (L50-5).
+    | Réglages du salon (spec 50 § 20.1 et § 20.2, lots L50-5 et L50-9) :
+    | libellé et aide de chaque champ, `room.settings.<champ>.{label,help}`,
+    | pour chaque clé de `SIMPLE_KEYS ∪ ADVANCED_KEYS` — le libellé d’un champ
+    | de l’onglet Avancé nomme aussi ce champ dans le rapport de changements
+    | (`:attribute`) ; les options de la difficulté de saisie et l’instant des
+    | propositions en Normal ; `D` remonté par le client quand `N` augmente ;
+    | le rapport de changements, un code par `RoomSettings::CHANGE_*`.
     */
 
     'settings' => [
+        'themeKeys' => [
+            'label' => 'Themes',
+            'help' => 'A movie counts if it belongs to any chosen theme. No theme: the whole catalogue.',
+        ],
+        'roundsCount' => [
+            'label' => 'Rounds',
+            'help' => 'One round, one movie.',
+        ],
+        'framesPerRound' => [
+            'label' => 'Frames per round',
+            'help' => 'From the most cryptic to the most obvious: more frames, more tiers.',
+        ],
+        'roundDuration' => [
+            'label' => 'Round duration',
+            'help' => 'Split equally between the frames.',
+            'raised' => 'Round duration raised to :seconds s, the minimum for this number of frames.',
+        ],
+        'revealDuration' => [
+            'label' => 'Reveal duration',
+            'help' => 'Pause between rounds, time to see the answer.',
+        ],
+        'inputDifficulty' => [
+            'label' => 'Answer mode',
+            'help' => 'How players answer.',
+            'option' => [
+                'easy' => 'Easy: choices from the first frame',
+                'normal' => 'Normal: free text, then choices on the last frame',
+                'expert' => 'Expert: free text only',
+            ],
+            'choices_at' => 'Choices appear at :seconds s, :percent% of the round.',
+        ],
+        'capacity' => [
+            'label' => 'Seats',
+            'help' => 'Maximum number of players, never below the players present.',
+        ],
         'allowLateJoin' => [
             'label' => 'Late arrivals',
             'help' => 'Allow joining mid-game, from the next round, with no points yet.',
         ],
+        'advanced' => [
+            'label' => 'Advanced settings',
+            'help' => 'Tier detail, scoring and limits.',
+        ],
+        'tierDurations' => [
+            'label' => 'Tier durations',
+            'help' => 'The round lasts the sum of the tiers.',
+        ],
+        'tierPoints' => [
+            'label' => 'Points per tier',
+            'help' => 'Points earned when the answer lands in this tier.',
+        ],
+        'speedBonus' => [
+            'label' => 'Speed bonus',
+            'help' => 'A bonus that decreases within each tier.',
+        ],
+        'noRepeatMovies' => [
+            'label' => 'No repeated movies',
+            'help' => 'Leaves out movies recently played in this room.',
+        ],
+        'attemptsPerSecond' => [
+            'label' => 'Attempts per second',
+            'help' => 'Maximum rate of free-text answers.',
+        ],
+        'attemptsPerRound' => [
+            'label' => 'Attempts per round',
+            'help' => 'Maximum number of free-text answers in a round.',
+        ],
+        'maxAnswerLength' => [
+            'label' => 'Maximum answer length',
+            'help' => 'In characters.',
+        ],
+        'disconnectGraceSeconds' => [
+            'label' => 'Time before “left”',
+            'help' => 'Time given to a disconnected player to come back.',
+        ],
+        'change' => [
+            'defaulted' => '“:attribute” was set to its default.',
+            'dropped' => '“:attribute” no longer exists and was removed.',
+            'clamped' => '“:attribute” was brought back within its limits.',
+            'resized' => '“:attribute” was re-split for the new number of frames.',
+            'pruned' => '“:attribute”: a theme no longer on the site was removed.',
+            'coerced' => '“:attribute” was unreadable and reset to its default.',
+            'equalized' => '“:attribute”: tiers were reset to equal durations.',
+            'reset' => '“:attribute”: the custom scoring was replaced by the default one.',
+            'raised' => '“:attribute” was raised to the number of players present.',
+            'overwritten' => '“:attribute”: your advanced setting was replaced.',
+        ],
+    ],
+
+    /*
+    | Avertissements non bloquants (spec 50 § 4.5 et § 20.2, lot L50-5) : un
+    | code par `RoomSettings::WARNING_*`, diffusé en données et rendu par
+    | chaque client dans sa langue ; `:seconds` reçoit le seuil lu dans
+    | `bounds.warningThresholds`.
+    */
+
+    'warnings' => [
+        'short_reveal' => 'Short reveal: :seconds s are recommended to leave time to read the answer.',
+        'long_round' => 'Round longer than :seconds s: a player who finds early will wait a long time.',
+        'non_decreasing_points' => 'A later tier is worth as much as or more than an earlier one: waiting may pay off.',
+        'all_tiers_zero' => 'No tier is worth any points: a scoreless game, the ranking follows the tie-breakers.',
     ],
 
     /*
@@ -113,7 +216,8 @@ return [
     | partage, sièges, lancement, annonces du lobby ; gestes d’hôte et départ
     | (spec 50 § 11.3 et § 11.4, lot L50-6) : retirer, nommer hôte, quitter,
     | leurs confirmations et leurs refus ; titre de la section des réglages
-    | (L50-9). Les nombres passent en placeholders, formatés par le client.
+    | (L50-9) ; presets, leur grisage et le rapport de changements (L50-5).
+    | Les nombres passent en placeholders, formatés par le client.
     */
 
     'lobby' => [
@@ -149,6 +253,10 @@ return [
         'leave' => 'Leave room',
         'leave_confirm' => 'Leave the room? You can come back with the link.',
         'settings_title' => 'Settings',
+        'presets_title' => 'Presets',
+        'changes_title' => 'Settings adjusted',
+        'preset_grayed' => 'Not enough movies for this preset: playable with :frames frames per round.',
+        'preset_unplayable' => 'Not enough movies for this preset.',
     ],
 
     /*

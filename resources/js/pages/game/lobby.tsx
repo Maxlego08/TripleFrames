@@ -10,11 +10,14 @@ import { GameStage } from '@/components/game/game-stage';
 import { NextRoundButton } from '@/components/game/next-round-button';
 import { Podium } from '@/components/game/podium';
 import { PoolStatus } from '@/components/room/pool-status';
+import { PresetPicker } from '@/components/room/preset-picker';
+import type { PresetOption } from '@/components/room/preset-picker';
 import { ReplayButton } from '@/components/room/replay-button';
 import { RoomSettingsForm } from '@/components/room/room-settings-form';
 import { LeaveRoomAction } from '@/components/room/seat-actions';
 import type { RoomGestureContext } from '@/components/room/seat-actions';
 import { SeatList } from '@/components/room/seat-list';
+import { SettingsChanges } from '@/components/room/settings-changes';
 import { ShareCode } from '@/components/room/share-code';
 import { ReadOnlyNotice } from '@/components/state/read-only-notice';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -38,13 +41,6 @@ import type {
     RoomSettingsView,
 } from '@/types/room-settings';
 
-/** Aide de grisage d'un preset, calculée au rendu (spec 50 § 5.3). */
-type LobbyPresetOption = {
-    key: 'classic' | 'fast' | 'hardcore' | 'discovery';
-    grayed: boolean;
-    nearestPlayableFramesPerRound: number | null;
-};
-
 /** Props de la page du salon (spec 50 § 8.1, `LobbyPageProps`). */
 type LobbyPageProps = {
     room: { code: string };
@@ -56,7 +52,8 @@ type LobbyPageProps = {
     settings: RoomSettingsState;
     bounds: RoomSettingsBoundsPayload;
     limits: PlatformLimitsPayload;
-    presets: LobbyPresetOption[];
+    /** Aide de grisage de chaque preset, calculée au rendu (§ 5.3). */
+    presets: PresetOption[];
     launch: { minConnected: number };
     editor: {
         advancedAvailable: boolean;
@@ -106,12 +103,15 @@ function firstError(errors: Record<string, string>): string | null {
  * ramène au lobby, sans démonter la souscription, l'horloge ni l'annonceur.
  *
  * **État de lobby**, composé ici :
- * - pour tous : le code et le lien de partage, les réglages — éditables
- *   par l'hôte seul, dont l'interrupteur des retardataires (§ 15.4) —, le
- *   nombre de joueurs et la liste des sièges, le compteur de vivier et le
- *   blocage, qui nomme le réglage fautif — non-répétition comprise (D28 du
- *   23/09) —, l'aide ;
- * - pour l'hôte : les remèdes du vivier et « Lancer la partie », désactivé
+ * - pour tous : le code et le lien de partage, les réglages de l'onglet
+ *   Simple (L50-5) — éditables par l'hôte seul, en lecture seule pour les
+ *   autres —, leurs avertissements, le nombre de joueurs et la liste des
+ *   sièges, le compteur de vivier et le blocage, qui nomme le réglage
+ *   fautif — non-répétition comprise (D28 du 23/09) —, l'aide ;
+ * - pour l'hôte : les presets du site, grisés quand le vivier du salon ne
+ *   les tient pas (§ 5.3), le rapport des réglages que le serveur a ajustés
+ *   de lui-même à sa dernière écriture (§ 2.6), les remèdes du vivier et
+ *   « Lancer la partie », désactivé
  *   avec son motif quand le vivier est bloqué, quand moins de
  *   `launch.minConnected` sièges sont connectés, ou pendant un drainage
  *   (prop partagée `maintenance`) — une aide seulement : le serveur relit
@@ -148,7 +148,9 @@ export default function Lobby({
     state: packet,
     seatToken,
     settings: settingsProp,
+    bounds,
     limits,
+    presets,
     launch,
     editor,
 }: LobbyPageProps) {
@@ -170,6 +172,7 @@ export default function Lobby({
         active,
         canWrite,
         onHttpException,
+        settingsChanges,
     } = lobby;
     const [remedyPending, setRemedyPending] = useState(false);
     const [remedyError, setRemedyError] = useState<string | null>(null);
@@ -218,6 +221,11 @@ export default function Lobby({
 
     const connectedSeats = state.seats.filter(
         (seat) => seat.connection === 'connected' && !seat.kicked,
+    ).length;
+    // Effectif présent (§ 10) : sièges ni partis ni expulsés — la capacité
+    // n'est jamais abaissée en dessous.
+    const headcount = state.seats.filter(
+        (seat) => seat.connection !== 'left' && !seat.kicked,
     ).length;
     const number = new Intl.NumberFormat(locale);
     const motives: string[] = [];
@@ -379,9 +387,27 @@ export default function Lobby({
                             <>
                                 <ShareCode code={room.code} url={shareUrl} />
 
+                                {isHost && (
+                                    <PresetPicker
+                                        roomCode={room.code}
+                                        presets={presets}
+                                        disabled={!canWrite}
+                                        onHttpException={onHttpException}
+                                        onRefused={announce}
+                                    />
+                                )}
+
+                                {settingsChanges !== null && (
+                                    <SettingsChanges
+                                        changes={settingsChanges}
+                                    />
+                                )}
+
                                 <RoomSettingsForm
                                     roomCode={room.code}
-                                    settings={settings.settings}
+                                    state={settings}
+                                    bounds={bounds}
+                                    headcount={headcount}
                                     editable={isHost}
                                     lateJoinAvailable={editor.lateJoinAvailable}
                                     disabled={!canWrite}
@@ -404,7 +430,7 @@ export default function Lobby({
                                     }
                                 />
 
-                                {isHost ? (
+                                {isHost && (
                                     <Form
                                         {...LaunchController.store.form({
                                             room: room.code,
@@ -481,10 +507,6 @@ export default function Lobby({
                                             </>
                                         )}
                                     </Form>
-                                ) : (
-                                    <ReadOnlyNotice
-                                        message={t('room.lobby.read_only')}
-                                    />
                                 )}
 
                                 <SeatList

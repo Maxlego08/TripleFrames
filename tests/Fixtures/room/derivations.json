@@ -1,0 +1,751 @@
+{
+    "bounds": {
+        "byFramesPerRound": {
+            "2": {
+                "roundsCount": { "min": 3, "max": 30 },
+                "framesPerRound": { "min": 2, "max": 5 },
+                "roundDuration": { "min": 10, "max": 120 },
+                "tierDuration": { "min": 5, "max": 115 },
+                "tierPoints": { "min": 0, "max": 1000 },
+                "revealDuration": { "min": 3, "max": 20 },
+                "capacity": { "min": 2, "max": 12 },
+                "attemptsPerSecond": { "min": 1, "max": 5 },
+                "attemptsPerRound": { "min": 5, "max": 50 },
+                "maxAnswerLength": { "min": 20, "max": 200 },
+                "disconnectGraceSeconds": { "min": 15, "max": 180 }
+            },
+            "3": {
+                "roundsCount": { "min": 3, "max": 30 },
+                "framesPerRound": { "min": 2, "max": 5 },
+                "roundDuration": { "min": 15, "max": 120 },
+                "tierDuration": { "min": 5, "max": 110 },
+                "tierPoints": { "min": 0, "max": 1000 },
+                "revealDuration": { "min": 3, "max": 20 },
+                "capacity": { "min": 2, "max": 12 },
+                "attemptsPerSecond": { "min": 1, "max": 5 },
+                "attemptsPerRound": { "min": 5, "max": 50 },
+                "maxAnswerLength": { "min": 20, "max": 200 },
+                "disconnectGraceSeconds": { "min": 15, "max": 180 }
+            },
+            "4": {
+                "roundsCount": { "min": 3, "max": 30 },
+                "framesPerRound": { "min": 2, "max": 5 },
+                "roundDuration": { "min": 20, "max": 120 },
+                "tierDuration": { "min": 5, "max": 105 },
+                "tierPoints": { "min": 0, "max": 1000 },
+                "revealDuration": { "min": 3, "max": 20 },
+                "capacity": { "min": 2, "max": 12 },
+                "attemptsPerSecond": { "min": 1, "max": 5 },
+                "attemptsPerRound": { "min": 5, "max": 50 },
+                "maxAnswerLength": { "min": 20, "max": 200 },
+                "disconnectGraceSeconds": { "min": 15, "max": 180 }
+            },
+            "5": {
+                "roundsCount": { "min": 3, "max": 30 },
+                "framesPerRound": { "min": 2, "max": 5 },
+                "roundDuration": { "min": 25, "max": 120 },
+                "tierDuration": { "min": 5, "max": 100 },
+                "tierPoints": { "min": 0, "max": 1000 },
+                "revealDuration": { "min": 3, "max": 20 },
+                "capacity": { "min": 2, "max": 12 },
+                "attemptsPerSecond": { "min": 1, "max": 5 },
+                "attemptsPerRound": { "min": 5, "max": 50 },
+                "maxAnswerLength": { "min": 20, "max": 200 },
+                "disconnectGraceSeconds": { "min": 15, "max": 180 }
+            }
+        },
+        "derivation": {
+            "tierPointsUnit": 100,
+            "attemptsPerRoundSecondsPerAttempt": 2,
+            "attemptsPerRoundSoftCap": 30
+        },
+        "warningThresholds": {
+            "recommendedMinRevealDuration": 5,
+            "longRoundWarningDuration": 60
+        }
+    },
+    "cases": [
+        {
+            "n": 2,
+            "d": 10,
+            "r": 8,
+            "tierDurations": [5, 5],
+            "tierPoints": [200, 100],
+            "attemptsPerRound": 5,
+            "warnings": []
+        },
+        {
+            "n": 2,
+            "d": 11,
+            "r": 8,
+            "tierDurations": [5, 6],
+            "tierPoints": [200, 100],
+            "attemptsPerRound": 6,
+            "warnings": []
+        },
+        {
+            "n": 2,
+            "d": 12,
+            "r": 8,
+            "tierDurations": [6, 6],
+            "tierPoints": [200, 100],
+            "attemptsPerRound": 6,
+            "warnings": []
+        },
+        {
+            "n": 2,
+            "d": 15,
+            "r": 8,
+            "tierDurations": [7, 8],
+            "tierPoints": [200, 100],
+            "attemptsPerRound": 8,
+            "warnings": []
+        },
+        {
+            "n": 2,
+            "d": 29,
+            "r": 8,
+            "tierDurations": [14, 15],
+            "tierPoints": [200, 100],
+            "attemptsPerRound": 15,
+            "warnings": []
+        },
+        {
+            "n": 2,
+            "d": 30,
+            "r": 8,
+            "tierDurations": [15, 15],
+            "tierPoints": [200, 100],
+            "attemptsPerRound": 15,
+            "warnings": []
+        },
+        {
+            "n": 2,
+            "d": 31,
+            "r": 8,
+            "tierDurations": [15, 16],
+            "tierPoints": [200, 100],
+            "attemptsPerRound": 16,
+            "warnings": []
+        },
+        {
+            "n": 2,
+            "d": 45,
+            "r": 8,
+            "tierDurations": [22, 23],
+            "tierPoints": [200, 100],
+            "attemptsPerRound": 23,
+            "warnings": []
+        },
+        {
+            "n": 2,
+            "d": 58,
+            "r": 8,
+            "tierDurations": [29, 29],
+            "tierPoints": [200, 100],
+            "attemptsPerRound": 29,
+            "warnings": []
+        },
+        {
+            "n": 2,
+            "d": 59,
+            "r": 8,
+            "tierDurations": [29, 30],
+            "tierPoints": [200, 100],
+            "attemptsPerRound": 30,
+            "warnings": []
+        },
+        {
+            "n": 2,
+            "d": 60,
+            "r": 8,
+            "tierDurations": [30, 30],
+            "tierPoints": [200, 100],
+            "attemptsPerRound": 30,
+            "warnings": []
+        },
+        {
+            "n": 2,
+            "d": 61,
+            "r": 8,
+            "tierDurations": [30, 31],
+            "tierPoints": [200, 100],
+            "attemptsPerRound": 30,
+            "warnings": ["long_round"]
+        },
+        {
+            "n": 2,
+            "d": 119,
+            "r": 8,
+            "tierDurations": [59, 60],
+            "tierPoints": [200, 100],
+            "attemptsPerRound": 30,
+            "warnings": ["long_round"]
+        },
+        {
+            "n": 2,
+            "d": 120,
+            "r": 8,
+            "tierDurations": [60, 60],
+            "tierPoints": [200, 100],
+            "attemptsPerRound": 30,
+            "warnings": ["long_round"]
+        },
+        {
+            "n": 3,
+            "d": 15,
+            "r": 8,
+            "tierDurations": [5, 5, 5],
+            "tierPoints": [300, 200, 100],
+            "attemptsPerRound": 8,
+            "warnings": []
+        },
+        {
+            "n": 3,
+            "d": 16,
+            "r": 8,
+            "tierDurations": [5, 5, 6],
+            "tierPoints": [300, 200, 100],
+            "attemptsPerRound": 8,
+            "warnings": []
+        },
+        {
+            "n": 3,
+            "d": 17,
+            "r": 8,
+            "tierDurations": [5, 5, 7],
+            "tierPoints": [300, 200, 100],
+            "attemptsPerRound": 9,
+            "warnings": []
+        },
+        {
+            "n": 3,
+            "d": 18,
+            "r": 8,
+            "tierDurations": [6, 6, 6],
+            "tierPoints": [300, 200, 100],
+            "attemptsPerRound": 9,
+            "warnings": []
+        },
+        {
+            "n": 3,
+            "d": 29,
+            "r": 8,
+            "tierDurations": [9, 9, 11],
+            "tierPoints": [300, 200, 100],
+            "attemptsPerRound": 15,
+            "warnings": []
+        },
+        {
+            "n": 3,
+            "d": 30,
+            "r": 8,
+            "tierDurations": [10, 10, 10],
+            "tierPoints": [300, 200, 100],
+            "attemptsPerRound": 15,
+            "warnings": []
+        },
+        {
+            "n": 3,
+            "d": 31,
+            "r": 8,
+            "tierDurations": [10, 10, 11],
+            "tierPoints": [300, 200, 100],
+            "attemptsPerRound": 16,
+            "warnings": []
+        },
+        {
+            "n": 3,
+            "d": 45,
+            "r": 8,
+            "tierDurations": [15, 15, 15],
+            "tierPoints": [300, 200, 100],
+            "attemptsPerRound": 23,
+            "warnings": []
+        },
+        {
+            "n": 3,
+            "d": 58,
+            "r": 8,
+            "tierDurations": [19, 19, 20],
+            "tierPoints": [300, 200, 100],
+            "attemptsPerRound": 29,
+            "warnings": []
+        },
+        {
+            "n": 3,
+            "d": 59,
+            "r": 8,
+            "tierDurations": [19, 19, 21],
+            "tierPoints": [300, 200, 100],
+            "attemptsPerRound": 30,
+            "warnings": []
+        },
+        {
+            "n": 3,
+            "d": 60,
+            "r": 8,
+            "tierDurations": [20, 20, 20],
+            "tierPoints": [300, 200, 100],
+            "attemptsPerRound": 30,
+            "warnings": []
+        },
+        {
+            "n": 3,
+            "d": 61,
+            "r": 8,
+            "tierDurations": [20, 20, 21],
+            "tierPoints": [300, 200, 100],
+            "attemptsPerRound": 30,
+            "warnings": ["long_round"]
+        },
+        {
+            "n": 3,
+            "d": 119,
+            "r": 8,
+            "tierDurations": [39, 39, 41],
+            "tierPoints": [300, 200, 100],
+            "attemptsPerRound": 30,
+            "warnings": ["long_round"]
+        },
+        {
+            "n": 3,
+            "d": 120,
+            "r": 8,
+            "tierDurations": [40, 40, 40],
+            "tierPoints": [300, 200, 100],
+            "attemptsPerRound": 30,
+            "warnings": ["long_round"]
+        },
+        {
+            "n": 4,
+            "d": 20,
+            "r": 8,
+            "tierDurations": [5, 5, 5, 5],
+            "tierPoints": [400, 300, 200, 100],
+            "attemptsPerRound": 10,
+            "warnings": []
+        },
+        {
+            "n": 4,
+            "d": 21,
+            "r": 8,
+            "tierDurations": [5, 5, 5, 6],
+            "tierPoints": [400, 300, 200, 100],
+            "attemptsPerRound": 11,
+            "warnings": []
+        },
+        {
+            "n": 4,
+            "d": 22,
+            "r": 8,
+            "tierDurations": [5, 5, 5, 7],
+            "tierPoints": [400, 300, 200, 100],
+            "attemptsPerRound": 11,
+            "warnings": []
+        },
+        {
+            "n": 4,
+            "d": 23,
+            "r": 8,
+            "tierDurations": [5, 5, 5, 8],
+            "tierPoints": [400, 300, 200, 100],
+            "attemptsPerRound": 12,
+            "warnings": []
+        },
+        {
+            "n": 4,
+            "d": 24,
+            "r": 8,
+            "tierDurations": [6, 6, 6, 6],
+            "tierPoints": [400, 300, 200, 100],
+            "attemptsPerRound": 12,
+            "warnings": []
+        },
+        {
+            "n": 4,
+            "d": 29,
+            "r": 8,
+            "tierDurations": [7, 7, 7, 8],
+            "tierPoints": [400, 300, 200, 100],
+            "attemptsPerRound": 15,
+            "warnings": []
+        },
+        {
+            "n": 4,
+            "d": 30,
+            "r": 8,
+            "tierDurations": [7, 7, 7, 9],
+            "tierPoints": [400, 300, 200, 100],
+            "attemptsPerRound": 15,
+            "warnings": []
+        },
+        {
+            "n": 4,
+            "d": 31,
+            "r": 8,
+            "tierDurations": [7, 7, 7, 10],
+            "tierPoints": [400, 300, 200, 100],
+            "attemptsPerRound": 16,
+            "warnings": []
+        },
+        {
+            "n": 4,
+            "d": 45,
+            "r": 8,
+            "tierDurations": [11, 11, 11, 12],
+            "tierPoints": [400, 300, 200, 100],
+            "attemptsPerRound": 23,
+            "warnings": []
+        },
+        {
+            "n": 4,
+            "d": 58,
+            "r": 8,
+            "tierDurations": [14, 14, 14, 16],
+            "tierPoints": [400, 300, 200, 100],
+            "attemptsPerRound": 29,
+            "warnings": []
+        },
+        {
+            "n": 4,
+            "d": 59,
+            "r": 8,
+            "tierDurations": [14, 14, 14, 17],
+            "tierPoints": [400, 300, 200, 100],
+            "attemptsPerRound": 30,
+            "warnings": []
+        },
+        {
+            "n": 4,
+            "d": 60,
+            "r": 8,
+            "tierDurations": [15, 15, 15, 15],
+            "tierPoints": [400, 300, 200, 100],
+            "attemptsPerRound": 30,
+            "warnings": []
+        },
+        {
+            "n": 4,
+            "d": 61,
+            "r": 8,
+            "tierDurations": [15, 15, 15, 16],
+            "tierPoints": [400, 300, 200, 100],
+            "attemptsPerRound": 30,
+            "warnings": ["long_round"]
+        },
+        {
+            "n": 4,
+            "d": 119,
+            "r": 8,
+            "tierDurations": [29, 29, 29, 32],
+            "tierPoints": [400, 300, 200, 100],
+            "attemptsPerRound": 30,
+            "warnings": ["long_round"]
+        },
+        {
+            "n": 4,
+            "d": 120,
+            "r": 8,
+            "tierDurations": [30, 30, 30, 30],
+            "tierPoints": [400, 300, 200, 100],
+            "attemptsPerRound": 30,
+            "warnings": ["long_round"]
+        },
+        {
+            "n": 5,
+            "d": 25,
+            "r": 8,
+            "tierDurations": [5, 5, 5, 5, 5],
+            "tierPoints": [500, 400, 300, 200, 100],
+            "attemptsPerRound": 13,
+            "warnings": []
+        },
+        {
+            "n": 5,
+            "d": 26,
+            "r": 8,
+            "tierDurations": [5, 5, 5, 5, 6],
+            "tierPoints": [500, 400, 300, 200, 100],
+            "attemptsPerRound": 13,
+            "warnings": []
+        },
+        {
+            "n": 5,
+            "d": 27,
+            "r": 8,
+            "tierDurations": [5, 5, 5, 5, 7],
+            "tierPoints": [500, 400, 300, 200, 100],
+            "attemptsPerRound": 14,
+            "warnings": []
+        },
+        {
+            "n": 5,
+            "d": 28,
+            "r": 8,
+            "tierDurations": [5, 5, 5, 5, 8],
+            "tierPoints": [500, 400, 300, 200, 100],
+            "attemptsPerRound": 14,
+            "warnings": []
+        },
+        {
+            "n": 5,
+            "d": 29,
+            "r": 8,
+            "tierDurations": [5, 5, 5, 5, 9],
+            "tierPoints": [500, 400, 300, 200, 100],
+            "attemptsPerRound": 15,
+            "warnings": []
+        },
+        {
+            "n": 5,
+            "d": 30,
+            "r": 8,
+            "tierDurations": [6, 6, 6, 6, 6],
+            "tierPoints": [500, 400, 300, 200, 100],
+            "attemptsPerRound": 15,
+            "warnings": []
+        },
+        {
+            "n": 5,
+            "d": 31,
+            "r": 8,
+            "tierDurations": [6, 6, 6, 6, 7],
+            "tierPoints": [500, 400, 300, 200, 100],
+            "attemptsPerRound": 16,
+            "warnings": []
+        },
+        {
+            "n": 5,
+            "d": 45,
+            "r": 8,
+            "tierDurations": [9, 9, 9, 9, 9],
+            "tierPoints": [500, 400, 300, 200, 100],
+            "attemptsPerRound": 23,
+            "warnings": []
+        },
+        {
+            "n": 5,
+            "d": 58,
+            "r": 8,
+            "tierDurations": [11, 11, 11, 11, 14],
+            "tierPoints": [500, 400, 300, 200, 100],
+            "attemptsPerRound": 29,
+            "warnings": []
+        },
+        {
+            "n": 5,
+            "d": 59,
+            "r": 8,
+            "tierDurations": [11, 11, 11, 11, 15],
+            "tierPoints": [500, 400, 300, 200, 100],
+            "attemptsPerRound": 30,
+            "warnings": []
+        },
+        {
+            "n": 5,
+            "d": 60,
+            "r": 8,
+            "tierDurations": [12, 12, 12, 12, 12],
+            "tierPoints": [500, 400, 300, 200, 100],
+            "attemptsPerRound": 30,
+            "warnings": []
+        },
+        {
+            "n": 5,
+            "d": 61,
+            "r": 8,
+            "tierDurations": [12, 12, 12, 12, 13],
+            "tierPoints": [500, 400, 300, 200, 100],
+            "attemptsPerRound": 30,
+            "warnings": ["long_round"]
+        },
+        {
+            "n": 5,
+            "d": 119,
+            "r": 8,
+            "tierDurations": [23, 23, 23, 23, 27],
+            "tierPoints": [500, 400, 300, 200, 100],
+            "attemptsPerRound": 30,
+            "warnings": ["long_round"]
+        },
+        {
+            "n": 5,
+            "d": 120,
+            "r": 8,
+            "tierDurations": [24, 24, 24, 24, 24],
+            "tierPoints": [500, 400, 300, 200, 100],
+            "attemptsPerRound": 30,
+            "warnings": ["long_round"]
+        },
+        {
+            "n": 3,
+            "d": 30,
+            "r": 3,
+            "tierDurations": [10, 10, 10],
+            "tierPoints": [300, 200, 100],
+            "attemptsPerRound": 15,
+            "warnings": ["short_reveal"]
+        },
+        {
+            "n": 3,
+            "d": 30,
+            "r": 4,
+            "tierDurations": [10, 10, 10],
+            "tierPoints": [300, 200, 100],
+            "attemptsPerRound": 15,
+            "warnings": ["short_reveal"]
+        },
+        {
+            "n": 3,
+            "d": 30,
+            "r": 5,
+            "tierDurations": [10, 10, 10],
+            "tierPoints": [300, 200, 100],
+            "attemptsPerRound": 15,
+            "warnings": []
+        },
+        {
+            "n": 3,
+            "d": 30,
+            "r": 20,
+            "tierDurations": [10, 10, 10],
+            "tierPoints": [300, 200, 100],
+            "attemptsPerRound": 15,
+            "warnings": []
+        }
+    ],
+    "warningCases": [
+        {
+            "revealDuration": 8,
+            "tierDurations": [15, 15],
+            "tierPoints": [200, 100],
+            "warnings": []
+        },
+        {
+            "revealDuration": 8,
+            "tierDurations": [15, 15],
+            "tierPoints": [1000, 1000],
+            "warnings": ["non_decreasing_points"]
+        },
+        {
+            "revealDuration": 8,
+            "tierDurations": [15, 15],
+            "tierPoints": [100, 200],
+            "warnings": ["non_decreasing_points"]
+        },
+        {
+            "revealDuration": 8,
+            "tierDurations": [15, 15],
+            "tierPoints": [200, 200],
+            "warnings": ["non_decreasing_points"]
+        },
+        {
+            "revealDuration": 8,
+            "tierDurations": [15, 15],
+            "tierPoints": [200, 0],
+            "warnings": []
+        },
+        {
+            "revealDuration": 8,
+            "tierDurations": [15, 15],
+            "tierPoints": [0, 0],
+            "warnings": ["non_decreasing_points", "all_tiers_zero"]
+        },
+        {
+            "revealDuration": 8,
+            "tierDurations": [10, 10, 10],
+            "tierPoints": [300, 200, 100],
+            "warnings": []
+        },
+        {
+            "revealDuration": 8,
+            "tierDurations": [10, 10, 10],
+            "tierPoints": [1000, 1000, 1000],
+            "warnings": ["non_decreasing_points"]
+        },
+        {
+            "revealDuration": 8,
+            "tierDurations": [10, 10, 10],
+            "tierPoints": [100, 200, 300],
+            "warnings": ["non_decreasing_points"]
+        },
+        {
+            "revealDuration": 8,
+            "tierDurations": [10, 10, 10],
+            "tierPoints": [300, 200, 200],
+            "warnings": ["non_decreasing_points"]
+        },
+        {
+            "revealDuration": 8,
+            "tierDurations": [10, 10, 10],
+            "tierPoints": [300, 200, 0],
+            "warnings": []
+        },
+        {
+            "revealDuration": 8,
+            "tierDurations": [10, 10, 10],
+            "tierPoints": [0, 0, 0],
+            "warnings": ["non_decreasing_points", "all_tiers_zero"]
+        },
+        {
+            "revealDuration": 8,
+            "tierDurations": [6, 6, 6, 6, 6],
+            "tierPoints": [500, 400, 300, 200, 100],
+            "warnings": []
+        },
+        {
+            "revealDuration": 8,
+            "tierDurations": [6, 6, 6, 6, 6],
+            "tierPoints": [1000, 1000, 1000, 1000, 1000],
+            "warnings": ["non_decreasing_points"]
+        },
+        {
+            "revealDuration": 8,
+            "tierDurations": [6, 6, 6, 6, 6],
+            "tierPoints": [100, 200, 300, 400, 500],
+            "warnings": ["non_decreasing_points"]
+        },
+        {
+            "revealDuration": 8,
+            "tierDurations": [6, 6, 6, 6, 6],
+            "tierPoints": [500, 400, 300, 200, 200],
+            "warnings": ["non_decreasing_points"]
+        },
+        {
+            "revealDuration": 8,
+            "tierDurations": [6, 6, 6, 6, 6],
+            "tierPoints": [500, 400, 300, 200, 0],
+            "warnings": []
+        },
+        {
+            "revealDuration": 8,
+            "tierDurations": [6, 6, 6, 6, 6],
+            "tierPoints": [0, 0, 0, 0, 0],
+            "warnings": ["non_decreasing_points", "all_tiers_zero"]
+        },
+        {
+            "revealDuration": 8,
+            "tierDurations": [5, 5, 51],
+            "tierPoints": [300, 200, 100],
+            "warnings": ["long_round"]
+        },
+        {
+            "revealDuration": 8,
+            "tierDurations": [5, 5, 50],
+            "tierPoints": [300, 200, 100],
+            "warnings": []
+        },
+        {
+            "revealDuration": 3,
+            "tierDurations": [40, 40, 40],
+            "tierPoints": [0, 0, 0],
+            "warnings": [
+                "short_reveal",
+                "long_round",
+                "non_decreasing_points",
+                "all_tiers_zero"
+            ]
+        }
+    ]
+}

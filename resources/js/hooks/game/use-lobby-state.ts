@@ -1,12 +1,20 @@
 import type { HttpExceptionResponse, PendingVisit } from '@inertiajs/core';
 import { router } from '@inertiajs/react';
-import { useEffect, useEffectEvent, useRef, useState } from 'react';
+import {
+    useEffect,
+    useEffectEvent,
+    useLayoutEffect,
+    useRef,
+    useState,
+} from 'react';
 import { useGameState } from '@/hooks/game/use-game-state';
 import type { GameStateView } from '@/hooks/game/use-game-state';
 import { useHeartbeat } from '@/hooks/game/use-heartbeat';
 import { useTranslations } from '@/hooks/use-translations';
 import { announce } from '@/lib/game/announcer';
 import { fetchGameState } from '@/lib/game/store';
+import { settingsChangeLines, settingsChangesFrom } from '@/lib/room-settings';
+import type { SettingsChangeReport } from '@/lib/room-settings';
 import { heartbeat, leave, show, state as roomState } from '@/routes/room';
 import type { GameStatePacket } from '@/types/game-wire';
 import type { RoomSettingsState } from '@/types/room-settings';
@@ -50,7 +58,15 @@ import type { RoomSettingsState } from '@/types/room-settings';
  * - **annonces** dans l'unique région `aria-live` (`announce()`, 90 § 7.4) :
  *   changement d'hôte (`room.lobby.host_changed`, ou
  *   `room.lobby.you_are_host` pour le nouvel hôte lui-même), réglages
- *   changés vus par un non-hôte au lobby (`room.lobby.settings_updated`) ;
+ *   changés vus par un non-hôte au lobby (`room.lobby.settings_updated`),
+ *   rapport de changements reçu par l'auteur (`room.lobby.changes_title`
+ *   puis une ligne par champ) ;
+ * - **rapport de changements** (§ 2.6, lot L50-5) : le flash
+ *   `settingsChanges` que le serveur pose sur la réponse de TOUTE écriture
+ *   de réglages de ce siège — champ, preset ou remède —, jamais diffusé au
+ *   salon. Posé même vide (`[]`), il remplace le précédent ; la prochaine
+ *   écriture (toute visite autre qu'une lecture) l'efface à son départ, et
+ *   une écriture refusée n'en rapporte aucun ;
  * - **onglet supplanté** : {@see LobbyStateView.onHttpException}, rappel de
  *   chaque requête du lobby, intercepte la réponse 409 `seat_superseded` de
  *   `seat.active` — sans lui, Inertia ouvrirait sa fenêtre d'erreur brute
@@ -102,7 +118,67 @@ export type LobbyStateView = GameStateView & {
      * sinon — la réponse suit alors son cours ordinaire.
      */
     onHttpException: (response: HttpExceptionResponse) => boolean | void;
+    /**
+     * Rapport de changements de la dernière écriture de réglages de CE
+     * siège (flash `settingsChanges`, § 2.6), `null` sans écriture ou depuis
+     * que la suivante est partie.
+     */
+    settingsChanges: SettingsChangeReport | null;
 };
+
+/**
+ * Le rapport de changements des écritures de réglages de ce siège (§ 2.6),
+ * lu dans le flash `settingsChanges` et annoncé à sa réception s'il n'est
+ * pas vide. Toute visite qui écrit (méthode autre que `get`) l'efface à son
+ * départ : le flash de sa réponse arrive toujours après. Abonnement en
+ * `useLayoutEffect`, posé pendant le commit, comme `useFlashNotice` : un
+ * flash émis juste après l'échange de page trouve son écouteur. Retiré au
+ * démontage (`strictMode` monte deux fois).
+ */
+function useSettingsChanges(): SettingsChangeReport | null {
+    const { t } = useTranslations();
+    const [changes, setChanges] = useState<SettingsChangeReport | null>(null);
+    const announceChanges = useEffectEvent(
+        (report: SettingsChangeReport): void => {
+            const lines = settingsChangeLines(report, t);
+
+            if (lines.length === 0) {
+                return;
+            }
+
+            announce(t('room.lobby.changes_title'));
+
+            for (const line of lines) {
+                announce(line);
+            }
+        },
+    );
+
+    useLayoutEffect(() => {
+        const stopStart = router.on('start', (event) => {
+            if (event.detail.visit.method !== 'get') {
+                setChanges(null);
+            }
+        });
+        const stopFlash = router.on('flash', (event) => {
+            const report = settingsChangesFrom(event.detail.flash);
+
+            if (report === null) {
+                return;
+            }
+
+            setChanges(report);
+            announceChanges(report);
+        });
+
+        return () => {
+            stopFlash();
+            stopStart();
+        };
+    }, []);
+
+    return changes;
+}
 
 /** Props rechargées au lobby : ni le paquet ni le jeton d'onglet. */
 const RELOADED_PROPS = ['settings', 'presets'];
@@ -320,5 +396,15 @@ export function useLobbyState(options: UseLobbyStateOptions): LobbyStateView {
         }
     }, [settingsSignature]);
 
-    return { ...view, phase, settings, active, canWrite, onHttpException };
+    const settingsChanges = useSettingsChanges();
+
+    return {
+        ...view,
+        phase,
+        settings,
+        active,
+        canWrite,
+        onHttpException,
+        settingsChanges,
+    };
 }

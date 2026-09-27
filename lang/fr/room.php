@@ -51,17 +51,117 @@ return [
     ],
 
     /*
-    | Réglages du salon (spec 50 § 20.1) : libellé et aide de chaque champ,
-    | `room.settings.<champ>.{label,help}`. Seul l’interrupteur des
-    | retardataires est livré (L50-9) ; les autres champs de l’onglet Simple
-    | arrivent avec leur formulaire (L50-5).
+    | Réglages du salon (spec 50 § 20.1 et § 20.2, lots L50-5 et L50-9) :
+    | libellé et aide de chaque champ, `room.settings.<champ>.{label,help}`,
+    | pour chaque clé de `SIMPLE_KEYS ∪ ADVANCED_KEYS` — le libellé d’un champ
+    | de l’onglet Avancé nomme aussi ce champ dans le rapport de changements
+    | (`:attribute`) ; les options de la difficulté de saisie et l’instant des
+    | propositions en Normal ; `D` remonté par le client quand `N` augmente ;
+    | le rapport de changements, un code par `RoomSettings::CHANGE_*`.
     */
 
     'settings' => [
+        'themeKeys' => [
+            'label' => 'Thèmes',
+            'help' => 'Un film compte s’il appartient à l’un des thèmes choisis. Aucun thème : tout le catalogue.',
+        ],
+        'roundsCount' => [
+            'label' => 'Nombre de manches',
+            'help' => 'Une manche, un film.',
+        ],
+        'framesPerRound' => [
+            'label' => 'Images par manche',
+            'help' => 'De la plus cryptique à la plus évidente : plus d’images, plus de paliers.',
+        ],
+        'roundDuration' => [
+            'label' => 'Durée d’une manche',
+            'help' => 'Répartie à parts égales entre les images.',
+            'raised' => 'Durée portée à :seconds s, le minimum pour ce nombre d’images.',
+        ],
+        'revealDuration' => [
+            'label' => 'Durée de la révélation',
+            'help' => 'Pause entre deux manches, le temps de découvrir la réponse.',
+        ],
+        'inputDifficulty' => [
+            'label' => 'Difficulté de saisie',
+            'help' => 'Comment les joueurs répondent.',
+            'option' => [
+                'easy' => 'Facile : propositions dès la première image',
+                'normal' => 'Normal : texte libre, puis propositions à la dernière image',
+                'expert' => 'Expert : texte libre uniquement',
+            ],
+            'choices_at' => 'Les propositions apparaissent à :seconds s, soit :percent % de la manche.',
+        ],
+        'capacity' => [
+            'label' => 'Places',
+            'help' => 'Nombre maximum de joueurs, jamais sous le nombre de joueurs présents.',
+        ],
         'allowLateJoin' => [
             'label' => 'Retardataires',
             'help' => 'Autoriser l’arrivée en cours de partie, à la manche suivante, sans aucun point.',
         ],
+        'advanced' => [
+            'label' => 'Réglages avancés',
+            'help' => 'Détail des paliers, barème et limites.',
+        ],
+        'tierDurations' => [
+            'label' => 'Durée des paliers',
+            'help' => 'La manche dure la somme des paliers.',
+        ],
+        'tierPoints' => [
+            'label' => 'Points par palier',
+            'help' => 'Points gagnés si la réponse tombe dans ce palier.',
+        ],
+        'speedBonus' => [
+            'label' => 'Bonus de rapidité',
+            'help' => 'Un bonus qui décroît à l’intérieur de chaque palier.',
+        ],
+        'noRepeatMovies' => [
+            'label' => 'Pas de film déjà joué',
+            'help' => 'Écarte les films joués récemment dans ce salon.',
+        ],
+        'attemptsPerSecond' => [
+            'label' => 'Tentatives par seconde',
+            'help' => 'Cadence maximale des réponses en texte libre.',
+        ],
+        'attemptsPerRound' => [
+            'label' => 'Tentatives par manche',
+            'help' => 'Nombre maximum de réponses en texte libre dans une manche.',
+        ],
+        'maxAnswerLength' => [
+            'label' => 'Longueur maximale d’une réponse',
+            'help' => 'En caractères.',
+        ],
+        'disconnectGraceSeconds' => [
+            'label' => 'Délai avant « parti »',
+            'help' => 'Temps laissé à un joueur déconnecté pour revenir.',
+        ],
+        'change' => [
+            'defaulted' => '« :attribute » a pris sa valeur par défaut.',
+            'dropped' => '« :attribute » n’existe plus et a été retiré.',
+            'clamped' => '« :attribute » a été ramené dans ses limites.',
+            'resized' => '« :attribute » a été redécoupé pour le nouveau nombre d’images.',
+            'pruned' => '« :attribute » : un thème retiré du site a été enlevé.',
+            'coerced' => '« :attribute » était illisible et a repris sa valeur par défaut.',
+            'equalized' => '« :attribute » : les paliers ont été remis à durée égale.',
+            'reset' => '« :attribute » : le barème personnalisé a été remplacé par le barème par défaut.',
+            'raised' => '« :attribute » a été relevé au nombre de joueurs présents.',
+            'overwritten' => '« :attribute » : votre réglage avancé a été remplacé.',
+        ],
+    ],
+
+    /*
+    | Avertissements non bloquants (spec 50 § 4.5 et § 20.2, lot L50-5) : un
+    | code par `RoomSettings::WARNING_*`, diffusé en données et rendu par
+    | chaque client dans sa langue ; `:seconds` reçoit le seuil lu dans
+    | `bounds.warningThresholds`.
+    */
+
+    'warnings' => [
+        'short_reveal' => 'Révélation courte : :seconds s sont recommandées pour laisser le temps de lire la réponse.',
+        'long_round' => 'Manche de plus de :seconds s : un joueur qui trouve tôt attendra longtemps.',
+        'non_decreasing_points' => 'Un palier tardif rapporte autant ou plus qu’un palier précédent : attendre peut payer.',
+        'all_tiers_zero' => 'Aucun palier ne rapporte de point : partie sans score, le classement suivra le départage.',
     ],
 
     /*
@@ -96,7 +196,8 @@ return [
     | partage, sièges, lancement, annonces du lobby ; gestes d’hôte et départ
     | (spec 50 § 11.3 et § 11.4, lot L50-6) : retirer, nommer hôte, quitter,
     | leurs confirmations et leurs refus ; titre de la section des réglages
-    | (L50-9). Les nombres passent en placeholders, formatés par le client.
+    | (L50-9) ; presets, leur grisage et le rapport de changements (L50-5).
+    | Les nombres passent en placeholders, formatés par le client.
     */
 
     'lobby' => [
@@ -132,6 +233,10 @@ return [
         'leave' => 'Quitter le salon',
         'leave_confirm' => 'Quitter le salon ? Vous pourrez revenir avec le lien.',
         'settings_title' => 'Réglages',
+        'presets_title' => 'Presets',
+        'changes_title' => 'Réglages ajustés',
+        'preset_grayed' => 'Pas assez de films pour ce preset : jouable avec :frames images par manche.',
+        'preset_unplayable' => 'Pas assez de films pour ce preset.',
     ],
 
     /*

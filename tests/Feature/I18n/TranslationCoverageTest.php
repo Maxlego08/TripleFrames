@@ -6,6 +6,7 @@ use App\Enums\AdminActionSubject;
 use App\Enums\AdminActionType;
 use App\Enums\ErrorPageStatus;
 use App\Enums\FrameProcessingFailure;
+use App\Enums\InputDifficulty;
 use App\Enums\JoinRefusal;
 use App\Enums\LegalPage;
 use App\Enums\Locale;
@@ -15,6 +16,8 @@ use App\Enums\RoomRefusal;
 use App\Enums\SettingPresetKey;
 use App\Http\Controllers\Room\LaunchController;
 use App\Rules\ValidNickname;
+use App\Settings\RoomSettings;
+use App\Settings\RoomSettingsEditor;
 use App\Support\Frames\CropViolation;
 use App\Support\I18n\TranslationDomains;
 use App\Support\Tmdb\TmdbErrorKind;
@@ -270,6 +273,26 @@ function i18nRoomSettingsKeys(): array
 }
 
 /**
+ * Les valeurs des constantes de `RoomSettings` d'un préfixe donné — codes du
+ * rapport de changements (`CHANGE_`) ou des avertissements (`WARNING_`) —,
+ * lues par réflexion : un code ajouté sans sa clé échoue ici.
+ *
+ * @return list<string>
+ */
+function i18nRoomSettingsCodes(string $prefix): array
+{
+    $codes = [];
+
+    foreach ((new ReflectionClass(RoomSettings::class))->getConstants() as $name => $value) {
+        if (str_starts_with($name, $prefix) && is_string($value)) {
+            $codes[] = $value;
+        }
+    }
+
+    return $codes;
+}
+
+/**
  * Les six motifs portés par `ImportOutcome::$reasonKey`, construits par
  * concaténation eux aussi.
  *
@@ -472,6 +495,28 @@ it('carries every key built by an enumerable key constructor', function () {
         ...array_map(
             static fn (PoolRemedyKind $kind): string => "room.pool.remedy.{$kind->value}",
             PoolRemedyKind::cases(),
+        ),
+        // Les réglages du lobby (50 § 20.1 et § 20.2, L50-5), construits
+        // côté client par des tables : le rapport de changements, une clé par
+        // code `CHANGE_*` ; les avertissements, une clé par code `WARNING_*` ;
+        // un libellé et une aide par clé postable de l'un ou l'autre onglet
+        // (le libellé nomme aussi le champ dans le rapport) ; une option par
+        // difficulté de saisie.
+        ...array_map(
+            static fn (string $code): string => "room.settings.change.{$code}",
+            i18nRoomSettingsCodes('CHANGE_'),
+        ),
+        ...array_map(
+            static fn (string $code): string => "room.warnings.{$code}",
+            i18nRoomSettingsCodes('WARNING_'),
+        ),
+        ...array_merge(...array_map(
+            static fn (string $field): array => ["room.settings.{$field}.label", "room.settings.{$field}.help"],
+            array_values(array_unique([...RoomSettingsEditor::SIMPLE_KEYS, ...RoomSettingsEditor::ADVANCED_KEYS])),
+        )),
+        ...array_map(
+            static fn (InputDifficulty $difficulty): string => "room.settings.inputDifficulty.option.{$difficulty->value}",
+            InputDifficulty::cases(),
         ),
     ];
 
