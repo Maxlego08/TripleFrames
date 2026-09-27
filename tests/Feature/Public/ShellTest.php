@@ -2,6 +2,8 @@
 
 use App\Enums\Locale;
 use App\Http\Middleware\ForceGameAppearance;
+use App\Models\Player;
+use App\Models\Room;
 use App\Models\User;
 use App\Support\I18n\TranslationDomains;
 use App\Support\Identity\PlayerToken;
@@ -23,9 +25,10 @@ use Tests\Support\Room\LobbyWrites;
 |
 | Créé par L90-1, complété par L90-3b (bandeau de maintenance), L90-7
 | (coquille de jeu, forçage sombre de `game/*`, région vivante unique) et
-| L90-9. « rend le lobby en sombre quelle que soit l'apparence du visiteur »
-| y est écrit par L50-4, première page `game/*` servie par une vraie route
-| (dépendance inversée, R-04).
+| L90-9 (solo et salon expiré forcés, donc chaque page `game/*`). « rend le
+| lobby en sombre quelle que soit l'apparence du visiteur » y est écrit par
+| L50-4, première page `game/*` servie par une vraie route (dépendance
+| inversée, R-04).
 |
 | Un seul forçage d'apparence existe dans le produit : les pages `game/*`, en
 | sombre. Le back-office a perdu le sien (D8 du 23/09) : forcer le clair
@@ -275,6 +278,53 @@ function shellWatchedEntries(): array
     ));
 }
 
+/**
+ * Pages Inertia que rend une route : le composant d'un `Route::inertia()`,
+ * sinon les noms passés à `Inertia::render()` ou `inertia()` dans le corps de
+ * son action, méthode de contrôleur ou fermeture. `null` quand ce rendu n'est
+ * pas vérifiable : action introuvable, ou nom de page non littéral.
+ *
+ * @return list<string>|null
+ */
+function shellRoutePages(RoutingRoute $route): ?array
+{
+    $component = $route->defaults['component'] ?? null;
+
+    if (is_string($component)) {
+        return [$component];
+    }
+
+    $uses = $route->getAction('uses');
+
+    if ($uses instanceof Closure) {
+        $reflection = new ReflectionFunction($uses);
+    } elseif (is_string($uses) && str_contains($uses, '@')) {
+        [$class, $method] = explode('@', $uses, 2);
+
+        if (! method_exists($class, $method)) {
+            return null;
+        }
+
+        $reflection = new ReflectionMethod($class, $method);
+    } else {
+        return null;
+    }
+
+    $file = $reflection->getFileName();
+
+    if ($file === false) {
+        return null;
+    }
+
+    $start = (int) $reflection->getStartLine();
+    $body = implode('', array_slice(file($file) ?: [], $start - 1, (int) $reflection->getEndLine() - $start + 1));
+
+    preg_match_all('/(?:Inertia::render|\binertia)\(\s*(.)/', $body, $calls);
+    preg_match_all('/(?:Inertia::render|\binertia)\(\s*([\'"])([^\'"]+)\1/', $body, $names);
+
+    return count($calls[0]) === count($names[2]) ? array_values($names[2]) : null;
+}
+
 it("laisse le back-office suivre l'apparence du visiteur", function () {
     // Les pages React ne sont pas en cause ici : seule compte la balise
     // `<html>` que Blade rend autour d'elles.
@@ -483,41 +533,15 @@ it("ne marque jamais une page publique comme d'apparence forcée", function () {
             $violations[] = "{$label} : hors du groupe web";
         }
 
-        $component = $route->defaults['component'] ?? null;
+        $pages = shellRoutePages($route);
 
-        if (is_string($component)) {
-            if (! str_starts_with($component, 'game/')) {
-                $violations[] = "{$label} : rend {$component}";
-            }
+        if ($pages === null) {
+            $violations[] = "{$label} : action {$route->getActionName()} illisible ou nom de page non littéral, le rendu n'est pas vérifiable";
 
             continue;
         }
 
-        $action = $route->getActionName();
-
-        if (! str_contains($action, '@')) {
-            $violations[] = "{$label} : action {$action} illisible, le rendu n'est pas vérifiable";
-
-            continue;
-        }
-
-        [$class, $method] = explode('@', $action, 2);
-        $reflection = new ReflectionMethod($class, $method);
-        $lines = array_slice(
-            file((string) $reflection->getFileName()) ?: [],
-            (int) $reflection->getStartLine() - 1,
-            (int) $reflection->getEndLine() - (int) $reflection->getStartLine() + 1,
-        );
-        $body = implode('', $lines);
-
-        preg_match_all('/(?:Inertia::render|\binertia)\(\s*(.)/', $body, $calls, PREG_SET_ORDER);
-        preg_match_all('/(?:Inertia::render|\binertia)\(\s*([\'"])([^\'"]+)\1/', $body, $names);
-
-        if (count($calls) !== count($names[2])) {
-            $violations[] = "{$label} : nom de page non littéral";
-        }
-
-        foreach ($names[2] as $name) {
+        foreach ($pages as $name) {
             if (! str_starts_with($name, 'game/')) {
                 $violations[] = "{$label} : rend {$name}";
             }
@@ -603,6 +627,127 @@ it("rend le lobby en sombre quelle que soit l'apparence du visiteur", function (
         ->and($game[0]['layout'])->toBe('GameLayout')
         ->and(is_file(resource_path('js/pages/game/lobby.tsx')))->toBeTrue()
         ->and(substr_count(shellSource('layouts/game/game-layout.tsx'), "useForcedAppearance('dark')"))->toBe(1);
+});
+
+it("rend le solo et le salon expiré en sombre quelle que soit l'apparence du visiteur", function () {
+    // L90-9 (C16 § 4 : « chaque page `game/*` porte les trois moitiés du
+    // forçage sombre », spec 90 § 2.2). `game/lobby` est prouvée par le test
+    // précédent ; restent les deux autres pages `game/*` du jalon 1, servies
+    // par leurs vraies routes : `game/solo` par `solo.show` à un siège solo,
+    // et `game/room-expired` par `room.show` sur un salon archivé — en 410,
+    // mais rendue par Blade comme toute page, donc forcée comme elle.
+    $this->withoutVite();
+
+    $token = PlayerToken::mint(Locale::French);
+    Player::factory()->solo()->create(['player_token_hash' => $token->hash()]);
+    $expired = Room::factory()->archived()->create();
+    LobbyWrites::actAs($this, $token);
+
+    $visits = [
+        'solo.show' => ['component' => 'game/solo', 'status' => 200, 'url' => route('solo.show')],
+        'room.show' => ['component' => 'game/room-expired', 'status' => 410, 'url' => route('room.show', $expired)],
+    ];
+
+    foreach (array_keys($visits) as $name) {
+        expect(Route::getRoutes()->getByName($name)?->gatherMiddleware())->toContain('game.appearance');
+    }
+
+    // Sans cookie d'abord, puis chaque préférence, `light` comprise : le
+    // partage de vue survit d'une requête à l'autre dans l'application du
+    // test, il est donc remis à zéro avant chacune — chaque réponse doit
+    // forcer d'elle-même.
+    foreach ([null, 'light', 'system', 'dark'] as $appearance) {
+        if ($appearance !== null) {
+            $this->withUnencryptedCookie('appearance', $appearance);
+        }
+
+        foreach ($visits as $visit) {
+            app()->forgetInstance(TranslationDomains::class);
+            Cache::flush();
+            View::share('appearanceForced', false);
+            View::share('appearance', null);
+
+            $label = $visit['component'].' ('.($appearance ?? 'sans cookie').')';
+            $response = $this->get($visit['url'])->assertStatus($visit['status']);
+
+            $response->assertInertia(fn (Assert $page) => $page->component($visit['component'])->etc());
+
+            $tag = shellHtmlTag($response);
+
+            expect(str_contains($tag, 'data-appearance-forced="dark"'))->toBeTrue("{$label} : non forcée")
+                ->and(in_array('dark', shellHtmlClasses($tag), true))->toBeTrue("{$label} : classe dark absente");
+        }
+    }
+
+    // Ce test et le précédent couvrent CHAQUE page `game/*` du dépôt : une
+    // page ajoutée sans la preuve de son forçage échoue ici.
+    $pages = array_map(
+        static fn (string $file): string => substr($file, strlen('pages/'), -strlen('.tsx')),
+        shellFrontFiles(['pages/game']),
+    );
+
+    expect($pages)->toBe(['game/lobby', 'game/room-expired', 'game/solo']);
+
+    // Moitié serveur, pour toutes : chaque route du groupe `web` qui rend une
+    // page `game/*` porte `game.appearance`, et chaque page en a au moins une
+    // (le sens inverse — une route forcée ne rend que des pages `game/*` —
+    // est prouvé par « ne marque jamais une page publique… »).
+    $rendered = [];
+    $violations = [];
+
+    foreach (Route::getRoutes()->getRoutes() as $route) {
+        /** @var RoutingRoute $route */
+        if (! in_array('web', $route->gatherMiddleware(), true)) {
+            continue;
+        }
+
+        $label = $route->getName() ?? $route->uri();
+        $routePages = shellRoutePages($route);
+
+        if ($routePages === null) {
+            $violations[] = "{$label} : rendu non vérifiable";
+
+            continue;
+        }
+
+        foreach ($routePages as $page) {
+            if (! str_starts_with($page, 'game/')) {
+                continue;
+            }
+
+            $rendered[] = $page;
+
+            if (! in_array('game.appearance', $route->gatherMiddleware(), true)) {
+                $violations[] = "{$label} : rend {$page} sans game.appearance";
+            }
+        }
+    }
+
+    $rendered = array_values(array_unique($rendered));
+    sort($rendered);
+
+    expect($violations)->toBe([])
+        ->and($rendered)->toBe($pages);
+
+    // Moitié cliente : toute page `game/*` prend `GameLayout`, qui force le
+    // sombre, et aucune ne lui substitue sa coquille. Sous Inertia 3, un
+    // `layout` posé par la page remplace la coquille du `switch`, sauf un
+    // simple objet de props, qui la garde (`Page.layout = { … }`, espaces et
+    // retours à la ligne compris). Toute fonction est refusée, même un
+    // résolveur qui rendrait des props : une lecture du source ne le distingue
+    // pas d'une fonction de rendu, la garde reste donc du côté prudent.
+    $game = array_values(array_filter(
+        shellLayoutSwitch(),
+        static fn (array $group): bool => in_array("name.startsWith('game/')", $group['conditions'], true),
+    ));
+
+    expect($game)->toHaveCount(1)
+        ->and($game[0]['layout'])->toBe('GameLayout')
+        ->and(substr_count(shellSource('layouts/game/game-layout.tsx'), "useForcedAppearance('dark')"))->toBe(1);
+
+    foreach ($pages as $page) {
+        expect(shellSource("pages/{$page}.tsx"))->not->toMatch('/\.layout\s*=(?!=)(?!\s*\{)/', "{$page} : coquille substituée");
+    }
 });
 
 it('garde le rendu côté serveur désactivé', function () {
