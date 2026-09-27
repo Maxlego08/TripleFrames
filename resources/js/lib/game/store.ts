@@ -1,3 +1,4 @@
+import { tierValueAt } from '@/lib/game/round-timeline';
 import { GAME_WIRE_VERSION, parseIsoMs } from '@/lib/game/wire';
 import type {
     ChoicesPayload,
@@ -306,6 +307,53 @@ export function displayedRound(
     }
 
     return current;
+}
+
+/**
+ * La valeur du palier que l'écran de manche affiche à l'instant serveur
+ * `nowMs`, ou `null` quand elle est masquée (spec 60 § 2.5, D29 du 23/09 ;
+ * exigence de 80 § 14 et § 1.4). **Seul décideur du masquage** : aucun
+ * composant ne le réécrit.
+ *
+ * La valeur n'est affichée qu'en phase `running` : masquée hors partie, en
+ * pause, pendant le décompte, dès la clôture (`round.closed`, ou un paquet
+ * en phase `closed` — `endedAt` posé), en révélation, pour une manche
+ * annulée et hors de `[0, D)`. Une valeur affichée après la clôture
+ * promettrait des points qu'aucune soumission ne peut plus gagner.
+ *
+ * La manche montrée est celle de {@link displayedRound} ; sa valeur est
+ * `tierValueAt()` de `round-timeline.ts` (80, C13 § 2.4), sur la même
+ * fenêtre que `currentTier()` : image et valeur basculent au même instant,
+ * celui de l'horloge resynchronisée, jamais l'arrivée d'un `tier.opened` qui
+ * peut être en retard (90 § 7.3). Une manche encore `scheduled` dont `T₁`
+ * est franchi est donc en cours à l'affichage : seul `tier.opened` manque à
+ * sa confirmation, et le serveur, qui rattrape avant tout jugement, la
+ * traite déjà comme ouverte.
+ *
+ * Au J2 s'ajoutera le masquage du mode sans score (`leaderboard.scoreless`,
+ * L60-17). Ne décide rien : un affichage indicatif, le serveur retient seul
+ * le palier d'une réponse, à son instant de réception.
+ */
+export function visibleTierValue(
+    state: GameStoreState,
+    nowMs: number,
+): number | null {
+    if (state.gameRef === null || state.status !== 'running') {
+        return null;
+    }
+
+    const round = displayedRound(state, nowMs);
+
+    if (round === null || round.endedAt !== null) {
+        return null;
+    }
+
+    const origin = startsAtMs(round);
+    const running =
+        round.phase === 'running' ||
+        (round.phase === 'scheduled' && nowMs >= origin);
+
+    return running ? tierValueAt(round.tiers, nowMs - origin) : null;
 }
 
 /**

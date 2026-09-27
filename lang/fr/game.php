@@ -77,8 +77,51 @@ return [
     // formate les nombres et les durées, et insère `:title` dans un fragment
     // portant son attribut `lang`, jamais en texte brut.
 
+    // `tier_value` : texte de la spec 80 (§ 15.2), forme figée par 05 (D29).
+    // Le reste du nœud appartient à la spec 60 (§ 19.4, lot L60-14) : écran
+    // de manche — décompte, numéro, chrono, clôture, annulation (sans motif
+    // ni titre), salon à un seul siège connecté (`lone_player`, jamais
+    // « solo »), retardataire en attente, bande des joueurs et fil « a
+    // trouvé ». Nombres et heures formatés par le client, jamais ici.
     'round' => [
         'tier_value' => ':points point en jeu|:points points en jeu',
+        'number' => 'Manche :number sur :total',
+        'starts_in' => 'La manche commence dans :seconds seconde|La manche commence dans :seconds secondes',
+        'time_left' => 'Temps restant : :time',
+        'time_up' => 'Fin de la manche : la réponse arrive.',
+        'cancelled' => 'Manche annulée à la suite d’un incident : elle ne compte pas.',
+        'lone_player' => 'Vous êtes le seul joueur connecté.',
+        'waiting_next' => 'Vous entrez dans la partie à la manche :number.',
+        'players' => 'Joueurs',
+        'players_description' => 'Les sièges du salon. La partie continue pendant ce temps.',
+        'found' => 'A trouvé',
+        'lock_rank' => 'Rang d’arrivée : :rank',
+    ],
+
+    // Spec 60 § 9.5 (lot L60-14) : la révélation (D14 du 23/09). Chaque
+    // titre est inséré par le client dans un fragment qui porte son `lang`,
+    // jamais interpolé en texte brut (`:title`).
+    'reveal' => [
+        'heading' => 'La réponse',
+        'original_title' => 'Titre original : :title',
+        'year' => 'Sortie : :year',
+        'images' => 'Images de la manche',
+        'finders' => 'Ont trouvé',
+        'finder_tier' => 'Image :index',
+    ],
+
+    // Spec 60 § 14 (lot L60-14) : la pause, et l’heure de clôture formatée
+    // par le client dans le fuseau du joueur.
+    'pause' => [
+        'title' => 'Partie en pause',
+        'description' => 'Plus aucun joueur n’était connecté : la partie reprend dès que l’un d’eux revient.',
+        'interrupts_at' => 'Sans retour d’un joueur, elle s’arrêtera à :time.',
+    ],
+
+    // Spec 60 § 5.4 (lot L60-14) : le seul pouvoir de l’hôte en partie,
+    // pendant la révélation.
+    'host' => [
+        'next_round' => 'Manche suivante',
     ],
 
     'score' => [

@@ -6,10 +6,12 @@ import {
     it,
     vi,
 } from 'vite-plus/test';
+import { currentTier, toLiveTimeline } from '@/lib/game/round-timeline';
 import {
     createGameStore,
     displayedRound,
     isMemberOfRound,
+    visibleTierValue,
 } from '@/lib/game/store';
 import type { GameStore, ResyncOutcome, ResyncReason } from '@/lib/game/store';
 import type {
@@ -737,6 +739,158 @@ describe('store', () => {
         await advanceTo(20_000 + HEARTBEAT_MS * 2 - 1);
 
         expect(locked.resyncs).toEqual([]);
+    });
+
+    it('masque la valeur du palier hors de la phase running', () => {
+        const at = (ms: number): number => ORIGIN_MS + ms;
+        // Référence : la fenêtre de `currentTier()` (90 § 7.3) — image et
+        // valeur basculent au même instant.
+        const tierPoints = (ms: number): number | null =>
+            currentTier(toLiveTimeline(GAME, timeline(1, 5_000), false), at(ms))
+                ?.points ?? null;
+
+        // Hors partie : le lobby n'a aucune valeur.
+        const lobby = harness(lobbyPacket(0));
+
+        expect(visibleTierValue(lobby.store.getState(), at(10_000))).toBeNull();
+        lobby.stop();
+
+        // Manche 1 programmée à 5 s : le décompte ne promet rien.
+        const game = harness(
+            packet(0, {
+                round: round(1, 5_000, 'scheduled', {
+                    images: [image(5_000, 1)],
+                }),
+                self: { ...packet(0).self, input: null },
+            }),
+        );
+        const value = (ms: number): number | null =>
+            visibleTierValue(game.store.getState(), at(ms));
+
+        expect(value(0)).toBeNull();
+        expect(value(4_999)).toBeNull();
+
+        // `T₁` franchi : la manche court à l'horloge resynchronisée, même si
+        // `tier.opened` — qui confirme, jamais ne déclenche — tarde.
+        expect(value(5_000)).toBe(300);
+
+        game.store.receive(
+            'tier.opened',
+            event<'tier.opened'>(5_004, {
+                sequenceIndex: 1,
+                roundNumber: 1,
+                tierIndex: 1,
+                opensAt: iso(5_000),
+                next: image(5_000, 2),
+            }),
+        );
+
+        // Phase `running` : la valeur du palier ouvert, entière, sans bonus,
+        // sur la fenêtre semi-ouverte de `currentTier()`.
+        for (const ms of [5_000, 14_999, 15_000, 24_999, 25_000, 34_999]) {
+            expect(value(ms)).toBe(tierPoints(ms));
+        }
+
+        expect(value(14_999)).toBe(300);
+        expect(value(15_000)).toBe(200);
+        expect(value(25_000)).toBe(100);
+
+        // À `D` sans `round.closed` reçu : hors de `[0, D)`, rien.
+        expect(value(35_000)).toBeNull();
+
+        // Fin anticipée à 22 s : masquée dès `round.closed`, alors que la
+        // fenêtre du palier 2 court encore.
+        game.store.receive(
+            'round.closed',
+            event<'round.closed'>(22_010, {
+                sequenceIndex: 1,
+                roundNumber: 1,
+                endedAt: iso(22_000),
+                revealStartsAt: iso(22_300),
+                revealEndsAt: iso(30_300),
+            }),
+        );
+
+        expect(tierPoints(22_000)).toBe(200);
+        expect(value(22_000)).toBeNull();
+        expect(value(22_200)).toBeNull();
+
+        // Révélation : toujours masquée.
+        game.store.receive(
+            'round.revealed',
+            event<'round.revealed'>(22_310, {
+                sequenceIndex: 1,
+                roundNumber: 1,
+                revealEndsAt: iso(30_300),
+                movie: MOVIE,
+                images: [image(5_000, 1), image(5_000, 2)],
+                finders: [],
+                leaderboard: { scoreless: false, roundNumber: 1, rows: [] },
+            }),
+        );
+
+        expect(game.store.getState().rounds[0].phase).toBe('revealing');
+        expect(value(22_310)).toBeNull();
+        expect(value(29_000)).toBeNull();
+
+        // Pause : aucune manche, aucune valeur.
+        game.store.receive(
+            'game.paused',
+            event<'game.paused'>(30_310, {
+                pausedAt: iso(30_300),
+                interruptsAt: iso(930_300),
+            }),
+        );
+
+        expect(game.store.getState().status).toBe('paused');
+        expect(value(30_310)).toBeNull();
+        game.stop();
+
+        // Annulée pendant son palier 1 : plus rien à gagner.
+        const cancelled = harness(
+            packet(6_000, {
+                round: round(1, 5_000, 'running', {
+                    currentTierIndex: 1,
+                    images: [image(5_000, 1), image(5_000, 2)],
+                }),
+            }),
+        );
+
+        expect(visibleTierValue(cancelled.store.getState(), at(6_000))).toBe(
+            300,
+        );
+
+        cancelled.store.receive(
+            'round.cancelled',
+            event<'round.cancelled'>(6_500, {
+                sequenceIndex: 1,
+                roundNumber: 1,
+            }),
+        );
+
+        expect(
+            visibleTierValue(cancelled.store.getState(), at(6_500)),
+        ).toBeNull();
+        cancelled.stop();
+
+        // Paquet de relecture en phase `closed` (grâce finale) : masquée,
+        // comme à l'événement.
+        const closed = harness(
+            packet(35_100, {
+                round: round(1, 5_000, 'closed', {
+                    currentTierIndex: 3,
+                    images: [image(5_000, 3)],
+                    endedAt: iso(35_000),
+                    revealStartsAt: iso(35_300),
+                    revealEndsAt: iso(43_300),
+                }),
+            }),
+        );
+
+        expect(
+            visibleTierValue(closed.store.getState(), at(35_100)),
+        ).toBeNull();
+        closed.stop();
     });
 
     // --- Ajouts (hors intitulés de la spec) ----------------------------------

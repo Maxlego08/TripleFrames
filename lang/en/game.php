@@ -86,8 +86,51 @@ return [
     // formate les nombres et les durées, et insère `:title` dans un fragment
     // portant son attribut `lang`, jamais en texte brut.
 
+    // `tier_value` : texte de la spec 80 (§ 15.2), forme figée par 05 (D29).
+    // Le reste du nœud appartient à la spec 60 (§ 19.4, lot L60-14) : écran
+    // de manche — décompte, numéro, chrono, clôture, annulation (sans motif
+    // ni titre), salon à un seul siège connecté (`lone_player`, jamais
+    // « solo »), retardataire en attente, bande des joueurs et fil « a
+    // trouvé ». Nombres et heures formatés par le client, jamais ici.
     'round' => [
         'tier_value' => ':points point at stake|:points points at stake',
+        'number' => 'Round :number of :total',
+        'starts_in' => 'The round starts in :seconds second|The round starts in :seconds seconds',
+        'time_left' => 'Time left: :time',
+        'time_up' => 'Round over: the answer is coming.',
+        'cancelled' => 'Round cancelled after an incident: it does not count.',
+        'lone_player' => 'You are the only player connected.',
+        'waiting_next' => 'You join the game at round :number.',
+        'players' => 'Players',
+        'players_description' => 'The seats in this room. The game goes on meanwhile.',
+        'found' => 'Found it',
+        'lock_rank' => 'Finish position: :rank',
+    ],
+
+    // Spec 60 § 9.5 (lot L60-14) : la révélation (D14 du 23/09). Chaque
+    // titre est inséré par le client dans un fragment qui porte son `lang`,
+    // jamais interpolé en texte brut (`:title`).
+    'reveal' => [
+        'heading' => 'The answer',
+        'original_title' => 'Original title: :title',
+        'year' => 'Released: :year',
+        'images' => 'Frames of this round',
+        'finders' => 'Found it',
+        'finder_tier' => 'Frame :index',
+    ],
+
+    // Spec 60 § 14 (lot L60-14) : la pause, et l’heure de clôture formatée
+    // par le client dans le fuseau du joueur.
+    'pause' => [
+        'title' => 'Game paused',
+        'description' => 'No player was connected any more: the game resumes as soon as one comes back.',
+        'interrupts_at' => 'If nobody comes back, it will end at :time.',
+    ],
+
+    // Spec 60 § 5.4 (lot L60-14) : le seul pouvoir de l’hôte en partie,
+    // pendant la révélation.
+    'host' => [
+        'next_round' => 'Next round',
     ],
 
     'score' => [

@@ -2,9 +2,12 @@ import type { FormDataConvertible } from '@inertiajs/core';
 import { Form, Head, router, usePage } from '@inertiajs/react';
 import { CircleAlert, Play } from 'lucide-react';
 import { useEffect, useId, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import LaunchController from '@/actions/App/Http/Controllers/Room/LaunchController';
 import { ConnectionBanner } from '@/components/game/connection-banner';
 import { GameHelp } from '@/components/game/game-help';
+import { GameStage } from '@/components/game/game-stage';
+import { NextRoundButton } from '@/components/game/next-round-button';
 import { Podium } from '@/components/game/podium';
 import { PoolStatus } from '@/components/room/pool-status';
 import { ReplayButton } from '@/components/room/replay-button';
@@ -19,6 +22,9 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Spinner } from '@/components/ui/spinner';
 import { useLobbyState } from '@/hooks/game/use-lobby-state';
+import type { LobbyStateView } from '@/hooks/game/use-lobby-state';
+import { useNextRound } from '@/hooks/game/use-next-round';
+import { useRoundStage } from '@/hooks/game/use-round-stage';
 import { useTranslations } from '@/hooks/use-translations';
 import { announce } from '@/lib/game/announcer';
 import { show } from '@/routes/room';
@@ -29,6 +35,7 @@ import type {
     PlatformLimitsPayload,
     RoomSettingsBoundsPayload,
     RoomSettingsState,
+    RoomSettingsView,
 } from '@/types/room-settings';
 
 /** Aide de grisage d'un preset, calculée au rendu (spec 50 § 5.3). */
@@ -113,15 +120,19 @@ function firstError(errors: Record<string, string>): string | null {
  * - pour les autres : l'attente de l'hôte, en lecture seule ;
  * - pour tous : « Quitter le salon », confirmé, qui mène à l'accueil.
  *
- * **États de partie** (manche, révélation, pause) : composants de 60 à venir
- * (L60-14), montés ici selon le magasin. D'ici là, l'état de partie montre
- * la liste des sièges, et au siège sans participation, l'attente de la
- * partie suivante (§ 15.3). Sur le podium (partie figée), le `Podium` de 80
- * (L80-7 : classement final, faits marquants, récapitulatif ; focus à son
- * titre), composé autour de « Rejouer » (§ 13, `ReplayButton`) : le geste
- * de l'hôte, désactivé avec son motif pendant un drainage, qui le refuse ;
- * les autres attendent l'hôte. Au retour au lobby, un focus perdu avec
- * l'état de partie démonté revient au titre de la page.
+ * **États de partie** (manche, joueur verrouillé, révélation, pause) : la
+ * scène de 60 (`GameStage`, L60-14), montée par {@link LobbyGameStage} selon
+ * le magasin — manche plein écran sans défilement, liste des sièges, gestes
+ * d'hôte et départ dans la feuille « Joueurs » ; révélation, pause et
+ * chargement dans une zone qui défile, sièges et départ dessous ; « manche
+ * suivante » à l'hôte seul, pendant la révélation. Au siège sans
+ * participation, l'attente de la partie suivante (§ 15.3) ; au retardataire
+ * admis, l'attente de sa manche (60 § 13.7). Sur le podium (partie figée),
+ * le `Podium` de 80 (L80-7 : classement final, faits marquants,
+ * récapitulatif ; focus à son titre), composé autour de « Rejouer » (§ 13,
+ * `ReplayButton`) : le geste de l'hôte, désactivé avec son motif pendant un
+ * drainage, qui le refuse ; les autres attendent l'hôte. Au retour au lobby,
+ * un focus perdu avec l'état de partie démonté revient au titre de la page.
  *
  * États obligatoires (§ 8.1) : chargement (`processing` des boutons),
  * erreur (refus de lancement, de remède ou de geste d'hôte — erreur `room`
@@ -294,174 +305,217 @@ export default function Lobby({
         ? [t('common.maintenance.launch_blocked')]
         : [];
 
+    // Bandeaux communs aux deux états : connexion, onglet supplanté, refus
+    // d'un geste (§ 8.1).
+    const banners = (
+        <>
+            <ConnectionBanner state={connection} />
+
+            {seatNotice !== null && <ReadOnlyNotice message={seatNotice} />}
+
+            {refusal !== null && (
+                <Alert role="note">
+                    <CircleAlert aria-hidden="true" />
+                    <AlertDescription className="text-foreground">
+                        {refusal}
+                    </AlertDescription>
+                </Alert>
+            )}
+        </>
+    );
+
+    // La liste des sièges et le départ, en partie (§ 11.1) : gestes d'hôte
+    // et « Quitter le salon » restent atteignables à tout instant.
+    const seatsPanel = (
+        <>
+            <SeatList
+                seats={state.seats}
+                selfPublicId={state.self.publicId}
+                capacity={settings.settings.capacity}
+                actions={isHost ? gestures : null}
+            />
+
+            <div>
+                <LeaveRoomAction {...leaveGesture} />
+            </div>
+        </>
+    );
+
     return (
         <>
             <Head title={t('room.lobby.title')} />
 
-            <ScrollArea className="h-full">
-                <div className="mx-auto flex w-full max-w-2xl flex-col gap-6 px-4 py-6">
-                    <header className="flex flex-col gap-1">
-                        <h1
-                            ref={titleRef}
-                            tabIndex={-1}
-                            className="text-2xl font-semibold tracking-tight focus-visible:outline-none"
-                        >
-                            {t('room.lobby.title')}
-                        </h1>
-                        {phase === 'lobby' && (
-                            <p className="text-muted-foreground">
-                                {isHost
-                                    ? t('room.lobby.you_are_host')
-                                    : t('room.lobby.waiting_for_host')}
-                            </p>
-                        )}
-                    </header>
-
-                    <ConnectionBanner state={connection} />
-
-                    {seatNotice !== null && (
-                        <ReadOnlyNotice message={seatNotice} />
-                    )}
-
-                    {refusal !== null && (
-                        <Alert role="note">
-                            <CircleAlert aria-hidden="true" />
-                            <AlertDescription className="text-foreground">
-                                {refusal}
-                            </AlertDescription>
-                        </Alert>
-                    )}
-
-                    {phase === 'lobby' ? (
-                        <>
-                            <ShareCode code={room.code} url={shareUrl} />
-
-                            <RoomSettingsForm
-                                roomCode={room.code}
-                                settings={settings.settings}
-                                editable={isHost}
-                                lateJoinAvailable={editor.lateJoinAvailable}
-                                disabled={!canWrite}
-                                onHttpException={onHttpException}
-                                onRefused={announce}
-                            />
-
-                            <PoolStatus
-                                pool={pool}
-                                remedies={
-                                    isHost
-                                        ? {
-                                              disabled:
-                                                  remedyPending || !canWrite,
-                                              onApply: applyRemedy,
-                                              error: remedyError,
-                                          }
-                                        : null
-                                }
-                            />
-
-                            {isHost ? (
-                                <Form
-                                    {...LaunchController.store.form({
-                                        room: room.code,
-                                    })}
-                                    options={{
-                                        preserveScroll: true,
-                                        preserveState: true,
-                                    }}
-                                    onHttpException={onHttpException}
-                                    onError={(formErrors) => {
-                                        const message = firstError(formErrors);
-
-                                        if (message !== null) {
-                                            announce(message);
-                                        }
-                                    }}
-                                    className="flex flex-col gap-2"
-                                >
-                                    {({ processing }) => (
-                                        <>
-                                            <Button
-                                                type="submit"
-                                                disabled={
-                                                    processing ||
-                                                    !canWrite ||
-                                                    motives.length > 0
-                                                }
-                                                aria-busy={processing}
-                                                aria-describedby={
-                                                    motives.length > 0
-                                                        ? motiveId
-                                                        : undefined
-                                                }
-                                                className="min-h-11 w-full sm:w-auto sm:self-start"
-                                            >
-                                                {processing ? (
-                                                    <Spinner
-                                                        aria-hidden="true"
-                                                        role="presentation"
-                                                        aria-label={undefined}
-                                                        className="motion-reduce:animate-none"
-                                                    />
-                                                ) : (
-                                                    <Play aria-hidden="true" />
-                                                )}
-                                                {processing
-                                                    ? t('room.lobby.launching')
-                                                    : t('room.lobby.launch')}
-                                            </Button>
-
-                                            {motives.length > 0 && (
-                                                <ul
-                                                    id={motiveId}
-                                                    className="flex flex-col gap-1 text-sm text-muted-foreground"
-                                                >
-                                                    {motives.map((motive) => (
-                                                        <li key={motive}>
-                                                            {motive}
-                                                        </li>
-                                                    ))}
-                                                </ul>
-                                            )}
-                                        </>
-                                    )}
-                                </Form>
-                            ) : (
-                                <ReadOnlyNotice
-                                    message={t('room.lobby.read_only')}
-                                />
-                            )}
-
-                            <SeatList
-                                seats={state.seats}
-                                selfPublicId={state.self.publicId}
-                                capacity={settings.settings.capacity}
-                                actions={isHost ? gestures : null}
-                            />
-
-                            <div>
-                                <LeaveRoomAction {...leaveGesture} />
-                            </div>
-
-                            {speedBonusMaxPercent !== undefined && (
-                                <div>
-                                    <GameHelp
-                                        speedBonusMaxPercent={
-                                            speedBonusMaxPercent
-                                        }
-                                    />
-                                </div>
-                            )}
-                        </>
-                    ) : (
-                        <>
-                            {waitingNextGame && (
+            {phase === 'game' && !onPodium ? (
+                <LobbyGameStage
+                    roomCode={room.code}
+                    lobby={lobby}
+                    settings={settings.settings}
+                    banners={banners}
+                    seatsPanel={seatsPanel}
+                />
+            ) : (
+                <ScrollArea className="h-full">
+                    <div className="mx-auto flex w-full max-w-2xl flex-col gap-6 px-4 py-6">
+                        <header className="flex flex-col gap-1">
+                            <h1
+                                ref={titleRef}
+                                tabIndex={-1}
+                                className="text-2xl font-semibold tracking-tight focus-visible:outline-none"
+                            >
+                                {t('room.lobby.title')}
+                            </h1>
+                            {phase === 'lobby' && (
                                 <p className="text-muted-foreground">
-                                    {t('room.lobby.waiting_next_game')}
+                                    {isHost
+                                        ? t('room.lobby.you_are_host')
+                                        : t('room.lobby.waiting_for_host')}
                                 </p>
                             )}
+                        </header>
 
-                            {onPodium && (
+                        {banners}
+
+                        {phase === 'lobby' ? (
+                            <>
+                                <ShareCode code={room.code} url={shareUrl} />
+
+                                <RoomSettingsForm
+                                    roomCode={room.code}
+                                    settings={settings.settings}
+                                    editable={isHost}
+                                    lateJoinAvailable={editor.lateJoinAvailable}
+                                    disabled={!canWrite}
+                                    onHttpException={onHttpException}
+                                    onRefused={announce}
+                                />
+
+                                <PoolStatus
+                                    pool={pool}
+                                    remedies={
+                                        isHost
+                                            ? {
+                                                  disabled:
+                                                      remedyPending ||
+                                                      !canWrite,
+                                                  onApply: applyRemedy,
+                                                  error: remedyError,
+                                              }
+                                            : null
+                                    }
+                                />
+
+                                {isHost ? (
+                                    <Form
+                                        {...LaunchController.store.form({
+                                            room: room.code,
+                                        })}
+                                        options={{
+                                            preserveScroll: true,
+                                            preserveState: true,
+                                        }}
+                                        onHttpException={onHttpException}
+                                        onError={(formErrors) => {
+                                            const message =
+                                                firstError(formErrors);
+
+                                            if (message !== null) {
+                                                announce(message);
+                                            }
+                                        }}
+                                        className="flex flex-col gap-2"
+                                    >
+                                        {({ processing }) => (
+                                            <>
+                                                <Button
+                                                    type="submit"
+                                                    disabled={
+                                                        processing ||
+                                                        !canWrite ||
+                                                        motives.length > 0
+                                                    }
+                                                    aria-busy={processing}
+                                                    aria-describedby={
+                                                        motives.length > 0
+                                                            ? motiveId
+                                                            : undefined
+                                                    }
+                                                    className="min-h-11 w-full sm:w-auto sm:self-start"
+                                                >
+                                                    {processing ? (
+                                                        <Spinner
+                                                            aria-hidden="true"
+                                                            role="presentation"
+                                                            aria-label={
+                                                                undefined
+                                                            }
+                                                            className="motion-reduce:animate-none"
+                                                        />
+                                                    ) : (
+                                                        <Play aria-hidden="true" />
+                                                    )}
+                                                    {processing
+                                                        ? t(
+                                                              'room.lobby.launching',
+                                                          )
+                                                        : t(
+                                                              'room.lobby.launch',
+                                                          )}
+                                                </Button>
+
+                                                {motives.length > 0 && (
+                                                    <ul
+                                                        id={motiveId}
+                                                        className="flex flex-col gap-1 text-sm text-muted-foreground"
+                                                    >
+                                                        {motives.map(
+                                                            (motive) => (
+                                                                <li
+                                                                    key={motive}
+                                                                >
+                                                                    {motive}
+                                                                </li>
+                                                            ),
+                                                        )}
+                                                    </ul>
+                                                )}
+                                            </>
+                                        )}
+                                    </Form>
+                                ) : (
+                                    <ReadOnlyNotice
+                                        message={t('room.lobby.read_only')}
+                                    />
+                                )}
+
+                                <SeatList
+                                    seats={state.seats}
+                                    selfPublicId={state.self.publicId}
+                                    capacity={settings.settings.capacity}
+                                    actions={isHost ? gestures : null}
+                                />
+
+                                <div>
+                                    <LeaveRoomAction {...leaveGesture} />
+                                </div>
+
+                                {speedBonusMaxPercent !== undefined && (
+                                    <div>
+                                        <GameHelp
+                                            speedBonusMaxPercent={
+                                                speedBonusMaxPercent
+                                            }
+                                        />
+                                    </div>
+                                )}
+                            </>
+                        ) : (
+                            <>
+                                {waitingNextGame && (
+                                    <p className="text-muted-foreground">
+                                        {t('room.lobby.waiting_next_game')}
+                                    </p>
+                                )}
+
                                 <Podium
                                     podium={state.podium}
                                     failed={!state.resyncing}
@@ -476,22 +530,87 @@ export default function Lobby({
                                         onRefused={announce}
                                     />
                                 </Podium>
-                            )}
 
-                            <SeatList
-                                seats={state.seats}
-                                selfPublicId={state.self.publicId}
-                                capacity={settings.settings.capacity}
-                                actions={isHost ? gestures : null}
-                            />
-
-                            <div>
-                                <LeaveRoomAction {...leaveGesture} />
-                            </div>
-                        </>
-                    )}
-                </div>
-            </ScrollArea>
+                                {seatsPanel}
+                            </>
+                        )}
+                    </div>
+                </ScrollArea>
+            )}
         </>
+    );
+}
+
+type LobbyGameStageProps = {
+    /** Code du salon (prop `room.code`), pour Wayfinder. */
+    roomCode: string;
+    /** L'état de la page (`useLobbyState`). */
+    lobby: LobbyStateView;
+    /**
+     * Les réglages du salon, figés du lancement au podium (00 § Réglages
+     * figés au lancement) : ceux du snapshot de la partie.
+     */
+    settings: RoomSettingsView;
+    banners: ReactNode;
+    seatsPanel: ReactNode;
+};
+
+/**
+ * L'état de partie de la page du salon, du lancement au podium exclu (spec
+ * 60 § 10.1 et § 11.8, lot L60-14) : l'horloge d'affichage, les annonces de
+ * manche, la valeur du palier et la saisie (`useRoundStage`), le geste
+ * « manche suivante » de l'hôte (`useNextRound`), et la scène de 60
+ * (`GameStage`). Monté seulement en partie : au lobby, aucune horloge de
+ * manche ne tourne.
+ *
+ * Deux replis, lus dans les réglages du salon, figés du lancement au podium
+ * — même lecture que `maxAnswerLength` au `game.launched` du magasin :
+ * `attemptsPerRound`, tant que la saisie du siège est inconnue (début de
+ * manche, avant toute soumission : la ligne naît `open`, toutes tentatives
+ * restantes) ; `maxAnswerLength`, si le paquet ne l'a pas encore porté.
+ */
+function LobbyGameStage({
+    roomCode,
+    lobby,
+    settings,
+    banners,
+    seatsPanel,
+}: LobbyGameStageProps) {
+    const { t } = useTranslations();
+    const { frameFormat } = usePage().props;
+    const { state, store, frames, canWrite } = lobby;
+    const { clock, tierValue, submission } = useRoundStage({ state, store });
+    const revealed = clock.round?.phase === 'revealing' ? clock.round : null;
+    const nextRound = useNextRound({
+        roomCode,
+        gameRef: state.gameRef,
+        sequenceIndex: revealed?.sequenceIndex ?? null,
+    });
+
+    return (
+        <GameStage
+            state={state}
+            clock={clock}
+            tierValue={tierValue}
+            submission={submission}
+            frames={frames}
+            frameFormat={frameFormat}
+            attemptsPerRound={settings.attemptsPerRound}
+            maxAnswerLength={state.maxAnswerLength ?? settings.maxAnswerLength}
+            title={t('room.lobby.title')}
+            banners={banners}
+            seatsPanel={seatsPanel}
+            revealAction={
+                state.self.isHost ? (
+                    <NextRoundButton
+                        label={t('game.host.next_round')}
+                        pending={nextRound.pending}
+                        disabled={!canWrite}
+                        error={nextRound.error}
+                        onAdvance={nextRound.advance}
+                    />
+                ) : null
+            }
+        />
     );
 }

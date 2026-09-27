@@ -77,9 +77,12 @@ function SeatRow({ seat, isSelf, actions, onGestureDone }: SeatRowProps) {
                     className="size-10 text-sm"
                 />
 
+                {/* `contain-inline-size` : sans lui, un pseudo long (vingt
+                    « W ») donne sa largeur entière à la ligne, qui déborde la
+                    colonne d'une zone défilante (même remède qu'E118-7). */}
                 <span
                     id={nicknameId}
-                    className="min-w-0 flex-1 truncate font-medium"
+                    className="min-w-0 flex-1 truncate font-medium contain-inline-size"
                 >
                     {nickname}
                 </span>
