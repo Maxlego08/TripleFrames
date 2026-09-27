@@ -80,12 +80,12 @@ function themePerimeterGenerated(): array
 }
 
 /**
- * Ajouts du jalon 1 à `WATCHED`, spec 90 § 9.3, à la lettre. Une entrée de
- * la spec n'y est pas encore, et c'est la spec qui le veut : `welcome.tsx`
- * entre « à sa réécriture en accueil » (L90-8). `hooks/admin` et
- * `lib/admin`, inscrits « dès leur création » par L20-9a, sont vérifiés avec
- * le reste du back-office ; la seconde assertion du test, sur les
- * répertoires, attrape tout répertoire né depuis le gel.
+ * Ajouts du jalon 1 à `WATCHED`, spec 90 § 9.3, à la lettre. `welcome.tsx`
+ * y est entré « à sa réécriture en accueil » (L90-8), et non au gel : c'est
+ * la spec qui le voulait. `hooks/admin` et `lib/admin`, inscrits « dès leur
+ * création » par L20-9a, sont vérifiés avec le reste du back-office ; la
+ * seconde assertion du test, sur les répertoires, attrape tout répertoire né
+ * depuis le gel.
  *
  * @return list<string>
  */
@@ -96,6 +96,7 @@ function themePerimeterFirstMilestone(): array
         'resources/js/pages/room',
         'resources/js/pages/legal',
         'resources/js/pages/error.tsx',
+        'resources/js/pages/welcome.tsx',
         'resources/js/layouts/game',
         'resources/js/layouts/public',
         'resources/js/components/game',

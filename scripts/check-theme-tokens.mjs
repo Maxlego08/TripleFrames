@@ -100,8 +100,8 @@ const WATCHED = [
     'resources/js/lib/admin',
 
     // Jalon 1, côté joueur (spec 90 § 9.3, contrat C16 § 2.11) : inscrits dès
-    // le gel, avant la création du premier fichier. `pages/welcome.tsx` n'y
-    // entre qu'à sa réécriture en accueil (L90-8).
+    // le gel, avant la création du premier fichier. `pages/welcome.tsx` y est
+    // entré à sa réécriture en accueil (L90-8, règle d'entrée n° 1), plus bas.
     'resources/js/pages/game',
     'resources/js/pages/room',
     'resources/js/pages/legal',
@@ -151,6 +151,11 @@ const WATCHED = [
     'resources/js/types/index.ts',
     // L90-7 (spec 90 § 2.3, § 9.3) : `GameLayoutProps`.
     'resources/js/types/ui.ts',
+
+    // Fichiers hérités RÉÉCRITS (spec 90 § 9.3, règle d'entrée n° 1) : ils
+    // sortent d'`EXEMPT` et entrent ici dans le commit qui les réécrit.
+    // L90-8 (spec 90 § 4.7) : la page du starter devient l'accueil.
+    'resources/js/pages/welcome.tsx',
 ];
 
 /**
@@ -224,7 +229,6 @@ const EXEMPT = [
     'resources/js/pages/settings/appearance.tsx',
     'resources/js/pages/settings/profile.tsx',
     'resources/js/pages/settings/security.tsx',
-    'resources/js/pages/welcome.tsx',
     'resources/js/types/navigation.ts',
     'resources/js/types/vite-env.d.ts',
 ];

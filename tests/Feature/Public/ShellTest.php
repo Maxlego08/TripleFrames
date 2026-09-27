@@ -386,23 +386,12 @@ it('garde le tableau de bord du starter dans AppLayout', function () {
         ->assertInertia(fn (Assert $page) => $page->component('dashboard'));
 
     // Côté client : le `switch` d'`app.tsx`, dans l'ordre de C16 § 2.1.
+    // `welcome` a rejoint `PublicLayout` à sa réécriture en accueil (L90-8) :
+    // la forme transitoire, sans coquille, n'est plus admise.
     $groups = shellLayoutSwitch();
 
-    // `welcome` rejoint `PublicLayout` à sa réécriture en accueil (L90-8) ;
-    // jusque-là, il reste en tête, sans coquille. Les deux formes sont
-    // admises, aucune autre.
-    if ($groups[0]['conditions'] === ["name === 'welcome'"]) {
-        expect($groups[0]['layout'])->toBe('null');
-
-        array_shift($groups);
-    } else {
-        expect($groups[0]['conditions'][0] ?? null)->toBe("name === 'welcome'");
-
-        array_shift($groups[0]['conditions']);
-    }
-
     expect($groups)->toBe([
-        ['conditions' => ["name === 'error'", "name.startsWith('legal/')"], 'layout' => 'PublicLayout'],
+        ['conditions' => ["name === 'welcome'", "name === 'error'", "name.startsWith('legal/')"], 'layout' => 'PublicLayout'],
         ['conditions' => ["name.startsWith('game/')"], 'layout' => 'GameLayout'],
         ['conditions' => ["name.startsWith('admin/')"], 'layout' => 'AdminLayout'],
         ['conditions' => ["name.startsWith('auth/')"], 'layout' => 'AuthLayout'],

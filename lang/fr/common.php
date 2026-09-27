@@ -141,13 +141,18 @@ return [
         ],
     ],
 
+    // Accueil (spec 90 § 4.7) : le jeu en une phrase et ses trois entrées.
+    // Aucun placeholder. Aucun texte ne dit la longueur ni l'alphabet d'un
+    // code de salon : ils appartiennent à `RoomCode` (spec 50), et le nombre
+    // d'images d'une manche est un réglage, jamais une règle (« quelques »).
     'home' => [
-        'deploy' => 'Déployer',
-        'description' => 'Nous vous suggérons de commencer par ceci.',
-        'documentation' => 'Lire la documentation',
-        'intro' => 'Laravel possède un écosystème d’une richesse remarquable.',
-        'title' => 'Pour commencer',
-        'tutorials' => 'Regarder les tutoriels vidéo sur Laracasts',
+        'create_room' => 'Créer un salon',
+        'heading' => 'Devinez le film, image après image',
+        'join_room' => 'Rejoindre',
+        'play_solo' => 'Jouer en solo',
+        'room_code_invalid' => 'Ce code de salon n’est pas valide. Vérifiez-le, puis réessayez.',
+        'room_code_label' => 'Code du salon',
+        'tagline' => 'Un blindtest de films et de dessins animés : chaque manche dévoile quelques images d’un même film, de la plus cryptique à la plus évidente. Trouvez son titre avant les autres.',
     ],
 
 ];

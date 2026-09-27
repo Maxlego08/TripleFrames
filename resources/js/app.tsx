@@ -16,13 +16,11 @@ void createInertiaApp({
     // (contrat C16 § 2.1).
     layout: (name) => {
         switch (true) {
-            // Page du starter, sans coquille jusqu'à sa réécriture en accueil
-            // (L90-8), qui la fait entrer dans `PublicLayout`.
+            // L'accueil, les pages légales et la page d'erreur joueur sont des
+            // pages publiques, dans l'apparence du visiteur (spec 90 § 4.7).
+            // La page d'erreur l'est même levée depuis une route de jeu (spec
+            // 90 § 4.8) ; `admin/error` reste dans la coquille du back-office.
             case name === 'welcome':
-                return null;
-            // La page d'erreur joueur est une page publique, dans l'apparence
-            // du visiteur, même levée depuis une route de jeu (spec 90 § 4.8).
-            // `admin/error` reste dans la coquille du back-office.
             case name === 'error':
             case name.startsWith('legal/'):
                 return PublicLayout;
