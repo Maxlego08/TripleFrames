@@ -1,8 +1,11 @@
 <?php
 
+use App\Actions\Game\CatchUpGame;
+use App\Enums\GuessSource;
 use App\Enums\InputDifficulty;
 use App\Enums\Locale;
 use App\Enums\RoundPlayerInputState;
+use App\Events\Game\AnswerAccepted;
 use App\Events\Game\InputClosed;
 use App\Jobs\Game\AdvanceRound;
 use App\Jobs\Game\InterruptPausedGame;
@@ -15,6 +18,7 @@ use App\Models\Round;
 use App\Models\RoundPlayer;
 use App\Models\RoundTier;
 use App\Support\Identity\PlayerToken;
+use App\ValueObjects\Answers\SeatInputView;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Support\Facades\Date;
@@ -34,7 +38,12 @@ use Tests\Support\Room\SeatEntry;
 |
 | Fichier partagé entre lots : L70-4 y pose l'effet de `text_exhausted` sur
 | la fin anticipée (D20 du 23/09, E10-53) ; L70-5 (plafond, comptage,
-| routes) et L70-9 (clic à `T_N`) le complètent.
+| routes) et L70-9 (clic à `T_N`, essai unique par siège) le complètent.
+|
+| Les clics de L70-9 passent par la route réelle, sur un QCM composé par
+| l'action réelle à son instant théorique (`SubmissionFixtures::openChoices()`).
+| Un clic ne consomme jamais de tentative de texte : les plafonds ne
+| concernent que le texte libre.
 |
 | Les soumissions de L70-5 passent par la route réelle, horloge figée à
 | l'instant de réception, sur une partie matérialisée et ouverte par les
@@ -577,4 +586,214 @@ it('une seconde soumission d\'un siège verrouillé répond 409 closed avec inpu
 
     expect(SubmissionFixtures::writes($queries))->toBe([])
         ->and(SubmissionFixtures::participation($round, $seat)->wrong_attempts)->toBe(0);
+});
+
+it('le plafond en Normal passe en text_exhausted et le clic reste recevable à T_N', function (): void {
+    Event::fake([InputClosed::class, AnswerAccepted::class]);
+
+    $tokens = [PlayerToken::mint(Locale::French), PlayerToken::mint(Locale::French)];
+    $target = SubmissionFixtures::movie('Harbour Lights', 'Les Feux du port');
+    [$game, $round, [$finder, $misser]] = SubmissionFixtures::openedRound($tokens, SubmissionFixtures::settings(InputDifficulty::Normal), $target);
+    SubmissionFixtures::decoyCandidates();
+
+    $cap = attemptsCap($game);
+    $cadence = SubmissionFixtures::cadenceMs($game);
+    $choicesTier = attemptsChoicesTier($game);
+    $tN = EngineFixtures::opensAt($round, $choicesTier);
+    $exhaustedAt = $tN->subMilliseconds(2 * $cadence);
+
+    foreach ([$finder, $misser] as $index => $seat) {
+        SubmissionFixtures::spend($round, $seat, $cap - 1);
+
+        // Le plafond atteint avant `T_N` : texte épuisé, QCM attendu.
+        SubmissionFixtures::submit($this, $seat, $tokens[$index], SubmissionFixtures::WRONG, $exhaustedAt)
+            ->assertOk()
+            ->assertExactJson(SubmissionFixtures::rejectedBody(0, RoundPlayerInputState::TextExhausted));
+
+        // Le texte est fermé — même le bon titre n'est ni jugé ni compté —,
+        // et ce 409 ne ferme pas le QCM attendu.
+        SubmissionFixtures::submit($this, $seat, $tokens[$index], 'Harbour Lights', $exhaustedAt->addMilliseconds($cadence))
+            ->assertStatus(Response::HTTP_CONFLICT)
+            ->assertExactJson(SubmissionFixtures::closedBody(Locale::French, RoundPlayerInputState::TextExhausted));
+
+        $participation = SubmissionFixtures::participation($round, $seat);
+
+        expect($participation->input_state)->toBe(RoundPlayerInputState::TextExhausted)
+            ->and($participation->wrong_attempts)->toBe($cap)
+            ->and($participation->input_closed_at)->toBeNull();
+    }
+
+    Event::assertNotDispatched(InputClosed::class);
+
+    // À `T_N`, le QCM est composé aussi pour les sièges `text_exhausted`, et
+    // leur vue de saisie porte les propositions.
+    SubmissionFixtures::openChoices($round);
+
+    $view = SeatInputView::forSeat(SubmissionFixtures::participation($round, $finder))->toArray();
+
+    expect($view['inputState'])->toBe(RoundPlayerInputState::TextExhausted->value)
+        ->and($view['attemptsLeft'])->toBe(0)
+        ->and($view['choices'])->not->toBeNull()
+        ->and($view['locked'])->toBeNull();
+
+    // Le clic reste recevable, une fois : juste, verrouillé au palier du QCM ;
+    // faux, `qcm_wrong`. Le compteur de texte n'est jamais touché.
+    $clickAt = $tN->addMilliseconds($cadence);
+
+    SubmissionFixtures::click($this, $finder, $tokens[0], SubmissionFixtures::correctChoice($round, $finder), $clickAt)
+        ->assertOk()
+        ->assertJson(['result' => 'accepted', 'inputState' => 'locked', 'lockRank' => 1, 'tierIndex' => $choicesTier]);
+
+    SubmissionFixtures::click($this, $misser, $tokens[1], SubmissionFixtures::wrongChoice($round, $misser), $clickAt)
+        ->assertOk()
+        ->assertExactJson(SubmissionFixtures::rejectedBody(0, RoundPlayerInputState::QcmWrong));
+
+    $found = SubmissionFixtures::participation($round, $finder);
+    $missed = SubmissionFixtures::participation($round, $misser);
+
+    expect($found->input_state)->toBe(RoundPlayerInputState::Locked)
+        ->and($found->wrong_attempts)->toBe($cap)
+        ->and($found->input_closed_at?->equalTo($clickAt))->toBeTrue()
+        ->and(SubmissionFixtures::guess($round, $finder)->source)->toBe(GuessSource::Choice)
+        ->and($missed->input_state)->toBe(RoundPlayerInputState::QcmWrong)
+        ->and($missed->wrong_attempts)->toBe($cap)
+        ->and($missed->input_closed_at?->equalTo($clickAt))->toBeTrue();
+
+    Event::assertDispatchedTimes(AnswerAccepted::class, 1);
+    Event::assertDispatchedTimes(InputClosed::class, 1);
+    Event::assertDispatched(InputClosed::class, static fn (InputClosed $event): bool => $event->roundId === $round->id
+        && $event->playerId === $misser->id
+        && $event->state === RoundPlayerInputState::QcmWrong);
+
+    // Essai unique et définitif : un second clic, même juste, est une saisie
+    // close.
+    SubmissionFixtures::click($this, $misser, $tokens[1], SubmissionFixtures::correctChoice($round, $misser), $clickAt->addMilliseconds($cadence))
+        ->assertStatus(Response::HTTP_CONFLICT)
+        ->assertExactJson(SubmissionFixtures::closedBody(Locale::French, RoundPlayerInputState::QcmWrong));
+
+    expect(Guess::query()->count())->toBe(1);
+    Event::assertDispatchedTimes(InputClosed::class, 1);
+});
+
+it('après revealed ou skipped, la route clic répond 409 sans rien écrire', function (RoundPlayerInputState $state): void {
+    $token = PlayerToken::mint(Locale::French);
+    [$game, $round, [$seat]] = SubmissionFixtures::openedRound([$token], SubmissionFixtures::settings(InputDifficulty::Normal), solo: true);
+    SubmissionFixtures::decoyCandidates();
+    $cadence = SubmissionFixtures::cadenceMs($game);
+
+    expect($state->isSoloOnly())->toBeTrue()
+        ->and($seat->room_id)->toBeNull();
+
+    // Le QCM ouvert et composé pour ce siège : seul le geste solo ferme sa
+    // saisie.
+    $gesture = SubmissionFixtures::openChoices($round)->addMilliseconds($cadence);
+    $correct = SubmissionFixtures::correctChoice($round, $seat);
+
+    // Le geste solo, écrit comme 60 l'écrit : état et instant de clôture.
+    RoundPlayer::query()
+        ->where('round_id', $round->id)
+        ->where('player_id', $seat->id)
+        ->update(['input_state' => $state->value, 'input_closed_at' => (new RoundPlayer)->fromDateTime($gesture)]);
+
+    // Même la bonne proposition : ni jugée, ni écrite.
+    $queries = SubmissionFixtures::queries(fn () => SubmissionFixtures::click($this, $seat, $token, $correct, $gesture->addMilliseconds($cadence))
+        ->assertStatus(Response::HTTP_CONFLICT)
+        ->assertExactJson(SubmissionFixtures::closedBody(Locale::French, $state)));
+
+    $participation = SubmissionFixtures::participation($round, $seat);
+
+    expect(SubmissionFixtures::writes($queries))->toBe([])
+        ->and($participation->input_state)->toBe($state)
+        ->and($participation->wrong_attempts)->toBe(0)
+        ->and($participation->input_closed_at?->equalTo($gesture))->toBeTrue()
+        ->and(Guess::query()->count())->toBe(0);
+})->with([
+    'revealed' => [RoundPlayerInputState::Revealed],
+    'skipped' => [RoundPlayerInputState::Skipped],
+]);
+
+it('en Normal un clic faux ferme aussi le texte libre', function (): void {
+    Event::fake([InputClosed::class]);
+
+    $token = PlayerToken::mint(Locale::French);
+    $target = SubmissionFixtures::movie('Harbour Lights', 'Les Feux du port');
+    [$game, $round, [$seat]] = SubmissionFixtures::openedRound([$token], SubmissionFixtures::settings(InputDifficulty::Normal), $target);
+    SubmissionFixtures::decoyCandidates();
+    $cadence = SubmissionFixtures::cadenceMs($game);
+    $clickAt = SubmissionFixtures::openChoices($round)->addMilliseconds($cadence);
+
+    // Un siège `open`, à qui il reste toutes ses tentatives de texte, clique
+    // une mauvaise proposition : il a consommé la seule information que le
+    // QCM vendait.
+    SubmissionFixtures::click($this, $seat, $token, SubmissionFixtures::wrongChoice($round, $seat), $clickAt)
+        ->assertOk()
+        ->assertExactJson(SubmissionFixtures::rejectedBody(0, RoundPlayerInputState::QcmWrong));
+
+    // Le texte est fermé avec lui : le bon titre n'est ni jugé ni compté.
+    $queries = SubmissionFixtures::queries(fn () => SubmissionFixtures::submit($this, $seat, $token, 'Harbour Lights', $clickAt->addMilliseconds($cadence))
+        ->assertStatus(Response::HTTP_CONFLICT)
+        ->assertExactJson(SubmissionFixtures::closedBody(Locale::French, RoundPlayerInputState::QcmWrong)));
+
+    $participation = SubmissionFixtures::participation($round, $seat);
+
+    expect(SubmissionFixtures::writes($queries))->toBe([])
+        ->and($participation->input_state)->toBe(RoundPlayerInputState::QcmWrong)
+        ->and($participation->wrong_attempts)->toBe(0)
+        ->and($participation->input_closed_at?->equalTo($clickAt))->toBeTrue()
+        ->and(Guess::query()->count())->toBe(0);
+
+    Event::assertDispatchedTimes(InputClosed::class, 1);
+});
+
+it('en Expert la route clic répond saisie close sans rien écrire', function (): void {
+    $token = PlayerToken::mint(Locale::French);
+    $target = SubmissionFixtures::movie('Harbour Lights', 'Les Feux du port');
+    [$game, $round, [$seat]] = SubmissionFixtures::openedRound([$token], SubmissionFixtures::settings(InputDifficulty::Expert), $target);
+    $cadence = SubmissionFixtures::cadenceMs($game);
+    // L'instant où le QCM de Normal s'ouvrirait : Expert n'en a jamais.
+    $tN = EngineFixtures::opensAt($round, attemptsChoicesTier($game));
+
+    Date::setTestNow($tN);
+    app(CatchUpGame::class)->handle($game, $tN);
+
+    $queries = SubmissionFixtures::queries(fn () => SubmissionFixtures::click($this, $seat, $token, 'Harbour Lights', $tN->addMilliseconds($cadence))
+        ->assertStatus(Response::HTTP_CONFLICT)
+        ->assertExactJson(SubmissionFixtures::closedBody(Locale::French)));
+
+    expect(SubmissionFixtures::writes($queries))->toBe([])
+        ->and(Round::query()->whereKey($round->id)->value('decoy_movie_id_1'))->toBeNull()
+        ->and(Guess::query()->count())->toBe(0);
+
+    // Rien n'est fermé : le texte libre, lui, est toujours jugé et compté.
+    SubmissionFixtures::submit($this, $seat, $token, SubmissionFixtures::WRONG, $tN->addMilliseconds(2 * $cadence))
+        ->assertOk()
+        ->assertExactJson(SubmissionFixtures::rejectedBody(attemptsCap($game) - 1));
+});
+
+it('en cas terminal, sans QCM, la route clic répond saisie close sans rien écrire', function (): void {
+    $token = PlayerToken::mint(Locale::French);
+    [$game, $round, [$seat]] = SubmissionFixtures::openedRound([$token], SubmissionFixtures::settings(InputDifficulty::Normal));
+    $cadence = SubmissionFixtures::cadenceMs($game);
+    $choicesTier = attemptsChoicesTier($game);
+    $tN = EngineFixtures::opensAt($round, $choicesTier);
+
+    // Les paliers d'avant ouverts, puis l'ouverture de `T_N` appliquée SANS
+    // QCM (composition terminale) : le rattrapage du clic n'a plus rien à
+    // faire, et le palier du QCM est franchi.
+    Date::setTestNow($tN->subMillisecond());
+    app(CatchUpGame::class)->handle($game, $tN->subMillisecond());
+    attemptsServeChoicesTier($round, $choicesTier, $tN);
+
+    // Aucun QCM n'existe : tout clic est une saisie close (409), jamais une
+    // proposition inconnue (422).
+    $queries = SubmissionFixtures::queries(fn () => SubmissionFixtures::click($this, $seat, $token, SubmissionFixtures::WRONG, $tN->addMilliseconds($cadence))
+        ->assertStatus(Response::HTTP_CONFLICT)
+        ->assertExactJson(SubmissionFixtures::closedBody(Locale::French)));
+
+    $participation = SubmissionFixtures::participation($round, $seat);
+
+    expect(SubmissionFixtures::writes($queries))->toBe([])
+        ->and($participation->input_state)->toBe(RoundPlayerInputState::Open)
+        ->and($participation->choices_locale)->toBeNull()
+        ->and(Guess::query()->count())->toBe(0);
 });

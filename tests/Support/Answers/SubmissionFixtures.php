@@ -2,6 +2,8 @@
 
 namespace Tests\Support\Answers;
 
+use App\Actions\Game\CatchUpGame;
+use App\Actions\Game\ComposeChoiceSets;
 use App\Actions\Game\MaterializeDraw;
 use App\Enums\InputDifficulty;
 use App\Enums\Locale;
@@ -13,11 +15,13 @@ use App\Models\Guess;
 use App\Models\Movie;
 use App\Models\Player;
 use App\Models\Round;
+use App\Models\RoundChoiceSet;
 use App\Models\RoundPlayer;
 use App\Settings\EngineConstants;
 use App\Settings\RoomSettings;
 use App\Settings\RoomSettingsBounds;
 use App\Support\Identity\PlayerToken;
+use App\ValueObjects\Answers\DecoyPick;
 use App\ValueObjects\Catalog\FrameLevelCoverage;
 use Carbon\CarbonImmutable;
 use Database\Factories\MovieFactory;
@@ -26,6 +30,7 @@ use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Testing\TestResponse;
+use LogicException;
 use Symfony\Component\HttpFoundation\Response;
 use Tests\Support\Draw\PoolFixtures;
 use Tests\Support\Game\EngineFixtures;
@@ -33,11 +38,11 @@ use Tests\Support\Room\LobbyWrites;
 use Tests\TestCase;
 
 /**
- * Fixtures de la soumission texte (spec 70 § 7 et § 9, lots L70-5 et
- * L70-6) : une vraie partie, matérialisée par l'action réelle, sa manche 1
+ * Fixtures de la soumission (spec 70 § 7 et § 9, lots L70-5, L70-6 et
+ * L70-9) : une vraie partie, matérialisée par l'action réelle, sa manche 1
  * programmée et ouverte par les transitions réelles, des sièges tenus par un
- * `player_token`, onglet actif frappé, et la soumission envoyée PAR LA
- * ROUTE, comme le client l'enverra :
+ * `player_token`, onglet actif frappé, et la soumission — texte ou clic —
+ * envoyée PAR LA ROUTE, comme le client l'enverra :
  * JSON, cookie `player_token`, en-tête `X-Seat-Token`, horloge figée à
  * l'instant de réception.
  *
@@ -69,16 +74,26 @@ final class SubmissionFixtures
     }
 
     /**
-     * Un film de vivier au titre imposé — `title_original` et titre anglais —,
-     * sans alias inventé, une variante publiée par niveau nominal du `N` par
-     * défaut ; ses clés `answer_key` sont celles du vrai projecteur.
+     * Un film de vivier au titre imposé — `title_original` et titre anglais,
+     * et titre français si `$frenchTitle` est donné —, sans alias inventé,
+     * une variante publiée par niveau nominal du `N` par défaut ; ses clés
+     * `answer_key` sont celles du vrai projecteur.
+     *
+     * Avec ses deux titres, le film a le profil de titre des films de vivier
+     * par défaut : ses leurres se tirent au premier rang, sans mode dégradé
+     * (spec 70 § 10.3).
      */
-    public static function movie(string $title): Movie
+    public static function movie(string $title, ?string $frenchTitle = null): Movie
     {
         $levels = FrameLevelCoverage::nominal(RoomSettingsBounds::DEFAULT_FRAMES_PER_ROUND);
+        $titles = [Locale::English->value => $title];
+
+        if ($frenchTitle !== null) {
+            $titles[Locale::French->value] = $frenchTitle;
+        }
 
         $movie = Movie::factory()
-            ->playable(titles: ['en' => $title], aliases: ['fr' => []])
+            ->playable(titles: $titles, aliases: [Locale::French->value => []])
             ->state(['title_original' => $title])
             ->has(
                 Frame::factory()
@@ -169,6 +184,93 @@ final class SubmissionFixtures
             ['round' => $round, 'answer' => $answer],
             [EnsureActiveSeat::HEADER => (string) $seat->active_seat_token],
         );
+    }
+
+    /**
+     * Le clic d'une proposition du QCM par la route, tel que le client
+     * l'envoie — la chaîne reçue, jamais un index —, reçu à `$at` (l'horloge
+     * courante sinon). Lot L70-9.
+     *
+     * @return TestResponse<Response>
+     */
+    public static function click(
+        TestCase $test,
+        Player $seat,
+        PlayerToken $token,
+        string $choice,
+        ?CarbonImmutable $at = null,
+        int $round = 1,
+    ): TestResponse {
+        if ($at instanceof CarbonImmutable) {
+            Date::setTestNow($at);
+        }
+
+        LobbyWrites::actAs($test, $token);
+
+        return $test->postJson(
+            route('round.choice.store', $seat),
+            ['round' => $round, 'choice' => $choice],
+            [EnsureActiveSeat::HEADER => (string) $seat->active_seat_token],
+        );
+    }
+
+    /**
+     * Des films de vivier de plus, au profil de titre des films de vivier par
+     * défaut (un titre dans chaque locale activée) : de quoi tirer trois
+     * leurres au premier rang, sans cas terminal, quel que soit `M`.
+     */
+    public static function decoyCandidates(): void
+    {
+        PoolFixtures::movies(DecoyPick::COUNT);
+    }
+
+    /**
+     * L'ouverture du QCM de la manche à son instant théorique — `T₁` en
+     * Facile, `T_N` en Normal — : le rattrapage à cet instant ouvre les
+     * paliers échus, puis la composition, appelée directement à cet instant
+     * comme la transition d'ouverture l'appellera (lot L60-11, qui la rendra
+     * idempotente ici). Elle doit composer : jamais le cas terminal. L'horloge
+     * reste figée à l'instant rendu.
+     */
+    public static function openChoices(Round $round): CarbonImmutable
+    {
+        $game = Game::query()->findOrFail($round->game_id);
+        $tierIndex = $game->input_difficulty->choicesOpenTierIndex($game->frames_per_round)
+            ?? throw new LogicException('SubmissionFixtures : aucun QCM en Expert.');
+        $at = EngineFixtures::opensAt($round, $tierIndex);
+
+        Date::setTestNow($at);
+        app(CatchUpGame::class)->handle($game, $at);
+
+        // Comme au premier appel d'un job : liaisons `scoped` oubliées.
+        app()->forgetScopedInstances();
+
+        expect(app(ComposeChoiceSets::class)->handle(Round::query()->findOrFail($round->id), $at))->toBeTrue();
+
+        return $at;
+    }
+
+    /**
+     * La ligne du QCM dans la langue de composition du siège, relue en base.
+     */
+    public static function choiceSet(Round $round, Player $seat): RoundChoiceSet
+    {
+        $locale = self::participation($round, $seat)->choices_locale
+            ?? throw new LogicException('SubmissionFixtures : siège sans langue de composition du QCM.');
+
+        return RoundChoiceSet::query()->where('round_id', $round->id)->where('locale', $locale->value)->sole();
+    }
+
+    /** La bonne proposition du siège : `choice_1` de sa ligne, en clair. */
+    public static function correctChoice(Round $round, Player $seat): string
+    {
+        return self::choiceSet($round, $seat)->choice_1;
+    }
+
+    /** Une mauvaise proposition du siège : le premier leurre de sa ligne. */
+    public static function wrongChoice(Round $round, Player $seat): string
+    {
+        return self::choiceSet($round, $seat)->choice_2;
     }
 
     /**

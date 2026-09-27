@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\Locale;
+use App\Enums\RoundPlayerInputState;
 use App\Models\AdminAction;
 use App\Models\Frame;
 use App\Models\Game;
@@ -17,6 +18,7 @@ use App\Models\SeenFrame;
 use App\Models\User;
 use App\Support\Answers\ChoicesPresenter;
 use App\ValueObjects\Answers\ChoicesPayload;
+use App\ValueObjects\Answers\SeatInputView;
 use Illuminate\Database\Eloquent\Model;
 
 /**
@@ -272,4 +274,72 @@ it('ChoicesPayload ne porte aucun identifiant de film', function () {
 
         expect(app(ChoicesPresenter::class)->forSeat($otherSeat)?->toArray()['lang'])->toBe($reached?->bcp47());
     }
+});
+
+it('SeatInputView ne sort que les données du siège demandeur', function () {
+    // Spec 70 § 16, contrat C10 § 3 (R-26) : la vue d'UN siège, destinataire
+    // unique de la resynchronisation. La forme est prouvée sur la CLASSE —
+    // aucune propriété de plus — et sur une manche réelle où trois sièges
+    // ont trois états : chacun ne reçoit que les siens.
+    $properties = array_map(
+        static fn (ReflectionProperty $property): string => $property->getName(),
+        (new ReflectionClass(SeatInputView::class))->getProperties(),
+    );
+
+    expect($properties)->toBe(['inputState', 'attemptsLeft', 'choices', 'lockRank', 'score'])
+        ->and(is_subclass_of(SeatInputView::class, JsonSerializable::class))->toBeFalse();
+
+    $round = Round::factory()->withDecoys()->create();
+    RoundChoiceSet::factory()->forRound($round)->create();
+
+    $seat = static fn (Closure $state): RoundPlayer => $state(
+        RoundPlayer::factory()->forRound($round, Player::factory()->create(['room_id' => $round->room_id]))->withChoices(Locale::English),
+    )->create();
+
+    $first = $seat(static fn ($factory) => $factory->locked());
+    $second = $seat(static fn ($factory) => $factory->locked());
+    $wrong = $seat(static fn ($factory) => $factory->qcmWrong());
+
+    $firstGuess = Guess::factory()->forRound($round, Player::query()->findOrFail($first->player_id))->withRank(1)->atTier(2)->withSpeedBonus(40)->create();
+    $secondGuess = Guess::factory()->forRound($round, Player::query()->findOrFail($second->player_id))->withRank(2)->atTier(3)->create();
+
+    $expected = static fn (RoundPlayer $roundPlayer, ?Guess $guess): array => [
+        'inputState' => $roundPlayer->input_state->value,
+        'attemptsLeft' => 0,
+        'choices' => app(ChoicesPresenter::class)->forSeat($roundPlayer)?->toArray(),
+        'locked' => $guess === null ? null : [
+            'lockRank' => $guess->lock_rank,
+            'tierIndex' => $guess->tier_index,
+            'pointsTier' => $guess->points_tier,
+            'pointsBonus' => $guess->points_bonus,
+            'pointsTotal' => $guess->points_total,
+        ],
+    ];
+
+    $views = [
+        [SeatInputView::forSeat($first)->toArray(), $expected($first, $firstGuess)],
+        [SeatInputView::forSeat($second)->toArray(), $expected($second, $secondGuess)],
+        [SeatInputView::forSeat($wrong)->toArray(), $expected($wrong, null)],
+    ];
+
+    // Chaque siège : SON état, SES points, SES propositions permutées pour
+    // lui — jamais le rang, les points ni l'état d'un autre.
+    foreach ($views as [$view, $own]) {
+        expect($view)->toBe($own)
+            ->and(array_keys($view))->toBe(['inputState', 'attemptsLeft', 'choices', 'locked'])
+            ->and(array_keys($view['choices'] ?? []))->toBe(['choices', 'useOriginalTitle', 'lang']);
+
+        // La structure exacte ci-dessus fixe toutes les clés : aucune ne
+        // nomme un identifiant. Et aucune valeur ne porte le `public_id` d'un
+        // siège, le sien compris : `SelfState` le porte déjà, hors de la vue.
+        $json = json_encode($view, JSON_THROW_ON_ERROR);
+
+        foreach ([$first, $second, $wrong] as $any) {
+            expect($json)->not->toContain((string) Player::query()->findOrFail($any->player_id)->public_id);
+        }
+    }
+
+    expect($views[0][0]['locked'])->not->toBe($views[1][0]['locked'])
+        ->and($views[0][0]['inputState'])->toBe(RoundPlayerInputState::Locked->value)
+        ->and($views[2][0]['inputState'])->toBe(RoundPlayerInputState::QcmWrong->value);
 });

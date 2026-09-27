@@ -67,6 +67,17 @@ return [
         'locked' => 'Found it!',
     ],
 
+    // Spec 70 § 17 (lot L70-9) : le QCM. Essai unique et définitif par siège :
+    // `wrong` est rendu par le client à partir de l’état `qcm_wrong` de la
+    // réponse ; `invalid` est l’erreur de validation (422) d’une chaîne absente
+    // des quatre propositions, résolue par le serveur dans la langue de la
+    // requête.
+    'choices' => [
+        'label' => 'Choices',
+        'wrong' => 'Wrong choice: answers are closed for this round.',
+        'invalid' => 'This choice does not exist.',
+    ],
+
     // Spec 80 § 15 (lot L80-6) : valeur du palier, score, classement, podium,
     // récapitulatif et aide du barème. Données, jamais phrases : le client
     // formate les nombres et les durées, et insère `:title` dans un fragment

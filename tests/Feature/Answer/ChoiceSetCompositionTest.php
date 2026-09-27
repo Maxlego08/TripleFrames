@@ -1,9 +1,18 @@
 <?php
 
+use App\Actions\Game\SubmitChoice;
+use App\Actions\Game\SubmitTextAnswer;
+use App\Enums\GuessMatchKind;
+use App\Enums\GuessSource;
 use App\Enums\InputDifficulty;
 use App\Enums\Locale;
 use App\Enums\PlayerConnectionState;
 use App\Enums\RoundPlayerInputState;
+use App\Events\Game\AnswerAccepted;
+use App\Events\Game\InputClosed;
+use App\Jobs\Game\AdvanceRound;
+use App\Jobs\Game\InterruptPausedGame;
+use App\Models\AnswerKey;
 use App\Models\Game;
 use App\Models\Guess;
 use App\Models\Movie;
@@ -16,17 +25,28 @@ use App\Models\RoundPlayer;
 use App\Support\Answers\ChoicesPresenter;
 use App\Support\Answers\DecoyPicker;
 use App\Support\Catalog\AnswerKeyNormalizer;
+use App\Support\Catalog\AnswerKeyProjector;
 use App\Support\Draw\DrawContext;
 use App\Support\Draw\SeededPrf;
 use App\Support\I18n\DisplayTitleResolver;
+use App\Support\Identity\PlayerToken;
 use App\ValueObjects\Answers\ChoicesPayload;
+use App\ValueObjects\Answers\SeatInputView;
+use App\ValueObjects\Scoring\TierScore;
 use Carbon\CarbonImmutable;
 use Database\Factories\MovieFactory;
 use Database\Factories\RoundPlayerFactory;
+use Illuminate\Database\Events\QueryExecuted;
+use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
+use Symfony\Component\HttpFoundation\Response;
 use Tests\Support\Answers\ChoiceSetFixtures;
+use Tests\Support\Answers\SubmissionFixtures;
 use Tests\Support\Draw\PoolFixtures;
+use Tests\Support\Room\SeatEntry;
 
 /*
 |--------------------------------------------------------------------------
@@ -42,6 +62,11 @@ use Tests\Support\Draw\PoolFixtures;
 | Graines fixes, vrais films de vivier (`PoolFixtures`), titres inventés.
 | `$this->at` est l'instant THÉORIQUE d'ouverture du QCM : la manche est
 | démarrée pour qu'il le soit exactement (`ChoiceSetFixtures::round()`).
+|
+| Le jugement du clic (lot L70-9) se joue PAR LA ROUTE, sur une partie
+| matérialisée par les actions réelles (`choiceSetPlayedRound()`) : la
+| chaîne cliquée traverse le middleware global `TrimStrings`, comme en
+| production. `SeatInputView` (même lot) y est lue après la composition.
 |
 */
 
@@ -696,4 +721,411 @@ it("refuse une composition en Expert ou hors de l'instant théorique d'ouverture
 
     expect($easyRound->refresh()->started_at?->format('Y-m-d H:i:s.v'))->toBe($this->at->format('Y-m-d H:i:s.v'))
         ->and(ChoiceSetFixtures::compose($easyRound, $this->at))->toBeTrue();
+});
+
+/**
+ * Une partie Normal jouée PAR LES ROUTES (lot L70-9) : sièges tenus par
+ * leurs jetons, chacun dans la langue de son jeton, manche 1 portant
+ * `$target`, QCM composé par l'action réelle à `T_N`.
+ *
+ * @param  list<PlayerToken>  $tokens
+ * @return array{game: Game, round: Round, seats: list<Player>, at: CarbonImmutable}
+ */
+function choiceSetPlayedRound(array $tokens, Movie $target): array
+{
+    Queue::fake([AdvanceRound::class, InterruptPausedGame::class]);
+    SeatEntry::isolateCookies();
+    Date::setTestNow(CarbonImmutable::parse('2026-09-27 21:10:00.125'));
+
+    [$game, $round, $seats] = SubmissionFixtures::openedRound(
+        $tokens,
+        SubmissionFixtures::settings(InputDifficulty::Normal),
+        $target,
+    );
+    SubmissionFixtures::decoyCandidates();
+
+    // La langue de composition d'un siège est celle de son joueur.
+    foreach ($seats as $index => $seat) {
+        Player::query()->whereKey($seat->id)->update(['locale' => ($tokens[$index]->locale ?? Locale::English)->value]);
+    }
+
+    $at = SubmissionFixtures::openChoices($round);
+
+    return ['game' => $game, 'round' => $round, 'seats' => $seats, 'at' => $at];
+}
+
+/**
+ * Les instructions d'un relevé qui lisent ou écrivent `answer_key`.
+ *
+ * @param  list<QueryExecuted>  $queries
+ * @return list<string>
+ */
+function choiceSetAnswerKeyQueries(array $queries): array
+{
+    return array_values(array_filter(
+        array_map(static fn (QueryExecuted $query): string => $query->sql, $queries),
+        static fn (string $sql): bool => SubmissionFixtures::touches($sql, 'answer_key'),
+    ));
+}
+
+it('un clic est jugé par égalité stricte contre choice_1 sans lire answer_key', function () {
+    $tokens = [PlayerToken::mint(Locale::French), PlayerToken::mint(Locale::French)];
+    $target = SubmissionFixtures::movie('Harbour Lights', 'Les Feux du port');
+    ['game' => $game, 'round' => $round, 'seats' => [$first, $second], 'at' => $tN] = choiceSetPlayedRound($tokens, $target);
+    $cadence = SubmissionFixtures::cadenceMs($game);
+    $set = SubmissionFixtures::choiceSet($round, $first);
+    $invalid = trans('game.choices.invalid', [], Locale::French->value);
+
+    expect($set->locale)->toBe(Locale::French)
+        ->and($set->choice_1)->toBe('Les Feux du port')
+        ->and($invalid)->not->toBe('game.choices.invalid');
+
+    // 1. Égalité STRICTE : une chaîne de même forme normalisée n'est pas la
+    // proposition — c'est une requête fabriquée, jamais un clic juste.
+    $shouted = Str::upper($set->choice_1);
+
+    expect($shouted)->not->toBe($set->choice_1)
+        ->and(AnswerKeyNormalizer::normalize($shouted))->toBe(AnswerKeyNormalizer::normalize($set->choice_1));
+
+    $queries = SubmissionFixtures::queries(fn () => SubmissionFixtures::click($this, $first, $tokens[0], $shouted, $tN->addMilliseconds($cadence))
+        ->assertUnprocessable()
+        ->assertJsonPath('errors.choice', [$invalid]));
+
+    // 2. Le titre de la cible est corrigé entre la composition et le clic :
+    // sa clé normalisée disparaît de `answer_key`, les quatre chaînes figées,
+    // elles, ne bougent pas.
+    MovieTitle::query()
+        ->where('movie_id', $target->id)
+        ->where('locale', Locale::French->value)
+        ->update(['title' => 'Les Lumières du havre']);
+    (new AnswerKeyProjector)->project($target->refresh());
+
+    expect(AnswerKey::query()->where('movie_id', $target->id)->where('normalized', AnswerKeyNormalizer::normalize($set->choice_1))->exists())->toBeFalse()
+        ->and(SubmissionFixtures::correctChoice($round, $first))->toBe($set->choice_1);
+
+    // 3. La proposition reçue verrouille, sans aucune lecture d'`answer_key` :
+    // l'instantané est celui d'un clic, jamais celui d'une clé.
+    $queries = [...$queries, ...SubmissionFixtures::queries(fn () => SubmissionFixtures::click($this, $first, $tokens[0], $set->choice_1, $tN->addMilliseconds(2 * $cadence))
+        ->assertOk()
+        ->assertJson(['result' => 'accepted', 'inputState' => 'locked', 'lockRank' => 1]))];
+
+    $guess = SubmissionFixtures::guess($round, $first);
+
+    expect($guess->source)->toBe(GuessSource::Choice)
+        ->and($guess->match_kind)->toBe(GuessMatchKind::Choice)
+        ->and($guess->answer_key_id)->toBeNull()
+        ->and($guess->answer_key_normalized)->toBe(AnswerKeyNormalizer::normalize($set->choice_1))
+        ->and($guess->submitted_normalized)->toBe(AnswerKeyNormalizer::normalize($set->choice_1))
+        ->and($guess->edit_distance)->toBe(0)
+        ->and($guess->prefix_was_ambiguous)->toBeFalse();
+
+    // 4. Le titre corrigé n'est pas une proposition ; la chaîne composée le
+    // reste pour le siège suivant.
+    $queries = [...$queries, ...SubmissionFixtures::queries(fn () => SubmissionFixtures::click($this, $second, $tokens[1], 'Les Lumières du havre', $tN->addMilliseconds($cadence))
+        ->assertUnprocessable()
+        ->assertJsonPath('errors.choice', [$invalid]))];
+
+    $queries = [...$queries, ...SubmissionFixtures::queries(fn () => SubmissionFixtures::click($this, $second, $tokens[1], $set->choice_1, $tN->addMilliseconds(2 * $cadence))
+        ->assertOk()
+        ->assertJson(['result' => 'accepted', 'inputState' => 'locked', 'lockRank' => 2]))];
+
+    expect(choiceSetAnswerKeyQueries($queries))->toBe([]);
+});
+
+it('une chaîne hors des quatre propositions est refusée en 422 sans fermer la saisie', function () {
+    Event::fake([InputClosed::class]);
+
+    $tokens = [PlayerToken::mint(Locale::French), PlayerToken::mint(Locale::English)];
+    $target = SubmissionFixtures::movie('Harbour Lights', 'Les Feux du port');
+    ['game' => $game, 'round' => $round, 'seats' => [$seat, $late], 'at' => $tN] = choiceSetPlayedRound($tokens, $target);
+    $cadence = SubmissionFixtures::cadenceMs($game);
+    $own = choiceSetStored(SubmissionFixtures::choiceSet($round, $seat));
+    $english = choiceSetRows($round)[Locale::English->value];
+    $invalid = trans('game.choices.invalid', [], Locale::French->value);
+
+    // Une chaîne fabriquée ; la bonne proposition d'une AUTRE langue, qui
+    // n'est pas l'une des quatre de ce siège ; un index, qu'un clic n'envoie
+    // jamais.
+    $refused = [SubmissionFixtures::WRONG, $english->choice_1, '1'];
+    $queries = [];
+
+    foreach ($refused as $step => $choice) {
+        expect(in_array($choice, $own, true))->toBeFalse();
+
+        $queries = [...$queries, ...SubmissionFixtures::queries(fn () => SubmissionFixtures::click($this, $seat, $tokens[0], $choice, $tN->addMilliseconds(($step + 1) * $cadence))
+            ->assertUnprocessable()
+            ->assertJsonPath('errors.choice', [$invalid]))];
+    }
+
+    // Rien n'est écrit ni compté, la saisie reste ouverte.
+    $participation = SubmissionFixtures::participation($round, $seat);
+
+    expect(SubmissionFixtures::writes($queries))->toBe([])
+        ->and($participation->input_state)->toBe(RoundPlayerInputState::Open)
+        ->and($participation->input_closed_at)->toBeNull()
+        ->and($participation->wrong_attempts)->toBe(0)
+        ->and($participation->choices_locale)->toBe(Locale::French)
+        ->and(Guess::query()->count())->toBe(0);
+
+    Event::assertNotDispatched(InputClosed::class);
+
+    // Un siège sans langue de composition n'a aucune ligne à lire : même la
+    // bonne proposition de sa langue est une chaîne inconnue.
+    RoundPlayer::query()->whereKey(SubmissionFixtures::participation($round, $late)->id)->update(['choices_locale' => null, 'choices_composed_at' => null]);
+
+    SubmissionFixtures::click($this, $late, $tokens[1], $english->choice_1, $tN->addMilliseconds($cadence))
+        ->assertUnprocessable()
+        ->assertJsonPath('errors.choice', [trans('game.choices.invalid', [], Locale::English->value)]);
+
+    expect(SubmissionFixtures::participation($round, $late)->input_state)->toBe(RoundPlayerInputState::Open);
+
+    // La saisie est restée ouverte : le texte libre est encore jugé et
+    // compté, puis le clic, une fois, verrouille.
+    $next = $tN->addMilliseconds((count($refused) + 1) * $cadence);
+
+    SubmissionFixtures::submit($this, $seat, $tokens[0], SubmissionFixtures::WRONG, $next)
+        ->assertOk()
+        ->assertExactJson(SubmissionFixtures::rejectedBody($game->settings_snapshot->attemptsPerRound - 1));
+
+    SubmissionFixtures::click($this, $seat, $tokens[0], SubmissionFixtures::correctChoice($round, $seat), $next->addMilliseconds($cadence))
+        ->assertOk()
+        ->assertJson(['result' => 'accepted', 'inputState' => 'locked', 'lockRank' => 1]);
+});
+
+it('une proposition dont le titre source porte une espace insécable ou un caractère invisible en bord reste cliquable', function () {
+    $nbsp = "\u{00A0}";
+    $zwsp = "\u{200B}";
+
+    // Le témoin : `trim()` de PHP garde ces caractères ; `TrimStrings`, qui
+    // nettoie le corps du clic par `Str::trim()`, les retire.
+    expect(trim('Harbor Of Glass'.$nbsp))->not->toBe('Harbor Of Glass')
+        ->and(trim($zwsp.'Le Port De Verre'))->not->toBe('Le Port De Verre');
+
+    $tokens = [PlayerToken::mint(Locale::French), PlayerToken::mint(Locale::English)];
+    $target = SubmissionFixtures::movie('Harbor Of Glass'.$nbsp, $zwsp.'Le Port De Verre');
+    ['game' => $game, 'round' => $round, 'seats' => [$french, $english], 'at' => $tN] = choiceSetPlayedRound($tokens, $target);
+    $cadence = SubmissionFixtures::cadenceMs($game);
+
+    // La proposition reçue par le siège français, telle que le présentateur
+    // la rend, est la cible nettoyée ; le client la renvoie telle quelle.
+    $received = app(ChoicesPresenter::class)->forSeat(SubmissionFixtures::participation($round, $french))?->choices ?? [];
+
+    expect($received)->toContain('Le Port De Verre')
+        ->and(SubmissionFixtures::correctChoice($round, $french))->toBe('Le Port De Verre');
+
+    SubmissionFixtures::click($this, $french, $tokens[0], 'Le Port De Verre', $tN->addMilliseconds($cadence))
+        ->assertOk()
+        ->assertJson(['result' => 'accepted', 'inputState' => 'locked', 'lockRank' => 1]);
+
+    // Le siège anglais renvoie le titre SOURCE, bordé de son espace
+    // insécable : `TrimStrings` le rend égal à la chaîne composée.
+    expect(SubmissionFixtures::correctChoice($round, $english))->toBe('Harbor Of Glass');
+
+    SubmissionFixtures::click($this, $english, $tokens[1], 'Harbor Of Glass'.$nbsp, $tN->addMilliseconds($cadence))
+        ->assertOk()
+        ->assertJson(['result' => 'accepted', 'inputState' => 'locked', 'lockRank' => 2]);
+
+    expect(Guess::query()->where('round_id', $round->id)->count())->toBe(2);
+});
+
+it("en Normal, après une composition terminale, SeatInputView::forSeat d'un siège anciennement text_exhausted rend attempts_exhausted sans propositions", function () {
+    // La cible est seule au catalogue : aucun leurre, à aucun rang.
+    ['game' => $game, 'round' => $round] = choiceSetScene($this->at, peers: 0);
+    $waiting = ChoiceSetFixtures::seat($round, Locale::French, static fn (RoundPlayerFactory $factory): RoundPlayerFactory => $factory->textExhausted());
+    $open = ChoiceSetFixtures::seat($round, Locale::English);
+
+    expect($game->input_difficulty)->toBe(InputDifficulty::Normal);
+
+    // Avant la composition : texte épuisé, QCM attendu, aucune proposition.
+    expect(SeatInputView::forSeat($waiting)->toArray())->toBe([
+        'inputState' => RoundPlayerInputState::TextExhausted->value,
+        'attemptsLeft' => 0,
+        'choices' => null,
+        'locked' => null,
+    ]);
+
+    expect(ChoiceSetFixtures::compose($round, $this->at))->toBeFalse();
+
+    // L'instance est périmée — `text_exhausted` en mémoire — : la vue relit
+    // la participation, close par la composition terminale, et ne promet
+    // plus de propositions.
+    expect($waiting->input_state)->toBe(RoundPlayerInputState::TextExhausted)
+        ->and(SeatInputView::forSeat($waiting)->toArray())->toBe([
+            'inputState' => RoundPlayerInputState::AttemptsExhausted->value,
+            'attemptsLeft' => 0,
+            'choices' => null,
+            'locked' => null,
+        ]);
+
+    // Témoin : un siège ouvert garde le texte libre seul, ses tentatives, et
+    // aucune proposition.
+    expect(SeatInputView::forSeat($open)->toArray())->toBe([
+        'inputState' => RoundPlayerInputState::Open->value,
+        'attemptsLeft' => $game->settings_snapshot->attemptsPerRound - $open->wrong_attempts,
+        'choices' => null,
+        'locked' => null,
+    ]);
+});
+
+it('un clic faux et une bonne réponse texte entrelacés se tranchent sous verrou, sans jamais locked et qcm_wrong', function () {
+    // L'entrelacement des tests `locks-timing` (LockTransactionTest), rejoué
+    // sur une seule connexion : l'écriture rivale est validée À UNE LECTURE
+    // DONNÉE de la soumission, après sa lecture de la saisie (S4) et avant sa
+    // transaction d'écriture. C'est donc la revérification sous verrou qui
+    // tranche, jamais la lecture de S4.
+    Event::fake([AnswerAccepted::class, InputClosed::class]);
+
+    $tokens = [PlayerToken::mint(Locale::French), PlayerToken::mint(Locale::French)];
+    $target = SubmissionFixtures::movie('Harbour Lights', 'Les Feux du port');
+    ['game' => $game, 'round' => $round, 'seats' => [$typedFirst, $clickedFirst], 'at' => $tN] = choiceSetPlayedRound($tokens, $target);
+    $at = $tN->addMilliseconds(SubmissionFixtures::cadenceMs($game));
+
+    /**
+     * Exécute `$rival` à la première lecture de `$table` par la soumission.
+     *
+     * @param  Closure(): void  $rival
+     */
+    $interleave = static function (string $table, Closure $rival): Closure {
+        $done = false;
+
+        DB::listen(static function (QueryExecuted $query) use (&$done, $table, $rival): void {
+            if ($done || ! SubmissionFixtures::touches($query->sql, $table)) {
+                return;
+            }
+
+            $done = true;
+            $rival();
+        });
+
+        return static function () use (&$done): bool {
+            return $done;
+        };
+    };
+
+    // 1. Le clic faux lit une saisie `open`, puis la bonne réponse texte du
+    // même siège se verrouille pendant sa lecture des propositions (S5') :
+    // son instruction conditionnelle ne touche rien, sa relecture dit
+    // `locked`, et aucune clôture n'est annoncée.
+    $wrong = SubmissionFixtures::wrongChoice($round, $typedFirst);
+    $fired = $interleave('round_choice_set', static function () use ($typedFirst, $game, $at): void {
+        expect(app(SubmitTextAnswer::class)->handle($typedFirst, $game, 1, 'Harbour Lights', $at)->toArray())
+            ->toMatchArray(['result' => 'accepted', 'inputState' => 'locked', 'lockRank' => 1]);
+    });
+
+    expect($fired())->toBeFalse();
+
+    SubmissionFixtures::click($this, $typedFirst, $tokens[0], $wrong, $at->addMillisecond())
+        ->assertStatus(Response::HTTP_CONFLICT)
+        ->assertExactJson(SubmissionFixtures::closedBody(Locale::French, RoundPlayerInputState::Locked));
+
+    expect($fired())->toBeTrue()
+        ->and(SubmissionFixtures::participation($round, $typedFirst)->input_state)->toBe(RoundPlayerInputState::Locked)
+        ->and(SubmissionFixtures::participation($round, $typedFirst)->input_closed_at?->equalTo($at))->toBeTrue();
+
+    Event::assertNotDispatched(InputClosed::class);
+
+    // 2. La bonne réponse texte lit une saisie `open`, puis le clic faux du
+    // même siège est validé pendant sa lecture des clés (S6) : la
+    // transaction de verrouillage relit `qcm_wrong` sous verrou et n'écrit
+    // rien.
+    $wrong = SubmissionFixtures::wrongChoice($round, $clickedFirst);
+    $fired = $interleave('answer_key', static function () use ($clickedFirst, $game, $at, $wrong): void {
+        expect(app(SubmitChoice::class)->handle($clickedFirst, $game, 1, $wrong, $at)->toArray())
+            ->toBe(SubmissionFixtures::rejectedBody(0, RoundPlayerInputState::QcmWrong));
+    });
+
+    expect($fired())->toBeFalse();
+
+    SubmissionFixtures::submit($this, $clickedFirst, $tokens[1], 'Harbour Lights', $at->addMillisecond())
+        ->assertStatus(Response::HTTP_CONFLICT)
+        ->assertExactJson(SubmissionFixtures::closedBody(Locale::French, RoundPlayerInputState::QcmWrong));
+
+    expect($fired())->toBeTrue()
+        ->and(SubmissionFixtures::participation($round, $clickedFirst)->input_state)->toBe(RoundPlayerInputState::QcmWrong)
+        ->and(Guess::query()->where('round_id', $round->id)->pluck('player_id')->all())->toBe([$typedFirst->id])
+        ->and(Round::query()->whereKey($round->id)->value('found_count'))->toBe(1);
+
+    Event::assertDispatchedTimes(AnswerAccepted::class, 1);
+    Event::assertDispatchedTimes(InputClosed::class, 1);
+    Event::assertDispatched(InputClosed::class, static fn (InputClosed $event): bool => $event->playerId === $clickedFirst->id
+        && $event->state === RoundPlayerInputState::QcmWrong);
+});
+
+it("SeatInputView::forSeat d'un siège verrouillé entre ses lectures rend l'état d'avant ou celui d'après, jamais une rupture", function () {
+    // La resynchronisation (60 § 12.2) lit la vue hors de toute transaction,
+    // et `LockGuess` valide `guess` et `locked` ensemble : le verrouillage du
+    // siège est validé À UNE LECTURE DONNÉE de la vue, une table par siège.
+    // La vue ne lève jamais : elle rend la saisie d'avant ou celle d'après, et
+    // celle d'après dès que la ligne `guess` a été lue vide avant la
+    // participation.
+    Event::fake([AnswerAccepted::class, InputClosed::class]);
+
+    $tables = ['guess', 'round_player', 'round', 'game'];
+    $tokens = array_map(static fn (): PlayerToken => PlayerToken::mint(Locale::French), $tables);
+    $target = SubmissionFixtures::movie('Harbour Lights', 'Les Feux du port');
+    ['game' => $game, 'round' => $round, 'seats' => $seats, 'at' => $tN] = choiceSetPlayedRound($tokens, $target);
+    $at = $tN->addMilliseconds(SubmissionFixtures::cadenceMs($game));
+
+    /**
+     * Exécute `$rival` à la première lecture de `$table` qui suit, une fois ;
+     * chaque appel a son propre drapeau.
+     *
+     * @param  Closure(): void  $rival
+     */
+    $interleave = static function (string $table, Closure $rival): Closure {
+        $done = false;
+
+        DB::listen(static function (QueryExecuted $query) use (&$done, $table, $rival): void {
+            if ($done || ! SubmissionFixtures::touches($query->sql, $table)) {
+                return;
+            }
+
+            $done = true;
+            $rival();
+        });
+
+        return static function () use (&$done): bool {
+            return $done;
+        };
+    };
+
+    $views = [];
+
+    foreach ($tables as $index => $table) {
+        $seat = $seats[$index];
+        $participation = SubmissionFixtures::participation($round, $seat);
+        $before = SeatInputView::forSeat($participation)->toArray();
+
+        expect($before['inputState'])->toBe(RoundPlayerInputState::Open->value)
+            ->and($before['choices'])->not->toBeNull()
+            ->and($before['locked'])->toBeNull();
+
+        // La bonne réponse texte du siège est validée à la première lecture
+        // de `$table` par la vue, après que cette lecture a rendu ses lignes.
+        $fired = $interleave($table, static function () use ($seat, $game, $at, $index): void {
+            expect(app(SubmitTextAnswer::class)->handle($seat, $game, 1, 'Harbour Lights', $at)->toArray())
+                ->toMatchArray(['result' => 'accepted', 'inputState' => 'locked', 'lockRank' => $index + 1]);
+        });
+
+        $view = SeatInputView::forSeat($participation)->toArray();
+
+        expect($fired())->toBeTrue();
+
+        $after = [
+            'inputState' => RoundPlayerInputState::Locked->value,
+            'attemptsLeft' => 0,
+            'choices' => $before['choices'],
+            'locked' => ['lockRank' => $index + 1, ...TierScore::fromGuess(SubmissionFixtures::guess($round, $seat))->toArray()],
+        ];
+
+        expect(SeatInputView::forSeat($participation)->toArray())->toBe($after)
+            ->and([$before, $after])->toContain($view);
+
+        $views[$table] = $view;
+    }
+
+    // `guess` lue vide, puis `locked` lue : la relecture de `guess` rend le
+    // rang et les points, jamais une exception.
+    expect($views['guess']['inputState'])->toBe(RoundPlayerInputState::Locked->value)
+        ->and($views['guess']['locked']['lockRank'] ?? null)->toBe(1);
 });

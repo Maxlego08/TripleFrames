@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Game\AnswerController;
+use App\Http\Controllers\Game\ChoiceController;
 use App\Http\Controllers\Game\ClockController;
 use App\Http\Controllers\Game\FrameServeController;
 use App\Http\Controllers\Game\RoomStateController;
@@ -155,4 +156,14 @@ Route::middleware(['seat.active', 'throttle:game-write'])->group(function (): vo
 // de la requête et n'est ni évalué ni compté.
 Route::post('seat/{player:public_id}/answer', [AnswerController::class, 'store'])
     ->name('round.answer.store')
+    ->middleware(['seat.active', 'throttle:answer']);
+
+// Clic d'une proposition du QCM (spec 70 § 7.6, contrat C10 § 2) : même
+// adressage, même pile et même limiteur que la saisie en texte libre, sur le
+// budget `choice` du siège, distinct du budget `text`. `choice` est l'une des
+// quatre chaînes reçues, renvoyée telle quelle — jamais un index —, jugée
+// par égalité stricte avec la cible sans jamais lire `answer_key`. JSON à
+// destinataire unique, aucun domaine de traduction.
+Route::post('seat/{player:public_id}/choice', [ChoiceController::class, 'store'])
+    ->name('round.choice.store')
     ->middleware(['seat.active', 'throttle:answer']);

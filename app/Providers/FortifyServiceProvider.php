@@ -35,7 +35,7 @@ class FortifyServiceProvider extends ServiceProvider
     /**
      * Les deux budgets du limiteur `answer` par siège (spec 70 § 8) : la
      * route de soumission, par son nom, et le budget qu'elle consomme. Liste
-     * close ; `round.choice.store` arrive au lot L70-9.
+     * close : le texte libre et le clic du QCM.
      */
     private const array ANSWER_BUDGETS = [
         'round.answer.store' => 'text',
@@ -250,7 +250,7 @@ class FortifyServiceProvider extends ServiceProvider
 
     /**
      * Le limiteur `answer` de la saisie (spec 70 § 8, contrat C10 § 2 et
-     * § 3), sur `round.answer.store` et, au lot L70-9, `round.choice.store`.
+     * § 3), sur `round.answer.store` et `round.choice.store`.
      *
      * **Clé sur le SIÈGE, jamais sur l'IP ni sur le seul `public_id`** :
      * aucune IP n'entre dans une donnée du domaine, et une clé sur le

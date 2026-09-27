@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\InputDifficulty;
 use App\Enums\Locale;
 use App\Enums\RoundPlayerInputState;
 use App\Http\Middleware\CaptureReceptionInstant;
@@ -37,7 +38,7 @@ use Tests\Support\Room\SeatEntry;
 /*
 |--------------------------------------------------------------------------
 | Limiteur `answer` et ordre des middlewares — spec 70 § 8, contrat C10
-| § 2 et § 3, lot L70-14
+| § 2 et § 3, lot L70-14 (budget du clic : lot L70-9)
 |--------------------------------------------------------------------------
 |
 | Le limiteur est clé sur le SIÈGE que `seat.active` a résolu, jamais sur
@@ -426,4 +427,67 @@ it('le limiteur answer refuse de compter une autre route que les soumissions de 
         [],
         [EnsureActiveSeat::HEADER => (string) $seat->active_seat_token],
     ))->toThrow(LogicException::class, 'Le limiteur answer ne compte que les soumissions de la saisie');
+});
+
+it('le clic du QCM consomme son propre budget, distinct du texte, dans la même pile de middlewares', function (): void {
+    $calls = [];
+    answerThrottleSpy($calls);
+
+    // La même pile que la saisie en texte libre : `seat.active` puis
+    // `throttle:answer`, avant la liaison implicite (lot L70-9). La pile de
+    // référence est lue d'abord : elle construit le noyau HTTP, qui inscrit
+    // ses groupes dans le routeur.
+    $textStack = answerThrottleStack();
+    $route = app('router')->getRoutes()->getByName('round.choice.store');
+
+    expect($route)->toBeInstanceOf(RoutingRoute::class);
+
+    /** @var RoutingRoute $route */
+    expect(array_values(array_map('strval', app('router')->gatherRouteMiddleware($route))))->toBe($textStack);
+
+    $token = PlayerToken::mint(Locale::French);
+    $target = SubmissionFixtures::movie('Harbour Lights', 'Les Feux du port');
+    [$game, $round, [$seat]] = SubmissionFixtures::openedRound([$token], SubmissionFixtures::settings(InputDifficulty::Normal), $target);
+    SubmissionFixtures::decoyCandidates();
+    $cadence = SubmissionFixtures::cadenceMs($game);
+    $at = SubmissionFixtures::openChoices($round)->addMilliseconds($cadence);
+
+    // Un texte, puis un clic du même siège dans la même seconde : deux
+    // budgets, le clic est jugé (ici, une chaîne fabriquée, 422).
+    SubmissionFixtures::submit($this, $seat, $token, SubmissionFixtures::WRONG, $at)
+        ->assertOk()
+        ->assertExactJson(SubmissionFixtures::rejectedBody($game->settings_snapshot->attemptsPerRound - 1));
+
+    SubmissionFixtures::click($this, $seat, $token, SubmissionFixtures::WRONG, $at->addMillisecond())
+        ->assertUnprocessable();
+
+    // Un second clic dans la même seconde : le budget du clic est consommé,
+    // le 429 n'est ni jugé ni écrit, et la saisie reste ouverte.
+    $wrong = SubmissionFixtures::wrongChoice($round, $seat);
+
+    SubmissionFixtures::click($this, $seat, $token, $wrong, $at->addMilliseconds(2))
+        ->assertStatus(Response::HTTP_TOO_MANY_REQUESTS)
+        ->assertExactJson(answerThrottleTooFastBody(Locale::French));
+
+    expect(SubmissionFixtures::participation($round, $seat)->input_state)->toBe(RoundPlayerInputState::Open);
+
+    // La seconde suivante, le clic est jugé.
+    SubmissionFixtures::click($this, $seat, $token, $wrong, $at->addMilliseconds(1 + $cadence))
+        ->assertOk()
+        ->assertExactJson(SubmissionFixtures::rejectedBody(0, RoundPlayerInputState::QcmWrong));
+
+    // Les clés : le budget `choice` du siège, par son identifiant interne,
+    // jamais celui du texte, à la même cadence.
+    expect(array_map(static fn (array $call): ?string => $call['limit']->key, $calls))->toBe([
+        answerThrottleTextKey($seat),
+        'answer:choice:'.$seat->id,
+        'answer:choice:'.$seat->id,
+        'answer:choice:'.$seat->id,
+    ]);
+
+    foreach ($calls as $call) {
+        expect($call['limit']->maxAttempts)->toBe($game->settings_snapshot->attemptsPerSecond)
+            ->and($call['seat']?->is($seat))->toBeTrue()
+            ->and($call['player'])->toBe('string');
+    }
 });

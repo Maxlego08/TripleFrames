@@ -1,12 +1,16 @@
 <?php
 
 use App\Actions\Game\CancelRound;
+use App\Actions\Game\RevealRound;
+use App\Actions\Game\SubmitChoice;
 use App\Actions\Game\SubmitTextAnswer;
 use App\Enums\GameStatus;
+use App\Enums\InputDifficulty;
 use App\Enums\Locale;
 use App\Enums\RoundIncidentReason;
 use App\Enums\RoundPlayerInputState;
 use App\Enums\RoundStatus;
+use App\Events\Game\InputClosed;
 use App\Jobs\Game\AdvanceRound;
 use App\Jobs\Game\InterruptPausedGame;
 use App\Models\Game;
@@ -17,7 +21,10 @@ use App\Support\Game\RoundClock;
 use App\Support\Identity\PlayerToken;
 use App\ValueObjects\Scoring\TierWindow;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Support\Facades\Date;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Queue;
 use Symfony\Component\HttpFoundation\Response;
 use Tests\Support\Answers\SubmissionFixtures;
@@ -29,6 +36,7 @@ use Tests\Support\Room\SeatEntry;
 /*
 |--------------------------------------------------------------------------
 | Fenêtre d'acceptation — spec 70 § 7.3, contrat C10 § 4 (R-20), lot L70-5
+| (route clic : lot L70-9)
 |--------------------------------------------------------------------------
 |
 | Une soumission est recevable si la manche annoncée est `running`, si elle
@@ -311,4 +319,98 @@ it('répond saisie close sans appeler l\'action quand le siège n\'a pas de part
         ->and(SubmissionFixtures::writes($queries))->toBe([])
         ->and(SubmissionFixtures::participation($round, $seat)->wrong_attempts)->toBe(0)
         ->and(Round::query()->whereKey($round->id)->value('status'))->toBe(RoundStatus::Running);
+});
+
+it("la route clic tient la même fenêtre et répond saisie close sans partie courante, sans appeler l'action", function (): void {
+    $resolved = 0;
+    $this->app->resolving(SubmitChoice::class, function () use (&$resolved): void {
+        $resolved++;
+    });
+
+    // Au lobby : aucune partie n'est jamais née dans ce salon. L'action n'est
+    // ni construite ni appelée, rien n'est lu de la manche ni écrit.
+    $token = PlayerToken::mint(Locale::French);
+    [, $host] = LobbyWrites::hostedRoom($token);
+
+    $queries = SubmissionFixtures::queries(fn () => SubmissionFixtures::click($this, $host, $token, SubmissionFixtures::WRONG)
+        ->assertStatus(Response::HTTP_CONFLICT)
+        ->assertExactJson(SubmissionFixtures::closedBody(Locale::French)));
+
+    expect($resolved)->toBe(0)
+        ->and(array_filter(
+            array_map(static fn ($query): string => $query->sql, $queries),
+            static fn (string $sql): bool => SubmissionFixtures::touches($sql, 'round')
+                || SubmissionFixtures::touches($sql, 'round_player')
+                || SubmissionFixtures::touches($sql, 'round_choice_set'),
+        ))->toBe([])
+        ->and(SubmissionFixtures::writes($queries))->toBe([]);
+
+    // En partie Normal, QCM composé : la bonne proposition reçue à
+    // `D + tier_grace_ms − 1` est jugée et verrouillée au dernier palier ;
+    // reçue à `D + tier_grace_ms`, la manche est révélée, et c'est une saisie
+    // close — rien n'est écrit.
+    $tokens = [PlayerToken::mint(Locale::English), PlayerToken::mint(Locale::English)];
+    $target = SubmissionFixtures::movie('Harbour Lights', 'Les Feux du port');
+    [$game, $round, [$inTime, $late]] = SubmissionFixtures::openedRound($tokens, SubmissionFixtures::settings(InputDifficulty::Normal), $target);
+    SubmissionFixtures::decoyCandidates();
+    SubmissionFixtures::openChoices($round);
+
+    $closesAt = EngineFixtures::durationEnd($round)->addMilliseconds($game->tier_grace_ms);
+
+    SubmissionFixtures::click($this, $inTime, $tokens[0], SubmissionFixtures::correctChoice($round, $inTime), $closesAt->subMillisecond())
+        ->assertOk()
+        ->assertJson(['result' => 'accepted', 'inputState' => 'locked', 'lockRank' => 1, 'tierIndex' => $game->frames_per_round]);
+
+    SubmissionFixtures::click($this, $late, $tokens[1], SubmissionFixtures::correctChoice($round, $late), $closesAt)
+        ->assertStatus(Response::HTTP_CONFLICT)
+        ->assertExactJson(SubmissionFixtures::closedBody(Locale::English));
+
+    $participation = SubmissionFixtures::participation($round, $late);
+
+    expect(Round::query()->whereKey($round->id)->value('status'))->toBe(RoundStatus::Revealing)
+        ->and($participation->input_state)->toBe(RoundPlayerInputState::Open)
+        ->and($participation->input_closed_at)->toBeNull()
+        ->and(Round::query()->whereKey($round->id)->value('found_count'))->toBe(1);
+});
+
+it('un clic faux traité après la révélation de sa manche répond saisie close sans rien écrire', function (): void {
+    Event::fake([InputClosed::class]);
+
+    $token = PlayerToken::mint(Locale::French);
+    $target = SubmissionFixtures::movie('Harbour Lights', 'Les Feux du port');
+    [$game, $round, [$seat]] = SubmissionFixtures::openedRound([$token], SubmissionFixtures::settings(InputDifficulty::Normal), $target);
+    SubmissionFixtures::decoyCandidates();
+    SubmissionFixtures::openChoices($round);
+
+    $closesAt = EngineFixtures::durationEnd($round)->addMilliseconds($game->tier_grace_ms);
+    $wrong = SubmissionFixtures::wrongChoice($round, $seat);
+
+    // Reçu dans la fenêtre, le clic est ralenti : la révélation — que le
+    // rattrapage de la requête, à son instant de réception, n'exécute pas —
+    // est validée pendant sa lecture des propositions (S5'), avant la
+    // transaction qui écrirait le clic faux. Les titres sont partis : la
+    // révélation l'emporte (spec 70 § 7.3).
+    $revealed = false;
+
+    DB::listen(static function (QueryExecuted $query) use (&$revealed, $round, $closesAt): void {
+        if ($revealed || ! SubmissionFixtures::touches($query->sql, 'round_choice_set')) {
+            return;
+        }
+
+        $revealed = true;
+        app(RevealRound::class)->handle(Round::query()->findOrFail($round->id), $closesAt);
+    });
+
+    SubmissionFixtures::click($this, $seat, $token, $wrong, $closesAt->subMillisecond())
+        ->assertStatus(Response::HTTP_CONFLICT)
+        ->assertExactJson(SubmissionFixtures::closedBody(Locale::French));
+
+    $participation = SubmissionFixtures::participation($round, $seat);
+
+    expect($revealed)->toBeTrue()
+        ->and(Round::query()->whereKey($round->id)->value('status'))->toBe(RoundStatus::Revealing)
+        ->and($participation->input_state)->toBe(RoundPlayerInputState::Open)
+        ->and($participation->input_closed_at)->toBeNull();
+
+    Event::assertNotDispatched(InputClosed::class);
 });
