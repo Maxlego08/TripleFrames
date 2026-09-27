@@ -63,8 +63,9 @@ import type { RoomSettingsState } from '@/types/room-settings';
  *   recalage sur chaque `serverNow` reçu.
  * - **Resynchronisation** à la reconnexion d'Echo, au retour de visibilité
  *   et au retour en ligne ; les autres déclencheurs vivent dans le magasin.
- * - **Connexion** : `offline` si le navigateur l'est, `reconnecting` si le
- *   temps réel est perdu ; au retour à `connected`, annonce
+ * - **Connexion** : `offline` si le navigateur l'est — ou, en solo, si la
+ *   dernière lecture de l'état a échoué (`unreachable`) —, `reconnecting` si
+ *   le temps réel est perdu ; au retour à `connected`, annonce
  *   `common.connection.restored` par `announce()` (90 § 7.4) — le bandeau,
  *   lui, ne rend rien à `connected`.
  * - **Images** : chaque référence reçue d'une manche dont le siège est
@@ -89,6 +90,13 @@ export type UseGameStateOptions = {
     settings?: RoomSettingsState | null;
     /** La page quitte l'état de jeu : visite de `room.show` (50). */
     onExit?: (exit: GameExit) => void;
+    /**
+     * La dernière lecture de l'état a échoué (réseau, 5xx) : le bandeau dit
+     * `offline` même quand le navigateur se croit en ligne. Le solo, qui ne
+     * vit que de ses lectures de `solo.state` (90 § 10, « Solo »), le pose ;
+     * le salon, dont le temps réel dit déjà la coupure, jamais.
+     */
+    unreachable?: boolean;
 };
 
 /** Les images de jeu, vues de l'écran ; `version` change à chaque chargement. */
@@ -272,7 +280,10 @@ export function useGameState(options: UseGameStateOptions): GameStateView {
         isOnline,
         alwaysOnline,
     );
-    const connection = connectionStateOf(realtimeStatus, online);
+    const connection =
+        options.unreachable === true
+            ? 'offline'
+            : connectionStateOf(realtimeStatus, online);
 
     const announceRestored = useEffectEvent((): void => {
         announce(translator.t('common.connection.restored'));

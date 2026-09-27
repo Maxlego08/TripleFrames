@@ -251,7 +251,7 @@ export async function fetchGameState(url: string): Promise<ResyncOutcome> {
 
         const body: unknown = await response.json();
 
-        return isPacket(body)
+        return isGameStatePacket(body)
             ? { kind: 'packet', packet: body }
             : { kind: 'failed' };
     } catch {
@@ -423,7 +423,13 @@ function isEnvelope(value: unknown): value is WireEnvelope {
     );
 }
 
-function isPacket(value: unknown): value is GameStatePacket {
+/**
+ * Un corps JSON est-il un paquet `GameStatePacket` de la version du fil ?
+ * Lu sur la réponse d'une resynchronisation et sur celle d'un geste solo
+ * (`solo.reveal`, `solo.skip`, `solo.next`, 60 § 16.5), qui rend le paquet
+ * à jour.
+ */
+export function isGameStatePacket(value: unknown): value is GameStatePacket {
     return (
         isEnvelope(value) &&
         'self' in value &&

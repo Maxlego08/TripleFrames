@@ -38,9 +38,13 @@ export type GameStageProps = {
     /**
      * Tentatives de texte d'une manche, repli de `attemptsLeft` tant que la
      * saisie du siège est inconnue (début de manche, avant toute soumission) :
-     * `attemptsPerRound` des réglages figés du lancement au podium.
+     * `attemptsPerRound` des réglages figés du lancement au podium. Nul
+     * quand la page n'en a aucune source — en solo, sans réglages de salon :
+     * la saisie attend alors la vue de saisie du paquet (`self.input`), que
+     * le solo reçoit toujours avec la manche ouverte, puisqu'il ne vit que de
+     * paquets (60 § 16.4).
      */
-    attemptsPerRound: number;
+    attemptsPerRound: number | null;
     /** `maxAnswerLength` de la partie (paquet), à défaut des réglages figés. */
     maxAnswerLength: number;
     /** Titre de la page, déjà traduit (`h1`, `sr-only` pendant la manche). */
@@ -54,6 +58,13 @@ export type GameStageProps = {
     seatsPanel?: ReactNode;
     /** Le geste « manche suivante » de la révélation ; nul sinon. */
     revealAction?: ReactNode;
+    /**
+     * Gestes de la manche en cours, sous la saisie, tant que la saisie du
+     * siège est ouverte (`open` ou `text_exhausted`) : en solo, « Voir la
+     * réponse » et « Passer la manche » (60 § 16.5, D18 du 23/09). Jamais en
+     * multijoueur (barrière 1 de 10 § 7.10, `lone_player` compris, § 9.3).
+     */
+    roundActions?: ReactNode;
 };
 
 /**
@@ -137,6 +148,10 @@ const announcedCancellations = new Set<string>();
  * - un membre sans ligne de manche (parti à `T₁`, revenu depuis) entre à la
  *   manche suivante (60 § 13.6).
  *
+ * **En solo** (`game/solo`, L60-16) : aucune bande des joueurs — le seul
+ * siège est le joueur —, et les gestes d'entraînement de la page
+ * (`roundActions`) sous la saisie tant qu'elle est ouverte.
+ *
  * Composant de présentation : ni Echo, ni horloge, ni requête (C16 § 2.9) —
  * l'instant et la manche montrée viennent de `clock`.
  */
@@ -153,6 +168,7 @@ export function GameStage({
     banners,
     seatsPanel,
     revealAction,
+    roundActions,
 }: GameStageProps) {
     const { t, tChoice, locale } = useTranslations();
     const number = new Intl.NumberFormat(locale);
@@ -339,8 +355,13 @@ export function GameStage({
         round.locked.find((each) => each.publicId === self.publicId)
             ?.lockRank ?? null;
     const locked = self.input?.inputState === 'locked' || lockRank !== null;
+    // Tentatives restantes : la vue de saisie du siège, à défaut le plafond
+    // des réglages figés ; sans l'une ni l'autre (solo), rien n'est monté
+    // avant le paquet qui porte la saisie — sauf le verrou, qui n'en dit rien.
+    const attemptsLeft = self.input?.attemptsLeft ?? attemptsPerRound;
     const roundInput =
-        state.inputDifficulty === null ? null : (
+        state.inputDifficulty === null ||
+        (attemptsLeft === null && !locked) ? null : (
             <RoundInput
                 roundKey={key}
                 difficulty={state.inputDifficulty}
@@ -351,7 +372,7 @@ export function GameStage({
                         ? state.offeredChoices.payload
                         : null)
                 }
-                attemptsLeft={self.input?.attemptsLeft ?? attemptsPerRound}
+                attemptsLeft={attemptsLeft ?? 0}
                 maxLength={maxAnswerLength}
                 submission={submission}
                 disabled={!self.seatActive}
@@ -365,10 +386,28 @@ export function GameStage({
     // retire — seul le verrou reste, jamais la réponse saisie.
     let input: ReactNode = null;
 
+    // Les gestes de la manche en cours (solo) : tant que la saisie du siège
+    // est ouverte, comme le serveur l'exige (409 `round_not_running` sinon).
+    const inputOpen =
+        !locked &&
+        (self.input === null ||
+            self.input.inputState === 'open' ||
+            self.input.inputState === 'text_exhausted');
+
     if (member && stage === 'running' && round.phase === 'running') {
         input =
             self.participates || locked ? (
-                roundInput
+                roundActions !== undefined &&
+                roundActions !== null &&
+                self.participates &&
+                inputOpen ? (
+                    <div className="flex flex-col gap-1.5">
+                        {roundInput}
+                        {roundActions}
+                    </div>
+                ) : (
+                    roundInput
+                )
             ) : round.roundNumber < round.roundsCount ? (
                 <p className="text-sm text-muted-foreground">
                     {t('game.round.waiting_next', {
@@ -422,16 +461,19 @@ export function GameStage({
                 notice={notice}
                 input={input}
                 players={
-                    <RoundPlayers
-                        className="shrink-0"
-                        seats={gameSeats}
-                        selfPublicId={self.publicId}
-                        locked={round.locked}
-                        lonePlayer={
-                            state.mode === 'multiplayer' && connected === 1
-                        }
-                        panel={seatsPanel}
-                    />
+                    // En solo, aucune bande : le seul siège est le joueur,
+                    // dont la saisie et le verrou disent déjà tout (90 § 10,
+                    // « Solo » : sans autres joueurs).
+                    state.mode === 'solo' ? null : (
+                        <RoundPlayers
+                            className="shrink-0"
+                            seats={gameSeats}
+                            selfPublicId={self.publicId}
+                            locked={round.locked}
+                            lonePlayer={connected === 1}
+                            panel={seatsPanel}
+                        />
+                    )
                 }
             />
         </div>

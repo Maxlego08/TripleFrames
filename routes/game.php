@@ -8,6 +8,9 @@ use App\Http\Controllers\Game\NextRoundController;
 use App\Http\Controllers\Game\RoomHeartbeatController;
 use App\Http\Controllers\Game\RoomStateController;
 use App\Http\Controllers\Game\SoloGameController;
+use App\Http\Controllers\Game\SoloHeartbeatController;
+use App\Http\Controllers\Game\SoloRoundController;
+use App\Http\Controllers\Game\SoloStateController;
 use App\Http\Controllers\Room\HostTransferController;
 use App\Http\Controllers\Room\KickController;
 use App\Http\Controllers\Room\LaunchController;
@@ -108,6 +111,40 @@ Route::post('solo', [SoloGameController::class, 'store'])
 Route::get('solo', [SoloGameController::class, 'show'])
     ->name('solo.show')
     ->middleware(['game.appearance', 'translations:game,room,legal', 'throttle:game-read']);
+
+// Sondage de la partie solo (§ 12 et § 16.4) : le paquet `GameStatePacket`,
+// JSON à destinataire unique, rattrapage compris — le solo ne reçoit aucun
+// événement. Une LECTURE, comme `room.state` : ni `seat.active` (l'onglet
+// supplanté y lit `seatActive: false`), ni frappe de jeton. 403 sans siège
+// solo tenu par le jeton.
+Route::get('solo/state', [SoloStateController::class, 'show'])
+    ->name('solo.state')
+    ->middleware(['translations:game,room,legal', 'throttle:game-read']);
+
+// Battement de présence du siège solo (§ 13.1, § 13.3) : même transaction
+// que celui du salon, sans salon ; un siège solo ne passe jamais `left`.
+// 204, ou 403 sans siège solo. Ni `seat.active`, ni domaine de traduction.
+Route::post('solo/heartbeat', [SoloHeartbeatController::class, 'store'])
+    ->name('solo.heartbeat')
+    ->middleware('throttle:game-write');
+
+// Gestes du joueur solo (§ 16.5, D18 du 23/09) : « Voir la réponse »,
+// « Passer la manche » et « Manche suivante ». `seat.active` résout le siège
+// SOLO du jeton (aucun `{room}` dans le chemin) et sa partie solo en cours :
+// 403 sans siège solo, 409 `seat_superseded` pour un onglet supplanté. Chaque
+// geste vaut battement et répond par le paquet à jour ; hors précondition,
+// 409 `round_not_running` (révéler, passer) ou `not_revealing` (manche
+// suivante), codes que le client traduit. Aucun domaine de traduction.
+Route::middleware(['seat.active', 'throttle:game-write'])->group(function (): void {
+    Route::post('solo/round/reveal', [SoloRoundController::class, 'reveal'])
+        ->name('solo.reveal');
+
+    Route::post('solo/round/skip', [SoloRoundController::class, 'skip'])
+        ->name('solo.skip');
+
+    Route::post('solo/round/next', [SoloRoundController::class, 'next'])
+        ->name('solo.next');
+});
 
 Route::get('clock', [ClockController::class, 'show'])
     ->name('clock.show')

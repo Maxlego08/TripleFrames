@@ -1,7 +1,10 @@
 <?php
 
+use App\Actions\Game\CatchUpGame;
 use App\Enums\GamePlayerStatus;
 use App\Enums\GameStatus;
+use App\Enums\InputDifficulty;
+use App\Enums\Locale;
 use App\Enums\PlayerConnectionState;
 use App\Enums\RoundStatus;
 use App\Events\Game\GameFinalized;
@@ -24,14 +27,19 @@ use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Sleep;
+use Illuminate\Testing\TestResponse;
+use Symfony\Component\HttpFoundation\Response;
+use Tests\Support\Answers\SubmissionFixtures;
 use Tests\Support\Draw\PoolFixtures;
 use Tests\Support\Game\EngineFixtures;
 use Tests\Support\Game\PresenceFixtures;
 use Tests\Support\Realtime\RecordingBroadcaster;
+use Tests\Support\Room\LobbyWrites;
+use Tests\TestCase;
 
 /*
 |--------------------------------------------------------------------------
-| Pause, reprise et clôture à 15 minutes — spec 60 § 9.6, § 14.1 à § 14.3 (lots L60-6, L60-13)
+| Pause, reprise et clôture à 15 minutes — spec 60 § 9.6, § 14.1 à § 14.3, § 16.6 (lots L60-6, L60-13, L60-16)
 |--------------------------------------------------------------------------
 |
 | `EndReveal(k)` met la partie en pause quand une manche reste à jouer et
@@ -42,8 +50,9 @@ use Tests\Support\Realtime\RecordingBroadcaster;
 | pause, sa déprogrammation, l'interruption programmée, le gel à l'instant
 | prévu et le retardataire qui empêche la pause ; ceux de L60-13 sur la
 | reprise par le battement d'un siège revenu (`ResumeGame`, § 14.2) et sur
-| le battement tardif, qui gèle à l'échéance au lieu de reprendre ; la partie
-| solo quittée (L60-16) arrive avec son lot.
+| le battement tardif, qui gèle à l'échéance au lieu de reprendre ; celui de
+| L60-16 sur la partie solo quittée (§ 16.6), jouée par ses routes
+| (`solo.heartbeat`) et par le rattrapage que ferait chaque job de frontière.
 |
 */
 
@@ -516,4 +525,139 @@ test('un battement reçu après paused_at + pauseTimeoutMs ne reprend pas la par
     app()->call([$job, 'handle']);
 
     expect($game->refresh()->ended_at?->equalTo($interruptsAt))->toBeTrue();
+});
+
+/**
+ * Une partie solo dont la manche 1 est ouverte, siège solo tenu par un jeton
+ * neuf ; le siège quitte la page : son dernier battement part à `T₁ + 1 s`,
+ * puis le balayage de présence le passe `disconnected` (jamais `left`,
+ * § 13.3). Rend la partie, sa manche 1, le siège et son jeton.
+ *
+ * @return array{Game, Round, Player, PlayerToken}
+ */
+function pauseLeftSoloGame(TestCase $test): array
+{
+    $token = PlayerToken::mint(Locale::French);
+    [$game, $round, [$seat]] = SubmissionFixtures::openedRound(
+        [$token],
+        SubmissionFixtures::settings(InputDifficulty::Expert),
+        solo: true,
+    );
+
+    $t1 = $round->started_at ?? throw new LogicException('Manche non programmée.');
+
+    pauseSoloBeat($test, $token, $t1->addSecond())->assertNoContent();
+    PresenceFixtures::run(PresenceFixtures::lastSweep());
+
+    expect($seat->refresh()->connection_state)->toBe(PlayerConnectionState::Disconnected)
+        ->and($seat->left_at)->toBeNull();
+
+    return [$game, $round, $seat, $token];
+}
+
+/**
+ * Le battement `solo.heartbeat` du siège de ce jeton, par la route, reçu à
+ * `$at`.
+ *
+ * @return TestResponse<Response>
+ */
+function pauseSoloBeat(TestCase $test, PlayerToken $token, CarbonImmutable $at): TestResponse
+{
+    Date::setTestNow($at);
+    LobbyWrites::actAs($test, $token);
+
+    return $test->postJson(route('solo.heartbeat'));
+}
+
+/**
+ * Le passage d'un job de frontière à `$at` : le rattrapage de la partie, seul
+ * travail du job (§ 4.2), horloge figée à cet instant.
+ */
+function pauseCatchUp(Game $game, CarbonImmutable $at): void
+{
+    Date::setTestNow($at);
+    app(CatchUpGame::class)->handle($game, $at);
+}
+
+test('une partie solo quittée passe en pause puis s\'interrompt', function (): void {
+    Queue::fake([AdvanceRound::class, InterruptPausedGame::class, SweepSeatPresence::class]);
+    $recorder = RecordingBroadcaster::install();
+
+    [$game, $round, $seat] = pauseLeftSoloGame($this);
+    $durationEnd = EngineFixtures::durationEnd($round);
+
+    // Le siège sorti des participants ne clôt pas la manche : elle va au bout
+    // de D — l'horloge d'une manche ne se met jamais en pause.
+    pauseCatchUp($game, $durationEnd->subMillisecond());
+
+    expect($round->refresh()->ended_at)->toBeNull()
+        ->and($game->refresh()->status)->toBe(GameStatus::Running);
+
+    // Puis la révélation se déroule, et sa fin ne trouve aucun siège présent :
+    // la partie se met en pause à `reveal_ends_at`, la manche suivante est
+    // déprogrammée, l'interruption armée.
+    $revealEndsAt = $durationEnd
+        ->addMilliseconds($game->tier_grace_ms)
+        ->addSeconds($game->settings_snapshot->revealDuration);
+
+    pauseCatchUp($game, $revealEndsAt);
+
+    $game->refresh();
+    $round->refresh();
+    $second = EngineFixtures::round($game, 2);
+
+    expect($round->ended_at?->equalTo($durationEnd))->toBeTrue()
+        ->and($round->reveal_ends_at?->equalTo($revealEndsAt))->toBeTrue()
+        ->and($round->status)->toBe(RoundStatus::Completed)
+        ->and($game->status)->toBe(GameStatus::Paused)
+        ->and($game->paused_at?->equalTo($revealEndsAt))->toBeTrue()
+        ->and($second->started_at)->toBeNull()
+        ->and($second->status)->toBe(RoundStatus::Pending)
+        ->and($seat->refresh()->connection_state)->toBe(PlayerConnectionState::Disconnected);
+
+    $interruption = Queue::pushed(InterruptPausedGame::class, static fn (InterruptPausedGame $job): bool => $job->gameId === $game->id)->first();
+
+    expect($interruption)->toBeInstanceOf(InterruptPausedGame::class);
+
+    // Personne ne revient : la partie s'interrompt à `paused_at +
+    // pauseTimeoutMs`, l'instant prévu, même quand le job part en retard.
+    $interruptsAt = $revealEndsAt->addMilliseconds(EngineConstants::pauseTimeoutMs());
+
+    expect($interruption?->interruptsAt()->equalTo($interruptsAt))->toBeTrue();
+
+    Date::setTestNow($interruptsAt->addSeconds(3));
+    app()->call([$interruption, 'handle']);
+    $game->refresh();
+
+    expect($game->status)->toBe(GameStatus::Interrupted)
+        ->and($game->ended_at?->equalTo($interruptsAt))->toBeTrue()
+        ->and($game->rounds_completed)->toBe(1)
+        ->and(EngineFixtures::round($game, 2)->status)->toBe(RoundStatus::Pending)
+        // Le siège solo n'est jamais parti : sa reprise reste possible.
+        ->and($seat->refresh()->left_at)->toBeNull()
+        // Aucune diffusion, ni pour la pause ni pour la fin.
+        ->and($recorder->sent)->toBe([]);
+
+    // Témoin : revenu sur la page avant l'échéance, le battement du siège
+    // reprend la partie et reprogramme la manche après le décompte.
+    [$back, $backRound, $backSeat, $backToken] = pauseLeftSoloGame($this);
+    $backEnd = EngineFixtures::durationEnd($backRound);
+    $backPausedAt = $backEnd
+        ->addMilliseconds($back->tier_grace_ms)
+        ->addSeconds($back->settings_snapshot->revealDuration);
+
+    pauseCatchUp($back, $backPausedAt);
+
+    expect($back->refresh()->status)->toBe(GameStatus::Paused);
+
+    $returnAt = $backPausedAt->addSeconds(7);
+    pauseSoloBeat($this, $backToken, $returnAt)->assertNoContent();
+    $back->refresh();
+
+    expect($back->status)->toBe(GameStatus::Running)
+        ->and($back->paused_at)->toBeNull()
+        ->and($back->total_paused_ms)->toBe(7_000)
+        ->and($backSeat->refresh()->connection_state)->toBe(PlayerConnectionState::Connected)
+        ->and(EngineFixtures::round($back, 2)->started_at?->equalTo($returnAt->addMilliseconds(EngineConstants::launchCountdownMs())))->toBeTrue()
+        ->and($recorder->sent)->toBe([]);
 });

@@ -21,9 +21,11 @@ use Illuminate\Support\Facades\DB;
 /**
  * Le battement de présence d'un siège — spec 60 § 13.1, contrat C7 § 4.10.
  * Action interne (nom libre) qui porte la transaction du § 13.1, partagée par
- * le battement de salon (`room.heartbeat`, `RoomHeartbeatController`) et par
- * celui du solo (`solo.heartbeat`, lot L60-16). **Seuls les battements HTTP
- * écrivent `last_seen_at`** ; la présence Reverb ne fait jamais foi.
+ * le battement de salon (`room.heartbeat`, `RoomHeartbeatController`), par
+ * celui du solo (`solo.heartbeat`, `SoloHeartbeatController`) et par chaque
+ * geste solo, qui « vaut battement » (§ 16.5 : `RevealSoloAnswer`,
+ * `SkipSoloRound`, `solo.next`), à l'instant du geste. **Seuls les battements
+ * HTTP écrivent `last_seen_at`** ; la présence Reverb ne fait jamais foi.
  *
  * Dans une transaction qui respecte l'ordre global du § 4.5 — `room FOR
  * UPDATE` d'abord, **seulement** s'il écrit `room.last_activity_at` ou ramène
@@ -78,15 +80,18 @@ final readonly class RecordHeartbeat
     /**
      * @param  Player  $seat  Siège résolu par le `player_token` courant, expulsé exclu.
      * @param  Room|null  $room  Son salon, déjà chargé ; `null` en solo.
+     * @param  CarbonImmutable|null  $at  Instant du battement : celui d'un geste solo, qui
+     *                                    « vaut battement » à son propre instant (spec 60
+     *                                    § 16.5, L60-16) ; l'horloge courante sinon.
      * @return bool `false` si le siège n'existe plus, a été expulsé ou effacé
      *              (archivage) sous le verrou : l'appelant répond 403.
      */
-    public function handle(Player $seat, ?Room $room): bool
+    public function handle(Player $seat, ?Room $room, ?CarbonImmutable $at = null): bool
     {
-        $outcome = DB::transaction(fn (): string => $this->beat($seat, self::needsRoom($seat, $room)));
+        $outcome = DB::transaction(fn (): string => $this->beat($seat, self::needsRoom($seat, $room), $at));
 
         if ($outcome === self::NEEDS_ROOM) {
-            $outcome = DB::transaction(fn (): string => $this->beat($seat, true));
+            $outcome = DB::transaction(fn (): string => $this->beat($seat, true, $at));
         }
 
         return $outcome === self::BEAT;
@@ -117,7 +122,7 @@ final readonly class RecordHeartbeat
     /**
      * Un passage sous les verrous : `room` si `$withRoom`, puis `player`.
      */
-    private function beat(Player $seat, bool $withRoom): string
+    private function beat(Player $seat, bool $withRoom, ?CarbonImmutable $at): string
     {
         $lockedRoom = null;
 
@@ -147,7 +152,7 @@ final readonly class RecordHeartbeat
             return self::NEEDS_ROOM;
         }
 
-        $now = Date::now()->toImmutable()->startOfMillisecond();
+        $now = ($at ?? Date::now()->toImmutable())->startOfMillisecond();
 
         $lockedSeat->forceFill(['last_seen_at' => $now]);
 

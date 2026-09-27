@@ -9,6 +9,7 @@ use App\Http\Controllers\Room\Concerns\PresentsSeatForm;
 use App\Http\Middleware\EnsureActiveSeat;
 use App\Http\Requests\Game\SoloStartRequest;
 use App\Models\Player;
+use App\Settings\PlatformLimits;
 use App\Support\Game\CurrentGame;
 use App\Support\Game\GameJournal;
 use App\Support\Game\GameStateBuilder;
@@ -117,19 +118,30 @@ final class SoloGameController extends Controller
     }
 
     /**
-     * La page de partie solo — **minimum du lot L60-15**, complétée par
-     * L60-16 (props `limits` et `presets`, rattrapage, sondage, gestes) :
+     * La page de partie solo (§ 16.4, lots L60-15 et L60-16) :
      *
      * 1. aucun siège solo tenu par le jeton (jeton absent, ou aucun `player`
      *    solo non parti) → 303 vers `solo.create`, **sans frapper de jeton**
      *    (C4 I4.1, § 16.4) ;
      * 2. sinon `ClaimSeatTab` (l'onglet prend la main, § 12.7), puis
-     *    `game/solo` avec `state` — la partie solo en cours, sinon la
-     *    dernière partie close du siège pour son podium, sinon le paquet sans
-     *    partie ({@see CurrentGame::forState()}) —, `seatToken` et
-     *    `settingsNotice` (flash de `solo.store`, `null` sinon).
+     *    `game/solo` avec :
+     *    - `state` — la partie solo en cours, sinon la dernière partie close
+     *      du siège pour son podium, sinon le paquet sans partie
+     *      ({@see CurrentGame::forState()}), construit sur le jeton rendu ;
+     *    - `seatToken`, jamais dans `state` ;
+     *    - `settingsNotice` — flash de `solo.store` (D19), `null` sinon ;
+     *    - `limits` — `PlatformLimits::toArray()`, prop de page comme au
+     *      lobby : l'aide `GameHelp` y lit `speedBonusMaxPercent` (90 § 7.7) ;
+     *    - `presets` — les quatre presets et leur `N` jouable le plus proche
+     *      sur le vivier catalogue, même forme que sur `room/solo`, pour le
+     *      choix du preset de la relance.
+     *
+     * Aucun rattrapage au rendu (§ 12.1 ne le demande qu'à `solo.state`) : le
+     * client tire `solo.state` dès le montage (§ 16.4), qui rattrape. Les
+     * fermetures ne sont évaluées que pour les props demandées : un
+     * rechargement partiel ne reconstruit ni le paquet ni le vivier.
      */
-    public function show(Request $request, SoloSeat $soloSeat, ClaimSeatTab $claim): InertiaResponse|RedirectResponse
+    public function show(Request $request, SoloSeat $soloSeat, ClaimSeatTab $claim, SoloPresets $presets): InertiaResponse|RedirectResponse
     {
         $seat = $soloSeat->of($request);
 
@@ -145,6 +157,8 @@ final class SoloGameController extends Controller
             'state' => static fn (): array => GameStateBuilder::build(CurrentGame::forState($seat), $seat, $now, $seatToken),
             'seatToken' => $seatToken,
             'settingsNotice' => is_array($notice) ? $notice : null,
+            'limits' => PlatformLimits::current()->toArray(),
+            'presets' => static fn (): array => $presets->options(),
         ]);
     }
 

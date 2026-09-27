@@ -1,5 +1,7 @@
 <?php
 
+use App\Actions\Game\RevealSoloAnswer;
+use App\Actions\Game\SkipSoloRound;
 use App\Avatars\AvatarPresetCatalog;
 use App\Enums\AvatarKind;
 use App\Enums\ContentAvailability;
@@ -8,10 +10,14 @@ use App\Enums\GameStatus;
 use App\Enums\InputDifficulty;
 use App\Enums\Locale;
 use App\Enums\PlayerConnectionState;
+use App\Enums\RoundIncidentReason;
 use App\Enums\RoundPlayerInputState;
 use App\Enums\RoundStatus;
 use App\Enums\SettingPresetKey;
 use App\Http\Controllers\Game\SoloGameController;
+use App\Http\Controllers\Game\SoloRoundController;
+use App\Http\Middleware\EnsureActiveSeat;
+use App\Jobs\Game\AdvanceRound;
 use App\Models\Frame;
 use App\Models\Game;
 use App\Models\GamePlayer;
@@ -21,14 +27,19 @@ use App\Models\Player;
 use App\Models\Round;
 use App\Models\RoundPlayer;
 use App\Settings\EngineConstants;
+use App\Settings\PlatformLimits;
 use App\Settings\RoomSettings;
 use App\Settings\RoomSettingsBounds;
 use App\Settings\SettingPresetCatalog;
 use App\Support\Deploy\DeployDrain;
 use App\Support\Draw\PoolTooSmallException;
 use App\Support\Game\GameJournal;
+use App\Support\Game\RoundStep;
+use App\Support\Game\SoloPresets;
+use App\Support\Game\SoloRoundClosure;
 use App\Support\Identity\NicknameNormalizer;
 use App\Support\Identity\PlayerToken;
+use App\Support\Realtime\WireTime;
 use App\Support\Room\SeatPublicId;
 use App\ValueObjects\Catalog\FrameLevelCoverage;
 use Carbon\CarbonImmutable;
@@ -36,6 +47,7 @@ use Database\Factories\MovieFactory;
 use Illuminate\Contracts\Queue\Queue as QueueContract;
 use Illuminate\Queue\Connectors\ConnectorInterface;
 use Illuminate\Queue\NullQueue;
+use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Route;
@@ -46,7 +58,10 @@ use Inertia\Testing\AssertableInertia as Assert;
 use Symfony\Component\HttpFoundation\Response;
 use Tests\Support\Answers\SubmissionFixtures;
 use Tests\Support\Draw\PoolFixtures;
+use Tests\Support\Game\EngineFixtures;
 use Tests\Support\Game\GameJournalRecorder;
+use Tests\Support\Game\PresenceFixtures;
+use Tests\Support\I18n\FrontSource;
 use Tests\Support\Realtime\RecordingBroadcaster;
 use Tests\Support\Room\LobbyWrites;
 use Tests\Support\Room\SeatEntry;
@@ -54,8 +69,7 @@ use Tests\TestCase;
 
 /*
 |--------------------------------------------------------------------------
-| Mode solo : démarrage et page d'entrée — spec 60 § 16.2 à § 16.4 et § 16.6,
-| contrat C7 § 4.12, E10-N3 (lot L60-15)
+| Mode solo — spec 60 § 16, contrat C7 § 4.12, E10-N3 (lots L60-15, L60-16)
 |--------------------------------------------------------------------------
 |
 | Le démarrage passe par la route, comme le client l'enverra : `solo.store`
@@ -72,9 +86,13 @@ use Tests\TestCase;
 | de QCM avant le dernier palier). Les jobs de frontière sont simulés : les
 | étapes échues s'exécutent par le rattrapage du démarrage.
 |
-| Les gestes, la page `game/solo` et son sondage appartiennent au lot
-| L60-16 : aucune redirection vers `solo.show` n'est suivie ici, sauf pour
-| prouver le premier passage.
+| Lot L60-16 (seconde moitié du fichier) : la page `game/solo` et ses props,
+| le sondage `solo.state`, le battement `solo.heartbeat` et les gestes
+| `solo.reveal`, `solo.skip`, `solo.next`, envoyés PAR LA ROUTE comme le
+| client les envoie — JSON, cookie `player_token`, onglet actif en
+| `X-Seat-Token`, horloge figée à l'instant de réception. Le solo ne reçoit
+| aucun événement : chaque étape échue s'exécute par le rattrapage d'un
+| sondage ou d'un geste, les jobs de frontière restant simulés.
 |
 */
 
@@ -877,4 +895,677 @@ it('reprend le siège solo écrit par un lancement concurrent quand l\'unicité 
         ->and($seat->nickname)->toBe('Rival')
         ->and(soloGameOf($seat)->mode)->toBe(GameMode::Solo)
         ->and(Game::query()->count())->toBe(1);
+});
+
+/*
+|--------------------------------------------------------------------------
+| Lot L60-16 — la page `game/solo`, le sondage, le battement et les gestes
+|--------------------------------------------------------------------------
+*/
+
+/**
+ * Une partie solo dont la manche 1 est ouverte à son palier 1 par les
+ * transitions réelles (`SubmissionFixtures::openedRound`) : siège solo tenu
+ * par un jeton neuf, onglet actif frappé, `M` au minimum des bornes, tout le
+ * reste au défaut. L'horloge est laissée à `T₁` (à la programmation, sans
+ * ouverture).
+ *
+ * @return array{0: PlayerToken, 1: Player, 2: Game, 3: Round}
+ */
+function soloOpened(InputDifficulty $difficulty = InputDifficulty::Expert, int $reserve = 0, ?Movie $target = null, bool $open = true): array
+{
+    $token = PlayerToken::mint(Locale::English);
+
+    [$game, $round, [$seat]] = SubmissionFixtures::openedRound(
+        [$token],
+        SubmissionFixtures::settings($difficulty),
+        $target,
+        solo: true,
+        reserve: $reserve,
+        open: $open,
+    );
+
+    return [$token, $seat, $game, $round];
+}
+
+/**
+ * L'en-tête de l'onglet actif du siège, relu en base.
+ *
+ * @return array<string, string>
+ */
+function soloTabHeader(Player $seat): array
+{
+    return [EnsureActiveSeat::HEADER => (string) $seat->refresh()->active_seat_token];
+}
+
+/**
+ * Un geste solo par la route (`solo.reveal`, `solo.skip`, `solo.next`), tel
+ * que le client l'envoie : JSON, cookie du jeton, onglet actif, reçu à `$at`
+ * (l'horloge courante sinon).
+ *
+ * @return TestResponse<Response>
+ */
+function soloGesture(TestCase $test, PlayerToken $token, Player $seat, string $route, ?CarbonImmutable $at = null): TestResponse
+{
+    if ($at instanceof CarbonImmutable) {
+        Date::setTestNow($at);
+    }
+
+    soloActAs($test, $token);
+
+    return $test->postJson(route($route), [], soloTabHeader($seat));
+}
+
+/**
+ * Le sondage `solo.state` par la route, reçu à `$at`.
+ *
+ * @return TestResponse<Response>
+ */
+function soloPoll(TestCase $test, PlayerToken $token, Player $seat, ?CarbonImmutable $at = null): TestResponse
+{
+    if ($at instanceof CarbonImmutable) {
+        Date::setTestNow($at);
+    }
+
+    soloActAs($test, $token);
+
+    return $test->getJson(route('solo.state'), soloTabHeader($seat));
+}
+
+/**
+ * Le battement `solo.heartbeat` par la route, reçu à `$at`.
+ *
+ * @return TestResponse<Response>
+ */
+function soloBeat(TestCase $test, PlayerToken $token, ?CarbonImmutable $at = null): TestResponse
+{
+    if ($at instanceof CarbonImmutable) {
+        Date::setTestNow($at);
+    }
+
+    soloActAs($test, $token);
+
+    return $test->postJson(route('solo.heartbeat'));
+}
+
+/**
+ * Passe, une à une, toutes les manches restantes d'une partie solo jusqu'à
+ * son gel : chaque manche programmée est ouverte par le sondage (le
+ * rattrapage), puis passée. Rend la réponse du dernier geste.
+ *
+ * @return TestResponse<Response>
+ */
+function soloSkipToEnd(TestCase $test, PlayerToken $token, Player $seat, Game $game): TestResponse
+{
+    $last = null;
+
+    while ($game->refresh()->ended_at === null) {
+        $next = Round::query()
+            ->where('game_id', $game->id)
+            ->whereIn('status', [RoundStatus::Running->value, RoundStatus::Pending->value])
+            ->whereNotNull('started_at')
+            ->orderBy('started_at')
+            ->first()
+            ?? throw new LogicException('Aucune manche programmée dans une partie en cours.');
+
+        $startedAt = $next->started_at ?? throw new LogicException('Manche sans origine de temps.');
+        $at = Date::now()->toImmutable()->max($startedAt)->addMilliseconds(1234);
+
+        soloPoll($test, $token, $seat, $at)->assertOk()->assertJsonPath('round.phase', 'running');
+        $last = soloGesture($test, $token, $seat, 'solo.skip', $at)->assertOk();
+    }
+
+    return $last ?? throw new LogicException('Partie déjà gelée.');
+}
+
+/** Le titre anglais du film de la manche : une réponse toujours acceptée (70). */
+function soloAnswerOf(Round $round): string
+{
+    $title = $round->movie->titles()->where('locale', Locale::English->value)->value('title');
+
+    return is_string($title) ? $title : throw new LogicException('Film sans titre anglais.');
+}
+
+it('voir la réponse clôt en revealed et ouvre une révélation de durée R sans guess', function (): void {
+    [$token, $seat, $game, $round] = soloOpened();
+    $t1 = $round->started_at ?? throw new LogicException('Manche non programmée.');
+    $revealedAt = $t1->addMilliseconds(2345);
+
+    $response = soloGesture($this, $token, $seat, 'solo.reveal', $revealedAt)->assertOk();
+
+    $round->refresh();
+    $participation = SubmissionFixtures::participation($round, $seat);
+    $revealStartsAt = $revealedAt->addMilliseconds($game->tier_grace_ms);
+    $revealEndsAt = $revealStartsAt->addSeconds($game->settings_snapshot->revealDuration);
+
+    // La saisie close en `revealed` à l'instant du geste ; le siège solo, seul
+    // participant, déclenche la fin anticipée à ce même instant — bien avant
+    // D — et la révélation normale, de durée R, est programmée.
+    expect($participation->input_state)->toBe(RoundPlayerInputState::Revealed)
+        ->and($participation->input_closed_at?->equalTo($revealedAt))->toBeTrue()
+        ->and($round->status)->toBe(RoundStatus::Running)
+        ->and($round->ended_at?->equalTo($revealedAt))->toBeTrue()
+        ->and($round->ended_at?->lessThan(EngineFixtures::durationEnd($round)))->toBeTrue()
+        ->and($round->reveal_ends_at?->equalTo($revealEndsAt))->toBeTrue();
+
+    Queue::assertPushedOn('game', AdvanceRound::class, static fn (AdvanceRound $job): bool => $job->roundId === $round->id
+        && $job->step === RoundStep::Reveal
+        && $job->dueAt === WireTime::iso($revealStartsAt));
+
+    // Le geste répond par le paquet à jour : phase `closed`, instants de la
+    // révélation, et encore aucun titre avant `revealStartsAt`.
+    $response->assertJsonPath('mode', GameMode::Solo->value)
+        ->assertJsonPath('round.phase', 'closed')
+        ->assertJsonPath('round.endedAt', WireTime::iso($revealedAt))
+        ->assertJsonPath('round.revealStartsAt', WireTime::iso($revealStartsAt))
+        ->assertJsonPath('round.revealEndsAt', WireTime::iso($revealEndsAt))
+        ->assertJsonPath('round.reveal', null)
+        ->assertJsonPath('self.input.inputState', RoundPlayerInputState::Revealed->value);
+
+    expect((string) $response->getContent())->not->toContain(soloAnswerOf($round));
+
+    // Au sondage de `revealStartsAt`, la révélation normale : le film, personne
+    // n'a trouvé, zéro point.
+    $reveal = soloPoll($this, $token, $seat, $revealStartsAt)->assertOk()
+        ->assertJsonPath('round.phase', 'revealing')
+        ->assertJsonPath('round.reveal.movie.originalTitle', $round->movie->title_original)
+        ->assertJsonPath('round.reveal.finders', [])
+        ->assertJsonPath('self.ownScore', 0);
+
+    expect($round->refresh()->status)->toBe(RoundStatus::Revealing)
+        ->and($reveal->json('round.revealEndsAt'))->toBe(WireTime::iso($revealEndsAt))
+        ->and(Guess::query()->count())->toBe(0)
+        ->and(SubmissionFixtures::participation($round, $seat)->input_state)->toBe(RoundPlayerInputState::Revealed);
+
+    // Elle dure R : la manche se complète à `reveal_ends_at`, où la suivante
+    // s'ouvre ; la manche révélée ne compte aucune bonne réponse.
+    soloPoll($this, $token, $seat, $revealEndsAt)->assertOk()
+        ->assertJsonPath('round.sequenceIndex', 2)
+        ->assertJsonPath('round.phase', 'running');
+
+    expect($round->refresh()->status)->toBe(RoundStatus::Completed)
+        ->and($game->refresh()->rounds_completed)->toBe(1)
+        ->and(Guess::query()->count())->toBe(0);
+});
+
+it('passer la manche clôt en skipped et programme la suivante sans révélation', function (): void {
+    [$token, $seat, $game, $round] = soloOpened();
+    $t1 = $round->started_at ?? throw new LogicException('Manche non programmée.');
+    $skippedAt = $t1->addMilliseconds(3456);
+
+    $response = soloGesture($this, $token, $seat, 'solo.skip', $skippedAt)->assertOk();
+
+    $round->refresh();
+    $game->refresh();
+    $participation = SubmissionFixtures::participation($round, $seat);
+    $next = EngineFixtures::round($game, 2);
+    $startsAt = $skippedAt->addMilliseconds($game->preload_lead_ms + EngineConstants::nextRoundMarginMs());
+
+    // La saisie close en `skipped`, la manche close et « révélée » au même
+    // instant — celui du geste —, `completed` d'emblée, comptée jouée.
+    expect($participation->input_state)->toBe(RoundPlayerInputState::Skipped)
+        ->and($participation->input_closed_at?->equalTo($skippedAt))->toBeTrue()
+        ->and($round->status)->toBe(RoundStatus::Completed)
+        ->and($round->ended_at?->equalTo($skippedAt))->toBeTrue()
+        ->and($round->reveal_ends_at?->equalTo($skippedAt))->toBeTrue()
+        ->and($game->rounds_completed)->toBe(1)
+        ->and($game->status)->toBe(GameStatus::Running)
+        ->and(Guess::query()->count())->toBe(0);
+
+    // La suivante, programmée à `now + preload_lead_ms + nextRoundMarginMs` :
+    // son palier 1 garde une fenêtre de préchargement entière.
+    expect($next->started_at?->equalTo($startsAt))->toBeTrue()
+        ->and($next->status)->toBe(RoundStatus::Pending);
+
+    Queue::assertPushed(AdvanceRound::class, static fn (AdvanceRound $job): bool => $job->roundId === $next->id
+        && $job->step === RoundStep::OpenTier
+        && $job->tierIndex === 1
+        && $job->dueAt === WireTime::iso($startsAt));
+
+    // Aucune révélation : aucun job de révélation pour la manche passée, et le
+    // paquet porte déjà la manche suivante, programmée, sans titre.
+    Queue::assertNotPushed(AdvanceRound::class, static fn (AdvanceRound $job): bool => $job->roundId === $round->id
+        && in_array($job->step, [RoundStep::Reveal, RoundStep::EndReveal], true));
+
+    $response->assertJsonPath('round.sequenceIndex', 2)
+        ->assertJsonPath('round.phase', 'scheduled')
+        ->assertJsonPath('round.startsAt', WireTime::iso($startsAt))
+        ->assertJsonPath('round.reveal', null);
+
+    expect((string) $response->getContent())->not->toContain(soloAnswerOf($round));
+
+    // Au `T₁` suivant, la manche 2 s'ouvre ; la manche passée n'a jamais été
+    // révélée.
+    soloPoll($this, $token, $seat, $startsAt)->assertOk()
+        ->assertJsonPath('round.sequenceIndex', 2)
+        ->assertJsonPath('round.phase', 'running');
+
+    expect($round->refresh()->status)->toBe(RoundStatus::Completed)
+        ->and($round->reveal_ends_at?->equalTo($round->ended_at))->toBeTrue();
+});
+
+it('revealed et skipped sont refusés hors solo', function (): void {
+    $token = PlayerToken::mint(Locale::English);
+    [$game, $round, [$seat]] = SubmissionFixtures::openedRound([$token]);
+    $before = soloRawRows($game);
+
+    expect($game->mode)->toBe(GameMode::Multiplayer);
+
+    // Les actions lèvent hors solo, avant toute lecture (barrière 1 de 10 § 7.10).
+    foreach ([RevealSoloAnswer::class, SkipSoloRound::class] as $action) {
+        expect(fn () => app($action)->handle($game, $seat, Date::now()->toImmutable()))
+            ->toThrow(LogicException::class);
+    }
+
+    // Les routes ne résolvent que le siège SOLO du jeton : un siège de salon
+    // n'en a aucun, et chaque geste est refusé en 403.
+    foreach (['solo.reveal', 'solo.skip', 'solo.next'] as $route) {
+        soloGesture($this, $token, $seat, $route)->assertForbidden();
+    }
+
+    // Le même jeton tient aussi un siège solo, sans partie : la route résout
+    // celui-là, jamais la partie du salon, et refuse faute de manche en cours.
+    $solo = Player::factory()->solo()->create(['player_token_hash' => $token->hash()]);
+
+    foreach (['solo.reveal', 'solo.skip'] as $route) {
+        soloGesture($this, $token, $solo, $route)
+            ->assertStatus(Response::HTTP_CONFLICT)
+            ->assertExactJson(['code' => 'round_not_running']);
+    }
+
+    // La partie multijoueur n'a rien vu : ni `revealed`, ni `skipped`.
+    expect(soloRawRows($game))->toBe($before)
+        ->and(RoundPlayer::query()->whereIn('input_state', [RoundPlayerInputState::Revealed->value, RoundPlayerInputState::Skipped->value])->count())->toBe(0)
+        ->and(SubmissionFixtures::participation($round, $seat)->input_state)->toBe(RoundPlayerInputState::Open);
+});
+
+it('une partie solo n\'émet aucun événement de diffusion', function (): void {
+    $this->withoutVite();
+    $recorder = RecordingBroadcaster::install();
+    soloCatalogue(soloRoundsOf());
+
+    [$token, $seat, $game] = soloStarted($this);
+    soloActAs($this, $token);
+    $this->get(route('solo.show'))->assertOk();
+
+    // Manche 1 : ouverte au sondage de T₁ ; une réponse fausse, puis la bonne
+    // — verrou, fin anticipée —, la révélation au sondage.
+    $first = Round::query()->where('game_id', $game->id)->where('round_number', 1)->sole();
+    $t1 = soloFirstRoundStart($game);
+
+    soloPoll($this, $token, $seat, $t1)->assertOk()->assertJsonPath('round.phase', 'running');
+    SubmissionFixtures::submit($this, $seat->refresh(), $token, SubmissionFixtures::WRONG, $t1->addSecond())->assertOk();
+    SubmissionFixtures::submit($this, $seat, $token, soloAnswerOf($first), $t1->addSeconds(2))
+        ->assertOk()
+        ->assertJsonPath('result', 'accepted');
+
+    $revealStartsAt = ($first->refresh()->ended_at ?? throw new LogicException('Manche non close.'))
+        ->addMilliseconds($game->tier_grace_ms);
+
+    soloPoll($this, $token, $seat, $revealStartsAt)->assertOk()->assertJsonPath('round.phase', 'revealing');
+
+    // « Manche suivante » raccourcit la révélation ; la manche 2 s'ouvre à
+    // son nouveau T₁.
+    soloGesture($this, $token, $seat, 'solo.next', $revealStartsAt->addSecond())->assertOk();
+    $second = Round::query()->where('game_id', $game->id)->where('round_number', 2)->sole();
+    $t1Second = $second->started_at ?? throw new LogicException('Manche 2 non programmée.');
+
+    soloPoll($this, $token, $seat, $t1Second)->assertOk()->assertJsonPath('round.phase', 'running');
+
+    // Manche 2 : « Voir la réponse », révélation, fin de révélation.
+    soloGesture($this, $token, $seat, 'solo.reveal', $t1Second->addSecond())->assertOk();
+    soloPoll($this, $token, $seat, $second->refresh()->reveal_ends_at)->assertOk();
+
+    // Les manches suivantes : « Passer la manche », jusqu'au gel.
+    soloSkipToEnd($this, $token, $seat, $game)->assertJsonPath('status', GameStatus::Completed->value);
+
+    expect($game->refresh()->status)->toBe(GameStatus::Completed)
+        ->and(GamePlayer::query()->where('game_id', $game->id)->sole()->correct_answers)->toBe(1)
+        // Toute la partie : ni salon, ni canal, rien sur le fil.
+        ->and($recorder->sent)->toBe([]);
+});
+
+it('un preset au N injouable est ramené au N jouable le plus proche et la page l\'annonce', function (): void {
+    $this->withoutVite();
+    soloCatalogue(soloRoundsOf(SettingPresetKey::Hardcore));
+    $preset = SettingPresetCatalog::settingsFor(SettingPresetKey::Hardcore);
+    $applied = RoomSettingsBounds::DEFAULT_FRAMES_PER_ROUND;
+    $notice = [
+        'preset' => SettingPresetKey::Hardcore->value,
+        'requestedFramesPerRound' => $preset->framesPerRound,
+        'appliedFramesPerRound' => $applied,
+    ];
+
+    $response = soloStart($this, soloFirstBody(SettingPresetKey::Hardcore))->assertRedirect(route('solo.show'));
+    soloActAs($this, SeatEntry::tokenFrom($response));
+
+    // La page où mène la redirection reçoit l'annonce, en données, et la
+    // partie se joue au N appliqué.
+    $this->get(route('solo.show'))->assertOk()->assertInertia(fn (Assert $page) => $page
+        ->component('game/solo')
+        ->where('settingsNotice', $notice)
+        ->where('state.mode', GameMode::Solo->value)
+        ->where('state.framesPerRound', $applied));
+
+    // Une annonce, pas un état : la page rechargée ne la rejoue pas.
+    $this->get(route('solo.show'))->assertOk()->assertInertia(fn (Assert $page) => $page
+        ->component('game/solo')
+        ->where('settingsNotice', null));
+
+    // La page l'annonce, dans les deux langues : le texte porte le preset et
+    // les deux N, formatés par le client ; le hook de la page le compose
+    // depuis la prop et le dit dans l'unique région vivante, la page le rend.
+    foreach ([Locale::French, Locale::English] as $locale) {
+        $text = trans('game.solo.frames_adjusted', ['preset' => 'PRESET', 'requested' => '97', 'applied' => '13'], $locale->value);
+
+        expect($text)->toBeString()
+            ->toContain('PRESET')
+            ->toContain('97')
+            ->toContain('13')
+            ->not->toContain(':preset')
+            ->not->toContain(':requested')
+            ->not->toContain(':applied');
+    }
+
+    $hook = FrontSource::withoutComments((string) file_get_contents(resource_path('js/hooks/game/use-solo-state.ts')));
+    $page = FrontSource::withoutComments((string) file_get_contents(resource_path('js/pages/game/solo.tsx')));
+
+    expect($hook)->toContain("'game.solo.frames_adjusted'")
+        ->toContain('announce(')
+        ->toContain('settingsNotice')
+        ->and($page)->toContain('noticeMessage')
+        ->toContain('settingsNotice');
+});
+
+it('solo.state et solo.heartbeat répondent 403 sans siège solo', function (): void {
+    // Sans jeton : refus, et aucun jeton frappé.
+    $state = $this->getJson(route('solo.state'))->assertForbidden();
+    $beat = $this->postJson(route('solo.heartbeat'))->assertForbidden();
+
+    expect(SeatEntry::tokenCookies($state))->toBe([])
+        ->and(SeatEntry::tokenCookies($beat))->toBe([]);
+
+    // Un jeton qui ne tient qu'un siège de salon : aucun siège solo. Les
+    // gestes, sous `seat.active`, sont refusés de même.
+    $token = PlayerToken::mint(Locale::French);
+    LobbyWrites::hostedRoom($token);
+    soloActAs($this, $token);
+
+    $this->getJson(route('solo.state'))->assertForbidden();
+    $this->postJson(route('solo.heartbeat'))->assertForbidden();
+
+    foreach (['solo.reveal', 'solo.skip', 'solo.next'] as $route) {
+        $this->postJson(route($route))->assertForbidden();
+    }
+
+    expect(Player::query()->whereNull('room_id')->count())->toBe(0);
+
+    // Témoin : le même jeton, une fois son siège solo né, lit son paquet —
+    // sans partie, sans canal, `[soi]` — et bat.
+    $solo = Player::factory()->solo()->create(['player_token_hash' => $token->hash()]);
+
+    $this->getJson(route('solo.state'))->assertOk()
+        ->assertHeader('Cache-Control', 'no-store, private')
+        ->assertJsonPath('mode', GameMode::Solo->value)
+        ->assertJsonPath('channels', null)
+        ->assertJsonPath('gameRef', null)
+        ->assertJsonPath('round', null)
+        ->assertJsonPath('seats.0.publicId', $solo->public_id);
+
+    $this->postJson(route('solo.heartbeat'))->assertNoContent();
+});
+
+it('voir la réponse clôt la manche même si le siège solo était passé disconnected', function (): void {
+    [$token, $seat, $game, $round] = soloOpened();
+    $t1 = $round->started_at ?? throw new LogicException('Manche non programmée.');
+
+    // Le siège bat à T₁, puis son onglet passe en arrière-plan : le balayage
+    // le passe `disconnected`. Il sort des participants sans clore la manche
+    // — zéro participant ne clôt jamais une manche.
+    soloBeat($this, $token, $t1)->assertNoContent();
+    $sweep = PresenceFixtures::lastSweep();
+    PresenceFixtures::run($sweep);
+
+    expect($seat->refresh()->connection_state)->toBe(PlayerConnectionState::Disconnected)
+        ->and($round->refresh()->ended_at)->toBeNull();
+
+    // Il touche « Voir la réponse » avant son battement de retour : le geste
+    // vaut battement, le siège redevient participant, et la fin anticipée
+    // clôt la manche à l'instant du geste, pas à D.
+    $revealedAt = PresenceFixtures::dueAt($sweep)->addMilliseconds(1500);
+
+    expect($revealedAt->lessThan(EngineFixtures::durationEnd($round)))->toBeTrue();
+
+    soloGesture($this, $token, $seat, 'solo.reveal', $revealedAt)->assertOk()
+        ->assertJsonPath('round.phase', 'closed');
+
+    $seat->refresh();
+    $round->refresh();
+
+    expect($seat->connection_state)->toBe(PlayerConnectionState::Connected)
+        ->and($seat->disconnected_at)->toBeNull()
+        ->and($seat->last_seen_at->equalTo($revealedAt))->toBeTrue()
+        ->and(SubmissionFixtures::participation($round, $seat)->input_state)->toBe(RoundPlayerInputState::Revealed)
+        ->and($round->ended_at?->equalTo($revealedAt))->toBeTrue()
+        ->and($round->reveal_ends_at?->equalTo($revealedAt->addMilliseconds($game->tier_grace_ms)->addSeconds($game->settings_snapshot->revealDuration)))->toBeTrue();
+
+    // Le geste réarme aussi le balayage du siège, à sa propre échéance.
+    expect(PresenceFixtures::dueAt(PresenceFixtures::lastSweep())->equalTo($revealedAt->addMilliseconds(EngineConstants::disconnectAfterMs())->ceilSecond()))->toBeTrue();
+});
+
+it('hors précondition, voir la réponse et passer la manche répondent 409 round_not_running', function (): void {
+    $refused = static function (TestCase $test, PlayerToken $token, Player $seat, Game $game, CarbonImmutable $at): void {
+        // L'état échu d'abord (le sondage rattrape) : le geste, qui rattrape
+        // aussi avant de lire la phase, n'écrit alors plus rien de lui-même.
+        soloPoll($test, $token, $seat, $at)->assertOk();
+        $before = soloRawRows($game);
+
+        foreach (['solo.reveal', 'solo.skip'] as $route) {
+            soloGesture($test, $token, $seat, $route, $at)
+                ->assertStatus(Response::HTTP_CONFLICT)
+                ->assertExactJson(['code' => 'round_not_running']);
+        }
+
+        // Rien n'est écrit sur la partie : ni saisie, ni manche.
+        expect(soloRawRows($game))->toBe($before);
+    };
+
+    // 1. Pendant le décompte : la manche est programmée, pas ouverte.
+    [$token, $seat, $game, $round] = soloOpened(open: false);
+    $t1 = $round->started_at ?? throw new LogicException('Manche non programmée.');
+
+    $refused($this, $token, $seat, $game, $t1->subSecond());
+
+    expect($round->refresh()->status)->toBe(RoundStatus::Pending);
+
+    // 2. Après la bonne réponse : le siège est verrouillé, la manche close
+    // d'anticipation — dans la grâce finale, puis pendant la révélation.
+    [$token, $seat, $game, $round] = soloOpened(target: SubmissionFixtures::movie('Quintessence Nocturne'));
+    $t1 = $round->started_at ?? throw new LogicException('Manche non programmée.');
+
+    // « Manche suivante » hors révélation : son propre 409 (§ 5.4).
+    soloGesture($this, $token, $seat, 'solo.next', $t1->addMilliseconds(500))
+        ->assertStatus(Response::HTTP_CONFLICT)
+        ->assertExactJson(['code' => 'not_revealing']);
+
+    SubmissionFixtures::submit($this, $seat, $token, 'Quintessence Nocturne', $t1->addSecond())->assertOk();
+    $endedAt = $round->refresh()->ended_at ?? throw new LogicException('Manche non close d’anticipation.');
+
+    $refused($this, $token, $seat, $game, $endedAt->addMilliseconds(intdiv($game->tier_grace_ms, 2)));
+    $refused($this, $token, $seat, $game, $endedAt->addMilliseconds($game->tier_grace_ms)->addSecond());
+
+    expect($round->refresh()->status)->toBe(RoundStatus::Revealing)
+        ->and(SubmissionFixtures::participation($round, $seat)->input_state)->toBe(RoundPlayerInputState::Locked);
+
+    // 3. Saisie close dans une manche qui court encore : le siège, passé
+    // `disconnected`, a trouvé sans clore la manche (zéro participant ne la
+    // clôt jamais). Son geste vaut battement, mais sa saisie n'est plus
+    // ouverte : refus, et le siège reste `locked` (`locked` ⟺ `guess`).
+    [$token, $seat, $game, $round] = soloOpened(target: SubmissionFixtures::movie('Vespertine Horizon'));
+    $t1 = $round->started_at ?? throw new LogicException('Manche non programmée.');
+
+    soloBeat($this, $token, $t1)->assertNoContent();
+    PresenceFixtures::run(PresenceFixtures::lastSweep());
+    $answeredAt = Date::now()->toImmutable()->addSecond();
+
+    SubmissionFixtures::submit($this, $seat, $token, 'Vespertine Horizon', $answeredAt)->assertOk();
+
+    expect($round->refresh()->ended_at)->toBeNull()
+        ->and(SubmissionFixtures::participation($round, $seat)->input_state)->toBe(RoundPlayerInputState::Locked);
+
+    $refused($this, $token, $seat, $game, $answeredAt->addSecond());
+
+    expect($round->refresh()->ended_at)->toBeNull()
+        ->and(SubmissionFixtures::participation($round, $seat)->input_state)->toBe(RoundPlayerInputState::Locked)
+        ->and(Guess::query()->where('round_id', $round->id)->count())->toBe(1);
+
+    // Le code est rendu dans les deux langues par le client.
+    foreach ([Locale::French, Locale::English] as $locale) {
+        soloMessage(SoloRoundController::KEY_ROUND_NOT_RUNNING, $locale);
+    }
+});
+
+it('passer la manche n\'écrit jamais ended_at au-delà de started_at + D', function (): void {
+    // 1. Une milliseconde avant D : l'instant du geste.
+    [$token, $seat, , $round] = soloOpened();
+    $durationEnd = EngineFixtures::durationEnd($round);
+
+    soloGesture($this, $token, $seat, 'solo.skip', $durationEnd->subMillisecond())->assertOk();
+    $round->refresh();
+
+    expect($round->status)->toBe(RoundStatus::Completed)
+        ->and($round->ended_at?->equalTo($durationEnd->subMillisecond()))->toBeTrue()
+        ->and($round->reveal_ends_at?->equalTo($durationEnd->subMillisecond()))->toBeTrue();
+
+    // 2. Reçu après D, le job de clôture en retard : le rattrapage du geste
+    // clôt d'abord la manche à D, et le geste est refusé — jamais un
+    // `ended_at` à l'heure du geste.
+    [$token, $seat, , $late] = soloOpened();
+    $lateEnd = EngineFixtures::durationEnd($late);
+
+    expect($late->refresh()->ended_at)->toBeNull();
+
+    soloGesture($this, $token, $seat, 'solo.skip', $lateEnd->addMilliseconds(1500))
+        ->assertStatus(Response::HTTP_CONFLICT)
+        ->assertExactJson(['code' => 'round_not_running']);
+
+    expect($late->refresh()->ended_at?->equalTo($lateEnd))->toBeTrue()
+        ->and(SubmissionFixtures::participation($late, $seat)->input_state)->toBe(RoundPlayerInputState::Open);
+
+    // 3. La clôture elle-même borne l'instant qu'on lui passe à D.
+    [, , $game, $direct] = soloOpened();
+    $directEnd = EngineFixtures::durationEnd($direct);
+
+    DB::transaction(static fn (): CarbonImmutable => SoloRoundClosure::skip($game->refresh(), $direct->refresh(), $directEnd->addSeconds(5)));
+    $direct->refresh();
+
+    expect($direct->ended_at?->equalTo($directEnd))->toBeTrue()
+        ->and($direct->reveal_ends_at?->equalTo($directEnd))->toBeTrue();
+});
+
+it('ni l\'annulation d\'une manche solo, ni le battement, ni le balayage de présence, ni la prise d\'onglet, ni la fin d\'une partie solo n\'émettent d\'événement de diffusion', function (): void {
+    $this->withoutVite();
+    $recorder = RecordingBroadcaster::install();
+    [$token, $seat, $game, $round] = soloOpened(reserve: 1);
+
+    // L'annulation : la variante du palier 2, frappée à l'ouverture du
+    // palier 1, n'est plus servable à T₂ ; le sondage rattrape l'ouverture,
+    // qui annule la manche, et la remplaçante est programmée.
+    $served = EngineFixtures::tier($round, 2)->served_frame_id;
+    Frame::query()->whereKey($served)->update(['availability' => ContentAvailability::Draft->value]);
+
+    soloPoll($this, $token, $seat, EngineFixtures::opensAt($round, 2))->assertOk();
+    $round->refresh();
+
+    expect($round->status)->toBe(RoundStatus::Cancelled)
+        ->and($round->cancel_reason)->toBe(RoundIncidentReason::FrameUnavailable)
+        ->and(Round::query()->where('game_id', $game->id)->where('round_number', 1)->where('status', RoundStatus::Pending->value)->whereNotNull('started_at')->count())->toBe(1);
+
+    // Le battement.
+    soloBeat($this, $token)->assertNoContent();
+
+    // La prise d'onglet : deux chargements complets sans en-tête, chacun
+    // supplantant l'onglet précédent.
+    $previous = $seat->refresh()->active_seat_token;
+    $this->get(route('solo.show'))->assertOk();
+    $this->get(route('solo.show'))->assertOk();
+
+    expect($seat->refresh()->active_seat_token)->not->toBe($previous);
+
+    // Le balayage de présence : le siège se tait et passe `disconnected`.
+    PresenceFixtures::run(PresenceFixtures::lastSweep());
+
+    expect($seat->refresh()->connection_state)->toBe(PlayerConnectionState::Disconnected);
+
+    // La fin de la partie : les manches restantes passées, jusqu'au gel.
+    soloSkipToEnd($this, $token, $seat, $game)->assertJsonPath('status', GameStatus::Completed->value);
+
+    expect($game->refresh()->status)->toBe(GameStatus::Completed)
+        ->and($recorder->sent)->toBe([]);
+});
+
+it('passer la dernière manche gèle la partie en completed à reveal_ends_at de cette manche', function (): void {
+    $journal = GameJournalRecorder::start();
+    [$token, $seat, $game] = soloOpened();
+
+    $response = soloSkipToEnd($this, $token, $seat, $game);
+
+    $last = Round::query()->where('game_id', $game->id)->where('round_number', $game->rounds_count)->sole();
+    $game->refresh();
+
+    // Gelée `completed`, à `reveal_ends_at` de la manche passée — son instant
+    // de clôture, sans révélation.
+    expect($game->status)->toBe(GameStatus::Completed)
+        ->and($last->status)->toBe(RoundStatus::Completed)
+        ->and($last->reveal_ends_at?->equalTo($last->ended_at))->toBeTrue()
+        ->and($game->ended_at?->equalTo($last->reveal_ends_at))->toBeTrue()
+        ->and($game->rounds_completed)->toBe($game->rounds_count);
+
+    // Les agrégats du siège sont gelés : aucune bonne réponse, aucun rang en solo.
+    $frozen = GamePlayer::query()->where('game_id', $game->id)->sole();
+
+    expect($frozen->correct_answers)->toBe(0)
+        ->and($frozen->final_score)->toBe(0)
+        ->and($frozen->final_rank)->toBeNull();
+
+    // Le geste répond par le podium, et plus aucune transition n'est attendue.
+    $response->assertJsonPath('status', GameStatus::Completed->value)
+        ->assertJsonPath('podium.gameStatus', GameStatus::Completed->value)
+        ->assertJsonPath('round', null)
+        ->assertJsonPath('nextTransitionAt', null);
+
+    expect(array_column($journal->contexts(GameJournal::GAME_FINALIZED), 'outcome'))->toBe([GameStatus::Completed->value]);
+
+    $journal->stop();
+});
+
+it('passe à game/solo les limites de plateforme et les presets de relance', function (): void {
+    $this->withoutVite();
+    soloCatalogue(soloRoundsOf());
+
+    [$token, $seat, $game] = soloStarted($this);
+    soloActAs($this, $token);
+
+    // `limits` : la prop de page du lobby (`PlatformLimits::toArray()`), dont
+    // l'aide lit `speedBonusMaxPercent` ; `presets` : les quatre presets et
+    // leur N jouable le plus proche sur le vivier catalogue, même forme que
+    // sur `room/solo` (passe 1 : Hardcore à 3).
+    $this->get(route('solo.show'))->assertOk()->assertInertia(fn (Assert $page) => $page
+        ->component('game/solo')
+        ->where('limits', PlatformLimits::current()->toArray())
+        ->where('presets', app(SoloPresets::class)->options())
+        ->where('presets', [
+            ['key' => 'classic', 'grayed' => false, 'nearestPlayableFramesPerRound' => null],
+            ['key' => 'fast', 'grayed' => false, 'nearestPlayableFramesPerRound' => null],
+            ['key' => 'hardcore', 'grayed' => true, 'nearestPlayableFramesPerRound' => RoomSettingsBounds::DEFAULT_FRAMES_PER_ROUND],
+            ['key' => 'discovery', 'grayed' => false, 'nearestPlayableFramesPerRound' => null],
+        ])
+        ->where('settingsNotice', null)
+        ->where('seatToken', $seat->refresh()->active_seat_token)
+        ->where('state.mode', GameMode::Solo->value)
+        ->where('state.framesPerRound', $game->frames_per_round)
+        ->missing('state.seatToken'));
+
+    // L'aide trouve son plafond de bonus pour le N de la partie.
+    expect(PlatformLimits::current()->toArray()['speedBonusMaxPercent'])->toHaveKey($game->frames_per_round);
 });

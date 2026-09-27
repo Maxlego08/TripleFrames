@@ -39,10 +39,14 @@ return [
     // Spec 60 § 16.3 (lot L60-15) : `pool_too_small`, refus du démarrage solo
     // quand aucun nombre d’images par manche n’est jouable pour le preset,
     // rendu par le serveur dans la langue de la requête.
+    // Spec 60 § 16.5 (lot L60-16) : `round_not_running`, code du 409 des
+    // gestes solo « Voir la réponse » et « Passer la manche » hors manche en
+    // cours ou après la réponse du joueur, rendu par le client.
     'errors' => [
         'seat_superseded' => 'Cet onglet n’a plus la main : vous jouez dans un autre onglet. Rechargez la page pour la reprendre ici.',
         'not_revealing' => 'La manche suivante ne peut être avancée que pendant la révélation.',
         'pool_too_small' => 'Le catalogue ne compte pas encore assez de films pour ce preset, même avec moins d’images par manche. Choisissez-en un autre.',
+        'round_not_running' => 'Ce geste n’est possible que pendant une manche en cours, avant d’avoir répondu.',
     ],
 
     // Spec 70 § 17 (lot L70-5) : la saisie en texte libre. `rejected`,
@@ -126,6 +130,20 @@ return [
     // pendant la révélation.
     'host' => [
         'next_round' => 'Manche suivante',
+    ],
+
+    // Spec 60 § 16 (lot L60-16) : la partie solo. Les deux gestes
+    // d’entraînement assisté (D18 du 23/09), la manche suivante pendant la
+    // révélation, l’absence de mémoire des films déjà vus (§ 16.7) et le
+    // nombre d’images par manche ramené d’office (D19 du 23/09) — `:preset`
+    // est le libellé traduit du preset, `:requested` et `:applied` des
+    // nombres formatés par le client, toujours au pluriel (N ≥ 2).
+    'solo' => [
+        'reveal_answer' => 'Voir la réponse',
+        'skip_round' => 'Passer la manche',
+        'next_round' => 'Manche suivante',
+        'no_room_memory' => 'En solo, aucune mémoire ne retient les films déjà vus : l’entraînement puise dans tout le catalogue, et un même film peut revenir.',
+        'frames_adjusted' => 'Le catalogue ne permet pas encore le preset :preset à :requested images par manche : cette partie se joue à :applied images par manche.',
     ],
 
     'score' => [
