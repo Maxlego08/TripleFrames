@@ -2,7 +2,12 @@
 
 namespace App\Providers;
 
+use App\Events\Game\AnswerAccepted;
+use App\Events\Game\GameFinalized;
+use App\Events\Game\InputClosed;
 use App\Listeners\DiagnoseDependencies;
+use App\Listeners\Game\BroadcastGameEnded;
+use App\Listeners\Game\CloseSeatInput;
 use App\Listeners\SyncCarbonLocale;
 use App\Settings\EngineConstants;
 use App\Settings\PlatformLimits;
@@ -63,7 +68,23 @@ class AppServiceProvider extends ServiceProvider
         // écouteur de `DiagnosingHealth` lève.
         Event::listen(DiagnosingHealth::class, DiagnoseDependencies::class);
 
+        $this->registerGameListeners();
         $this->registerPlayerGuard();
+    }
+
+    /**
+     * Les écouteurs du moteur (spec 60 § 8.2 et § 14.5, lot L60-11), ici
+     * faute d'`EventServiceProvider`, découverte automatique coupée : les
+     * crochets de fin de saisie sur les événements de domaine de 70
+     * (`AnswerAccepted`, `InputClosed`), qui émettent `player.locked` et
+     * réévaluent la fin anticipée, et l'annonce `game.ended` sur le gel de 80
+     * (`GameFinalized`). Tous sont livrés après commit, synchrones.
+     */
+    protected function registerGameListeners(): void
+    {
+        Event::listen(AnswerAccepted::class, [CloseSeatInput::class, 'answerAccepted']);
+        Event::listen(InputClosed::class, [CloseSeatInput::class, 'inputClosed']);
+        Event::listen(GameFinalized::class, BroadcastGameEnded::class);
     }
 
     /**

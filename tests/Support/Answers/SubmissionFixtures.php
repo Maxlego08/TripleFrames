@@ -227,10 +227,11 @@ final class SubmissionFixtures
     /**
      * L'ouverture du QCM de la manche à son instant théorique — `T₁` en
      * Facile, `T_N` en Normal — : le rattrapage à cet instant ouvre les
-     * paliers échus, puis la composition, appelée directement à cet instant
-     * comme la transition d'ouverture l'appellera (lot L60-11, qui la rendra
-     * idempotente ici). Elle doit composer : jamais le cas terminal. L'horloge
-     * reste figée à l'instant rendu.
+     * paliers échus — la transition d'ouverture compose le QCM (lot L60-11) —,
+     * puis la composition, rappelée directement à cet instant : idempotente,
+     * elle rend vrai sans rien réécrire, et prouve que le QCM existe. Elle
+     * doit composer : jamais le cas terminal. L'horloge reste figée à
+     * l'instant rendu.
      */
     public static function openChoices(Round $round): CarbonImmutable
     {

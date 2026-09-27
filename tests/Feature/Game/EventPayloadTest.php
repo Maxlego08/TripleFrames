@@ -2,10 +2,16 @@
 
 use App\Actions\Game\AdvanceToNextRound;
 use App\Actions\Game\CatchUpGame;
+use App\Actions\Game\FinalizeGame;
 use App\Actions\Game\ScheduleRound;
+use App\Enums\GameStatus;
+use App\Enums\InputDifficulty;
 use App\Enums\Locale;
+use App\Enums\PlayerConnectionState;
+use App\Enums\RoundPlayerInputState;
 use App\Enums\RoundStatus;
 use App\Events\Game\GameEnded;
+use App\Events\Game\GameFinalized;
 use App\Events\Game\GameLaunched;
 use App\Events\Game\GamePaused;
 use App\Events\Game\GameResumed;
@@ -28,19 +34,31 @@ use App\Events\Game\SettingsChanged;
 use App\Events\Game\TierOpened;
 use App\Http\Middleware\EnsureActiveSeat;
 use App\Jobs\Game\AdvanceRound;
+use App\Jobs\Game\InterruptPausedGame;
 use App\Models\Alias;
+use App\Models\AnswerKey;
 use App\Models\Frame;
 use App\Models\Game;
+use App\Models\GamePlayer;
 use App\Models\Movie;
 use App\Models\MovieTitle;
 use App\Models\Player;
 use App\Models\Room;
 use App\Models\Round;
 use App\Models\RoundChoiceSet;
+use App\Models\RoundPlayer;
 use App\Models\RoundTier;
 use App\Settings\EngineConstants;
+use App\Settings\PlatformLimits;
+use App\Settings\RoomSettings;
+use App\Settings\RoomSettingsBounds;
+use App\Support\Answers\ChoicesPresenter;
+use App\Support\Draw\DrawContext;
+use App\Support\Draw\SeededPrf;
 use App\Support\Game\GameStateBuilder;
 use App\Support\Game\NextRoundOutcome;
+use App\Support\Game\RevealMovieBuilder;
+use App\Support\Game\RoundStep;
 use App\Support\Game\TransitionBroadcasts;
 use App\Support\Identity\PlayerToken;
 use App\Support\Identity\PlayerTokenCookie;
@@ -49,7 +67,11 @@ use App\Support\Realtime\GameRef;
 use App\Support\Realtime\GameWire;
 use App\Support\Realtime\WirePayload;
 use App\Support\Realtime\WireTime;
+use App\Support\Scoring\Scoreboard;
+use App\ValueObjects\Answers\ChoicesPayload;
+use App\ValueObjects\Catalog\FrameLevelCoverage;
 use Carbon\CarbonImmutable;
+use Database\Factories\MovieFactory;
 use Illuminate\Broadcasting\BroadcastException;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
@@ -57,9 +79,11 @@ use Illuminate\Contracts\Broadcasting\ShouldRescue;
 use Illuminate\Contracts\Events\ShouldDispatchAfterCommit;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
+use Tests\Support\Answers\SubmissionFixtures;
 use Tests\Support\Draw\PoolFixtures;
 use Tests\Support\Game\EngineFixtures;
 use Tests\Support\I18n\FrontSource;
@@ -67,10 +91,12 @@ use Tests\Support\Realtime\RecordingBroadcaster;
 use Tests\Support\Realtime\RecordingJob;
 use Tests\Support\Realtime\WireFixtures;
 use Tests\Support\Realtime\WireScene;
+use Tests\Support\Room\SeatEntry;
+use Tests\Support\Scoring\ScoringFixtures;
 
 /*
 |--------------------------------------------------------------------------
-| Contrat d'événements — spec 60 § 11, contrat C7 § 2.3 et § 3 (lots L60-3, L60-6, L60-7)
+| Contrat d'événements — spec 60 § 11, contrat C7 § 2.3 et § 3 (lots L60-3, L60-6, L60-7, L60-11)
 |--------------------------------------------------------------------------
 |
 | Les dix-neuf événements de la liste close, émis par la chaîne réelle du
@@ -85,9 +111,11 @@ use Tests\Support\Realtime\WireScene;
 | porte sur la réémission de `round.scheduled` (« manche suivante »,
 | rattrapage). La liste close s'éprouve aussi sur son miroir client (L60-9,
 | écart (i)) : l'union `GameEventName` et les charges de `types/game-wire.ts`,
-| et la répartition salon / siège des écoutes de `lib/game/echo.ts`. Les
-| autres intitulés du fichier (60 § 20) arrivent avec leurs émetteurs
-| (L60-11) ; « ni aucun paquet » s'éprouve sur
+| et la répartition salon / siège des écoutes de `lib/game/echo.ts`. Ceux
+| de L60-11 portent sur ses émetteurs, en fin de fichier : QCM ciblé
+| (`OpenTier`), `player.locked` (crochet de fin de saisie), et aucun titre
+| avant `revealStartsAt` hors des quatre propositions ; « ni aucun paquet »
+| s'éprouve sur
 | `GameStatePacket` : branche sans partie dès L60-4 (lobby et solo, par
 | `room.state` et par le constructeur), branche de partie en L60-12
 | (passation obligatoire, E83-3).
@@ -1016,7 +1044,7 @@ it('round.scheduled est réémis pour une manche pending reprogrammée et jamais
 it('un passage de rattrapage ne libère que l\'état courant de chaque manche et jamais un événement annulé', function (): void {
     // Ajout (§ 4.4) : la règle de péremption de `TransitionBroadcasts`,
     // éprouvée sur des charges réelles de la liste close, `seat.choices`
-    // compris (son émetteur arrive en L60-11).
+    // compris (émis par `OpenTier` depuis L60-11).
     $recorder = RecordingBroadcaster::install();
     $scene = WireFixtures::scene();
     $events = WireFixtures::events($scene);
@@ -1068,4 +1096,729 @@ it('un passage de rattrapage ne libère que l\'état courant de chaque manche et
         'game.paused',
     ])
         ->and($recorder->sent[1]['payload']['tierIndex'])->toBe(2);
+});
+
+/*
+|--------------------------------------------------------------------------
+| Émetteurs de L60-11 : QCM ciblé, `player.locked`, `game.ended`
+|--------------------------------------------------------------------------
+|
+| Parties réelles (`SubmissionFixtures`) : sièges tenus par un `player_token`,
+| soumissions et clics PAR LA ROUTE, manches ouvertes par les transitions
+| réelles, crochets de fin de saisie déclenchés par les vrais événements de
+| domaine de 70 (`AnswerAccepted`, `InputClosed`), gel par l'action réelle.
+| Le diffuseur enregistreur voit ce qui partirait vers Reverb.
+|
+*/
+
+/**
+ * Le décor commun des tests de L60-11 : disque simulé, jobs du moteur
+ * retenus, cookies isolés, horloge figée, diffuseur enregistreur.
+ */
+function eventPayloadQcmSetUp(): RecordingBroadcaster
+{
+    PoolFixtures::fakeFramesDisk();
+    Queue::fake([AdvanceRound::class, InterruptPausedGame::class]);
+    SeatEntry::isolateCookies();
+    Date::setTestNow(CarbonImmutable::parse('2026-09-27 16:00:00.250'));
+
+    return RecordingBroadcaster::install();
+}
+
+/**
+ * Une partie multijoueur à cette difficulté, un siège par locale donnée
+ * (colonne `player.locale`, que la composition fige), manche 1 programmée,
+ * et ouverte à son palier 1 par `OpenTier` sauf `$open = false`.
+ *
+ * @param  list<Locale>  $locales
+ * @return array{game: Game, round: Round, seats: list<Player>, tokens: list<PlayerToken>}
+ */
+function eventPayloadQcmRound(InputDifficulty $difficulty, array $locales, ?Movie $target = null, bool $open = true): array
+{
+    $tokens = array_map(static fn (Locale $locale): PlayerToken => PlayerToken::mint($locale), $locales);
+    [$game, $round, $seats] = SubmissionFixtures::openedRound($tokens, SubmissionFixtures::settings($difficulty), $target, open: false);
+
+    foreach ($seats as $index => $seat) {
+        $seat->forceFill(['locale' => $locales[$index]])->save();
+    }
+
+    if ($open) {
+        EngineFixtures::openTier($round, 1);
+    }
+
+    return ['game' => $game, 'round' => $round->refresh(), 'seats' => $seats, 'tokens' => $tokens];
+}
+
+/**
+ * Les `seat.choices` enregistrés, indexés par nom de canal Pusher.
+ *
+ * @param  list<array{channels: list<string>, event: string, payload: array<string, mixed>, json: string}>  $sent
+ * @return list<array{channels: list<string>, event: string, payload: array<string, mixed>, json: string}>
+ */
+function eventPayloadChoicesSent(array $sent): array
+{
+    return array_values(array_filter($sent, static fn (array $row): bool => $row['event'] === 'seat.choices'));
+}
+
+/** Le canal Pusher privé d'un siège. */
+function eventPayloadSeatChannel(Player $seat): string
+{
+    return 'private-'.ChannelNames::seat($seat);
+}
+
+/**
+ * Un film de vivier au titre, au titre français et à l'alias imposés — clés
+ * `answer_key` projetées par le vrai projecteur —, une variante publiée par
+ * niveau nominal du `N` par défaut.
+ */
+function eventPayloadAliasedMovie(string $title, string $frenchTitle, string $alias): Movie
+{
+    $levels = FrameLevelCoverage::nominal(RoomSettingsBounds::DEFAULT_FRAMES_PER_ROUND);
+
+    $movie = Movie::factory()
+        ->playable(
+            titles: [Locale::English->value => $title, Locale::French->value => $frenchTitle],
+            aliases: [Locale::French->value => [$alias]],
+        )
+        ->state(['title_original' => $title, 'title_original_latin' => null])
+        ->has(
+            Frame::factory()
+                ->count(count($levels))
+                ->published()
+                ->sequence(...array_map(static fn ($level): array => ['frame_level' => $level], $levels)),
+            'frames',
+        )
+        ->create();
+
+    MovieFactory::recomputeProjection($movie);
+
+    return $movie->refresh();
+}
+
+it('aucune charge émise avant revealStartsAt ne contient un titre, un alias ou une forme normalisée du film de la manche hors des quatre propositions du QCM', function (): void {
+    $recorder = eventPayloadQcmSetUp();
+
+    $target = eventPayloadAliasedMovie('Harbour Lights', 'Les Feux du port', 'Port des lumières');
+    SubmissionFixtures::decoyCandidates();
+    ['game' => $game, 'round' => $round, 'seats' => $seats, 'tokens' => $tokens] = eventPayloadQcmRound(
+        InputDifficulty::Normal,
+        [Locale::French, Locale::English, Locale::French],
+        $target,
+    );
+    [$finder, $clicker, $idle] = $seats;
+    $cadence = SubmissionFixtures::cadenceMs($game);
+    $framesPerRound = $game->frames_per_round;
+
+    // Tout ce que le fil pourrait laisser échapper : titres de chaque locale,
+    // titre original, alias, et toute forme normalisée projetée.
+    $forbidden = eventPayloadTitleStrings($target);
+
+    foreach (AnswerKey::query()->where('movie_id', $target->id)->pluck('normalized') as $normalized) {
+        $forbidden[] = $normalized;
+    }
+
+    $forbidden = array_values(array_unique($forbidden));
+
+    // Les chaînes du fil sont échappées comme le JSON les écrit.
+    expect($forbidden)->toContain('Harbour Lights', 'Les Feux du port', substr(json_encode('Port des lumières', JSON_THROW_ON_ERROR), 1, -1), 'harbour lights');
+
+    // Une manche entière : programmation et palier 1 (déjà enregistrés), un
+    // siège qui trouve par l'alias (`player.locked`), les paliers suivants,
+    // le QCM ciblé à `T_N`, un clic faux, la clôture à `D`, puis la révélation.
+    SubmissionFixtures::submit($this, $finder, $tokens[0], 'Port des lumières', EngineFixtures::opensAt($round, 1)->addMilliseconds($cadence))
+        ->assertOk()
+        ->assertJson(['result' => 'accepted']);
+
+    $tN = EngineFixtures::opensAt($round, $framesPerRound);
+    Date::setTestNow($tN);
+    app(CatchUpGame::class)->handle($game, $tN);
+
+    SubmissionFixtures::click($this, $clicker, $tokens[1], SubmissionFixtures::wrongChoice($round, $clicker), $tN->addMilliseconds($cadence))
+        ->assertOk()
+        ->assertJson(['result' => 'rejected', 'inputState' => RoundPlayerInputState::QcmWrong->value]);
+
+    $endedAt = EngineFixtures::durationEnd($round);
+    Date::setTestNow($endedAt);
+    app(CatchUpGame::class)->handle($game, $endedAt);
+
+    $revealStartsAt = $endedAt->addMilliseconds($game->tier_grace_ms);
+    Date::setTestNow($revealStartsAt);
+    app(CatchUpGame::class)->handle($game, $revealStartsAt);
+
+    $before = array_values(array_filter(
+        $recorder->sent,
+        static fn (array $sent): bool => $sent['payload']['serverNow'] < WireTime::iso($revealStartsAt),
+    ));
+
+    // La scène couvre tous les émetteurs d'une manche avant ses titres.
+    expect(array_values(array_unique(array_column($before, 'event'))))
+        ->toBe(['round.scheduled', 'tier.opened', 'player.locked', 'seat.choices', 'round.closed']);
+
+    $pushedTarget = 0;
+
+    foreach ($before as $sent) {
+        $payload = $sent['payload'];
+
+        // Les quatre propositions, et elles seules, peuvent nommer le film :
+        // la bonne y figure bien, et rien d'autre de la charge ne le nomme.
+        if ($sent['event'] === 'seat.choices') {
+            $seat = collect($seats)->first(static fn (Player $candidate): bool => $sent['channels'] === [eventPayloadSeatChannel($candidate)]);
+            expect($seat)->toBeInstanceOf(Player::class);
+
+            expect($payload['choices'])->toContain(SubmissionFixtures::correctChoice($round, $seat));
+            $pushedTarget++;
+            unset($payload['choices']);
+        }
+
+        $json = json_encode($payload, JSON_THROW_ON_ERROR);
+
+        foreach ($forbidden as $string) {
+            expect(str_contains($json, $string))->toBeFalse("[{$sent['event']}] nomme le film avant revealStartsAt : [{$string}].");
+        }
+    }
+
+    // Témoins : le QCM a bien été poussé aux deux sièges dont la saisie
+    // accepte un clic (le trouveur est verrouillé), et les titres partent à
+    // `revealStartsAt`, jamais avant.
+    expect($pushedTarget)->toBe(2);
+
+    $revealed = collect($recorder->sent)->firstWhere('event', 'round.revealed');
+
+    expect($revealed['payload']['serverNow'] ?? null)->toBe(WireTime::iso($revealStartsAt))
+        ->and($revealed['json'] ?? '')->toContain('Harbour Lights')
+        ->and(SubmissionFixtures::participation($round, $idle)->input_state)->toBe(RoundPlayerInputState::Open);
+});
+
+it('la position de la cible parmi les quatre propositions suit la permutation qcmOrder du siège', function (): void {
+    $recorder = eventPayloadQcmSetUp();
+
+    SubmissionFixtures::decoyCandidates();
+    $locales = [Locale::French, Locale::English, Locale::French, Locale::English, Locale::French];
+    ['game' => $game, 'round' => $round, 'seats' => $seats] = eventPayloadQcmRound(InputDifficulty::Easy, $locales);
+
+    $pushed = eventPayloadChoicesSent($recorder->sent);
+    $prf = SeededPrf::forGame($game);
+    $reordered = 0;
+
+    expect($pushed)->toHaveCount(count($seats));
+
+    foreach ($seats as $seat) {
+        $set = SubmissionFixtures::choiceSet($round, $seat);
+        $stored = [$set->choice_1, $set->choice_2, $set->choice_3, $set->choice_4];
+
+        // La permutation du siège, recalculée hors du présentateur, sur le
+        // seul contexte `draw:qcm:{sequenceIndex}:{publicId}`.
+        $order = $prf->permutation(DrawContext::qcmOrder($round->sequence_index, $seat->public_id), ChoicesPayload::COUNT);
+        $received = collect($pushed)->first(static fn (array $sent): bool => $sent['channels'] === [eventPayloadSeatChannel($seat)]);
+
+        expect($received)->not->toBeNull()
+            ->and($set->locale)->toBe($seat->locale)
+            ->and($received['payload']['choices'])->toBe(array_map(static fn (int $index): string => $stored[$index], $order))
+            // La cible, `choice_1`, à la position que la permutation lui donne.
+            ->and(array_search($stored[0], $received['payload']['choices'], true))->toBe(array_search(0, $order, true))
+            // Ni index, ni drapeau, ni métadonnée par proposition.
+            ->and(array_slice(array_keys($received['payload']), 3))->toBe(['sequenceIndex', 'choices', 'useOriginalTitle', 'lang'])
+            ->and(array_is_list($received['payload']['choices']))->toBeTrue();
+
+        if ($received['payload']['choices'] !== $stored) {
+            $reordered++;
+        }
+    }
+
+    // Aucune position conventionnelle : l'ordre stocké n'est pas celui du fil.
+    expect($reordered)->toBeGreaterThan(0);
+});
+
+it('player.locked ne porte que sequenceIndex, publicId et lockRank', function (): void {
+    $recorder = eventPayloadQcmSetUp();
+
+    $target = SubmissionFixtures::movie('Harbour Lights');
+    ['game' => $game, 'round' => $round, 'seats' => [$first, $second, $spent], 'tokens' => $tokens] = eventPayloadQcmRound(
+        InputDifficulty::Expert,
+        [Locale::French, Locale::English, Locale::French],
+        $target,
+    );
+    $cadence = SubmissionFixtures::cadenceMs($game);
+    $t1 = EngineFixtures::opensAt($round, 1);
+    $room = Room::query()->findOrFail($game->room_id);
+
+    foreach ([[$first, $tokens[0], 1], [$second, $tokens[1], 2]] as [$seat, $token, $rank]) {
+        $recorder->sent = [];
+        $receivedAt = $t1->addMilliseconds($rank * $cadence);
+
+        $response = SubmissionFixtures::submit($this, $seat, $token, 'Harbour Lights', $receivedAt)
+            ->assertOk()
+            ->assertJson(['result' => 'accepted', 'lockRank' => $rank]);
+
+        expect($recorder->sent)->toHaveCount(1);
+
+        $locked = $recorder->sent[0];
+
+        // Au salon, l'enveloppe puis trois champs, rien d'autre : ni points,
+        // ni palier, ni chaîne — le verrouillé les lit dans SA réponse.
+        expect($locked['event'])->toBe('player.locked')
+            ->and($locked['channels'])->toBe(['presence-'.ChannelNames::room($room)])
+            ->and(array_keys($locked['payload']))->toBe(['v', 'serverNow', 'gameRef', 'sequenceIndex', 'publicId', 'lockRank'])
+            ->and($locked['payload'])->toMatchArray([
+                'serverNow' => WireTime::iso($receivedAt),
+                'gameRef' => GameRef::for($game),
+                'sequenceIndex' => $round->sequence_index,
+                'publicId' => $seat->public_id,
+                'lockRank' => $rank,
+            ])
+            ->and($locked['json'])->not->toContain('Harbour')
+            ->and($locked['json'])->not->toContain('points')
+            ->and($locked['json'])->not->toContain('tierIndex')
+            ->and($response->json('tierIndex'))->toBeInt()
+            ->and($response->json('pointsTotal'))->toBeInt();
+    }
+
+    // Une saisie close sans bonne réponse n'est jamais annoncée : la
+    // dernière saisie ouverte s'épuise, et seule la clôture part.
+    $recorder->sent = [];
+    SubmissionFixtures::spend($round, $spent, $game->settings_snapshot->attemptsPerRound - 1);
+    $exhaustedAt = $t1->addMilliseconds(3 * $cadence);
+
+    SubmissionFixtures::submit($this, $spent, $tokens[2], SubmissionFixtures::WRONG, $exhaustedAt)
+        ->assertOk()
+        ->assertJson(['result' => 'rejected', 'inputState' => RoundPlayerInputState::AttemptsExhausted->value]);
+
+    expect(array_column($recorder->sent, 'event'))->toBe(['round.closed'])
+        ->and($recorder->sent[0]['payload']['endedAt'])->toBe(WireTime::iso($exhaustedAt));
+});
+
+it('seat.choices part sur le canal privé du siège et jamais sur le canal du salon', function (): void {
+    $recorder = eventPayloadQcmSetUp();
+
+    SubmissionFixtures::decoyCandidates();
+    ['round' => $round, 'seats' => $seats] = eventPayloadQcmRound(InputDifficulty::Easy, [Locale::French, Locale::English, Locale::French]);
+
+    $pushed = eventPayloadChoicesSent($recorder->sent);
+
+    // Un envoi par siège, chacun sur SON canal privé, jamais deux fois.
+    expect(array_map(static fn (array $sent): array => $sent['channels'], $pushed))
+        ->toEqualCanonicalizing(array_map(static fn (Player $seat): array => [eventPayloadSeatChannel($seat)], $seats));
+
+    foreach ($pushed as $sent) {
+        expect($sent['channels'])->toHaveCount(1)
+            ->and($sent['channels'][0])->toStartWith('private-seat.');
+    }
+
+    // Aucune diffusion au salon ne porte le QCM ni l'une de ses chaînes, dans
+    // aucune locale.
+    $strings = RoundChoiceSet::query()
+        ->where('round_id', $round->id)
+        ->get()
+        ->flatMap(static fn (RoundChoiceSet $set): array => [$set->choice_1, $set->choice_2, $set->choice_3, $set->choice_4])
+        ->map(static fn (string $choice): string => substr(json_encode($choice, JSON_THROW_ON_ERROR), 1, -1))
+        ->all();
+
+    expect($strings)->toHaveCount(count(Locale::cases()) * ChoicesPayload::COUNT);
+
+    $onRoom = array_values(array_filter(
+        $recorder->sent,
+        static fn (array $sent): bool => str_starts_with($sent['channels'][0], 'presence-'),
+    ));
+
+    expect(array_column($onRoom, 'event'))->toBe(['round.scheduled', 'tier.opened']);
+
+    foreach ($onRoom as $sent) {
+        foreach ($strings as $string) {
+            expect(str_contains($sent['json'], $string))->toBeFalse("[{$sent['event']}] porte une proposition du QCM.");
+        }
+    }
+});
+
+it('en Facile le QCM est poussé à T₁, en Normal à T_N, en Expert jamais', function (): void {
+    $recorder = eventPayloadQcmSetUp();
+
+    SubmissionFixtures::decoyCandidates();
+
+    foreach ([InputDifficulty::Easy, InputDifficulty::Normal, InputDifficulty::Expert] as $difficulty) {
+        ['game' => $game, 'round' => $round, 'seats' => $seats] = eventPayloadQcmRound(
+            $difficulty,
+            [Locale::French, Locale::English],
+            open: false,
+        );
+        $choicesTier = $difficulty->choicesOpenTierIndex($game->frames_per_round);
+
+        foreach (range(1, $game->frames_per_round) as $tierIndex) {
+            $recorder->sent = [];
+            $opensAt = EngineFixtures::opensAt($round, $tierIndex);
+
+            $queries = SubmissionFixtures::queries(static fn () => EngineFixtures::openTier($round, $tierIndex));
+
+            if ($tierIndex !== $choicesTier) {
+                expect(array_column($recorder->sent, 'event'))->toBe(['tier.opened'], "{$difficulty->value}, palier {$tierIndex}");
+
+                continue;
+            }
+
+            // Au palier du QCM : l'ouverture, puis un envoi par siège, à
+            // l'instant de l'ouverture.
+            expect(array_column($recorder->sent, 'event'))->toBe(['tier.opened', 'seat.choices', 'seat.choices'], $difficulty->value);
+
+            foreach (eventPayloadChoicesSent($recorder->sent) as $sent) {
+                expect($sent['payload']['serverNow'])->toBe(WireTime::iso($opensAt))
+                    ->and($sent['payload']['sequenceIndex'])->toBe($round->sequence_index)
+                    ->and($sent['payload']['choices'])->toHaveCount(ChoicesPayload::COUNT);
+            }
+
+            expect(array_merge(...array_column(eventPayloadChoicesSent($recorder->sent), 'channels')))
+                ->toEqualCanonicalizing(array_map(eventPayloadSeatChannel(...), $seats));
+
+            // La langue de chaque siège est figée par la composition, qui suit
+            // la naissance des participants (contrat C7 § 4.8), jamais
+            // rattrapée par le cas défensif du présentateur.
+            $defensive = array_filter(
+                SubmissionFixtures::writes($queries),
+                static fn (string $sql): bool => SubmissionFixtures::touches($sql, 'round_player')
+                    && preg_match('/choices_locale[`"]?\s+is\s+null/i', $sql) === 1,
+            );
+
+            expect($defensive)->toBe([])
+                ->and(RoundPlayer::query()->where('round_id', $round->id)->whereNull('choices_locale')->exists())->toBeFalse();
+        }
+
+        // Composé au palier du QCM, et jamais en Expert.
+        expect($round->refresh()->decoy_movie_id_1 !== null)->toBe($choicesTier !== null, $difficulty->value)
+            ->and($round->status)->toBe(RoundStatus::Running);
+    }
+});
+
+it('à T_N en Normal, le QCM est poussé au siège dont le texte libre est épuisé', function (): void {
+    $recorder = eventPayloadQcmSetUp();
+
+    $target = SubmissionFixtures::movie('Harbour Lights', 'Les Feux du port');
+    $labels = ['épuisé', 'ouvert', 'trouveur', 'déconnecté', 'parti'];
+    ['game' => $game, 'round' => $round, 'seats' => $list, 'tokens' => $tokenList] = eventPayloadQcmRound(
+        InputDifficulty::Normal,
+        array_fill(0, count($labels), Locale::French),
+        $target,
+    );
+    $seats = array_combine($labels, $list);
+    $tokens = array_combine($labels, $tokenList);
+    SubmissionFixtures::decoyCandidates();
+
+    $cadence = SubmissionFixtures::cadenceMs($game);
+    $t1 = EngineFixtures::opensAt($round, 1);
+    $tN = EngineFixtures::opensAt($round, $game->frames_per_round);
+
+    // Le trouveur verrouille au palier 1 ; l'épuisé use son texte libre avant
+    // `T_N` et attend le QCM (D20 du 23/09).
+    SubmissionFixtures::submit($this, $seats['trouveur'], $tokens['trouveur'], 'Harbour Lights', $t1->addMilliseconds($cadence))
+        ->assertOk()
+        ->assertJson(['result' => 'accepted']);
+
+    SubmissionFixtures::spend($round, $seats['épuisé'], $game->settings_snapshot->attemptsPerRound - 1);
+    SubmissionFixtures::submit($this, $seats['épuisé'], $tokens['épuisé'], SubmissionFixtures::WRONG, $tN->subMilliseconds($cadence))
+        ->assertOk()
+        ->assertExactJson(SubmissionFixtures::rejectedBody(0, RoundPlayerInputState::TextExhausted));
+
+    // Un siège déconnecté reste destinataire ; un siège parti ne l'est plus.
+    $seats['déconnecté']->forceFill([
+        'connection_state' => PlayerConnectionState::Disconnected,
+        'disconnected_at' => $tN->subMilliseconds($cadence),
+    ])->save();
+    $seats['parti']->forceFill([
+        'connection_state' => PlayerConnectionState::Left,
+        'disconnected_at' => $tN->subMilliseconds(2 * $cadence),
+        'left_at' => $tN->subMilliseconds($cadence),
+    ])->save();
+
+    $recorder->sent = [];
+    Date::setTestNow($tN);
+    app(CatchUpGame::class)->handle($game, $tN);
+
+    $pushed = eventPayloadChoicesSent($recorder->sent);
+
+    expect(array_column($recorder->sent, 'event'))->toBe(['tier.opened', 'seat.choices', 'seat.choices', 'seat.choices'])
+        ->and(array_map(static fn (array $sent): array => $sent['channels'], $pushed))->toBe([
+            [eventPayloadSeatChannel($seats['épuisé'])],
+            [eventPayloadSeatChannel($seats['ouvert'])],
+            [eventPayloadSeatChannel($seats['déconnecté'])],
+        ]);
+
+    // La charge de l'épuisé est celle que toute resynchronisation lui rejoue,
+    // et le QCM lui rend la main : son clic juste verrouille au palier N.
+    $exhausted = SubmissionFixtures::participation($round, $seats['épuisé']);
+    $replayed = app(ChoicesPresenter::class)->forSeat($exhausted);
+
+    expect($exhausted->input_state)->toBe(RoundPlayerInputState::TextExhausted)
+        ->and($replayed)->toBeInstanceOf(ChoicesPayload::class)
+        ->and(array_slice($pushed[0]['payload'], 3))->toBe(['sequenceIndex' => $round->sequence_index, ...$replayed?->toArray() ?? []]);
+
+    SubmissionFixtures::click($this, $seats['épuisé'], $tokens['épuisé'], SubmissionFixtures::correctChoice($round, $seats['épuisé']), $tN->addMilliseconds($cadence))
+        ->assertOk()
+        ->assertJson(['result' => 'accepted', 'tierIndex' => $game->frames_per_round]);
+});
+
+it("en Normal, un QCM non composable n'émet aucun seat.choices", function (): void {
+    $recorder = eventPayloadQcmSetUp();
+
+    // Aucun film de plus que les `M` de la partie : deux leurres possibles
+    // au plus, jamais trois — le cas terminal (contrat C11).
+    ['game' => $game, 'round' => $round, 'seats' => [$exhausted, $open], 'tokens' => $tokens] = eventPayloadQcmRound(
+        InputDifficulty::Normal,
+        [Locale::French, Locale::English],
+    );
+    $cadence = SubmissionFixtures::cadenceMs($game);
+    $tN = EngineFixtures::opensAt($round, $game->frames_per_round);
+
+    expect(Movie::query()->count())->toBeLessThan($game->rounds_count + ChoicesPayload::COUNT - 1);
+
+    SubmissionFixtures::spend($round, $exhausted, $game->settings_snapshot->attemptsPerRound - 1);
+    SubmissionFixtures::submit($this, $exhausted, $tokens[0], SubmissionFixtures::WRONG, $tN->subMilliseconds($cadence))
+        ->assertOk()
+        ->assertExactJson(SubmissionFixtures::rejectedBody(0, RoundPlayerInputState::TextExhausted));
+
+    $recorder->sent = [];
+    Date::setTestNow($tN);
+    app(CatchUpGame::class)->handle($game, $tN);
+
+    // Le palier s'ouvre, sans aucun envoi de QCM : la manche continue en
+    // saisie texte seule.
+    expect(array_column($recorder->sent, 'event'))->toBe(['tier.opened'])
+        ->and($round->refresh()->status)->toBe(RoundStatus::Running)
+        ->and($round->ended_at)->toBeNull()
+        ->and($round->decoy_movie_id_1)->toBeNull()
+        ->and(RoundChoiceSet::query()->where('round_id', $round->id)->exists())->toBeFalse()
+        ->and(EngineFixtures::tier($round, $game->frames_per_round)->served_at?->equalTo($tN))->toBeTrue();
+
+    // Le siège qui attendait le QCM n'a plus rien à attendre : sa saisie se
+    // ferme à l'instant de composition, sans diffusion ; l'autre reste ouvert.
+    $closed = SubmissionFixtures::participation($round, $exhausted);
+
+    expect($closed->input_state)->toBe(RoundPlayerInputState::AttemptsExhausted)
+        ->and($closed->input_closed_at?->equalTo($tN))->toBeTrue()
+        ->and(SubmissionFixtures::participation($round, $open)->input_state)->toBe(RoundPlayerInputState::Open)
+        ->and(eventPayloadChoicesSent($recorder->sent))->toBe([]);
+});
+
+it('en Normal, un QCM non composable qui ferme le dernier participant émet round.closed après tier.opened', function (bool $catchUp): void {
+    // Ajout (E108-1) : la composition terminale ferme le siège au texte
+    // épuisé dans une transaction IMBRIQUÉE, dont les rappels après commit
+    // partent avant ceux d'`OpenTier` (E90-4) ; l'écouteur de cette clôture
+    // attend donc la fin de l'ouverture. Sur le fil, `round.closed` suit
+    // `tier.opened` — seul dans un passage de rattrapage, dernière étape
+    // (§ 4.4) — et la frontière d'`OpenTier` comme la révélation sont
+    // programmées.
+    $recorder = eventPayloadQcmSetUp();
+
+    ['game' => $game, 'round' => $round, 'seats' => [$exhausted], 'tokens' => [$token]] = eventPayloadQcmRound(
+        InputDifficulty::Normal,
+        [Locale::French],
+    );
+    $cadence = SubmissionFixtures::cadenceMs($game);
+    $tN = EngineFixtures::opensAt($round, $game->frames_per_round);
+
+    expect(Movie::query()->count())->toBeLessThan($game->rounds_count + ChoicesPayload::COUNT - 1);
+
+    SubmissionFixtures::spend($round, $exhausted, $game->settings_snapshot->attemptsPerRound - 1);
+    SubmissionFixtures::submit($this, $exhausted, $token, SubmissionFixtures::WRONG, $tN->subMilliseconds($cadence))
+        ->assertOk()
+        ->assertExactJson(SubmissionFixtures::rejectedBody(0, RoundPlayerInputState::TextExhausted));
+
+    $recorder->sent = [];
+    Date::setTestNow($tN);
+
+    if ($catchUp) {
+        app(CatchUpGame::class)->handle($game, $tN);
+    } else {
+        EngineFixtures::openTier($round, $game->frames_per_round, $tN);
+    }
+
+    $closed = collect($recorder->sent)->firstWhere('event', 'round.closed');
+
+    expect(array_column($recorder->sent, 'event'))->toBe($catchUp ? ['round.closed'] : ['tier.opened', 'round.closed'])
+        ->and($closed['payload']['endedAt'] ?? null)->toBe(WireTime::iso($tN))
+        ->and($round->refresh()->ended_at?->equalTo($tN))->toBeTrue()
+        ->and(SubmissionFixtures::participation($round, $exhausted)->input_closed_at?->equalTo($tN))->toBeTrue()
+        ->and(EngineFixtures::tier($round, $game->frames_per_round)->served_at?->equalTo($tN))->toBeTrue();
+
+    $steps = Queue::pushed(AdvanceRound::class, static fn (AdvanceRound $job): bool => $job->roundId === $round->id && in_array($job->step, [RoundStep::Close, RoundStep::Reveal], true))
+        ->map(static fn (AdvanceRound $job): array => [$job->step, $job->dueAt])
+        ->values()
+        ->all();
+
+    expect($steps)->toEqualCanonicalizing([
+        [RoundStep::Close, WireTime::iso(EngineFixtures::durationEnd($round))],
+        [RoundStep::Reveal, WireTime::iso($tN->addMilliseconds($game->tier_grace_ms))],
+    ]);
+})->with([
+    'par le rattrapage' => [true],
+    "par l'appel direct" => [false],
+]);
+
+it("le gel d'une partie multijoueur émet game.ended avec son podium, et rien en solo ni pour une partie disparue", function (): void {
+    // Ajout (§ 14.5) : l'écouteur de `GameFinalized` compose le podium par
+    // son seul producteur, sur la partie relue, en multijoueur seulement ;
+    // idempotent, il tolère une partie purgée.
+    $recorder = eventPayloadQcmSetUp();
+
+    $game = EngineFixtures::game(EngineFixtures::settings());
+    EngineFixtures::seat($game);
+    EngineFixtures::materialize($game);
+    EngineFixtures::schedule(EngineFixtures::round($game, 1), Date::now()->toImmutable()->addSeconds(5));
+
+    foreach (range(1, $game->rounds_count - 1) as $sequenceIndex) {
+        EngineFixtures::play(EngineFixtures::round($game, $sequenceIndex));
+    }
+
+    $last = EngineFixtures::round($game, $game->rounds_count);
+
+    foreach (range(1, $game->frames_per_round) as $tierIndex) {
+        EngineFixtures::openTier($last, $tierIndex);
+    }
+
+    EngineFixtures::close($last);
+    EngineFixtures::reveal($last);
+    $recorder->sent = [];
+    EngineFixtures::endReveal($last);
+
+    $game->refresh();
+    $podium = Scoreboard::podium($game);
+    $room = Room::query()->findOrFail($game->room_id);
+
+    // La fin de la dernière révélation gèle la partie : `game.ended` part
+    // après le gel, avec le podium que toute resynchronisation rejouera.
+    expect($game->status)->toBe(GameStatus::Completed)
+        ->and(array_column($recorder->sent, 'event'))->toBe(['game.ended']);
+
+    $ended = $recorder->sent[0];
+
+    expect($ended['channels'])->toBe(['presence-'.ChannelNames::room($room)])
+        ->and($ended['payload']['gameRef'])->toBe(GameRef::for($game))
+        ->and($ended['payload']['serverNow'])->toBe(WireTime::iso(Date::now()->toImmutable()))
+        ->and($ended['payload']['podium'])->toBe(json_decode(json_encode($podium, JSON_THROW_ON_ERROR), true, flags: JSON_THROW_ON_ERROR))
+        ->and($ended['payload']['podium']['gameStatus'])->toBe(GameStatus::Completed->value);
+
+    // Redélivré : le même podium, rien d'autre.
+    event(new GameFinalized($game->id, GameStatus::Completed));
+
+    expect(array_column($recorder->sent, 'event'))->toBe(['game.ended', 'game.ended'])
+        ->and($recorder->sent[1]['payload']['podium'])->toBe($ended['payload']['podium']);
+
+    // Une partie disparue n'annonce rien ; une partie solo non plus.
+    $recorder->sent = [];
+    $attempts = $recorder->attempts;
+
+    event(new GameFinalized($game->id + 1_000, GameStatus::Interrupted));
+
+    $solo = EngineFixtures::game(EngineFixtures::settings(), solo: true);
+    EngineFixtures::seat($solo);
+    EngineFixtures::materialize($solo);
+
+    expect(app(FinalizeGame::class)->handle($solo, GameStatus::Interrupted, Date::now()->toImmutable()))->toBeTrue()
+        ->and($recorder->attempts)->toBe($attempts)
+        ->and($recorder->sent)->toBe([]);
+});
+
+/**
+ * Le corps HTTP qu'un événement enverrait à l'API de Reverb, tel que le SDK
+ * Pusher le compose : la charge encodée en JSON, puis encodée une seconde
+ * fois dans le corps `{ name, data, channel }`.
+ */
+function eventPayloadReverbBody(RoomBroadcast|SeatBroadcast $event): string
+{
+    $channel = $event->broadcastOn();
+
+    return json_encode([
+        'name' => $event->broadcastAs(),
+        'data' => json_encode($event->broadcastWith(), JSON_THROW_ON_ERROR),
+        'channel' => $channel->name,
+    ], JSON_THROW_ON_ERROR);
+}
+
+it('chaque charge aux bornes tient sous la borne de requête de Reverb, pire cas d\'écriture compris', function (): void {
+    // Ajout (passation E83-5) : toute diffusion passe par l'API HTTP de
+    // Reverb, dont le tampon est borné par `max_request_size` ; au-delà, 413
+    // et l'événement est perdu sans resynchronisation. Mesuré sur les
+    // producteurs réels, aux bornes : `MAX_ROUNDS_COUNT` manches,
+    // `roomSeats()` sièges qui trouvent tous chaque manche, `N` maximal,
+    // titres et pseudos à la largeur de leur colonne dans leurs caractères
+    // les plus lourds sur le fil. Titres : hors du plan multilingue de base
+    // (colonnes utf8mb4), échappés en paire de substitution
+    // `\uXXXX\uXXXX`, puis une seconde fois par le corps. Pseudos : la
+    // lettre accentuée, le plus lourd de ce que `ValidNickname` admet.
+    Event::fake([GameFinalized::class]);
+
+    $bound = (int) config('reverb.servers.reverb.max_request_size');
+    // En-têtes, chemin et signature de la requête HTTP, hors corps.
+    $requestOverhead = 1_024;
+    $title = str_repeat("\u{20000}", 255);
+    $original = str_repeat("\u{20001}", 255);
+    $nickname = str_repeat('é', 20);
+
+    $game = ScoringFixtures::game(RoomSettings::fromInput([
+        'roundsCount' => RoomSettingsBounds::MAX_ROUNDS_COUNT,
+        'framesPerRound' => RoomSettingsBounds::MAX_FRAMES_PER_ROUND,
+    ]));
+    $room = Room::query()->findOrFail($game->room_id);
+    $seats = [];
+
+    foreach (range(1, PlatformLimits::roomSeats()) as $position) {
+        $seat = ScoringFixtures::seat($game);
+        $seat->forceFill(['nickname' => $nickname])->save();
+        GamePlayer::query()->where('player_id', $seat->id)->update(['display_nickname' => $nickname]);
+        $seats[] = $seat;
+    }
+
+    $round = null;
+
+    foreach (range(1, RoomSettingsBounds::MAX_ROUNDS_COUNT) as $roundNumber) {
+        $movie = Movie::factory()->create(['title_original' => $original, 'title_original_latin' => $title, 'original_language' => 'ja']);
+        MovieTitle::query()->where('movie_id', $movie->id)->delete();
+
+        foreach (Locale::cases() as $locale) {
+            MovieTitle::factory()->for($movie)->forLocale($locale->value)->titled($title)->create();
+        }
+
+        $round = ScoringFixtures::round($game, $roundNumber, RoundStatus::Completed, movie: $movie);
+
+        foreach ($seats as $position => $seat) {
+            ScoringFixtures::find($round, $seat, 1_000 + $position * 37);
+        }
+    }
+
+    expect($round)->toBeInstanceOf(Round::class)
+        ->and(app(FinalizeGame::class)->handle($game, GameStatus::Completed, Date::now()->toImmutable()))->toBeTrue();
+
+    $game->refresh();
+    $last = Round::query()->findOrFail($round?->id);
+
+    $heaviest = [
+        'game.ended' => new GameEnded($room, $game, ['podium' => Scoreboard::podium($game)]),
+        'round.revealed' => new RoundRevealed($room, $game, [
+            'sequenceIndex' => $last->sequence_index,
+            'roundNumber' => (int) $last->round_number,
+            'revealEndsAt' => WireTime::iso(Date::now()->toImmutable()),
+            'movie' => RevealMovieBuilder::build(Movie::query()->findOrFail($last->movie_id)),
+            'images' => array_map(static fn (int $tierIndex): array => WireFixtures::image($game, $last, $tierIndex), range(1, $game->frames_per_round)),
+            'finders' => Scoreboard::roundFinders($last),
+            'leaderboard' => Scoreboard::leaderboard($game, $last),
+        ]),
+    ];
+
+    // Non vacant : chaque manche porte ses titres, chaque siège trouve.
+    expect($heaviest['game.ended']->payload()['podium']['recap'])->toHaveCount(RoomSettingsBounds::MAX_ROUNDS_COUNT)
+        ->and($heaviest['round.revealed']->payload()['finders'])->toHaveCount(PlatformLimits::roomSeats());
+
+    $sizes = [];
+
+    foreach ($heaviest as $name => $event) {
+        $sizes[$name] = strlen(eventPayloadReverbBody($event));
+
+        expect($sizes[$name] + $requestOverhead)->toBeLessThanOrEqual($bound, "[{$name}] pèse {$sizes[$name]} octets aux bornes.");
+    }
+
+    // L'ancienne borne du paquet ne portait même pas la fin d'une partie.
+    expect($sizes['game.ended'])->toBeGreaterThan(10_000);
+
+    // Et les dix-neuf événements d'une scène ordinaire, un à un.
+    $scene = WireFixtures::scene();
+
+    foreach (WireFixtures::events($scene) as $event) {
+        expect(strlen(eventPayloadReverbBody($event)) + $requestOverhead)->toBeLessThanOrEqual($bound, $event->broadcastAs());
+    }
 });

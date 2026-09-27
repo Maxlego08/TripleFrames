@@ -5,6 +5,7 @@ use App\Enums\GuessSource;
 use App\Enums\InputDifficulty;
 use App\Enums\Locale;
 use App\Enums\RoundPlayerInputState;
+use App\Enums\RoundStatus;
 use App\Events\Game\AnswerAccepted;
 use App\Events\Game\InputClosed;
 use App\Jobs\Game\AdvanceRound;
@@ -168,8 +169,13 @@ function attemptsServeChoicesTier(Round $round, int $choicesTier, CarbonImmutabl
         ->whereNull('served_at')
         ->update(['served_at' => (new RoundTier)->fromDateTime($tN)]);
 
-    expect($served)->toBe(1)
-        ->and(Round::query()->whereKey($round->id)->value('decoy_movie_id_1'))->toBeNull();
+    expect($served)->toBe(1);
+
+    // Sans QCM à `T_N` : en Normal, les leurres restent NULL (composition
+    // terminale) ; en Facile, ils datent de `T₁`, où le QCM s'est ouvert.
+    if (Game::query()->whereKey($round->game_id)->value('input_difficulty') !== InputDifficulty::Easy) {
+        expect(Round::query()->whereKey($round->id)->value('decoy_movie_id_1'))->toBeNull();
+    }
 }
 
 /**
@@ -385,11 +391,19 @@ it('un épuisement reçu avant T_N et traité après une composition terminale f
 });
 
 it('en Facile la route texte répond saisie close sans compter', function (): void {
+    // Des leurres AVANT l'ouverture : en Facile, `OpenTier(1)` compose le
+    // QCM (L60-11), dont le cas terminal annulerait la manche — le 409 viendrait
+    // alors de la manche annulée, jamais de la difficulté (passation E104-6).
+    SubmissionFixtures::decoyCandidates();
+
     $target = SubmissionFixtures::movie('Heat');
     $token = PlayerToken::mint(Locale::French);
     [$game, $round, [$seat]] = SubmissionFixtures::openedRound([$token], SubmissionFixtures::settings(InputDifficulty::Easy), $target);
     $cadence = SubmissionFixtures::cadenceMs($game);
     $t1 = EngineFixtures::opensAt($round, 1);
+
+    expect($round->status)->toBe(RoundStatus::Running)
+        ->and($round->decoy_movie_id_1)->not->toBeNull();
 
     // Une saisie fausse, puis le titre exact : ni l'une ni l'autre n'est
     // jugée — Facile n'a pas de texte libre.
@@ -410,7 +424,10 @@ it('en Facile la route texte répond saisie close sans compter', function (): vo
             array_map(static fn (QueryExecuted $query): string => $query->sql, $queries),
             static fn (string $sql): bool => SubmissionFixtures::touches($sql, 'answer_key'),
         )))->toBe([])
-        ->and(Guess::query()->count())->toBe(0);
+        ->and(Guess::query()->count())->toBe(0)
+        // Toujours en cours : la clôture vient de la difficulté seule.
+        ->and($round->refresh()->status)->toBe(RoundStatus::Running)
+        ->and($round->ended_at)->toBeNull();
 });
 
 it('une saisie vide après normalisation ou trop longue est refusée en 422 sans compter', function (): void {
@@ -455,8 +472,17 @@ it('une saisie vide après normalisation ou trop longue est refusée en 422 sans
 });
 
 it('n\'atteint jamais text_exhausted hors difficulté Normal', function (InputDifficulty $difficulty, ?RoundPlayerInputState $beforeChoices, ?RoundPlayerInputState $afterChoices): void {
+    // En Facile, le QCM est composé à `T₁` par `OpenTier(1)` (L60-11) : des
+    // leurres d'abord, pour que la manche coure et que le 409 vienne de la
+    // difficulté, jamais d'une annulation `choices_unavailable` (E104-6).
+    if ($difficulty === InputDifficulty::Easy) {
+        SubmissionFixtures::decoyCandidates();
+    }
+
     $tokens = [PlayerToken::mint(Locale::French), PlayerToken::mint(Locale::French)];
     [$game, $round, [$early, $late]] = SubmissionFixtures::openedRound($tokens, SubmissionFixtures::settings($difficulty));
+
+    expect($round->status)->toBe(RoundStatus::Running);
     $cap = attemptsCap($game);
     $cadence = SubmissionFixtures::cadenceMs($game);
     // L'instant où le QCM de Normal s'ouvrirait, quelle que soit la

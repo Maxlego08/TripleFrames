@@ -40,10 +40,13 @@ use Tests\Support\Realtime\RecordingBroadcaster;
 | arrivent avec L60-13, qui livre le balayage et reçoit les gestes de 50.
 |
 | Les clôtures de saisie de 70 (verrouillage, clic faux, tentatives
-| épuisées) ne sont pas encore livrées : elles sont écrites ici comme 70 les
-| écrira — état, `input_closed_at` —, puis le crochet est appelé comme son
-| écouteur l'appellera. Parties matérialisées par l'action réelle, manches
-| ouvertes par les transitions réelles, aucune valeur de jeu en littéral.
+| épuisées) sont écrites ici comme 70 les écrit — état, `input_closed_at` —,
+| puis le crochet est appelé comme son écouteur l'appelle (L60-11) : ce
+| fichier éprouve le prédicat et l'instant écrit. Les vrais écouteurs, par
+| les vraies routes, vivent sous MySQL dans
+| `tests/Concurrency/Game/EarlyEndHookTest.php`. Parties matérialisées par
+| l'action réelle, manches ouvertes par les transitions réelles, aucune
+| valeur de jeu en littéral.
 |
 */
 
@@ -325,4 +328,40 @@ test('un siège au texte épuisé empêche la fin anticipée jusqu\'à son clic'
 
     expect($round->refresh()->ended_at?->equalTo($clickedAt))->toBeTrue()
         ->and($game->refresh()->mode)->toBe(GameMode::Multiplayer);
+});
+
+test('l\'écouteur d\'une clôture de saisie passe au crochet l\'instant écrit, même quand la transition qui l\'émet est rattrapée en retard', function (): void {
+    // Ajout (L60-11) : en Normal, un QCM non composable ferme à l'instant
+    // THÉORIQUE de composition, `T_N`, le siège qui l'attendait (70 § 10.7),
+    // avec `InputClosed` ; l'écouteur relit cet instant écrit — jamais
+    // l'heure du rattrapage — et la manche se clôt à `T_N`.
+    $recorder = RecordingBroadcaster::install();
+
+    [$game, $round, $seats] = earlyEndOpenedRound(['épuisé' => []]);
+
+    RoundPlayer::query()
+        ->where('round_id', $round->id)
+        ->where('player_id', $seats['épuisé']->id)
+        ->update(['input_state' => RoundPlayerInputState::TextExhausted->value, 'input_closed_at' => null]);
+
+    $tN = EngineFixtures::opensAt($round, $game->frames_per_round);
+    $late = $tN->addMilliseconds(2_700);
+    $recorder->sent = [];
+
+    Date::setTestNow($late);
+    app(CatchUpGame::class)->handle($game, $late);
+
+    $participation = earlyEndParticipation($round, $seats['épuisé']);
+
+    expect($round->refresh()->decoy_movie_id_1)->toBeNull()
+        ->and($participation->input_state)->toBe(RoundPlayerInputState::AttemptsExhausted)
+        ->and($participation->input_closed_at?->equalTo($tN))->toBeTrue()
+        ->and($round->ended_at?->equalTo($tN))->toBeTrue()
+        // Le même passage révèle, déjà échue à `T_N + tier_grace_ms`, et
+        // n'émet que l'état courant : les titres, dont la fin se lit depuis
+        // l'instant écrit, puis la manche suivante.
+        ->and($round->status)->toBe(RoundStatus::Revealing)
+        ->and($round->reveal_ends_at?->equalTo($tN->addMilliseconds($game->tier_grace_ms)->addSeconds($game->settings_snapshot->revealDuration)))->toBeTrue()
+        ->and(array_column($recorder->sent, 'event'))->toBe(['round.revealed', 'round.scheduled'])
+        ->and($recorder->sent[0]['payload']['serverNow'])->toBe(WireTime::iso($late));
 });

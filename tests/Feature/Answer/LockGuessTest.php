@@ -411,8 +411,15 @@ it('le guess porte l\'instantané complet de la règle', function (): void {
     );
     $choiceOffsetMs = RoundClock::offsetMs($round, $choiceAt);
     $clicked = null;
+    // Le relevé ne porte que la transaction de verrouillage : le crochet de
+    // fin de saisie qu'`AnswerAccepted` déclenche après son commit (L60-11)
+    // ouvre la sienne, hors du § 9.1.
     $statements = SubmissionFixtures::queries(function () use ($round, $choiceSeat, $game, $choiceMatch, $choiceAt, $choiceOffsetMs, &$clicked): void {
-        $clicked = app(LockGuess::class)->handle($round, $choiceSeat, $game, $choiceMatch, GuessSource::Choice, $choiceAt, $choiceOffsetMs);
+        Event::fakeFor(function () use ($round, $choiceSeat, $game, $choiceMatch, $choiceAt, $choiceOffsetMs, &$clicked): void {
+            $clicked = app(LockGuess::class)->handle($round, $choiceSeat, $game, $choiceMatch, GuessSource::Choice, $choiceAt, $choiceOffsetMs);
+
+            Event::assertDispatchedTimes(AnswerAccepted::class, 1);
+        }, [AnswerAccepted::class]);
     });
 
     // Les étapes du § 9.1, dans cet ordre, et rien d'autre : la manche, puis

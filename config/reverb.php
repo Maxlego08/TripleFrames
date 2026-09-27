@@ -45,7 +45,18 @@ return [
             'options' => [
                 'tls' => [],
             ],
-            'max_request_size' => env('REVERB_MAX_REQUEST_SIZE', 10_000),
+            // Borne du tampon d'une requête HTTP reçue par Reverb, donc de
+            // toute diffusion du moteur : au-delà, Reverb ferme en 413 et
+            // l'événement est perdu sans resynchronisation (E83-5). Les
+            // 10 000 octets du paquet ne portent même pas `game.ended` d'un
+            // salon ordinaire ; 512 Kio couvrent, de peu (~495 Ko), le pire
+            // cas mesuré aux bornes — `MAX_ROUNDS_COUNT` manches, `roomSeats`
+            // sièges trouveurs, titres de 255 caractères hors du plan
+            // multilingue de base, échappés en paires de substitution puis
+            // une seconde fois par le protocole Pusher — (`EventPayloadTest`) :
+            // c'est un plancher. Le tampon ne grandit qu'à la taille reçue, et
+            // l'API `/apps/` ne quitte jamais la boucle locale.
+            'max_request_size' => env('REVERB_MAX_REQUEST_SIZE', 524_288),
             'scaling' => [
                 'enabled' => env('REVERB_SCALING_ENABLED', false),
                 'channel' => env('REVERB_SCALING_CHANNEL', 'reverb'),
