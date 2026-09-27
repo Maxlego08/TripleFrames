@@ -1,0 +1,290 @@
+@use 'scss/tokens' as *;
+@use 'scss/mixins' as *;
+
+* {
+    box-sizing: border-box;
+}
+
+html,
+body {
+    min-width: 20rem;
+    min-height: 100%;
+    margin: 0;
+}
+
+body {
+    color: $color-ink;
+    background: $color-violet-dark;
+    font-family: $font-body;
+    line-height: 1.5;
+}
+
+a {
+    color: inherit;
+}
+
+.skip-link {
+    position: fixed;
+    z-index: 20;
+    top: 0.75rem;
+    left: 0.75rem;
+    padding: 0.65rem 0.9rem;
+    border: $line-width solid $color-ink;
+    border-radius: $radius-small;
+    background: $color-yellow;
+    font-weight: 900;
+    transform: translateY(-180%);
+
+    &:focus {
+        transform: translateY(0);
+    }
+}
+
+.error-page {
+    display: grid;
+    min-height: 100svh;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    background: repeating-linear-gradient(
+        90deg,
+        $color-violet 0 5.5rem,
+        oklch(0.44 0.15 295) 5.5rem 9rem,
+        oklch(0.34 0.14 295) 9rem 13rem
+    );
+
+    &__header {
+        display: flex;
+        width: min(100% - 2rem, 76rem);
+        min-height: 5.5rem;
+        align-items: center;
+        margin: 0 auto;
+    }
+
+    &__brand {
+        @include outlined-surface($color-paper, 999rem);
+        @include hard-shadow(0.25rem);
+        display: inline-flex;
+        min-height: 3.25rem;
+        align-items: center;
+        gap: 0.65rem;
+        padding: 0.35rem 1rem 0.35rem 0.5rem;
+        text-decoration: none;
+    }
+
+    &__brand-logo {
+        display: block;
+        width: 2.55rem;
+        height: auto;
+    }
+
+    &__brand-name {
+        @include display-type;
+        font-size: 1.15rem;
+        letter-spacing: -0.04em;
+    }
+
+    &__main {
+        display: grid;
+        place-items: center;
+        padding: 1.25rem 1rem 2.5rem;
+    }
+}
+
+.error-card {
+    @include outlined-surface($color-paper, 2rem);
+    @include hard-shadow(0.625rem);
+    width: min(100%, 34rem);
+    padding: clamp(2.25rem, 5vw, 4rem);
+    text-align: center;
+
+    &__code,
+    &__title {
+        @include display-type;
+        margin: 0;
+    }
+
+    &__code {
+        font-size: clamp(5.5rem, 12vw, 8rem);
+        line-height: 0.82;
+        letter-spacing: -0.08em;
+    }
+
+    &__title {
+        margin-top: 1.35rem;
+        font-size: clamp(1.8rem, 4vw, 2.55rem);
+        line-height: 1.05;
+        letter-spacing: -0.045em;
+    }
+
+    &__message {
+        max-width: 31ch;
+        margin: 1rem auto 2.25rem;
+        font-size: clamp(1rem, 2vw, 1.15rem);
+    }
+
+    &__actions {
+        display: flex;
+        align-items: center;
+        flex-direction: column;
+        gap: 1.25rem;
+    }
+
+    &__action {
+        @include display-type;
+        @include hard-shadow;
+        display: inline-flex;
+        width: 100%;
+        min-height: 3.6rem;
+        align-items: center;
+        justify-content: center;
+        padding: 0.8rem 1.25rem;
+        border: $line-width solid $color-ink;
+        border-radius: $radius-medium;
+        background: $color-yellow;
+        font-size: 1rem;
+        text-decoration: none;
+        transition: box-shadow 120ms ease, transform 120ms ease;
+
+        &:hover {
+            box-shadow: 0.4375rem 0.4375rem 0 $color-ink;
+            transform: translate(-0.125rem, -0.125rem);
+        }
+
+        &:active {
+            box-shadow: 0.0625rem 0.0625rem 0 $color-ink;
+            transform: translate(0.125rem, 0.125rem);
+        }
+    }
+
+    &__secondary {
+        font-weight: 900;
+        text-underline-offset: 0.25rem;
+    }
+}
+
+.error-footer {
+    border-top: $line-width solid $color-ink;
+    background: $color-yellow;
+
+    &__inner {
+        display: flex;
+        width: min(100% - 2rem, 76rem);
+        min-height: 4.25rem;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1.5rem;
+        margin: 0 auto;
+        font-size: 0.82rem;
+    }
+
+    &__tagline {
+        margin: 0;
+    }
+
+    &__nav {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: 1rem;
+    }
+
+    &__link {
+        font-weight: 800;
+        text-underline-offset: 0.2rem;
+    }
+}
+
+a:focus-visible {
+    @include focus-ring;
+}
+
+@media (max-width: $breakpoint-mobile) {
+    .error-page {
+        &__header {
+            width: min(100% - 1.5rem, 76rem);
+            min-height: 4.75rem;
+        }
+
+        &__brand {
+            min-height: 2.85rem;
+            padding-right: 0.85rem;
+        }
+
+        &__brand-logo {
+            width: 2.15rem;
+        }
+
+        &__brand-name {
+            font-size: 1rem;
+        }
+
+        &__main {
+            padding: 1rem 0.75rem 2rem;
+        }
+    }
+
+    .error-card {
+        padding: 2rem 1.25rem 2.25rem;
+        border-radius: 1.5rem;
+        box-shadow: 0.4375rem 0.4375rem 0 $color-ink;
+
+        &__message {
+            margin-bottom: 1.75rem;
+        }
+    }
+
+    .error-footer {
+        &__inner {
+            min-height: 0;
+            align-items: center;
+            flex-direction: column;
+            gap: 0.65rem;
+            padding: 0.9rem 0;
+            text-align: center;
+        }
+
+        &__nav {
+            justify-content: center;
+        }
+    }
+}
+
+@media (max-height: 43rem) and (min-width: 35.0625rem) {
+    .error-page {
+        &__header {
+            min-height: 4.5rem;
+        }
+
+        &__main {
+            padding-block: 0.75rem 1.25rem;
+        }
+    }
+
+    .error-card {
+        padding-block: 1.75rem;
+
+        &__code {
+            font-size: 5rem;
+        }
+
+        &__title {
+            margin-top: 0.8rem;
+        }
+
+        &__message {
+            margin-bottom: 1.35rem;
+        }
+    }
+
+    .error-footer__inner {
+        min-height: 3.5rem;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        scroll-behavior: auto !important;
+        transition-duration: 0.01ms !important;
+    }
+}

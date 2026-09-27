@@ -1,0 +1,248 @@
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  min-width: 20rem;
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  color: oklch(27% 0.08 292deg);
+  background: oklch(30% 0.11 295deg);
+  font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+  line-height: 1.5;
+}
+
+a {
+  color: inherit;
+}
+
+.skip-link {
+  position: fixed;
+  z-index: 20;
+  top: 0.75rem;
+  left: 0.75rem;
+  padding: 0.65rem 0.9rem;
+  border: 0.1875rem solid oklch(27% 0.08 292deg);
+  border-radius: 0.65rem;
+  background: oklch(88% 0.16 89deg);
+  font-weight: 900;
+  transform: translateY(-180%);
+}
+.skip-link:focus {
+  transform: translateY(0);
+}
+
+.error-page {
+  display: grid;
+  min-height: 100svh;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  background: repeating-linear-gradient(90deg, oklch(40% 0.15 295deg) 0 5.5rem, oklch(44% 0.15 295deg) 5.5rem 9rem, oklch(34% 0.14 295deg) 9rem 13rem);
+}
+.error-page__header {
+  display: flex;
+  width: min(100% - 2rem, 76rem);
+  min-height: 5.5rem;
+  align-items: center;
+  margin: 0 auto;
+}
+.error-page__brand {
+  border: 0.1875rem solid oklch(27% 0.08 292deg);
+  border-radius: 999rem;
+  background: oklch(98% 0.03 91deg);
+  box-shadow: 0.25rem 0.25rem 0 oklch(27% 0.08 292deg);
+  display: inline-flex;
+  min-height: 3.25rem;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.35rem 1rem 0.35rem 0.5rem;
+  text-decoration: none;
+}
+.error-page__brand-logo {
+  display: block;
+  width: 2.55rem;
+  height: auto;
+}
+.error-page__brand-name {
+  font-family: "Arial Rounded MT Bold", "Trebuchet MS", sans-serif;
+  font-weight: 900;
+  font-size: 1.15rem;
+  letter-spacing: -0.04em;
+}
+.error-page__main {
+  display: grid;
+  place-items: center;
+  padding: 1.25rem 1rem 2.5rem;
+}
+
+.error-card {
+  border: 0.1875rem solid oklch(27% 0.08 292deg);
+  border-radius: 2rem;
+  background: oklch(98% 0.03 91deg);
+  box-shadow: 0.625rem 0.625rem 0 oklch(27% 0.08 292deg);
+  width: min(100%, 34rem);
+  padding: clamp(2.25rem, 5vw, 4rem);
+  text-align: center;
+}
+.error-card__code, .error-card__title {
+  font-family: "Arial Rounded MT Bold", "Trebuchet MS", sans-serif;
+  font-weight: 900;
+  margin: 0;
+}
+.error-card__code {
+  font-size: clamp(5.5rem, 12vw, 8rem);
+  line-height: 0.82;
+  letter-spacing: -0.08em;
+}
+.error-card__title {
+  margin-top: 1.35rem;
+  font-size: clamp(1.8rem, 4vw, 2.55rem);
+  line-height: 1.05;
+  letter-spacing: -0.045em;
+}
+.error-card__message {
+  max-width: 31ch;
+  margin: 1rem auto 2.25rem;
+  font-size: clamp(1rem, 2vw, 1.15rem);
+}
+.error-card__actions {
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+.error-card__action {
+  font-family: "Arial Rounded MT Bold", "Trebuchet MS", sans-serif;
+  font-weight: 900;
+  box-shadow: 0.3125rem 0.3125rem 0 oklch(27% 0.08 292deg);
+  display: inline-flex;
+  width: 100%;
+  min-height: 3.6rem;
+  align-items: center;
+  justify-content: center;
+  padding: 0.8rem 1.25rem;
+  border: 0.1875rem solid oklch(27% 0.08 292deg);
+  border-radius: 0.85rem;
+  background: oklch(88% 0.16 89deg);
+  font-size: 1rem;
+  text-decoration: none;
+  transition: box-shadow 120ms ease, transform 120ms ease;
+}
+.error-card__action:hover {
+  box-shadow: 0.4375rem 0.4375rem 0 oklch(27% 0.08 292deg);
+  transform: translate(-0.125rem, -0.125rem);
+}
+.error-card__action:active {
+  box-shadow: 0.0625rem 0.0625rem 0 oklch(27% 0.08 292deg);
+  transform: translate(0.125rem, 0.125rem);
+}
+.error-card__secondary {
+  font-weight: 900;
+  text-underline-offset: 0.25rem;
+}
+
+.error-footer {
+  border-top: 0.1875rem solid oklch(27% 0.08 292deg);
+  background: oklch(88% 0.16 89deg);
+}
+.error-footer__inner {
+  display: flex;
+  width: min(100% - 2rem, 76rem);
+  min-height: 4.25rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  margin: 0 auto;
+  font-size: 0.82rem;
+}
+.error-footer__tagline {
+  margin: 0;
+}
+.error-footer__nav {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 1rem;
+}
+.error-footer__link {
+  font-weight: 800;
+  text-underline-offset: 0.2rem;
+}
+
+a:focus-visible {
+  outline: 0.1875rem solid oklch(81% 0.13 195deg);
+  outline-offset: 0.1875rem;
+}
+
+@media (max-width: 35rem) {
+  .error-page__header {
+    width: min(100% - 1.5rem, 76rem);
+    min-height: 4.75rem;
+  }
+  .error-page__brand {
+    min-height: 2.85rem;
+    padding-right: 0.85rem;
+  }
+  .error-page__brand-logo {
+    width: 2.15rem;
+  }
+  .error-page__brand-name {
+    font-size: 1rem;
+  }
+  .error-page__main {
+    padding: 1rem 0.75rem 2rem;
+  }
+  .error-card {
+    padding: 2rem 1.25rem 2.25rem;
+    border-radius: 1.5rem;
+    box-shadow: 0.4375rem 0.4375rem 0 oklch(27% 0.08 292deg);
+  }
+  .error-card__message {
+    margin-bottom: 1.75rem;
+  }
+  .error-footer__inner {
+    min-height: 0;
+    align-items: center;
+    flex-direction: column;
+    gap: 0.65rem;
+    padding: 0.9rem 0;
+    text-align: center;
+  }
+  .error-footer__nav {
+    justify-content: center;
+  }
+}
+@media (max-height: 43rem) and (min-width: 35.0625rem) {
+  .error-page__header {
+    min-height: 4.5rem;
+  }
+  .error-page__main {
+    padding-block: 0.75rem 1.25rem;
+  }
+  .error-card {
+    padding-block: 1.75rem;
+  }
+  .error-card__code {
+    font-size: 5rem;
+  }
+  .error-card__title {
+    margin-top: 0.8rem;
+  }
+  .error-card__message {
+    margin-bottom: 1.35rem;
+  }
+  .error-footer__inner {
+    min-height: 3.5rem;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}
