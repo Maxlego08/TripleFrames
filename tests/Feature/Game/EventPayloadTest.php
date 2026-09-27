@@ -77,6 +77,7 @@ use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
 use Illuminate\Contracts\Broadcasting\ShouldRescue;
 use Illuminate\Contracts\Events\ShouldDispatchAfterCommit;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
@@ -93,10 +94,11 @@ use Tests\Support\Realtime\WireFixtures;
 use Tests\Support\Realtime\WireScene;
 use Tests\Support\Room\SeatEntry;
 use Tests\Support\Scoring\ScoringFixtures;
+use Tests\TestCase;
 
 /*
 |--------------------------------------------------------------------------
-| Contrat d'événements — spec 60 § 11, contrat C7 § 2.3 et § 3 (lots L60-3, L60-6, L60-7, L60-11)
+| Contrat d'événements — spec 60 § 11, contrat C7 § 2.3 et § 3 (lots L60-3, L60-6, L60-7, L60-11, L60-12)
 |--------------------------------------------------------------------------
 |
 | Les dix-neuf événements de la liste close, émis par la chaîne réelle du
@@ -117,8 +119,9 @@ use Tests\Support\Scoring\ScoringFixtures;
 | avant `revealStartsAt` hors des quatre propositions ; « ni aucun paquet »
 | s'éprouve sur
 | `GameStatePacket` : branche sans partie dès L60-4 (lobby et solo, par
-| `room.state` et par le constructeur), branche de partie en L60-12
-| (passation obligatoire, E83-3).
+| `room.state` et par le constructeur), branche de partie depuis L60-12
+| (manche en cours au QCM composé, grâce finale, révélation, partie gelée,
+| partie solo ; le `serve_token` n'y sort que dans l'URL de son palier).
 |
 */
 
@@ -335,6 +338,125 @@ it('chaque événement porte v, serverNow au format ISO-8601 UTC à la milliseco
     }
 });
 
+/**
+ * Les jetons d'image que portent les références d'image d'une charge, à
+ * toute profondeur (`TierImageRef` : `{ tierIndex, url, fetchNotBefore }`),
+ * jeton → palier annoncé.
+ *
+ * @param  array<array-key, mixed>  $payload
+ * @return array<string, int>
+ */
+function eventPayloadImageTokens(array $payload): array
+{
+    $tokens = [];
+
+    if (isset($payload['tierIndex'], $payload['url']) && is_string($payload['url']) && is_int($payload['tierIndex'])) {
+        $tokens[(string) preg_replace('#^/f/([0-9a-f]{32})\?.*$#', '$1', $payload['url'])] = $payload['tierIndex'];
+    }
+
+    foreach ($payload as $value) {
+        if (is_array($value)) {
+            $tokens += eventPayloadImageTokens($value);
+        }
+    }
+
+    return $tokens;
+}
+
+/**
+ * Le `serve_token` — seul identifiant d'image qui quitte le serveur (C8) —
+ * ne sort que dans l'URL signée d'une référence d'image, celle de SON
+ * palier, une seule fois ; aucun autre jeton frappé en base n'apparaît.
+ *
+ * @param  array<array-key, mixed>  $payload
+ */
+function eventPayloadAssertServeTokens(array $payload, string $json, string $label): void
+{
+    $carried = eventPayloadImageTokens($payload);
+
+    foreach ($carried as $serveToken => $tierIndex) {
+        expect(RoundTier::query()->where('serve_token', $serveToken)->value('tier_index'))
+            ->toBe($tierIndex, "[{$label}] porte l'URL d'un autre palier que celui annoncé.")
+            ->and(substr_count($json, $serveToken))->toBe(1, "[{$label}] porte le jeton d'image hors de son URL.");
+    }
+
+    $minted = array_filter(RoundTier::query()->pluck('serve_token')->all(), is_string(...));
+
+    expect($minted)->not->toBeEmpty();
+
+    foreach (array_diff($minted, array_keys($carried)) as $serveToken) {
+        expect($json)->not->toContain($serveToken);
+    }
+}
+
+/**
+ * Les paquets de PARTIE que `room.state` sert à un siège d'une partie
+ * multijoueur en Normal — manche en cours au palier du QCM (composé), grâce
+ * finale, révélation, partie gelée avec son podium —, et le paquet d'une
+ * partie solo en cours, par le constructeur. Horloge figée à chaque instant,
+ * jobs de frontière retenus : c'est le rattrapage de la route qui fait
+ * avancer la partie.
+ *
+ * @return array{Room, array<string, array{payload: array<string, mixed>, json: string}>}
+ */
+function eventPayloadGamePackets(TestCase $test): array
+{
+    Queue::fake([AdvanceRound::class, InterruptPausedGame::class]);
+    PoolFixtures::fakeFramesDisk();
+    SubmissionFixtures::decoyCandidates();
+
+    $room = Room::factory()->playing()->create();
+    $game = EngineFixtures::game(SubmissionFixtures::settings(InputDifficulty::Normal), room: $room);
+    $token = PlayerToken::mint(Locale::French);
+    $seat = EngineFixtures::seat($game, ['player_token_hash' => $token->hash(), 'active_seat_token' => (string) Str::ulid()]);
+    EngineFixtures::seat($game);
+    $room->forceFill(['host_player_id' => $seat->id])->save();
+    EngineFixtures::materialize($game);
+
+    $round = EngineFixtures::round($game, 1);
+    EngineFixtures::schedule($round, Date::now()->toImmutable()->addMilliseconds(EngineConstants::launchCountdownMs()));
+
+    $fetch = static function (CarbonImmutable $at) use ($test, $room, $seat, $token): array {
+        Date::setTestNow($at);
+        Cache::flush();
+        (new ReflectionProperty($test, 'defaultCookies'))->setValue($test, []);
+
+        $response = $test->withCredentials()
+            ->withCookie(PlayerTokenCookie::NAME, json_encode($token->toClaims(), JSON_THROW_ON_ERROR))
+            ->getJson(route('room.state', ['room' => $room->room_code]), [EnsureActiveSeat::HEADER => (string) $seat->active_seat_token])
+            ->assertOk();
+
+        /** @var array<string, mixed> $payload */
+        $payload = $response->json();
+
+        return ['payload' => $payload, 'json' => (string) $response->getContent()];
+    };
+
+    $choicesAt = EngineFixtures::opensAt($round, (int) $game->input_difficulty->choicesOpenTierIndex($game->frames_per_round));
+    $durationEnd = EngineFixtures::durationEnd($round);
+    $packets = [
+        'manche, QCM composé' => $fetch($choicesAt->addMilliseconds(1)),
+        'grâce finale' => $fetch($durationEnd->addMilliseconds(1)),
+        'révélation' => $fetch($durationEnd->addMilliseconds($game->tier_grace_ms)),
+    ];
+
+    $frozenAt = CarbonImmutable::parse($packets['révélation']['payload']['round']['revealEndsAt'] ?? throw new LogicException('Révélation sans fin.'));
+    Date::setTestNow($frozenAt);
+    app(FinalizeGame::class)->handle($game->refresh(), GameStatus::Interrupted, $frozenAt);
+    $packets['partie gelée'] = $fetch($frozenAt->addSecond());
+
+    $solo = EngineFixtures::game(SubmissionFixtures::settings(InputDifficulty::Normal), solo: true);
+    $soloSeat = EngineFixtures::seat($solo);
+    EngineFixtures::materialize($solo);
+    $soloRound = EngineFixtures::round($solo, 1);
+    EngineFixtures::schedule($soloRound, Date::now()->toImmutable()->addMilliseconds(EngineConstants::launchCountdownMs()));
+    EngineFixtures::openTier($soloRound, 1);
+    $soloPacket = GameStateBuilder::build($solo->refresh(), $soloSeat, Date::now()->toImmutable(), $soloSeat->active_seat_token);
+    $packets['partie solo'] = ['payload' => $soloPacket, 'json' => json_encode($soloPacket, JSON_THROW_ON_ERROR)];
+
+    return [$room, $packets];
+}
+
 it("aucune charge d'événement ni aucun paquet ne contient de clé d'identifiant interne", function (): void {
     $recorder = RecordingBroadcaster::install();
     $scene = WireFixtures::scene();
@@ -355,7 +477,6 @@ it("aucune charge d'événement ni aucun paquet ne contient de clé d'identifian
     $never = array_values(array_filter([
         ...Player::query()->pluck('player_token_hash')->all(),
         ...Player::query()->pluck('active_seat_token')->all(),
-        ...RoundTier::query()->pluck('serve_token')->all(),
         ...Frame::query()->pluck('game_path')->all(),
         ...Game::query()->pluck('draw_seed')->all(),
     ], static fn (mixed $value): bool => is_string($value) && $value !== ''));
@@ -373,7 +494,14 @@ it("aucune charge d'événement ni aucun paquet ne contient de clé d'identifian
         foreach ($never as $value) {
             expect($sent['json'])->not->toContain($value);
         }
+
+        eventPayloadAssertServeTokens($sent['payload'], $sent['json'], $sent['event']);
     }
+
+    // Les URL signées réelles partent bien : `round.scheduled`,
+    // `tier.opened.next` et `round.revealed` portent chacun leur jeton.
+    expect(count(eventPayloadImageTokens(collect($recorder->sent)->firstWhere('event', 'round.revealed')['payload'] ?? [])))
+        ->toBe($scene->game->frames_per_round);
 
     // « Ni aucun paquet » — branche sans partie (L60-4) : le paquet de lobby
     // servi par `room.state` à un siège dont l'onglet tient la main, et le
@@ -401,12 +529,21 @@ it("aucune charge d'événement ni aucun paquet ne contient de clé d'identifian
     $solo = GameStateBuilder::build(null, Player::factory()->solo()->create(), Date::now()->toImmutable(), null);
     $packets['solo'] = ['payload' => $solo, 'json' => json_encode($solo, JSON_THROW_ON_ERROR)];
 
+    // Branche de partie (L60-12, passation E83-3) : les paquets qui
+    // concentrent le risque de fuite — manche en cours QCM composé, grâce
+    // finale, révélation, partie gelée avec son podium — servis par
+    // `room.state` après le rattrapage, et une partie solo par le
+    // constructeur.
+    [$gameRoom, $gamePackets] = eventPayloadGamePackets($this);
+    $packets = [...$packets, ...$gamePackets];
+
     $never = array_values(array_filter([
         ...$never,
         ...Player::query()->pluck('player_token_hash')->all(),
         ...Player::query()->pluck('active_seat_token')->all(),
+        ...Frame::query()->pluck('game_path')->all(),
+        ...Game::query()->pluck('draw_seed')->all(),
     ], static fn (mixed $value): bool => is_string($value) && $value !== ''));
-
     foreach ($packets as $label => $packet) {
         WirePayload::assertSafe($packet['payload'], "paquet {$label}");
 
@@ -419,10 +556,21 @@ it("aucune charge d'événement ni aucun paquet ne contient de clé d'identifian
             expect($packet['json'])->not->toContain($value);
         }
 
+        eventPayloadAssertServeTokens($packet['payload'], $packet['json'], "paquet {$label}");
+
         // Ni l'identifiant du salon, ni son code : le canal passe par la clé
         // HMAC (E10-31).
-        expect($packet['json'])->not->toContain('"'.$lobby->room_code.'"');
+        expect($packet['json'])->not->toContain('"'.$lobby->room_code.'"')
+            ->and($packet['json'])->not->toContain('"'.$gameRoom->room_code.'"');
     }
+
+    // Chaque paquet de partie a bien porté ce qu'il devait éprouver.
+    expect($packets['manche, QCM composé']['payload']['self']['input']['choices']['choices'] ?? [])->toHaveCount(4)
+        ->and($packets['manche, QCM composé']['payload']['round']['images'] ?? [])->not->toBeEmpty()
+        ->and($packets['grâce finale']['payload']['round']['phase'] ?? null)->toBe('closed')
+        ->and($packets['révélation']['payload']['round']['reveal'] ?? null)->not->toBeNull()
+        ->and($packets['partie gelée']['payload']['podium'] ?? null)->not->toBeNull()
+        ->and($packets['partie solo']['payload']['round']['images'] ?? [])->not->toBeEmpty();
 
     // La QCM ciblé porte ses quatre chaînes, jamais `choice_1` en position
     // identifiable : sa charge est une liste, sans clé par proposition.

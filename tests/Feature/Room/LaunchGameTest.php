@@ -88,8 +88,8 @@ use Tests\TestCase;
 | réserve se tire dans la limite du vivier, et chaque film coûte sa banque
 | d'images.
 |
-| La page du salon en partie (`room.show`, branche de partie de
-| `GameStateBuilder`) est le lot L60-12 : aucune redirection n'est suivie ici.
+| La page du salon en partie (`game/lobby` en `playing`) est le lot L50-4 :
+| aucune redirection n'est suivie ici.
 |
 */
 

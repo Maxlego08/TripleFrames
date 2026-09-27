@@ -94,7 +94,7 @@ use Tests\Support\Room\SeatEntry;
  * (`LaunchGame`, contrat C6), le tirage de la spec 30, la matérialisation et la
  * programmation de la spec 60. Il ne JOUE pas la partie : les jobs sont simulés
  * (`Queue::fake()`), et aucune redirection n'est suivie (la page du salon en
- * partie est le lot L60-12).
+ * partie, `game/lobby`, est le lot L50-4).
  *
  * Le vivier est lu, depuis le lot L30-5, par **le** constructeur unique de la
  * spec 30, {@see PoolQuery} — jamais par un prédicat recopié ici, qui

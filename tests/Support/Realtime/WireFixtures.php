@@ -2,6 +2,7 @@
 
 namespace Tests\Support\Realtime;
 
+use App\Actions\Game\MintTierServeToken;
 use App\Enums\GamePlayerStatus;
 use App\Enums\Locale;
 use App\Enums\RoomStatus;
@@ -38,11 +39,12 @@ use App\Models\RoundTier;
 use App\Settings\EngineConstants;
 use App\Support\Answers\ChoicesPresenter;
 use App\Support\Game\RevealMovieBuilder;
+use App\Support\Game\RoundTimelinePresenter;
 use App\Support\Game\SeatViewPresenter;
+use App\Support\Game\TierImageRefPresenter;
 use App\Support\Realtime\WireTime;
 use App\Support\Room\RoomSettingsPresenter;
 use App\Support\Scoring\Scoreboard;
-use App\ValueObjects\Scoring\TierWindow;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Date;
 use LogicException;
@@ -58,10 +60,10 @@ use Tests\Support\Scoring\ScoringFixtures;
  * `SeatViewPresenter` (C7, sur `PlayerIdentity` de C5),
  * `TierWindow::fromRoundTier()` et `Scoreboard` (C13),
  * `ChoicesPresenter` (C11), `RoomSettingsPresenter` (C0), `RevealMovieBuilder`
- * (L60-6). Les autres — `Podium`, l'URL signée d'image (L60-8) — sont
- * composés à la main à la forme de leur type client : l'URL en attendant son
- * lot ; le podium parce que la scène n'est pas gelée (une manche y court
- * encore), son producteur `Scoreboard::podium()` (L80-5) n'étant lisible
+ * (L60-6), `RoundTimelinePresenter` et `TierImageRefPresenter` (L60-5 ; URL
+ * signée réelle, jeton de fixture). Seul le `Podium` est composé à la main à
+ * la forme de son type client : la scène n'est pas gelée (une manche y court
+ * encore), et son producteur `Scoreboard::podium()` (L80-5) n'est lisible
  * qu'après le gel — `PodiumTest` fait passer le podium réel par `game.ended`.
  */
 final class WireFixtures
@@ -222,42 +224,37 @@ final class WireFixtures
     }
 
     /**
-     * `RoundTimeline` (60 § 11.5).
+     * `RoundTimeline` (60 § 11.5), par son seul constructeur
+     * ({@see RoundTimelinePresenter}).
      *
      * @return array<string, mixed>
      */
     public static function timeline(Game $game, Round $round): array
     {
-        return [
-            'sequenceIndex' => $round->sequence_index,
-            'roundNumber' => (int) $round->round_number,
-            'roundsCount' => $game->rounds_count,
-            'startsAt' => WireTime::iso(self::startedAt($round)),
-            'durationMs' => $round->duration_ms,
-            'tiers' => $round->tiers()->orderBy('tier_index')->get()
-                ->map(static fn (RoundTier $tier): array => TierWindow::fromRoundTier($tier)->toArray())
-                ->all(),
-            'choicesAtTierIndex' => $game->input_difficulty->choicesOpenTierIndex($game->frames_per_round),
-        ];
+        return RoundTimelinePresenter::timeline($game, $round);
     }
 
     /**
-     * `TierImageRef` : l'URL est composée à la forme de `ServeUrl` (L60-8) —
-     * jeton aléatoire, expiration et signature —, `fetchNotBefore` = `Tᵢ −
+     * `TierImageRef`, par son seul constructeur ({@see TierImageRefPresenter}) :
+     * l'URL signée réelle de `ServeUrl`, `fetchNotBefore` = `Tᵢ −
      * preload_lead_ms`.
+     *
+     * Un palier de fixture sans jeton en reçoit un, écrit directement : la
+     * frappe réelle ({@see MintTierServeToken}) exige une variante servable
+     * sur le disque `frames`, que les scènes du fil n'ont pas. Seul l'état
+     * « frappé » compte ici, jamais son écrivain.
      *
      * @return array{tierIndex: int, url: string, fetchNotBefore: string}
      */
     public static function image(Game $game, Round $round, int $tierIndex): array
     {
-        $tier = $round->tiers()->where('tier_index', $tierIndex)->firstOrFail();
-        $opensAt = self::startedAt($round)->addMilliseconds($tier->starts_at_offset_ms);
+        $tier = RoundTier::query()->where('round_id', $round->id)->where('tier_index', $tierIndex)->firstOrFail();
 
-        return [
-            'tierIndex' => $tierIndex,
-            'url' => '/f/'.bin2hex(random_bytes(16)).'?expires=1790172346&signature='.bin2hex(random_bytes(32)),
-            'fetchNotBefore' => WireTime::iso($opensAt->subMilliseconds($game->preload_lead_ms)),
-        ];
+        if ($tier->serve_token === null) {
+            $tier->forceFill(['serve_token' => bin2hex(random_bytes(16))])->save();
+        }
+
+        return TierImageRefPresenter::image($game, $tier);
     }
 
     /**
