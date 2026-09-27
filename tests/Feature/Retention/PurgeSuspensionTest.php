@@ -4,6 +4,7 @@ use App\Enums\OpsProbe;
 use App\Enums\PurgeRunStatus;
 use App\Enums\PurgeScope;
 use App\Jobs\Retention\RunRetentionPurge;
+use App\Jobs\Room\ArchiveIdleRooms;
 use App\Models\PurgeRun;
 use App\Support\Retention\PurgeSuspension;
 use App\Support\Retention\RetentionPurger;
@@ -42,6 +43,16 @@ function purgeSuspensionProbe(): TestResponse
     ]);
 }
 
+/**
+ * La purge vient de tourner, et le balayage `stale_lobby` de 50, que la
+ * sonde surveille aussi, vient de passer.
+ */
+function purgeSuspensionFreshRuns(): void
+{
+    app(RetentionPurger::class)->run();
+    app()->call([new ArchiveIdleRooms, 'handle']);
+}
+
 function purgeSuspensionMessage(string $key): string
 {
     $message = trans('admin.console.purge.'.$key, [], 'fr');
@@ -50,7 +61,7 @@ function purgeSuspensionMessage(string $key): string
 }
 
 it('met la sonde purge en alerte tant que la purge est suspendue', function (): void {
-    app(RetentionPurger::class)->run();
+    purgeSuspensionFreshRuns();
     purgeSuspensionProbe()->assertOk();
 
     $this->artisan('purge:suspend')
@@ -93,7 +104,7 @@ it('met la sonde purge en alerte tant que la purge est suspendue', function (): 
     expect(Cache::has(PurgeSuspension::CACHE_KEY))->toBeFalse();
     purgeSuspensionProbe()->assertStatus(503);
 
-    app(RetentionPurger::class)->run();
+    purgeSuspensionFreshRuns();
     purgeSuspensionProbe()->assertOk();
 
     $this->artisan('purge:resume')
@@ -145,12 +156,21 @@ it('reprend la purge à la levée de la suspension', function (): void {
 
     $this->travel(1)->day();
     $interrupted = app(RetentionPurger::class)->run();
+    $sessionsAt = array_search(PurgeScope::FrameworkSessions, PurgeScope::implemented(), true);
+    $current = array_pop($interrupted);
 
-    expect($interrupted)->toHaveCount(1)
-        ->and($interrupted[0]->scope)->toBe(PurgeScope::FrameworkSessions)
-        ->and($interrupted[0]->status)->toBe(PurgeRunStatus::Failed)
-        ->and($interrupted[0]->rows_deleted)->toBe(1)
-        ->and($interrupted[0]->finished_at)->toBeNull()
+    // Les périmètres qui la précèdent dans l'ordre du tableau ont tourné
+    // jusqu'au bout ; ceux qui la suivent ne sont pas partis.
+    expect($sessionsAt)->toBeInt()
+        ->and(array_map(static fn (PurgeRun $run): PurgeScope => $run->scope, $interrupted))
+        ->toBe(array_slice(PurgeScope::implemented(), 0, (int) $sessionsAt))
+        ->and(array_map(static fn (PurgeRun $run): PurgeRunStatus => $run->status, $interrupted))
+        ->each->toBe(PurgeRunStatus::Completed);
+
+    expect($current?->scope)->toBe(PurgeScope::FrameworkSessions)
+        ->and($current?->status)->toBe(PurgeRunStatus::Failed)
+        ->and($current?->rows_deleted)->toBe(1)
+        ->and($current?->finished_at)->toBeNull()
         ->and(RetentionRows::seeded(PurgeScope::FrameworkSessions))->toBe(2);
 
     // Levée : la purge reprend ce qui restait.

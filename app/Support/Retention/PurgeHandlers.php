@@ -6,6 +6,7 @@ use App\Support\Retention\Handlers\FrameworkFailedJobsHandler;
 use App\Support\Retention\Handlers\FrameworkResetTokensHandler;
 use App\Support\Retention\Handlers\FrameworkSessionsHandler;
 use App\Support\Retention\Handlers\PurgeRunHandler;
+use App\Support\Retention\Handlers\StaleRoomHandler;
 use Illuminate\Contracts\Container\Container;
 
 /**
@@ -23,13 +24,14 @@ use Illuminate\Contracts\Container\Container;
 final readonly class PurgeHandlers
 {
     /**
-     * Les gestionnaires du premier temps de L100-8 (D37 du 23/09) : les
-     * périmètres sans jeu. `stale_room` (L50-8) et la branche solo
-     * d'`orphan_player` (L60-15) s'y ajoutent avec leur lot.
+     * Les gestionnaires livrés (D37 du 23/09) : `stale_room`, qui archive par
+     * l'action de 50 (L50-8), et les périmètres sans jeu. La branche solo
+     * d'`orphan_player` (L60-15) s'y ajoute avec son lot.
      *
      * @var list<class-string<PurgeHandler>>
      */
     public const array CLASSES = [
+        StaleRoomHandler::class,
         FrameworkSessionsHandler::class,
         FrameworkFailedJobsHandler::class,
         FrameworkResetTokensHandler::class,

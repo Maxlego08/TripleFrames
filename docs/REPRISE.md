@@ -542,7 +542,7 @@ Ensuite, à chaque session : **« Implémente l'étape suivante de l'ordre des l
 111. L50-6 — pouvoirs de l'hôte : expulsion (D15), transfert, départ → 65, 83, 93, 101, 110 — ✅ livrée le 27/09
 112. L60-13 — présence, reprise, pouvoir d'hôte en partie → 85, 89, 93, 97, 111 — ✅ livrée le 27/09
 113. L50-8 — échéances : archivage, lobby oublié, salon expiré → 23, 29, 83, 101, 112 — ✅ livrée le 27/09
-114. L100-8 (2e temps, `stale_room`) + L100-7 (3e temps, `stale_lobby`) → 24, 113
+114. L100-8 (2e temps, `stale_room`) + L100-7 (3e temps, `stale_lobby`) → 24, 113 — ✅ livrée le 27/09
 115. L50-7b — gel, « Rejouer », concurrence du lancement → 6, 83, 89, 97, 102
 116. L50-9 — retardataires (lot J1 ordinaire, D35) → 6, 91, 101, 102
 117. L70-10 — écran de saisie, grille QCM → 8, 39, 95, 99, 104, 105, 107, 109

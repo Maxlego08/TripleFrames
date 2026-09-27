@@ -53,17 +53,18 @@ enum PurgeScope: string
      * La sonde `purge` (spec 100 § 15) surveille chacun d'eux, et chacun a
      * exactement un gestionnaire dans `App\Support\Retention\PurgeHandlers`.
      *
-     * **Premier temps de L100-8** (D37 du 23/09) : les seuls périmètres sans
-     * jeu, qui ne dépendent d'aucun lot de 50 ni de 60. `StaleRoom` entre avec
-     * `ArchiveRoom` de 50 (L50-8), la branche sièges solo d'`OrphanPlayer`
-     * avec le démarrage solo de 60 (L60-15), chacun à sa place dans l'ordre
-     * du tableau.
+     * **Livrés en temps successifs** (D37 du 23/09) : d'abord les seuls
+     * périmètres sans jeu, qui ne dépendent d'aucun lot de 50 ni de 60 ;
+     * puis `StaleRoom`, filet de l'archivage, avec `ArchiveRoom` de 50
+     * (L50-8). La branche sièges solo d'`OrphanPlayer` entre avec le
+     * démarrage solo de 60 (L60-15), à sa place dans l'ordre du tableau.
      *
      * @return list<self>
      */
     public static function implemented(): array
     {
         return [
+            self::StaleRoom,
             self::FrameworkSessions,
             self::FrameworkFailedJobs,
             self::FrameworkResetTokens,

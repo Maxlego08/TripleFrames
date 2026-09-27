@@ -7,6 +7,7 @@ use App\Enums\PurgeScope;
 use App\Http\Middleware\EnsureProbeToken;
 use App\Http\Middleware\RobotsDirectives;
 use App\Jobs\Ops\WorkerHeartbeat;
+use App\Jobs\Room\ArchiveIdleRooms;
 use App\Models\Frame;
 use App\Models\Game;
 use App\Models\PurgeRun;
@@ -148,10 +149,20 @@ function probeEndpointPurgeHandler(PurgeScope $scope, int $eligible, bool $along
         : FakePurgeHandler::replace($scope, $eligible);
 }
 
-/** La purge vient de tourner : une exécution terminée par périmètre implémenté. */
+/**
+ * La purge et le balayage de 50 viennent de tourner : une exécution terminée
+ * par périmètre implémenté, et un passage `stale_lobby`.
+ */
 function probeEndpointFreshPurge(): void
 {
     app(RetentionPurger::class)->run();
+    probeEndpointSweep();
+}
+
+/** Un passage du balayage `room:archive-idle` de 50, comme le worker `default` l'exécute. */
+function probeEndpointSweep(): void
+{
+    app()->call([new ArchiveIdleRooms, 'handle']);
 }
 
 /** Une exécution de purge terminée, commencée il y a `$hoursAgo` heures. */
@@ -455,12 +466,15 @@ it('signale un périmètre qui n\'a rien supprimé en 48 h alors que des lignes 
     $sessions = probeEndpointPurgeHandler(PurgeScope::FrameworkSessions, eligible: 0);
     $failedJobs = probeEndpointPurgeHandler(PurgeScope::FrameworkFailedJobs, eligible: 0);
 
-    // Tous les autres périmètres implémentés ont tourné la nuit dernière.
+    // Tous les autres périmètres implémentés ont tourné la nuit dernière, et
+    // le balayage de 50 vient de passer.
     foreach (PurgeScope::implemented() as $scope) {
         if ($scope !== PurgeScope::FrameworkSessions) {
             probeEndpointPurgeRun($scope, hoursAgo: 10, rowsDeleted: 0);
         }
     }
+
+    probeEndpointPurgeRun(PurgeScope::StaleLobby, hoursAgo: 0.1, rowsDeleted: 0);
 
     // La dernière nuit n'a rien supprimé, et rien n'était éligible.
     $lastNight = probeEndpointPurgeRun(PurgeScope::FrameworkSessions, hoursAgo: 10, rowsDeleted: 0);
@@ -505,9 +519,10 @@ it('met la sonde purge en alerte quand un périmètre n\'a aucune exécution ter
     // Aucune exécution jamais écrite : l'absence de ligne est une panne.
     probeEndpointRequest(OpsProbe::Purge->value)->assertStatus(503);
 
-    // Tous les autres périmètres viennent de tourner ; `purge_run` n'a
-    // qu'une ligne en cours et une ligne plantée, qui n'en tiennent pas lieu.
-    foreach (PurgeScope::implemented() as $scope) {
+    // Tous les autres périmètres viennent de tourner, balayage de 50 compris ;
+    // `purge_run` n'a qu'une ligne en cours et une ligne plantée, qui n'en
+    // tiennent pas lieu.
+    foreach ([...PurgeScope::implemented(), PurgeScope::StaleLobby] as $scope) {
         if ($scope !== PurgeScope::PurgeRun) {
             probeEndpointPurgeRun($scope, hoursAgo: 1, rowsDeleted: 0);
         }
@@ -527,6 +542,54 @@ it('met la sonde purge en alerte quand un périmètre n\'a aucune exécution ter
     // Deux gestionnaires pour un même périmètre : en alerte.
     probeEndpointPurgeHandler(PurgeScope::PurgeRun, eligible: 0, alongside: true);
     probeEndpointRequest(OpsProbe::Purge->value)->assertStatus(503);
+});
+
+it('met la sonde purge en alerte quand le balayage stale_lobby n\'a aucun passage terminé dans la fenêtre', function (): void {
+    $staleHours = config('ops.purge.stale_hours');
+
+    // La purge vient de tourner, mais le balayage de 50 n'est jamais passé :
+    // l'absence de sa ligne est une panne, que la fraîcheur des autres
+    // périmètres ne masque pas.
+    app(RetentionPurger::class)->run();
+
+    expect(PurgeRun::query()->where('scope', PurgeScope::StaleLobby->value)->exists())->toBeFalse();
+    probeEndpointRequest(OpsProbe::Purge->value)->assertStatus(503);
+
+    // Un passage en cours, un passage interrompu (même après avoir archivé)
+    // ou un passage terminé hors de la fenêtre n'en tiennent pas lieu.
+    probeEndpointPurgeRun(PurgeScope::StaleLobby, hoursAgo: 0.1, rowsDeleted: 0, status: PurgeRunStatus::Running);
+    probeEndpointPurgeRun(PurgeScope::StaleLobby, hoursAgo: 0.2, rowsDeleted: 3, status: PurgeRunStatus::Failed);
+    probeEndpointPurgeRun(PurgeScope::StaleLobby, hoursAgo: $staleHours + 0.1, rowsDeleted: 5);
+    probeEndpointRequest(OpsProbe::Purge->value)->assertStatus(503);
+
+    // Un vrai passage du balayage, sans aucun salon à archiver : la ligne
+    // qu'il écrit à chaque passage suffit.
+    probeEndpointSweep();
+
+    $sweep = PurgeRun::query()->where('scope', PurgeScope::StaleLobby->value)->latest('id')->firstOrFail();
+
+    expect($sweep->status)->toBe(PurgeRunStatus::Completed)
+        ->and($sweep->rows_deleted)->toBe(0);
+    probeEndpointRequest(OpsProbe::Purge->value)->assertOk();
+
+    // Le passage sort de la fenêtre : alerte, alors que la purge, rejouée,
+    // est fraîche ; un nouveau passage la lève.
+    $this->travel($staleHours)->hours();
+    $this->travel(1)->seconds();
+    app(RetentionPurger::class)->run();
+    probeEndpointRequest(OpsProbe::Purge->value)->assertStatus(503);
+
+    probeEndpointSweep();
+    probeEndpointRequest(OpsProbe::Purge->value)->assertOk();
+
+    // Un gestionnaire étiqueté pour `stale_lobby` ferait un second exécutant
+    // du périmètre que 50 exécute seul : en alerte, sans que la sonde n° 4
+    // l'interroge jamais — elle ne vaut que pour les périmètres du moteur.
+    $tagged = probeEndpointPurgeHandler(PurgeScope::StaleLobby, eligible: 5, alongside: true);
+    probeEndpointRequest(OpsProbe::Purge->value)->assertStatus(503);
+
+    expect($tagged->askedAsOf)->toBeNull()
+        ->and($tagged->wasExecuted())->toBeFalse();
 });
 
 it('met la sonde purge en alerte pour un gestionnaire dont le périmètre n\'est jamais exécuté', function (): void {

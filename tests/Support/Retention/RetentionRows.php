@@ -3,8 +3,11 @@
 namespace Tests\Support\Retention;
 
 use App\Enums\PurgeScope;
+use App\Models\Player;
 use App\Models\PurgeRun;
+use App\Models\Room;
 use App\Support\Retention\RetentionWindows;
+use App\Support\Room\RoomCode;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
@@ -18,8 +21,9 @@ use LogicException;
  * documentation (RFC 5737).
  *
  * Chaque ligne porte un **marqueur** (`seed-` en tête de clé, file `seed`,
- * scope `stale_lobby` pour `purge_run`) : {@see self::seeded()} ne compte
- * qu'elles, jamais les lignes que la purge écrit elle-même.
+ * scope `stale_lobby` pour `purge_run`, code `SEED..` pour un salon) :
+ * {@see self::seeded()} ne compte qu'elles, jamais les lignes que la purge
+ * écrit elle-même.
  *
  * {@see self::seed()} connaît chaque périmètre implémenté et LÈVE pour un
  * périmètre inconnu : un périmètre ajouté à `PurgeScope::implemented()` sans
@@ -34,6 +38,15 @@ final class RetentionRows
 
     /** `purge_run` n'a pas de clé à marquer : le scope du balayage de 50, que la purge n'écrit jamais. */
     public const PurgeScope PURGE_RUN_MARKER = PurgeScope::StaleLobby;
+
+    /**
+     * Les quatre premiers signes du code d'un salon de test (`stale_room`),
+     * tous de `RoomCode::ALPHABET` ; les deux derniers le numérotent.
+     */
+    public const string ROOM_CODE_MARKER = 'SEED';
+
+    /** Rang du prochain salon marqué, pour des codes distincts dans un test. */
+    private static int $rooms = 0;
 
     /**
      * Deux lignes éligibles et deux lignes conservées pour `$scope`, à
@@ -66,6 +79,7 @@ final class RetentionRows
     public static function cutoff(PurgeScope $scope, CarbonImmutable $now): CarbonImmutable
     {
         return match ($scope) {
+            PurgeScope::StaleRoom => $now->subHours(RetentionWindows::STALE_ROOM_HOURS),
             PurgeScope::FrameworkSessions => $now->subMinutes(RetentionWindows::sessionLifetimeMinutes()),
             PurgeScope::FrameworkFailedJobs => $now->subDays(RetentionWindows::FAILED_JOBS_DAYS),
             PurgeScope::FrameworkResetTokens => $now->subMinutes(RetentionWindows::resetTokenMinutes()),
@@ -80,6 +94,7 @@ final class RetentionRows
         $key ??= self::MARKER.Str::lower(Str::random(12));
 
         match ($scope) {
+            PurgeScope::StaleRoom => self::room($at),
             PurgeScope::FrameworkSessions => self::session($key, $at),
             PurgeScope::FrameworkFailedJobs => self::failedJob($at),
             PurgeScope::FrameworkResetTokens => self::resetToken($key.'@example.com', $at),
@@ -88,10 +103,18 @@ final class RetentionRows
         };
     }
 
-    /** Le nombre de lignes marquées encore présentes dans la table de `$scope`. */
+    /**
+     * Le nombre de lignes marquées encore présentes dans le périmètre de
+     * `$scope` : dans sa table, ou, pour `stale_room`, qui archive sans jamais
+     * supprimer, encore non archivées.
+     */
     public static function seeded(PurgeScope $scope): int
     {
         return match ($scope) {
+            PurgeScope::StaleRoom => Room::query()
+                ->where('room_code', 'like', self::ROOM_CODE_MARKER.'%')
+                ->whereNull('archived_at')
+                ->count(),
             PurgeScope::FrameworkSessions => DB::table(Config::string('session.table'))
                 ->where('id', 'like', self::MARKER.'%')
                 ->count(),
@@ -106,6 +129,32 @@ final class RetentionRows
                 ->count(),
             default => throw new LogicException("Aucun jeu de lignes de test pour le périmètre {$scope->value}."),
         };
+    }
+
+    /**
+     * Un salon au lobby, jamais archivé, dernière activité à `$lastActivityAt`,
+     * au code marqué ; un siège y garde un pseudo et une empreinte de jeton,
+     * les identifiants d'invité que l'archivage efface.
+     */
+    public static function room(CarbonImmutable $lastActivityAt): Room
+    {
+        $rank = self::$rooms++ % (strlen(RoomCode::ALPHABET) ** 2);
+        $code = self::ROOM_CODE_MARKER
+            .RoomCode::ALPHABET[intdiv($rank, strlen(RoomCode::ALPHABET))]
+            .RoomCode::ALPHABET[$rank % strlen(RoomCode::ALPHABET)];
+
+        $room = Room::factory()->create([
+            'room_code' => $code,
+            'room_code_active' => $code,
+            'last_activity_at' => $lastActivityAt,
+        ]);
+
+        Player::factory()->for($room)->create([
+            'joined_at' => $lastActivityAt,
+            'last_seen_at' => $lastActivityAt,
+        ]);
+
+        return $room;
     }
 
     /** Une session, avec l'adresse IP et l'agent que la migration du starter y stocke. */

@@ -61,6 +61,8 @@ interface PurgeHandler
     /**
      * Efface UNE ligne, si elle est encore éligible à `$now`, et rend le
      * nombre de lignes traitées (0 si elle a disparu ou n'est plus éligible).
+     * Effacer s'entend au sens du périmètre : supprimer la ligne, ou, pour
+     * `stale_room`, archiver le salon par l'action de 50, jamais le supprimer.
      * Appelé par le moteur dans une transaction ouverte sur {@see connection()}.
      */
     public function purge(PurgeRow $row, CarbonImmutable $now): int;

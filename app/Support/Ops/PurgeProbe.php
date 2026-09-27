@@ -37,15 +37,23 @@ use Illuminate\Support\Facades\Config;
  *
  * Périmètres surveillés : ceux de `PurgeScope::implemented()` ET ceux des
  * gestionnaires étiquetés {@see PurgeHandler} ({@see PurgeHandlers}). Un
- * périmètre sans gestionnaire, ou servi par deux, est en alerte.
+ * périmètre sans gestionnaire, ou servi par deux, est en alerte. S'y ajoute
+ * `stale_lobby`, pour le seul point 1 (paragraphe `stale_lobby` ci-dessous).
  *
  * **Suspension** (`purge:suspend`, {@see PurgeSuspension}) : tant que le
  * drapeau existe, la sonde est en alerte — l'interrupteur d'incident
  * déclenche l'alerte au lieu de la masquer (spec 100 § 14).
  *
- * **Pas encore de vérification `stale_lobby`** (D37 du 23/09) : sa ligne est
- * écrite par le balayage de 50, et la vérification est branchée avec L50-8 —
- * elle serait sinon en alerte permanente.
+ * **`stale_lobby`** (spec 100 § 15, 50 § 16.2) : ce périmètre n'est jamais
+ * exécuté par le moteur, mais par le balayage `room:archive-idle` de 50, qui
+ * écrit sa ligne `purge_run` à chaque passage, même à zéro salon archivé. La
+ * sonde n'en lit que la **fraîcheur** — une ligne `completed` commencée depuis
+ * moins de `ops.purge.stale_hours` heures —, jamais la sonde n° 4, réservée
+ * aux périmètres de `PurgeScope::implemented()` : un balayage qui tourne sans
+ * archiver ce qu'il devrait se voit par la sonde n° 2 d'`integrity`. Un
+ * gestionnaire étiqueté pour `stale_lobby` est en alerte : il ferait un second
+ * exécutant d'un périmètre que 50 exécute seul, et le moteur ne l'appellerait
+ * jamais.
  */
 final readonly class PurgeProbe
 {
@@ -76,6 +84,18 @@ final readonly class PurgeProbe
             }
 
             $handlers[$scope] = $served[0];
+        }
+
+        $swept = PurgeScope::StaleLobby->value;
+
+        if (isset($handlers[$swept])) {
+            $failures[] = "{$swept} : gestionnaire déclaré pour un périmètre confié au balayage de 50";
+
+            unset($handlers[$swept]);
+        }
+
+        if (! $this->completedRuns($swept, $since)->exists()) {
+            $failures[] = "{$swept} : aucun passage terminé du balayage depuis {$staleHours} h";
         }
 
         $watched = array_unique([

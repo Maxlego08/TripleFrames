@@ -7,7 +7,6 @@ use Carbon\CarbonImmutable;
 use Illuminate\Database\ConnectionInterface;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
-use UnexpectedValueException;
 
 /**
  * Un périmètre qui **supprime** les lignes d'une table dont la colonne pilote
@@ -76,7 +75,7 @@ abstract class TablePurgeHandler implements PurgeHandler
 
         foreach ($query->get() as $row) {
             $values = (array) $row;
-            $rows[] = new PurgeRow(self::scalar($values[$pilot] ?? null), self::scalar($values[$key] ?? null));
+            $rows[] = PurgeRow::fromValues($values[$pilot] ?? null, $values[$key] ?? null);
         }
 
         return $rows;
@@ -95,14 +94,5 @@ abstract class TablePurgeHandler implements PurgeHandler
         return $this->connection()
             ->table($this->table())
             ->where($this->pilotColumn(), '<', $this->cutoff($asOf));
-    }
-
-    private static function scalar(mixed $value): int|string
-    {
-        if (is_int($value) || is_string($value)) {
-            return $value;
-        }
-
-        throw new UnexpectedValueException('Colonne pilote ou clé de purge nulle ou non scalaire.');
     }
 }

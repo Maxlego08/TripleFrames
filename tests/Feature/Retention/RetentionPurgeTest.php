@@ -2,9 +2,15 @@
 
 use App\Enums\PurgeRunStatus;
 use App\Enums\PurgeScope;
+use App\Enums\RoomStatus;
 use App\Jobs\Retention\RunRetentionPurge;
+use App\Models\Game;
+use App\Models\GamePlayer;
+use App\Models\Player;
 use App\Models\PurgeRun;
+use App\Models\Room;
 use App\Support\Ops\Heartbeat;
+use App\Support\Realtime\ChannelNames;
 use App\Support\Retention\PurgeHandlers;
 use App\Support\Retention\RetentionPurger;
 use App\Support\Retention\RetentionWindows;
@@ -20,6 +26,7 @@ use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Queue;
+use Tests\Support\Realtime\RecordingBroadcaster;
 use Tests\Support\Retention\FailingPurgeHandler;
 use Tests\Support\Retention\FakePurgeHandler;
 use Tests\Support\Retention\RetentionRows;
@@ -29,10 +36,11 @@ use Tests\Support\Retention\RetentionRows;
 | Moteur de purge de rétention — spec 100 § 14, 10 § 11
 |--------------------------------------------------------------------------
 |
-| Premier temps de L100-8 (D37 du 23/09) : les périmètres sans jeu
+| Livré en temps successifs (D37 du 23/09) : les périmètres sans jeu
 | (`framework_sessions`, `framework_failed_jobs`, `framework_reset_tokens`,
-| `purge_run`). Les tests propres à `stale_room` et à la branche solo
-| d'`orphan_player` s'écrivent avec leur périmètre (L50-8, L60-15).
+| `purge_run`), puis `stale_room`, qui archive par l'action de 50 (L50-8).
+| Le test propre à la branche solo d'`orphan_player` s'écrit avec son
+| périmètre (L60-15).
 |
 | Horloge figée à l'heure de la purge quotidienne ; aucune donnée réelle
 | ({@see RetentionRows}).
@@ -57,6 +65,67 @@ function retentionPurgeRun(): array
     }
 
     return $runs;
+}
+
+/**
+ * Un salon non archivé, dernière activité à `$lastActivityAt`, lancé une fois
+ * ou jamais.
+ */
+function retentionPurgeRoom(CarbonImmutable $lastActivityAt, bool $launched = false): Room
+{
+    return Room::factory()->create([
+        'launched_at' => $launched ? $lastActivityAt->subHour() : null,
+        'last_activity_at' => $lastActivityAt,
+    ]);
+}
+
+/**
+ * L'hôte et un invité du salon, pseudos et empreintes de jeton posés.
+ *
+ * @return list<Player>
+ */
+function retentionPurgeSeats(Room $room): array
+{
+    $seats = array_values(Player::factory()->for($room)->count(2)->create()->all());
+
+    Room::query()->whereKey($room->id)->update(['host_player_id' => $seats[0]->id]);
+    $room->refresh();
+
+    return $seats;
+}
+
+/**
+ * Les identifiants d'invité d'un siège, bruts.
+ *
+ * @return array{nickname: mixed, nickname_normalized: mixed, player_token_hash: mixed}
+ */
+function retentionPurgeIdentity(Player $seat): array
+{
+    $row = DB::table('player')->where('id', $seat->id)->first(['nickname', 'nickname_normalized', 'player_token_hash']);
+
+    expect($row)->not->toBeNull();
+
+    return [
+        'nickname' => $row?->nickname,
+        'nickname_normalized' => $row?->nickname_normalized,
+        'player_token_hash' => $row?->player_token_hash,
+    ];
+}
+
+/**
+ * Le nombre de lignes des tables qu'un archivage touche sans jamais y
+ * supprimer.
+ *
+ * @return array<string, int>
+ */
+function retentionPurgeRoomCounts(): array
+{
+    return [
+        'room' => DB::table('room')->count(),
+        'player' => DB::table('player')->count(),
+        'game' => DB::table('game')->count(),
+        'game_player' => DB::table('game_player')->count(),
+    ];
 }
 
 /**
@@ -356,6 +425,148 @@ it('n\'exécute jamais stale_lobby, confié au balayage de 50', function (): voi
     expect($lobby->wasExecuted())->toBeFalse()
         ->and(PurgeRun::query()->where('scope', PurgeScope::StaleLobby->value)->pluck('id')->all())->toBe([$sweep->id])
         ->and(PurgeRun::query()->count())->toBe(1 + 2 * count(PurgeScope::implemented()));
+});
+
+it('archive un salon oublié depuis 48 h par l\'action d\'archivage de 50, jamais par suppression', function (): void {
+    // Un salon par lot : le curseur doit dépasser les salons que l'action
+    // refuse, sans jamais les resélectionner.
+    config(['ops.purge.batch_size' => 1]);
+
+    $recorder = RecordingBroadcaster::install();
+    $now = CarbonImmutable::now();
+    $cutoff = RetentionRows::cutoff(PurgeScope::StaleRoom, $now);
+
+    // Le balayage de 50 n'a jamais tourné. Un salon lancé une fois, revenu au
+    // lobby, oublié une seconde au-delà du filet : hôte, invité et une partie
+    // figée dont les participations gardent leurs pseudos.
+    $forgotten = retentionPurgeRoom($cutoff->subSecond(), launched: true);
+    $forgottenSeats = retentionPurgeSeats($forgotten);
+    $game = Game::factory()->forRoom($forgotten)->completed()->create(['started_at' => $cutoff->subHours(3)]);
+
+    foreach ($forgottenSeats as $seat) {
+        GamePlayer::factory()->for($game)->frozenFrom($seat)->create();
+    }
+
+    // Un lobby jamais lancé, oublié depuis des jours : le filet le prend aussi.
+    $lobby = retentionPurgeRoom($cutoff->subDays(3));
+    $lobbySeats = retentionPurgeSeats($lobby);
+
+    // Conservés : à la borne exacte (stricte), récent, déjà archivé.
+    $edge = retentionPurgeRoom($cutoff);
+    $edgeSeats = retentionPurgeSeats($edge);
+    $recent = retentionPurgeRoom($now->subHour());
+    $archivedAt = $now->subDays(9);
+    $archived = Room::factory()->archived()->create(['last_activity_at' => $now->subDays(10), 'archived_at' => $archivedAt]);
+
+    // Refusés par l'action, qui relit tout sous le verrou du salon : une
+    // dernière partie qui n'est pas figée (cas défensif, journalisé), et un
+    // salon qui reprend vie entre la sélection du lot et le verrou.
+    $unfinished = retentionPurgeRoom($cutoff->subHour(), launched: true);
+    Game::factory()->forRoom($unfinished)->create(['started_at' => $cutoff->subHours(2), 'ended_at' => null]);
+    $revived = retentionPurgeRoom($cutoff->subHours(2));
+    $revivedSeats = retentionPurgeSeats($revived);
+
+    $handler = FakePurgeHandler::declared(PurgeScope::StaleRoom);
+
+    expect($handler->eligibleCount())->toBe(4);
+
+    $reviving = true;
+    DB::beforeExecuting(static function (string $query, array $bindings) use (&$reviving, $revived, $now): void {
+        if ($reviving
+            && preg_match('/^select \* from ["`]room["`] where ["`]room["`]\.["`]id["`] = \? limit 1/i', $query) === 1
+            && $bindings === [$revived->id]) {
+            $reviving = false;
+            DB::table('room')->where('id', $revived->id)->update(['last_activity_at' => $now]);
+        }
+    });
+
+    $counts = retentionPurgeRoomCounts();
+    $deletes = new ArrayObject;
+    DB::listen(static function (QueryExecuted $query) use ($deletes): void {
+        if (preg_match('/^delete from ["`](room|player|game|game_player)["`]/i', $query->sql, $match) === 1) {
+            $deletes[] = $match[1];
+        }
+    });
+    Log::spy();
+
+    $run = retentionPurgeRun()[PurgeScope::StaleRoom->value];
+
+    // Le périmètre a tourné jusqu'au bout, un lot par salon éligible : deux
+    // salons archivés, et les refus de l'action ne sont pas des échecs.
+    expect($reviving)->toBeFalse()
+        ->and($run->status)->toBe(PurgeRunStatus::Completed)
+        ->and($run->rows_deleted)->toBe(2)
+        ->and($run->batches)->toBe(4)
+        ->and($run->error)->toBeNull();
+
+    // Archivés par l'action de 50 : code actif libéré, hôte vidé, pseudos,
+    // formes normalisées, empreintes de jeton et pseudos figés effacés.
+    foreach ([$forgotten, $lobby] as $room) {
+        $room->refresh();
+
+        expect($room->status)->toBe(RoomStatus::Archived)
+            ->and($room->archived_at?->equalTo($now))->toBeTrue()
+            ->and($room->room_code_active)->toBeNull()
+            ->and($room->host_player_id)->toBeNull();
+    }
+
+    foreach ([...$forgottenSeats, ...$lobbySeats] as $seat) {
+        expect(retentionPurgeIdentity($seat))->toBe(['nickname' => null, 'nickname_normalized' => null, 'player_token_hash' => null]);
+    }
+
+    expect(GamePlayer::query()->where('game_id', $game->id)->count())->toBe(2)
+        ->and(GamePlayer::query()->where('game_id', $game->id)->whereNotNull('display_nickname')->exists())->toBeFalse();
+
+    // Après validation, `room.archived` pour chacun d'eux, et pour eux seuls.
+    expect(array_column($recorder->sent, 'event'))->toBe(['room.archived', 'room.archived'])
+        ->and(array_column($recorder->sent, 'channels'))->toEqualCanonicalizing([
+            ['presence-'.ChannelNames::room($forgotten)],
+            ['presence-'.ChannelNames::room($lobby)],
+        ]);
+
+    // Les autres, intacts ; le salon déjà archivé ne l'est pas une seconde fois.
+    foreach ([$edge, $recent, $unfinished, $revived] as $room) {
+        $room->refresh();
+
+        expect($room->archived_at)->toBeNull()
+            ->and($room->status)->not->toBe(RoomStatus::Archived)
+            ->and($room->room_code_active)->toBe($room->room_code);
+    }
+
+    foreach ([...$edgeSeats, ...$revivedSeats] as $seat) {
+        expect(retentionPurgeIdentity($seat)['player_token_hash'])->not->toBeNull();
+    }
+
+    expect($archived->refresh()->archived_at?->equalTo($archivedAt))->toBeTrue();
+
+    Log::shouldHaveReceived('warning')
+        ->withArgs(static fn (string $message, array $context = []): bool => ($context['room_id'] ?? null) === $unfinished->id)
+        ->once();
+
+    // Jamais par suppression : aucune requête de suppression sur ces tables,
+    // aucune ligne en moins.
+    expect($deletes->getArrayCopy())->toBe([])
+        ->and(retentionPurgeRoomCounts())->toBe($counts);
+
+    // Le refus défensif laisse le salon éligible, ce que la sonde voit ; celui
+    // qui a repris vie ne l'est plus.
+    expect($handler->eligibleCount())->toBe(1);
+
+    // Une seconde plus tard, le salon resté à la borne est échu à son tour ;
+    // ceux déjà archivés ne sont pas repris.
+    $this->travel(1)->seconds();
+    $recorder->sent = [];
+
+    $next = retentionPurgeRun()[PurgeScope::StaleRoom->value];
+
+    expect($next->rows_deleted)->toBe(1)
+        ->and($next->batches)->toBe(2)
+        ->and($edge->refresh()->status)->toBe(RoomStatus::Archived)
+        ->and($forgotten->refresh()->archived_at?->equalTo($now))->toBeTrue()
+        ->and(array_column($recorder->sent, 'channels'))->toBe([['presence-'.ChannelNames::room($edge)]])
+        ->and($recent->refresh()->archived_at)->toBeNull()
+        ->and($deletes->getArrayCopy())->toBe([])
+        ->and(retentionPurgeRoomCounts())->toBe($counts);
 });
 
 it('supprime les sessions au-delà de leur durée de vie sans dépendre du tirage', function (): void {

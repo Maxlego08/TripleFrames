@@ -11,9 +11,10 @@ use Illuminate\Support\Facades\Config;
  * publiquement, que 90 publiera depuis ici sans les recopier.
  *
  * Quand une durée est déjà déclarée ailleurs — par le framework
- * (`session.lifetime`, expiration du courtier de mots de passe de Fortify) ou,
- * plus tard, par 50 (`App\Support\Room\RoomExpiry`) —, elle est LUE à sa
- * source, jamais doublée d'une seconde constante.
+ * (`session.lifetime`, expiration du courtier de mots de passe de Fortify) ou
+ * par 50 (`App\Support\Room\RoomExpiry`, échéances du lobby et du salon) —,
+ * elle est LUE à sa source, jamais doublée d'une seconde constante. Le filet
+ * `stale_room` n'a pas d'autre source : sa durée vit ici.
  */
 final class RetentionWindows
 {
@@ -28,8 +29,8 @@ final class RetentionWindows
 
     /**
      * Filet `stale_room` : un salon non archivé 48 h après sa dernière
-     * activité. Son gestionnaire arrive avec l'action d'archivage de 50
-     * (L50-8) ; la sonde n° 2 de 10 § 11.3 la lit déjà ici.
+     * activité, archivé de force par l'action d'archivage de 50
+     * (`StaleRoomHandler`). La sonde n° 2 de 10 § 11.3 lit la même durée.
      */
     public const int STALE_ROOM_HOURS = 48;
 
