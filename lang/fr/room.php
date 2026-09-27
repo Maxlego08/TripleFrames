@@ -74,6 +74,67 @@ return [
         'launch_failed' => 'Le lancement a échoué. Réessayez dans un instant.',
     ],
 
+    /*
+    | Page du salon (spec 50 § 8.1 et § 20.3, lot L50-4) : code et lien de
+    | partage, sièges, lancement, annonces du lobby. Les gestes d’hôte
+    | (retirer, nommer hôte, quitter) arrivent avec le lot L50-6. Les nombres
+    | passent en placeholders, formatés par le client.
+    */
+
+    'lobby' => [
+        'title' => 'Salon',
+        'code_label' => 'Code',
+        'copy_link' => 'Copier le lien',
+        'link_copied' => 'Lien copié',
+        'share_hint' => 'Partagez ce lien ou ce code avec vos amis.',
+        'share' => 'Partager',
+        'players' => 'Joueurs (:count sur :capacity)',
+        'host_badge' => 'Hôte',
+        'you' => 'Vous',
+        'seat' => [
+            'disconnected' => 'Déconnecté',
+            'left' => 'Parti',
+            'kicked' => 'Retiré',
+        ],
+        'host_changed' => ':nickname est maintenant l’hôte.',
+        'you_are_host' => 'Vous êtes l’hôte : vous réglez et lancez la partie.',
+        'read_only' => 'Seul l’hôte peut modifier les réglages.',
+        'settings_updated' => 'L’hôte a modifié les réglages.',
+        'waiting_for_host' => 'En attente du lancement par l’hôte.',
+        'waiting_next_game' => 'Une partie est en cours : vous jouerez la prochaine.',
+        'launch' => 'Lancer la partie',
+        'launching' => 'Lancement…',
+        'need_players' => 'Il faut au moins :min joueurs connectés.',
+    ],
+
+    /*
+    | Vivier au lobby (spec 50 § 9.2 et § 20.3) : compteur et blocage, rendus
+    | pour tous à partir du rapport en données ; une cause par cas de
+    | `PoolFault`, un remède par cas de `PoolRemedyKind`, construits côté
+    | client par une table. `:value` n’existe que pour les deux remèdes qui
+    | proposent une valeur.
+    */
+
+    'pool' => [
+        'counter' => 'Films jouables : :playable pour :required manches.',
+        'blocked' => 'Lancement impossible : pas assez de films jouables avec ces réglages.',
+        'no_remedy' => 'Le catalogue ne compte pas encore assez de films pour une partie.',
+        'cause' => [
+            'themeKeys' => 'Les thèmes choisis restreignent trop le choix.',
+            'framesPerRound' => 'Trop peu de films ont assez d’images pour ce nombre d’images par manche.',
+            'roundsCount' => 'Il y a plus de manches que de films jouables.',
+            'noRepeatMovies' => 'Ce salon a déjà joué la plupart des films disponibles.',
+        ],
+        'themes_pruned' => 'Un thème choisi n’est plus proposé sur le site : il ne filtre plus rien.',
+        'remedy' => [
+            'open_new_room' => 'Créer un nouveau salon (:count films jouables avec ces réglages)',
+            'disable_no_repeat' => 'Autoriser les films déjà joués (:count films jouables)',
+            'clear_themes' => 'Retirer les thèmes (:count films jouables)',
+            'lower_frames_per_round' => 'Passer à :value images par manche (:count films jouables)',
+            'reduce_rounds_count' => 'Jouer :value manches (:count films jouables)',
+        ],
+    ],
+
     'presets' => [
         'classic' => [
             'label' => 'Classique',

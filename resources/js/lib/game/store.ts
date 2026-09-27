@@ -99,6 +99,7 @@ export type ResyncReason =
     | 'watchdog'
     | 'choices_missing'
     | 'launched'
+    | 'replayed'
     | 'superseded'
     | 'reconnected'
     | 'visible'

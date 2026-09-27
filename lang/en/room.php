@@ -11,6 +11,7 @@ return [
     | du code livré : les écrans de création et d’entrée (L50-3b), les refus
     | de geste de salon — {@see \App\Enums\RoomRefusal} construit
     | `room.refusal.<valeur>` — et l’échec technique du lancement (L50-7a),
+    | la page du salon et son vivier (L50-4 : `room.lobby.*`, `room.pool.*`),
     | et les huit lignes des presets — {@see \App\Enums\SettingPresetKey} construit
     | `room.presets.<clé>.{label,description}` — : la spec interdit d’inventer
     | des clés pour des écrans absents. `setting_preset` n’a **aucune colonne
@@ -83,6 +84,67 @@ return [
 
     'errors' => [
         'launch_failed' => 'Starting the game failed. Please try again in a moment.',
+    ],
+
+    /*
+    | Page du salon (spec 50 § 8.1 et § 20.3, lot L50-4) : code et lien de
+    | partage, sièges, lancement, annonces du lobby. Les gestes d’hôte
+    | (retirer, nommer hôte, quitter) arrivent avec le lot L50-6. Les nombres
+    | passent en placeholders, formatés par le client.
+    */
+
+    'lobby' => [
+        'title' => 'Room',
+        'code_label' => 'Code',
+        'copy_link' => 'Copy link',
+        'link_copied' => 'Link copied',
+        'share_hint' => 'Share this link or code with your friends.',
+        'share' => 'Share',
+        'players' => 'Players (:count of :capacity)',
+        'host_badge' => 'Host',
+        'you' => 'You',
+        'seat' => [
+            'disconnected' => 'Disconnected',
+            'left' => 'Left',
+            'kicked' => 'Removed',
+        ],
+        'host_changed' => ':nickname is now the host.',
+        'you_are_host' => 'You are the host: you set up and start the game.',
+        'read_only' => 'Only the host can change the settings.',
+        'settings_updated' => 'The host changed the settings.',
+        'waiting_for_host' => 'Waiting for the host to start.',
+        'waiting_next_game' => 'A game is in progress: you will play the next one.',
+        'launch' => 'Start game',
+        'launching' => 'Starting…',
+        'need_players' => 'At least :min connected players are needed.',
+    ],
+
+    /*
+    | Vivier au lobby (spec 50 § 9.2 et § 20.3) : compteur et blocage, rendus
+    | pour tous à partir du rapport en données ; une cause par cas de
+    | `PoolFault`, un remède par cas de `PoolRemedyKind`, construits côté
+    | client par une table. `:value` n’existe que pour les deux remèdes qui
+    | proposent une valeur.
+    */
+
+    'pool' => [
+        'counter' => 'Playable movies: :playable for :required rounds.',
+        'blocked' => 'Cannot start: not enough playable movies with these settings.',
+        'no_remedy' => 'The catalogue does not hold enough movies for a game yet.',
+        'cause' => [
+            'themeKeys' => 'The chosen themes narrow the choice too much.',
+            'framesPerRound' => 'Too few movies have enough frames for this number of frames per round.',
+            'roundsCount' => 'There are more rounds than playable movies.',
+            'noRepeatMovies' => 'This room has already played most of the available movies.',
+        ],
+        'themes_pruned' => 'A chosen theme is no longer offered: it no longer filters anything.',
+        'remedy' => [
+            'open_new_room' => 'Open a new room (:count playable movies with these settings)',
+            'disable_no_repeat' => 'Allow movies already played (:count playable movies)',
+            'clear_themes' => 'Clear the themes (:count playable movies)',
+            'lower_frames_per_round' => 'Switch to :value frames per round (:count playable movies)',
+            'reduce_rounds_count' => 'Play :value rounds (:count playable movies)',
+        ],
     ],
 
     'presets' => [

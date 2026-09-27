@@ -17,9 +17,9 @@ import {
  * retirer) la classe `dark` sur `<html>`, il n'écrit pas une seule couleur.
  *
  * Le forçage se fait en trois moitiés. La moitié serveur,
- * `App\Http\Middleware\ForceGameAppearance` (alias `game.appearance`, qui
- * sera posé par L50-4, L50-8 et L60-16 sur le groupe de `routes/game.php`
- * qui rendra les pages `game/*`), partage
+ * `App\Http\Middleware\ForceGameAppearance` (alias `game.appearance`, posé
+ * sur les routes de `routes/game.php` qui rendent les pages `game/*` : la
+ * page du salon `room.show`, puis la page solo), partage
  * `appearance = 'dark'` ET le drapeau `appearanceForced`, dont Blade tire
  * l'attribut `data-appearance-forced` sur `<html>`. C'est cet attribut, et non
  * ce hook, qui supprime le clignotement au premier chargement :

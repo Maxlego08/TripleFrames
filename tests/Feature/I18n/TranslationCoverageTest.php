@@ -9,6 +9,8 @@ use App\Enums\FrameProcessingFailure;
 use App\Enums\JoinRefusal;
 use App\Enums\LegalPage;
 use App\Enums\Locale;
+use App\Enums\PoolFault;
+use App\Enums\PoolRemedyKind;
 use App\Enums\RoomRefusal;
 use App\Enums\SettingPresetKey;
 use App\Http\Controllers\Room\LaunchController;
@@ -460,6 +462,17 @@ it('carries every key built by an enumerable key constructor', function () {
             RoomRefusal::cases(),
         ),
         LaunchController::KEY_LAUNCH_FAILED,
+        // Le vivier au lobby (50 § 9.2, L50-4) : le réglage fautif nommé, une
+        // clé par cas de `PoolFault`, et le geste proposé, une clé par cas de
+        // `PoolRemedyKind` — construites côté client par une table.
+        ...array_map(
+            static fn (PoolFault $fault): string => "room.pool.cause.{$fault->value}",
+            PoolFault::cases(),
+        ),
+        ...array_map(
+            static fn (PoolRemedyKind $kind): string => "room.pool.remedy.{$kind->value}",
+            PoolRemedyKind::cases(),
+        ),
     ];
 
     $missing = array_values(array_filter(

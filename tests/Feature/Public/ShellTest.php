@@ -4,13 +4,17 @@ use App\Enums\Locale;
 use App\Http\Middleware\ForceGameAppearance;
 use App\Models\User;
 use App\Support\I18n\TranslationDomains;
+use App\Support\Identity\PlayerToken;
 use Illuminate\Routing\Route as RoutingRoute;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\View;
 use Illuminate\Testing\TestResponse;
 use Inertia\Inertia;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\Support\I18n\FrontSource;
+use Tests\Support\Room\LobbyWrites;
 
 /*
 |--------------------------------------------------------------------------
@@ -558,6 +562,58 @@ it("ne marque jamais une page publique comme d'apparence forcée", function () {
     }
 
     expect($callers)->toBe(["layouts/game/game-layout.tsx : 'dark'"]);
+});
+
+it("rend le lobby en sombre quelle que soit l'apparence du visiteur", function () {
+    // Écrit par L50-4 (dépendance inversée, spec 90 § L90-7) : `game/lobby`
+    // est la première page `game/*` servie par une vraie route, `room.show`.
+    // Le forçage a trois moitiés (spec 90 § 2.2) : le serveur force le
+    // document quel que soit le cookie `appearance`, l'attribut
+    // `data-appearance-forced` empêche `initializeTheme()` de reposer la
+    // préférence stockée, et `GameLayout`, coquille de toute page `game/*`,
+    // tient la moitié cliente pour une navigation Inertia.
+    $this->withoutVite();
+
+    $token = PlayerToken::mint(Locale::French);
+    [$room] = LobbyWrites::hostedRoom($token);
+    LobbyWrites::actAs($this, $token);
+
+    expect(Route::getRoutes()->getByName('room.show')?->gatherMiddleware())->toContain('game.appearance');
+
+    // Sans cookie d'abord, puis chaque préférence : le partage de vue survit
+    // d'une requête à l'autre dans l'application du test, il est donc remis à
+    // zéro avant chacune — chaque réponse doit forcer d'elle-même.
+    foreach ([null, 'light', 'system', 'dark'] as $appearance) {
+        app()->forgetInstance(TranslationDomains::class);
+        Cache::flush();
+        View::share('appearanceForced', false);
+        View::share('appearance', null);
+
+        if ($appearance !== null) {
+            $this->withUnencryptedCookie('appearance', $appearance);
+        }
+
+        $label = $appearance ?? 'sans cookie';
+        $response = $this->get(route('room.show', $room))->assertOk();
+
+        $response->assertInertia(fn (Assert $page) => $page->component('game/lobby')->etc());
+
+        $tag = shellHtmlTag($response);
+
+        expect(str_contains($tag, 'data-appearance-forced="dark"'))->toBeTrue("{$label} : non forcée")
+            ->and(in_array('dark', shellHtmlClasses($tag), true))->toBeTrue("{$label} : classe dark absente");
+    }
+
+    // Moitié cliente : la page prend `GameLayout`, qui force le sombre.
+    $game = array_values(array_filter(
+        shellLayoutSwitch(),
+        static fn (array $group): bool => in_array("name.startsWith('game/')", $group['conditions'], true),
+    ));
+
+    expect($game)->toHaveCount(1)
+        ->and($game[0]['layout'])->toBe('GameLayout')
+        ->and(is_file(resource_path('js/pages/game/lobby.tsx')))->toBeTrue()
+        ->and(substr_count(shellSource('layouts/game/game-layout.tsx'), "useForcedAppearance('dark')"))->toBe(1);
 });
 
 it('garde le rendu côté serveur désactivé', function () {
