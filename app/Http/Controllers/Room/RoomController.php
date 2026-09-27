@@ -71,7 +71,10 @@ class RoomController extends Controller
     /**
      * La page du salon rend, dans cet ordre (§ 7.2) :
      *
-     * 1. un salon archivé → `game/room-expired`, statut **410** (§ 16.3) ;
+     * 1. un salon archivé → `game/room-expired`, statut **410**, sans aucune
+     *    prop : aucune autre information sur le salon (§ 16.3). Le lien d'un
+     *    salon archivé n'est jamais une 404 ; après recyclage de son code, il
+     *    mène au salon actif qui le porte (§ 6.3) ;
      * 2. aucun siège non expulsé pour ce jeton (`seatIn()`) → 303 vers la
      *    page d'entrée publique `room.entry`, hors de `game.appearance` ;
      * 3. sinon : la réparation d'hôte (§ 11.1 : une lecture qui ne trouve pas

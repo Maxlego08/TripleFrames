@@ -13,6 +13,7 @@ return [
     | `room.refusal.<valeur>` — et l’échec technique du lancement (L50-7a),
     | la page du salon et son vivier (L50-4 : `room.lobby.*`, `room.pool.*`),
     | les gestes d’hôte et le départ (L50-6 : `room.lobby.{kick,transfer,leave}*`),
+    | la page du salon expiré (L50-8 : `room.expired.*`),
     | et les huit lignes des presets — {@see \App\Enums\SettingPresetKey} construit
     | `room.presets.<clé>.{label,description}` — : la spec interdit d’inventer
     | des clés pour des écrans absents. `setting_preset` n’a **aucune colonne
@@ -155,6 +156,19 @@ return [
             'lower_frames_per_round' => 'Switch to :value frames per round (:count playable movies)',
             'reduce_rounds_count' => 'Play :value rounds (:count playable movies)',
         ],
+    ],
+
+    /*
+    | Salon expiré (spec 50 § 16.3, lot L50-8) : la page `game/room-expired`,
+    | rendue en 410 par le lien d’un salon archivé. Aucune autre information
+    | sur le salon ; deux sorties, un nouveau salon et l’accueil.
+    */
+
+    'expired' => [
+        'title' => 'Room expired',
+        'description' => 'This room was closed after a period of inactivity. Create a new one to play again.',
+        'create' => 'Create a room',
+        'home' => 'Home',
     ],
 
     'presets' => [

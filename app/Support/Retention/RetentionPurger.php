@@ -48,16 +48,13 @@ use Throwable;
  * **Aucune donnée personnelle dans `purge_run` ni au journal** : une
  * exception de requête porte dans son message la clé de la ligne (une
  * adresse électronique pour un jeton de réinitialisation, l'identifiant d'une
- * session). Seuls sa classe et son code sont consignés.
+ * session). Seuls sa classe et son code sont consignés
+ * ({@see PurgeRun::describeFailure()}), et les largeurs de `error` et `batches`
+ * se lisent sur le modèle : le balayage `stale_lobby` de `50` écrit le même
+ * journal, avec les mêmes règles.
  */
 final readonly class RetentionPurger
 {
-    /** Largeur de `purge_run.batches` (`unsignedSmallInteger`). */
-    private const int MAX_RECORDED_BATCHES = 65_535;
-
-    /** Largeur de `purge_run.error` (`string(500)`). */
-    private const int ERROR_LENGTH = 500;
-
     public function __construct(
         private PurgeHandlers $handlers,
         private PurgeSuspension $suspension,
@@ -119,7 +116,7 @@ final readonly class RetentionPurger
 
         $handler = $handlers[0];
         $batchSize = max(1, Config::integer('ops.purge.batch_size'));
-        $maxBatches = min(self::MAX_RECORDED_BATCHES, max(1, Config::integer('ops.purge.max_batches')));
+        $maxBatches = min(PurgeRun::MAX_BATCHES, max(1, Config::integer('ops.purge.max_batches')));
 
         $deleted = 0;
         $batches = 0;
@@ -163,7 +160,7 @@ final readonly class RetentionPurger
         } catch (Throwable $failure) {
             Log::error('Purge de rétention : périmètre interrompu.', [
                 'scope' => $scope->value,
-                ...self::describe($failure),
+                ...PurgeRun::describeFailure($failure),
             ]);
 
             return $this->close(
@@ -172,7 +169,7 @@ final readonly class RetentionPurger
                 PurgeRunStatus::Failed,
                 $deleted,
                 $batches,
-                'Périmètre interrompu : '.self::summary($failure),
+                'Périmètre interrompu : '.PurgeRun::summarizeFailure($failure),
             );
         }
 
@@ -180,7 +177,7 @@ final readonly class RetentionPurger
             Log::warning('Purge de rétention : lignes en échec, reprises à la ligne suivante.', [
                 'scope' => $scope->value,
                 'failures' => $rowFailures,
-                ...self::describe($lastRowFailure),
+                ...PurgeRun::describeFailure($lastRowFailure),
             ]);
         }
 
@@ -190,7 +187,7 @@ final readonly class RetentionPurger
             PurgeRunStatus::Completed,
             $deleted,
             $batches,
-            $lastRowFailure === null ? null : "{$rowFailures} ligne(s) en échec ; dernière : ".self::summary($lastRowFailure),
+            $lastRowFailure === null ? null : "{$rowFailures} ligne(s) en échec ; dernière : ".PurgeRun::summarizeFailure($lastRowFailure),
         );
     }
 
@@ -208,31 +205,9 @@ final readonly class RetentionPurger
             'duration_ms' => $completed ? intdiv(hrtime(true) - $clock, 1_000_000) : null,
             'rows_deleted' => $deleted,
             'batches' => $batches,
-            'error' => $error === null ? null : mb_substr($error, 0, self::ERROR_LENGTH),
+            'error' => $error === null ? null : mb_substr($error, 0, PurgeRun::ERROR_LENGTH),
         ])->save();
 
         return $run;
-    }
-
-    /**
-     * Ce qui se consigne d'une exception : sa classe et son code (l'état SQL
-     * d'une exception de requête), jamais son message, qui porte les valeurs
-     * liées de la requête.
-     *
-     * @return array{exception: class-string, code: string}
-     */
-    private static function describe(Throwable $failure): array
-    {
-        return [
-            'exception' => $failure::class,
-            'code' => (string) $failure->getCode(),
-        ];
-    }
-
-    private static function summary(Throwable $failure): string
-    {
-        $described = self::describe($failure);
-
-        return "{$described['exception']} (code {$described['code']})";
     }
 }

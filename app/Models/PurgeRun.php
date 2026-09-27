@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Table;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Throwable;
 
 /**
  * Le journal d'exécution de la purge — la sonde de la seule panne du projet
@@ -68,6 +69,19 @@ class PurgeRun extends Model
     use HasFactory;
 
     /**
+     * Largeur de `error` (`string(500)`) : tout écrivain du journal y tronque
+     * son message — le moteur de purge de `100` et le balayage `stale_lobby`
+     * de `50`, jamais deux constantes pour une colonne.
+     */
+    public const int ERROR_LENGTH = 500;
+
+    /**
+     * Largeur de `batches` (`unsignedSmallInteger`) : tout écrivain du journal
+     * y plafonne son compte de lots.
+     */
+    public const int MAX_BATCHES = 65_535;
+
+    /**
      * Miroir EXACT des défauts SQL de `purge_run` (§ 1.7).
      *
      * Un défaut de base ne remplit que la LIGNE : l'instance qui vient de
@@ -96,5 +110,30 @@ class PurgeRun extends Model
             'finished_at' => 'datetime',
             'ran_at' => 'datetime',
         ];
+    }
+
+    /**
+     * Ce qui se consigne d'une exception, dans `error` comme au journal : sa
+     * classe et son code (l'état SQL d'une exception de requête), jamais son
+     * message, qui porte les valeurs liées de la requête — une adresse
+     * électronique, l'identifiant d'une session. Règle commune à tous les
+     * écrivains du journal.
+     *
+     * @return array{exception: class-string, code: string}
+     */
+    public static function describeFailure(Throwable $failure): array
+    {
+        return [
+            'exception' => $failure::class,
+            'code' => (string) $failure->getCode(),
+        ];
+    }
+
+    /** {@see self::describeFailure()} en une ligne, pour la colonne `error`. */
+    public static function summarizeFailure(Throwable $failure): string
+    {
+        $described = self::describeFailure($failure);
+
+        return "{$described['exception']} (code {$described['code']})";
     }
 }

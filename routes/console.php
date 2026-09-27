@@ -1,9 +1,11 @@
 <?php
 
+use App\Console\Commands\RoomArchiveIdleCommand;
 use App\Jobs\Ops\ReportBruteForce;
 use App\Jobs\Ops\WorkerHeartbeat;
 use App\Jobs\Retention\RunRetentionPurge;
 use App\Support\Ops\Heartbeat;
+use App\Support\Room\RoomExpiry;
 use Carbon\CarbonInterface;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
@@ -32,6 +34,14 @@ Artisan::command('inspire', function () {
 // il est surveillé par la même mesure (§ 10.7).
 Schedule::job(new WorkerHeartbeat(Heartbeat::GAME))->everyThirtySeconds();
 Schedule::job(new WorkerHeartbeat(Heartbeat::DEFAULT))->everyMinute();
+
+// Échéances des salons (spec 50 § 16.2) : toutes les
+// `RoomExpiry::SWEEP_EVERY_MINUTES`, la commande dépose le balayage sur la
+// file `default`, jamais `game` (la file est posée par le job) — archivage
+// anticipé des lobbies jamais lancés (périmètre `stale_lobby`, dont il écrit
+// la ligne `purge_run` à chaque passage), puis archivage à 24 h. L'archivage
+// effectif suit l'échéance d'au plus une cadence.
+Schedule::command(RoomArchiveIdleCommand::class)->cron(RoomExpiry::sweepCron());
 
 // Purge de rétention (§ 14) : chaque jour, sur la file `default`, jamais
 // `game` (la file est posée par le job). Avant l'élagage des instantanés et

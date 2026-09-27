@@ -144,6 +144,19 @@ return [
         ],
     ],
 
+    /*
+    | Salon expiré (spec 50 § 16.3, lot L50-8) : la page `game/room-expired`,
+    | rendue en 410 par le lien d’un salon archivé. Aucune autre information
+    | sur le salon ; deux sorties, un nouveau salon et l’accueil.
+    */
+
+    'expired' => [
+        'title' => 'Salon expiré',
+        'description' => 'Ce salon a été fermé après une période d’inactivité. Créez-en un nouveau pour rejouer.',
+        'create' => 'Créer un salon',
+        'home' => 'Accueil',
+    ],
+
     'presets' => [
         'classic' => [
             'label' => 'Classique',

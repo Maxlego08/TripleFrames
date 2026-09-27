@@ -35,7 +35,7 @@ use LogicException;
  * au DÉPART, jamais à la déconnexion ; l'ancien hôte ne récupère pas le rôle
  * à son retour. `$now` est l'instant pris par l'appelant après le verrou :
  * le transfert n'écrit pas `last_activity_at`, qui reste à la charge du geste
- * (§ 16.1). `clear()`, appelé par l'archivage, arrive avec le lot L50-8.
+ * (§ 16.1). `clear()` vide le rôle à l'archivage ({@see ArchiveRoom}).
  */
 final readonly class TransferHost
 {
@@ -91,6 +91,22 @@ final readonly class TransferHost
         $this->write($room, $target);
 
         return $target;
+    }
+
+    /**
+     * Vide le rôle d'hôte — archivage du salon ({@see ArchiveRoom}, § 16.2,
+     * étape 3), seul appelant. `host_player_id = NULL`, sans événement : un
+     * transfert vers `NULL` n'a personne à prévenir, et c'est `room.archived`,
+     * émis par l'archivage, qui fait quitter le salon aux clients encore
+     * ouverts. Un salon déjà sans hôte n'est pas réécrit.
+     *
+     * @throws LogicException Transaction absente.
+     */
+    public function clear(Room $room, CarbonImmutable $now): void
+    {
+        self::assertTransaction();
+
+        $this->write($room, null);
     }
 
     /**

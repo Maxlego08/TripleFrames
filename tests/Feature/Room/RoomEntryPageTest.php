@@ -303,7 +303,7 @@ it('redirige sans erreur vers la page de salon expiré quand on rejoint un salon
     // … qui rend « salon expiré », en 410, jamais une 404.
     $this->get(route('room.show', $archived))
         ->assertStatus(Response::HTTP_GONE)
-        ->assertInertia(fn (Assert $page) => $page->component('game/room-expired', shouldExist: false));
+        ->assertInertia(fn (Assert $page) => $page->component('game/room-expired'));
 });
 
 it('ne force jamais le thème sombre sur les pages d\'entrée et de création', function (): void {
