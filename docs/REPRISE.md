@@ -550,7 +550,7 @@ Ensuite, à chaque session : **« Implémente l'étape suivante de l'ordre des l
 119. L60-14 — états de manche, de révélation et de pause → 15, 39, 95, 99, 109, 110, 112, 117, 118 — ✅ livrée le 27/09
 120. L50-5 — formulaire Simple, presets, vivier, avertissements → 8, 12, 36, 86, 110 — ✅ livrée le 27/09
 121. L60-15 — démarrage solo, page d'entrée (E10-N3) → 6, 15, 16, 36, 63, 65, 67, 86, 93, 97, 102 — ✅ livrée le 27/09
-122. L100-8 (3e temps) — branche solo d'`orphan_player` → 24, 121
+122. L100-8 (3e temps) — branche solo d'`orphan_player` → 24, 121 — ✅ livrée le 27/09
 123. L60-16 — partie solo, gestes (D18, D19) → 94, 109, 112, 119, 121
 124. L90-8 — accueil, champ de code → 15, 100, 101, 121
 125. L90-9 — recette portrait et accessibilité (partie automatisée) → 99, 110, 117, 118, 119, 120, 123

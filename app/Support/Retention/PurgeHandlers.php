@@ -5,6 +5,7 @@ namespace App\Support\Retention;
 use App\Support\Retention\Handlers\FrameworkFailedJobsHandler;
 use App\Support\Retention\Handlers\FrameworkResetTokensHandler;
 use App\Support\Retention\Handlers\FrameworkSessionsHandler;
+use App\Support\Retention\Handlers\OrphanPlayerHandler;
 use App\Support\Retention\Handlers\PurgeRunHandler;
 use App\Support\Retention\Handlers\StaleRoomHandler;
 use Illuminate\Contracts\Container\Container;
@@ -25,13 +26,15 @@ final readonly class PurgeHandlers
 {
     /**
      * Les gestionnaires livrés (D37 du 23/09) : `stale_room`, qui archive par
-     * l'action de 50 (L50-8), et les périmètres sans jeu. La branche solo
-     * d'`orphan_player` (L60-15) s'y ajoute avec son lot.
+     * l'action de 50 (L50-8), la branche sièges solo d'`orphan_player`, qui
+     * efface les identifiants d'un siège solo (L60-15), et les périmètres
+     * sans jeu.
      *
      * @var list<class-string<PurgeHandler>>
      */
     public const array CLASSES = [
         StaleRoomHandler::class,
+        OrphanPlayerHandler::class,
         FrameworkSessionsHandler::class,
         FrameworkFailedJobsHandler::class,
         FrameworkResetTokensHandler::class,

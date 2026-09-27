@@ -3,12 +3,16 @@
 namespace Tests\Support\Retention;
 
 use App\Enums\PurgeScope;
+use App\Models\Game;
+use App\Models\GamePlayer;
 use App\Models\Player;
 use App\Models\PurgeRun;
 use App\Models\Room;
 use App\Support\Retention\RetentionWindows;
 use App\Support\Room\RoomCode;
+use App\Support\Room\SeatPublicId;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -21,7 +25,8 @@ use LogicException;
  * documentation (RFC 5737).
  *
  * Chaque ligne porte un **marqueur** (`seed-` en tête de clé, file `seed`,
- * scope `stale_lobby` pour `purge_run`, code `SEED..` pour un salon) :
+ * scope `stale_lobby` pour `purge_run`, code `SEED..` pour un salon,
+ * `public_id` `SEED…` pour un siège solo) :
  * {@see self::seeded()} ne compte qu'elles, jamais les lignes que la purge
  * écrit elle-même.
  *
@@ -44,6 +49,13 @@ final class RetentionRows
      * tous de `RoomCode::ALPHABET` ; les deux derniers le numérotent.
      */
     public const string ROOM_CODE_MARKER = 'SEED';
+
+    /**
+     * Les quatre premiers signes du `public_id` d'un siège solo de test
+     * (`orphan_player`), tous de `SeatPublicId::ALPHABET` : le marqueur
+     * survit à l'effacement des identifiants, que le pseudo ne survivrait pas.
+     */
+    public const string SEAT_ID_MARKER = 'SEED';
 
     /** Rang du prochain salon marqué, pour des codes distincts dans un test. */
     private static int $rooms = 0;
@@ -80,6 +92,7 @@ final class RetentionRows
     {
         return match ($scope) {
             PurgeScope::StaleRoom => $now->subHours(RetentionWindows::STALE_ROOM_HOURS),
+            PurgeScope::OrphanPlayer => $now->subMinutes(RetentionWindows::SOLO_SEAT_IDLE_MINUTES),
             PurgeScope::FrameworkSessions => $now->subMinutes(RetentionWindows::sessionLifetimeMinutes()),
             PurgeScope::FrameworkFailedJobs => $now->subDays(RetentionWindows::FAILED_JOBS_DAYS),
             PurgeScope::FrameworkResetTokens => $now->subMinutes(RetentionWindows::resetTokenMinutes()),
@@ -95,6 +108,7 @@ final class RetentionRows
 
         match ($scope) {
             PurgeScope::StaleRoom => self::room($at),
+            PurgeScope::OrphanPlayer => self::soloSeat($at),
             PurgeScope::FrameworkSessions => self::session($key, $at),
             PurgeScope::FrameworkFailedJobs => self::failedJob($at),
             PurgeScope::FrameworkResetTokens => self::resetToken($key.'@example.com', $at),
@@ -106,7 +120,9 @@ final class RetentionRows
     /**
      * Le nombre de lignes marquées encore présentes dans le périmètre de
      * `$scope` : dans sa table, ou, pour `stale_room`, qui archive sans jamais
-     * supprimer, encore non archivées.
+     * supprimer, encore non archivées, et, pour `orphan_player`, qui efface
+     * des colonnes sans jamais supprimer, les sièges solo qui portent encore
+     * un identifiant d'invité.
      */
     public static function seeded(PurgeScope $scope): int
     {
@@ -114,6 +130,16 @@ final class RetentionRows
             PurgeScope::StaleRoom => Room::query()
                 ->where('room_code', 'like', self::ROOM_CODE_MARKER.'%')
                 ->whereNull('archived_at')
+                ->count(),
+            PurgeScope::OrphanPlayer => Player::query()
+                ->whereNull('room_id')
+                ->where('public_id', 'like', self::SEAT_ID_MARKER.'%')
+                ->where(static fn (Builder $identity): Builder => $identity
+                    ->whereNotNull('nickname')
+                    ->orWhereNotNull('nickname_normalized')
+                    ->orWhereNotNull('player_token_hash')
+                    ->orWhereNotNull('solo_token_hash')
+                    ->orWhereHas('gamePlayers', static fn (Builder $participation): Builder => $participation->whereNotNull('display_nickname')))
                 ->count(),
             PurgeScope::FrameworkSessions => DB::table(Config::string('session.table'))
                 ->where('id', 'like', self::MARKER.'%')
@@ -155,6 +181,39 @@ final class RetentionRows
         ]);
 
         return $room;
+    }
+
+    /**
+     * Un siège solo, dernière activité à `$lastSeenAt`, au `public_id` marqué,
+     * tel que le démarrage solo l'écrit : pseudo et forme normalisée, empreinte
+     * du jeton et créneau d'unicité `solo_token_hash` (sa copie, dans la même
+     * écriture) ; une partie solo figée y garde le pseudo figé.
+     */
+    public static function soloSeat(CarbonImmutable $lastSeenAt): Player
+    {
+        $tokenHash = hash('sha256', self::MARKER.Str::random(40));
+        $publicId = self::SEAT_ID_MARKER;
+
+        while (strlen($publicId) < SeatPublicId::LENGTH) {
+            $publicId .= SeatPublicId::ALPHABET[random_int(0, strlen(SeatPublicId::ALPHABET) - 1)];
+        }
+
+        $seat = Player::factory()->solo()->create([
+            'public_id' => $publicId,
+            'player_token_hash' => $tokenHash,
+            'solo_token_hash' => $tokenHash,
+            'joined_at' => $lastSeenAt->subHour(),
+            'last_seen_at' => $lastSeenAt,
+        ]);
+
+        $game = Game::factory()->solo()->completed()->create([
+            'started_at' => $lastSeenAt->subHour(),
+            'ended_at' => $lastSeenAt->subMinutes(30),
+        ]);
+
+        GamePlayer::factory()->for($game)->frozenFrom($seat)->create();
+
+        return $seat;
     }
 
     /** Une session, avec l'adresse IP et l'agent que la migration du starter y stocke. */

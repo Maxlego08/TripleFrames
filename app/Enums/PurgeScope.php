@@ -56,8 +56,10 @@ enum PurgeScope: string
      * **Livrés en temps successifs** (D37 du 23/09) : d'abord les seuls
      * périmètres sans jeu, qui ne dépendent d'aucun lot de 50 ni de 60 ;
      * puis `StaleRoom`, filet de l'archivage, avec `ArchiveRoom` de 50
-     * (L50-8). La branche sièges solo d'`OrphanPlayer` entre avec le
-     * démarrage solo de 60 (L60-15), à sa place dans l'ordre du tableau.
+     * (L50-8) ; puis `OrphanPlayer`, dans sa seule branche sièges solo, avec
+     * le démarrage solo de 60 (L60-15). Sa branche « dépendante »
+     * (suppression des lignes `player` et `room`) arrive au J2 avec les faits
+     * de partie, par le même gestionnaire.
      *
      * @return list<self>
      */
@@ -65,6 +67,7 @@ enum PurgeScope: string
     {
         return [
             self::StaleRoom,
+            self::OrphanPlayer,
             self::FrameworkSessions,
             self::FrameworkFailedJobs,
             self::FrameworkResetTokens,

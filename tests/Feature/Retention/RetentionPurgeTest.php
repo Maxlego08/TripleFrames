@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\GameStatus;
 use App\Enums\PurgeRunStatus;
 use App\Enums\PurgeScope;
 use App\Enums\RoomStatus;
@@ -14,6 +15,7 @@ use App\Support\Realtime\ChannelNames;
 use App\Support\Retention\PurgeHandlers;
 use App\Support\Retention\RetentionPurger;
 use App\Support\Retention\RetentionWindows;
+use App\Support\Room\RoomExpiry;
 use Carbon\CarbonImmutable;
 use Illuminate\Console\Scheduling\CallbackEvent;
 use Illuminate\Console\Scheduling\Event;
@@ -38,9 +40,9 @@ use Tests\Support\Retention\RetentionRows;
 |
 | Livré en temps successifs (D37 du 23/09) : les périmètres sans jeu
 | (`framework_sessions`, `framework_failed_jobs`, `framework_reset_tokens`,
-| `purge_run`), puis `stale_room`, qui archive par l'action de 50 (L50-8).
-| Le test propre à la branche solo d'`orphan_player` s'écrit avec son
-| périmètre (L60-15).
+| `purge_run`), puis `stale_room`, qui archive par l'action de 50 (L50-8),
+| puis la branche sièges solo d'`orphan_player`, qui efface les
+| identifiants d'un siège solo (L60-15).
 |
 | Horloge figée à l'heure de la purge quotidienne ; aucune donnée réelle
 | ({@see RetentionRows}).
@@ -567,6 +569,263 @@ it('archive un salon oublié depuis 48 h par l\'action d\'archivage de 50, jamai
         ->and($recent->refresh()->archived_at)->toBeNull()
         ->and($deletes->getArrayCopy())->toBe([])
         ->and(retentionPurgeRoomCounts())->toBe($counts);
+});
+
+/**
+ * Les identifiants d'invité d'un siège, bruts : les quatre colonnes de
+ * `player` que l'effacement d'un siège solo vide, et les pseudos figés de
+ * ses participations.
+ *
+ * @return array{nickname: mixed, nickname_normalized: mixed, player_token_hash: mixed, solo_token_hash: mixed, display_nicknames: list<mixed>}
+ */
+function retentionPurgeSoloIdentity(Player $seat): array
+{
+    $row = DB::table('player')->where('id', $seat->id)->first(['nickname', 'nickname_normalized', 'player_token_hash', 'solo_token_hash']);
+
+    expect($row)->not->toBeNull();
+
+    return [
+        'nickname' => $row?->nickname,
+        'nickname_normalized' => $row?->nickname_normalized,
+        'player_token_hash' => $row?->player_token_hash,
+        'solo_token_hash' => $row?->solo_token_hash,
+        'display_nicknames' => DB::table('game_player')->where('player_id', $seat->id)->orderBy('id')->pluck('display_nickname')->all(),
+    ];
+}
+
+/**
+ * Tout ce que portent un siège et ses participations HORS des identifiants
+ * que l'effacement vide et des `updated_at` qu'il pose : ce qui ne change
+ * jamais, `last_seen_at` compris.
+ *
+ * @return array{seat: array<string, mixed>, participations: list<array<string, mixed>>}
+ */
+function retentionPurgeSoloRest(Player $seat): array
+{
+    $strip = static fn (object $row, array $columns): array => array_diff_key((array) $row, array_flip($columns));
+    $row = DB::table('player')->where('id', $seat->id)->first();
+
+    expect($row)->not->toBeNull();
+
+    return [
+        'seat' => $strip((object) $row, ['nickname', 'nickname_normalized', 'player_token_hash', 'solo_token_hash', 'updated_at']),
+        'participations' => DB::table('game_player')->where('player_id', $seat->id)->orderBy('id')->get()
+            ->map(static fn (object $participation): array => $strip($participation, ['display_nickname', 'updated_at']))
+            ->values()
+            ->all(),
+    ];
+}
+
+it('efface pseudo, forme normalisée du pseudo, empreinte du jeton et pseudo figé d\'un siège solo inactif depuis 24 h, dans une transaction', function (): void {
+    // Un siège par lot : le curseur doit dépasser les sièges qui échouent ou
+    // ne sont plus éligibles, sans jamais les resélectionner.
+    config(['ops.purge.batch_size' => 1]);
+
+    // 24 h, la durée des identifiants d'invité d'un siège de salon (« Idem »
+    // de 10 § 11.1), lue chez 50 et jamais recopiée.
+    expect(RetentionWindows::SOLO_SEAT_IDLE_MINUTES)->toBe(24 * 60)
+        ->and(RetentionWindows::SOLO_SEAT_IDLE_MINUTES)->toBe(RoomExpiry::ROOM_IDLE_MINUTES);
+
+    $now = CarbonImmutable::now();
+    $cutoff = RetentionRows::cutoff(PurgeScope::OrphanPlayer, $now);
+
+    // Échus, chacun tel que le démarrage solo l'écrit : un siège inactif une
+    // seconde au-delà de la fenêtre, avec une seconde partie solo figée, et un
+    // siège oublié depuis un mois.
+    $idle = RetentionRows::soloSeat($cutoff->subSecond());
+    $interrupted = Game::factory()->solo()->interrupted()->create([
+        'started_at' => $cutoff->subHours(3),
+        'ended_at' => $cutoff->subHours(2),
+    ]);
+    GamePlayer::factory()->for($interrupted)->frozenFrom($idle)->create();
+    $forgotten = RetentionRows::soloSeat($cutoff->subMonth());
+
+    // Conservés : à la borne exacte (stricte), récent, et le siège inactif
+    // d'un salon encore actif, que seul l'archivage de 50 efface.
+    $edge = RetentionRows::soloSeat($cutoff);
+    $recent = RetentionRows::soloSeat($now->subMinute());
+    $roomSeat = Player::factory()
+        ->for(Room::factory()->create(['last_activity_at' => $now->subHour()]))
+        ->create(['joined_at' => $cutoff->subDays(2), 'last_seen_at' => $cutoff->subDays(2)]);
+
+    // Déjà effacé : plus rien à effacer, donc plus éligible.
+    Player::factory()->solo()->archivedIdentity()->create([
+        'joined_at' => $cutoff->subDays(60),
+        'last_seen_at' => $cutoff->subDays(60),
+    ]);
+
+    // Relu sous le verrou du siège : un siège qui reprend vie entre la
+    // sélection du lot et le verrou n'est pas effacé.
+    $revived = RetentionRows::soloSeat($cutoff->subHours(2));
+
+    // Dans une transaction : l'effacement de l'un échoue sur sa ligne
+    // `player`, celui de l'autre sur ses pseudos figés. Quel que soit l'ordre
+    // des deux écritures, l'une est faite quand l'autre échoue : rien ne doit
+    // en rester.
+    $failsOnSeat = RetentionRows::soloSeat($cutoff->subHours(4));
+    $failsOnFrozen = RetentionRows::soloSeat($cutoff->subHours(5));
+
+    $handler = FakePurgeHandler::declared(PurgeScope::OrphanPlayer);
+
+    expect($handler->eligibleCount())->toBe(5);
+
+    $identities = [];
+    $rests = [];
+
+    foreach ([$edge, $recent, $roomSeat, $revived, $failsOnSeat, $failsOnFrozen] as $seat) {
+        $identities[$seat->id] = retentionPurgeSoloIdentity($seat);
+    }
+
+    foreach ([$idle, $forgotten, $edge, $recent, $roomSeat, $failsOnSeat, $failsOnFrozen] as $seat) {
+        $rests[$seat->id] = retentionPurgeSoloRest($seat);
+    }
+
+    $reviving = true;
+    $failing = true;
+
+    DB::beforeExecuting(static function (string $query, array $bindings) use (&$reviving, &$failing, $revived, $failsOnSeat, $failsOnFrozen, $now): void {
+        if ($reviving
+            && preg_match('/^select ["`]id["`] from ["`]player["`] where /i', $query) === 1
+            && in_array($revived->id, $bindings, true)) {
+            $reviving = false;
+            DB::table('player')->where('id', $revived->id)->update(['last_seen_at' => $now->format('Y-m-d H:i:s.v')]);
+        }
+
+        if (! $failing) {
+            return;
+        }
+
+        foreach (['player' => $failsOnSeat->id, 'game_player' => $failsOnFrozen->id] as $table => $seatId) {
+            if (preg_match('/^update ["`]'.$table.'["`] /i', $query) === 1 && in_array($seatId, $bindings, true)) {
+                throw new QueryException('testing', $query, $bindings, new PDOException('écriture refusée', 23000));
+            }
+        }
+    });
+
+    $counts = retentionPurgeRoomCounts();
+    $deletes = new ArrayObject;
+    DB::listen(static function (QueryExecuted $query) use ($deletes): void {
+        if (preg_match('/^delete from ["`](room|player|game|game_player)["`]/i', $query->sql, $match) === 1) {
+            $deletes[] = $match[1];
+        }
+    });
+
+    $run = retentionPurgeRun()[PurgeScope::OrphanPlayer->value];
+
+    // Le périmètre a tourné jusqu'au bout, un lot par siège éligible : deux
+    // sièges effacés, deux lignes en échec comptées, jamais le lot annulé.
+    expect($reviving)->toBeFalse()
+        ->and($run->status)->toBe(PurgeRunStatus::Completed)
+        ->and($run->rows_deleted)->toBe(2)
+        ->and($run->batches)->toBe(5)
+        ->and($run->error)->toContain('2 ligne(s) en échec')
+        ->and($run->error)->toContain(QueryException::class);
+
+    // Effacés : pseudo, forme normalisée, empreinte du jeton et son créneau
+    // d'unicité, et le pseudo figé de chacune des parties du siège.
+    expect(retentionPurgeSoloIdentity($idle))->toBe([
+        'nickname' => null,
+        'nickname_normalized' => null,
+        'player_token_hash' => null,
+        'solo_token_hash' => null,
+        'display_nicknames' => [null, null],
+    ])->and(retentionPurgeSoloIdentity($forgotten))->toBe([
+        'nickname' => null,
+        'nickname_normalized' => null,
+        'player_token_hash' => null,
+        'solo_token_hash' => null,
+        'display_nicknames' => [null],
+    ]);
+
+    // Dans une transaction : un effacement qui échoue en cours de route ne
+    // laisse rien d'effacé, ni sur le siège ni sur ses participations.
+    foreach ([$edge, $recent, $roomSeat, $revived, $failsOnSeat, $failsOnFrozen] as $seat) {
+        expect(retentionPurgeSoloIdentity($seat))->toBe($identities[$seat->id]);
+    }
+
+    expect($identities[$failsOnSeat->id]['player_token_hash'])->not->toBeNull()
+        ->and($identities[$failsOnFrozen->id]['display_nicknames'])->not->toContain(null);
+
+    // Effacement de colonnes, jamais suppression de ligne : rien d'autre ne
+    // change, `last_seen_at` compris, et aucune ligne ne part.
+    foreach ($rests as $id => $rest) {
+        expect(retentionPurgeSoloRest(Player::query()->findOrFail($id)))->toBe($rest);
+    }
+
+    expect($deletes->getArrayCopy())->toBe([])
+        ->and(retentionPurgeRoomCounts())->toBe($counts)
+        ->and($handler->eligibleCount())->toBe(2);
+
+    // Une seconde plus tard, le siège resté à la borne est échu à son tour, et
+    // les deux lignes en échec sont reprises ; aucun autre siège n'est touché.
+    $failing = false;
+    $this->travel(1)->seconds();
+
+    $next = retentionPurgeRun()[PurgeScope::OrphanPlayer->value];
+
+    expect($next->rows_deleted)->toBe(3)
+        ->and($next->batches)->toBe(3)
+        ->and($next->error)->toBeNull();
+
+    foreach ([$edge, $failsOnSeat, $failsOnFrozen] as $seat) {
+        expect(retentionPurgeSoloIdentity($seat))->toBe([
+            'nickname' => null,
+            'nickname_normalized' => null,
+            'player_token_hash' => null,
+            'solo_token_hash' => null,
+            'display_nicknames' => [null],
+        ]);
+    }
+
+    foreach ([$recent, $roomSeat, $revived] as $seat) {
+        expect(retentionPurgeSoloIdentity($seat))->toBe($identities[$seat->id]);
+    }
+
+    expect($deletes->getArrayCopy())->toBe([])
+        ->and(retentionPurgeRoomCounts())->toBe($counts)
+        ->and($handler->eligibleCount())->toBe(0);
+});
+
+it('n\'efface pas un siège solo dont une partie n\'est pas figée, et le journalise', function (): void {
+    $now = CarbonImmutable::now();
+    $cutoff = RetentionRows::cutoff(PurgeScope::OrphanPlayer, $now);
+
+    // Un siège repris par un démarrage solo garde sa dernière activité jusqu'à
+    // son premier battement : la partie qui commence n'est pas figée.
+    $seat = RetentionRows::soloSeat($cutoff->subDays(2));
+    $running = Game::factory()->solo()->create(['started_at' => $now->subSecond()]);
+    GamePlayer::factory()->for($running)->frozenFrom($seat)->create();
+    $identity = retentionPurgeSoloIdentity($seat);
+
+    Log::spy();
+
+    $run = retentionPurgeRun()[PurgeScope::OrphanPlayer->value];
+
+    // Refusé, sans échec : le siège reste éligible, ce que la sonde voit.
+    expect($run->status)->toBe(PurgeRunStatus::Completed)
+        ->and($run->rows_deleted)->toBe(0)
+        ->and($run->batches)->toBe(1)
+        ->and($run->error)->toBeNull()
+        ->and(retentionPurgeSoloIdentity($seat))->toBe($identity)
+        ->and(FakePurgeHandler::declared(PurgeScope::OrphanPlayer)->eligibleCount())->toBe(1);
+
+    // Journalisé par des identifiants internes, jamais un pseudo.
+    Log::shouldHaveReceived('warning')
+        ->withArgs(static fn (string $message, array $context = []): bool => $context === ['player_id' => $seat->id, 'game_id' => $running->id])
+        ->once();
+
+    // Figée, la partie ne retient plus le siège : la nuit suivante l'efface.
+    Game::query()->whereKey($running->id)->update(['status' => GameStatus::Interrupted->value, 'ended_at' => $now]);
+    $this->travel(1)->day();
+
+    expect(retentionPurgeRun()[PurgeScope::OrphanPlayer->value]->rows_deleted)->toBe(1)
+        ->and(retentionPurgeSoloIdentity($seat))->toBe([
+            'nickname' => null,
+            'nickname_normalized' => null,
+            'player_token_hash' => null,
+            'solo_token_hash' => null,
+            'display_nicknames' => [null, null],
+        ]);
 });
 
 it('supprime les sessions au-delà de leur durée de vie sans dépendre du tirage', function (): void {
