@@ -112,7 +112,7 @@ it("n'accorde aucun geste de salon à un administrateur qui n'est pas l'hôte", 
         ),
     ));
 
-    expect($abilities)->toContain('updateSettings', 'launch', 'advanceRound', 'kick', 'transferHost', 'leave');
+    expect($abilities)->toContain('updateSettings', 'launch', 'replay', 'advanceRound', 'kick', 'transferHost', 'leave');
 
     foreach ($abilities as $ability) {
         expect(Gate::forUser($admin)->allows($ability, [$room, null]))->toBeFalse($ability)
@@ -136,6 +136,7 @@ it("n'accorde aucun geste de salon à un administrateur qui n'est pas l'hôte", 
     HostGestures::transfer($this, $room, $adminToken, $adminSeat, ['publicId' => $target->public_id])->assertForbidden();
     LobbyWrites::send($this, 'PATCH', route('room.settings.update', $room), $room, ['roundsCount' => RoomSettingsBounds::MIN_ROUNDS_COUNT], $adminSeat)->assertForbidden();
     LobbyWrites::send($this, 'POST', route('room.launch', $room), $room, [], $adminSeat)->assertForbidden();
+    LobbyWrites::send($this, 'POST', route('room.replay', $room), $room, [], $adminSeat)->assertForbidden();
 
     // Sans siège dans ce salon, le compte seul n'ouvre rien : 403.
     HostGestures::kick($this, $room, PlayerToken::mint(Locale::French), $host, $target->public_id)->assertForbidden();
@@ -160,6 +161,7 @@ it("relit l'autorité d'hôte sous verrou à chaque écriture", function (): voi
         'réglages' => ['updateSettings', static fn (Room $room, Player $target): array => ['PATCH', route('room.settings.update', $room), ['roundsCount' => RoomSettingsBounds::MIN_ROUNDS_COUNT]]],
         'preset' => ['updateSettings', static fn (Room $room, Player $target): array => ['POST', route('room.settings.preset', $room), ['preset' => SettingPresetKey::Fast->value]]],
         'lancement' => ['launch', static fn (Room $room, Player $target): array => ['POST', route('room.launch', $room), []]],
+        'rejouer' => ['replay', static fn (Room $room, Player $target): array => ['POST', route('room.replay', $room), []]],
         'expulsion' => ['kick', static fn (Room $room, Player $target): array => ['POST', route('room.players.kick', ['room' => $room, 'target' => $target->public_id]), []]],
         'transfert' => ['transferHost', static fn (Room $room, Player $target): array => ['POST', route('room.host.transfer', $room), ['publicId' => $target->public_id]]],
     ];

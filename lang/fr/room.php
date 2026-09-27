@@ -66,8 +66,9 @@ return [
     ],
 
     /*
-    | Échec technique d’un lancement (spec 50 § 12.5) : la transaction est
-    | annulée, le salon reste au lobby, et l’hôte peut recommencer.
+    | Échec technique d’un lancement ou d’un « Rejouer » (spec 50 § 12.5,
+    | § 13) : la transaction est annulée, le salon garde son statut — au
+    | lobby, ou sur son podium —, et l’hôte peut recommencer.
     */
 
     'errors' => [
@@ -142,6 +143,17 @@ return [
             'lower_frames_per_round' => 'Passer à :value images par manche (:count films jouables)',
             'reduce_rounds_count' => 'Jouer :value manches (:count films jouables)',
         ],
+    ],
+
+    /*
+    | « Rejouer » (spec 50 § 13 et § 20.3, lot L50-7b) : sur le podium, le
+    | geste de l’hôte qui ramène le salon au lobby ; les autres joueurs
+    | attendent l’hôte.
+    */
+
+    'replay' => [
+        'action' => 'Rejouer',
+        'waiting' => 'En attente de l’hôte pour rejouer.',
     ],
 
     /*

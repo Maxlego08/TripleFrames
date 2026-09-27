@@ -106,8 +106,12 @@ function frameServeGame(?RoomSettings $settings = null, ?int $preloadLeadMs = nu
     $token = PlayerToken::mint(Locale::French);
     $game = EngineFixtures::game($settings ?? EngineFixtures::settings(), solo: $solo);
 
+    // `preload_lead_ms` est une colonne figée de la partie (50 § 12.7) : la
+    // fixture la pose en base, comme si la partie était née avec elle,
+    // jamais par une sauvegarde du modèle, que la garde refuse.
     if ($preloadLeadMs !== null) {
-        $game->forceFill(['preload_lead_ms' => $preloadLeadMs])->save();
+        Game::query()->whereKey($game->id)->update(['preload_lead_ms' => $preloadLeadMs]);
+        $game->refresh();
     }
 
     EngineFixtures::seat($game, ['player_token_hash' => $token->hash()]);

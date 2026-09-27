@@ -1,11 +1,12 @@
 import type { FormDataConvertible } from '@inertiajs/core';
 import { Form, Head, router, usePage } from '@inertiajs/react';
 import { CircleAlert, Play } from 'lucide-react';
-import { useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import LaunchController from '@/actions/App/Http/Controllers/Room/LaunchController';
 import { ConnectionBanner } from '@/components/game/connection-banner';
 import { GameHelp } from '@/components/game/game-help';
 import { PoolStatus } from '@/components/room/pool-status';
+import { ReplayButton } from '@/components/room/replay-button';
 import { LeaveRoomAction } from '@/components/room/seat-actions';
 import type { RoomGestureContext } from '@/components/room/seat-actions';
 import { SeatList } from '@/components/room/seat-list';
@@ -111,7 +112,11 @@ function firstError(errors: Record<string, string>): string | null {
  * **États de partie** (manche, révélation, pause, podium) : composants de 60
  * et de 80 à venir (L60-14, L80-7), montés ici selon le magasin. D'ici là,
  * l'état de partie montre la liste des sièges, et au siège sans
- * participation, l'attente de la partie suivante (§ 15.3).
+ * participation, l'attente de la partie suivante (§ 15.3). Sur le podium
+ * (partie figée), « Rejouer » (§ 13, `ReplayButton`) : le geste de l'hôte,
+ * désactivé avec son motif pendant un drainage, qui le refuse ; les autres
+ * attendent l'hôte. Au retour au lobby, un focus perdu avec l'état de
+ * partie démonté revient au titre de la page.
  *
  * États obligatoires (§ 8.1) : chargement (`processing` des boutons),
  * erreur (refus de lancement, de remède ou de geste d'hôte — erreur `room`
@@ -151,6 +156,28 @@ export default function Lobby({
     const [remedyPending, setRemedyPending] = useState(false);
     const [remedyError, setRemedyError] = useState<string | null>(null);
     const motiveId = useId();
+    const titleRef = useRef<HTMLHeadingElement>(null);
+    const previousPhase = useRef(phase);
+
+    // Retour au lobby (« Rejouer ») : l'état de partie est démonté avec le
+    // contrôle qui avait le focus — le bouton « Rejouer » lui-même chez
+    // l'hôte. Le focus perdu revient au titre, jamais volé à un contrôle
+    // qui l'a gardé. Idempotent au double montage de `strictMode`.
+    useEffect(() => {
+        const before = previousPhase.current;
+
+        previousPhase.current = phase;
+
+        if (before !== 'game' || phase !== 'lobby') {
+            return;
+        }
+
+        const focused = document.activeElement;
+
+        if (focused === null || focused === document.body) {
+            titleRef.current?.focus();
+        }
+    }, [phase]);
 
     const isHost = state.self.isHost;
     const pool = settings.pool;
@@ -241,6 +268,14 @@ export default function Lobby({
         phase === 'game' &&
         !state.seats.some((seat) => seat.publicId === state.self.publicId);
 
+    // Le podium : la partie est figée (`game.ended`, ou le paquet relu). Le
+    // drainage refuse « Rejouer » (§ 14) : le bouton le dit, le serveur
+    // décide.
+    const onPodium = phase === 'game' && state.podium !== null;
+    const replayMotives = maintenance
+        ? [t('common.maintenance.launch_blocked')]
+        : [];
+
     return (
         <>
             <Head title={t('room.lobby.title')} />
@@ -248,7 +283,11 @@ export default function Lobby({
             <ScrollArea className="h-full">
                 <div className="mx-auto flex w-full max-w-2xl flex-col gap-6 px-4 py-6">
                     <header className="flex flex-col gap-1">
-                        <h1 className="text-2xl font-semibold tracking-tight">
+                        <h1
+                            ref={titleRef}
+                            tabIndex={-1}
+                            className="text-2xl font-semibold tracking-tight focus-visible:outline-none"
+                        >
                             {t('room.lobby.title')}
                         </h1>
                         {phase === 'lobby' && (
@@ -392,6 +431,17 @@ export default function Lobby({
                                 <p className="text-muted-foreground">
                                     {t('room.lobby.waiting_next_game')}
                                 </p>
+                            )}
+
+                            {onPodium && (
+                                <ReplayButton
+                                    roomCode={room.code}
+                                    isHost={isHost}
+                                    disabled={!canWrite}
+                                    motives={replayMotives}
+                                    onHttpException={onHttpException}
+                                    onRefused={announce}
+                                />
                             )}
 
                             <SeatList

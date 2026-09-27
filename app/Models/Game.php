@@ -20,6 +20,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use LogicException;
 
 /**
  * La partie — et la règle appliquée, figée au lancement (§ 7.2).
@@ -35,6 +36,14 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * hôte postant `tierGraceMs: 120000` s'achèterait le palier 1 pour toute la
  * manche (§ 7.5). À ne jamais confondre avec `disconnectGraceSeconds`, réglage
  * d'hôte de 15 à 180 s (§ 1.3).
+ *
+ * **Colonnes figées** ({@see self::FROZEN_COLUMNS}, spec 50 § 12.7, contrat
+ * C6, E10-41) : immuables après l'INSERT, que seul `OpenGame` écrit. La
+ * garde `updating` ({@see self::booted()}) lève sur toute sauvegarde qui en
+ * changerait une ; `settings_snapshot` y est comparé par VALEUR décodée
+ * (`RoomSettingsCast`, `ComparesCastableAttributes`), jamais par chaîne :
+ * MySQL relit une colonne `json` normalisée, et une sauvegarde qui suit une
+ * simple lecture de l'instantané ne change rien.
  *
  * @property int $id
  * @property int|null $room_id NULL en solo ; `restrictOnDelete` vers `room`. `#[Hidden]` — `room.id` est cachée à la source (§ 6.2).
@@ -70,6 +79,38 @@ class Game extends Model
 {
     /** @use HasFactory<GameFactory> */
     use HasFactory;
+
+    /**
+     * Les colonnes figées de la partie — spec 50 § 12.7 et contrat C6 § 2, à
+     * la lettre et dans leur ordre (E10-41) : la règle appliquée (réglages,
+     * versions, constantes serveur), le tirage (graine, vivier), l'origine du
+     * journal (`started_at`) et le salon. Écrites une fois, à l'INSERT de
+     * `OpenGame` ; aucune ne change ensuite, pas même après le podium ni au
+     * « Rejouer » de l'hôte : un rejeu doit redonner exactement le même
+     * palier, les mêmes points et le même tirage.
+     *
+     * Hors de la liste, et donc écrites en cours de partie par leurs seuls
+     * écrivains : `status`, `paused_at`, `total_paused_ms`, `rounds_completed`
+     * et `ended_at` (60, 80).
+     *
+     * @var list<string>
+     */
+    public const array FROZEN_COLUMNS = [
+        'mode',
+        'input_difficulty',
+        'rounds_count',
+        'frames_per_round',
+        'draw_seed',
+        'draw_pool_size',
+        'tier_grace_ms',
+        'preload_lead_ms',
+        'settings_version',
+        'settings_snapshot',
+        'scoring_version',
+        'validation_version',
+        'started_at',
+        'room_id',
+    ];
 
     /**
      * Miroir EXACT des défauts SQL de `game` (§ 1.7).
@@ -114,6 +155,48 @@ class Game extends Model
             'total_paused_ms' => 'integer',
             'ended_at' => 'datetime',
         ];
+    }
+
+    /**
+     * La garde des colonnes figées (spec 50 § 12.7, contrat C6 § 2) : toute
+     * mise à jour Eloquent qui en changerait une lève, avant la moindre
+     * requête. Un défaut de l'appelant, jamais un cas d'exécution : aucun
+     * chemin légitime ne réécrit la règle d'une partie lancée.
+     *
+     * La garde écoute le modèle ; une requête de mise à jour directe
+     * (`Game::query()->update()`) ou une sauvegarde sans événements ne passe
+     * pas par elle — aucun code de `app/` n'écrit `game` ainsi.
+     */
+    protected static function booted(): void
+    {
+        static::updating(static function (Game $game): void {
+            $changed = $game->changedFrozenColumns();
+
+            if ($changed !== []) {
+                throw new LogicException(sprintf(
+                    'Game #%d : colonne(s) figée(s) modifiée(s) après le lancement : %s (spec 50 § 12.7, contrat C6).',
+                    $game->getKey(),
+                    implode(', ', $changed),
+                ));
+            }
+        });
+    }
+
+    /**
+     * Les colonnes figées que la prochaine sauvegarde changerait, dans l'ordre
+     * de {@see self::FROZEN_COLUMNS}. L'instantané des réglages est comparé
+     * par valeur (`RoomSettingsCast::compare()`).
+     *
+     * @return list<string>
+     */
+    public function changedFrozenColumns(): array
+    {
+        $dirty = $this->getDirty();
+
+        return array_values(array_filter(
+            self::FROZEN_COLUMNS,
+            static fn (string $column): bool => array_key_exists($column, $dirty),
+        ));
     }
 
     /**

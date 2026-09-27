@@ -1649,7 +1649,9 @@ export type TranslationKey =
     | 'room.refusal.not_in_lobby'
     | 'room.refusal.pool_insufficient'
     | 'room.refusal.room_archived'
-    | 'room.refusal.settings_outdated';
+    | 'room.refusal.settings_outdated'
+    | 'room.replay.action'
+    | 'room.replay.waiting';
 
 export type TranslationKeyFor<D extends TranslationDomain> = Extract<
     TranslationKey,

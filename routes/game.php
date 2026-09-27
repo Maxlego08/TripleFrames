@@ -11,6 +11,7 @@ use App\Http\Controllers\Room\HostTransferController;
 use App\Http\Controllers\Room\KickController;
 use App\Http\Controllers\Room\LaunchController;
 use App\Http\Controllers\Room\LeaveRoomController;
+use App\Http\Controllers\Room\ReplayController;
 use App\Http\Controllers\Room\RoomController;
 use App\Http\Controllers\Room\RoomEntryController;
 use App\Http\Controllers\Room\RoomPresetController;
@@ -137,18 +138,18 @@ Route::post('r/{room}/heartbeat', [RoomHeartbeatController::class, 'store'])
     ->name('room.heartbeat')
     ->middleware('throttle:game-write');
 
-// Gestes de l'hôte (spec 50 § 3, § 5.3, § 11, § 12, § 17.1, § 21 ;
+// Gestes de l'hôte (spec 50 § 3, § 5.3, § 11, § 12, § 13, § 17.1, § 21 ;
 // contrats C0 et C6) : l'onglet Simple, l'application d'un preset, le
-// lancement, l'expulsion et le transfert du rôle ; et le départ, geste de
-// tout joueur ; en partie, « manche suivante » (spec 60 § 5.4). Toute
-// écriture du salon passe par `seat.active` (contrat C7 : 403 sans siège
-// tenu par le jeton, 409 `seat_superseded` pour un onglet supplanté), puis
-// par `throttle:game-write`, dans cet ordre et avant la liaison de `{room}`
-// (liste de priorité de `bootstrap/app.php`). Aucun domaine de traduction :
-// ces routes ne rendent aucune page — elles redirigent vers le lobby (le
-// départ, vers l'accueil), refus et échec technique rendus dans la langue de
-// la requête ; « manche suivante » répond en JSON, par un code que le client
-// traduit.
+// lancement, « Rejouer », l'expulsion et le transfert du rôle ; et le
+// départ, geste de tout joueur ; en partie, « manche suivante » (spec 60
+// § 5.4). Toute écriture du salon passe par `seat.active` (contrat C7 : 403
+// sans siège tenu par le jeton, 409 `seat_superseded` pour un onglet
+// supplanté), puis par `throttle:game-write`, dans cet ordre et avant la
+// liaison de `{room}` (liste de priorité de `bootstrap/app.php`). Aucun
+// domaine de traduction : ces routes ne rendent aucune page — elles
+// redirigent vers le lobby (le départ, vers l'accueil), refus et échec
+// technique rendus dans la langue de la requête ; « manche suivante »
+// répond en JSON, par un code que le client traduit.
 Route::middleware(['seat.active', 'throttle:game-write'])->group(function (): void {
     Route::patch('r/{room}/settings', [RoomSettingsController::class, 'update'])
         ->name('room.settings.update');
@@ -158,6 +159,11 @@ Route::middleware(['seat.active', 'throttle:game-write'])->group(function (): vo
 
     Route::post('r/{room}/launch', [LaunchController::class, 'store'])
         ->name('room.launch');
+
+    // « Rejouer » (§ 13) : sur le podium, l'hôte ramène le salon au lobby ;
+    // le lancement suivant repasse par la garde de vivier.
+    Route::post('r/{room}/replay', [ReplayController::class, 'store'])
+        ->name('room.replay');
 
     // Pouvoirs de l'hôte (§ 11.3, § 11.4) et départ de tout joueur.
     // `{target}` est le `public_id` du siège VISÉ, jamais `{player}` :

@@ -23,8 +23,8 @@ use App\Models\User;
  *   verrou du salon, l'hôte ayant pu changer entre la requête et le verrou
  *   (spec 50 § 2.5, § 12.6 invariant 2).
  *
- * `replay` arrive avec son lot (L50-7b). `launch` a pour appelant
- * `room.launch` (L50-7a) ; `advanceRound` est posée au même lot pour le geste
+ * `launch` a pour appelant `room.launch` (L50-7a) et `replay`, `room.replay`
+ * (L50-7b) ; `advanceRound` est posée avec le lancement pour le geste
  * « manche suivante » de `60` (contrat C7 § 2.4), dont l'action l'évalue sous
  * le verrou du salon. `kick`, `transferHost` et `leave` ont pour appelants
  * `room.players.kick`, `room.host.transfer` et `room.leave` (L50-6).
@@ -47,6 +47,17 @@ class RoomPolicy
      * verrou du salon, après la réparation d'un hôte sans cible (L3).
      */
     public function launch(?User $user, Room $room, ?Player $seat): bool
+    {
+        return self::holdsHostSeat($room, $seat);
+    }
+
+    /**
+     * « Rejouer » sur le podium (`room.replay`, § 13) : même clause que
+     * {@see self::updateSettings()}. L'action relit l'autorité sous le verrou
+     * du salon, après la réparation d'un hôte sans cible (R3), puis le gel de
+     * la dernière partie et le drapeau de drainage.
+     */
+    public function replay(?User $user, Room $room, ?Player $seat): bool
     {
         return self::holdsHostSeat($room, $seat);
     }

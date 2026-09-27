@@ -166,11 +166,14 @@ function decoyDrawTarget(Game $game, Movie $movie, CarbonImmutable $at): Round
  */
 function decoyDrawPick(Round $round, CarbonImmutable $at, ?string $seed = null): ?DecoyPick
 {
-    $game = Game::query()->findOrFail($round->game_id);
-
+    // La graine est une colonne figée de la partie (50 § 12.7) : la fixture
+    // la pose en base, comme si la partie était née avec elle, jamais par
+    // une sauvegarde du modèle, que la garde des colonnes figées refuse.
     if ($seed !== null) {
-        $game->forceFill(['draw_seed' => $seed])->save();
+        Game::query()->whereKey($round->game_id)->update(['draw_seed' => $seed]);
     }
+
+    $game = Game::query()->findOrFail($round->game_id);
 
     app()->forgetScopedInstances();
 

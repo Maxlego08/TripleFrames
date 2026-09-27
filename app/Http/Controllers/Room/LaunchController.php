@@ -7,18 +7,16 @@ use App\Actions\Room\UpdateRoomSettings;
 use App\Enums\RoomRefusal;
 use App\Enums\RoomStatus;
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Room\Concerns\AnswersRoomGesture;
 use App\Http\Middleware\EnsureActiveSeat;
 use App\Models\Room;
 use App\Policies\RoomPolicy;
-use App\Support\Game\GameJournal;
 use App\ValueObjects\Room\LaunchOutcome;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\Gate;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Str;
 use Inertia\Inertia;
 use LogicException;
 use Symfony\Component\HttpFoundation\Response;
@@ -63,6 +61,8 @@ use Throwable;
  */
 class LaunchController extends Controller
 {
+    use AnswersRoomGesture;
+
     /** Message d'un échec technique du lancement, rendu à l'hôte (§ 12.5, § 20.3). */
     public const string KEY_LAUNCH_FAILED = 'room.errors.launch_failed';
 
@@ -83,8 +83,8 @@ class LaunchController extends Controller
         try {
             $outcome = $launch->handle($room, $seat);
         } catch (Throwable $exception) {
-            $playing = self::isPlaying($room);
-            self::journalFailure($exception, $playing);
+            $playing = self::rereadStatus($room) === RoomStatus::Playing;
+            self::journalGestureFailure(self::LOG_LAUNCH_FAILED, $exception, ['roomPlaying' => $playing]);
 
             // Levée après le COMMIT : la partie est née, rien n'a échoué pour
             // l'hôte. Le salon ne peut être en `playing` ici que par une
@@ -125,55 +125,5 @@ class LaunchController extends Controller
         }
 
         return self::backToRoom($room, $refusal->messageKey(), $outcome->replace);
-    }
-
-    /**
-     * Retour à la page du salon, d'où part le geste — jamais l'accueil, même
-     * sans en-tête `Referer` —, avec le message traduit sous `room`.
-     *
-     * @param  array<string, int>  $replace
-     */
-    private static function backToRoom(Room $room, string $messageKey, array $replace = []): RedirectResponse
-    {
-        $message = __($messageKey, $replace);
-
-        return back(Response::HTTP_SEE_OTHER, fallback: route('room.show', $room))
-            ->withErrors(['room' => is_string($message) ? $message : $messageKey]);
-    }
-
-    /**
-     * Le statut du salon, relu hors de la transaction terminée. Une lecture
-     * en échec (base perdue) vaut « pas en partie » : l'hôte lit alors
-     * l'échec traduit et peut recommencer, L4 rendant le geste idempotent.
-     */
-    private static function isPlaying(Room $room): bool
-    {
-        try {
-            return Room::query()->whereKey($room->id)->value('status') === RoomStatus::Playing;
-        } catch (Throwable) {
-            return false;
-        }
-    }
-
-    /**
-     * La ligne du journal `game` d'un lancement en échec : la classe, le code
-     * et le lieu de l'exception, la classe de sa cause, et si le salon est
-     * malgré tout en partie. Ni message ni trace : ils peuvent citer une
-     * requête et ses valeurs. Écrire le journal n'échoue jamais la réponse.
-     */
-    private static function journalFailure(Throwable $exception, bool $playing): void
-    {
-        try {
-            Log::channel(GameJournal::CHANNEL)->error(self::LOG_LAUNCH_FAILED, [
-                'exception' => $exception::class,
-                'code' => $exception->getCode(),
-                'file' => str_replace('\\', '/', Str::after($exception->getFile(), base_path().DIRECTORY_SEPARATOR)),
-                'line' => $exception->getLine(),
-                'previous' => $exception->getPrevious() === null ? null : $exception->getPrevious()::class,
-                'roomPlaying' => $playing,
-            ]);
-        } catch (Throwable) {
-            // Le journal ne décide rien : la réponse traduite part quand même.
-        }
     }
 }
