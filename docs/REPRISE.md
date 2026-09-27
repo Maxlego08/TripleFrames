@@ -544,7 +544,7 @@ Ensuite, à chaque session : **« Implémente l'étape suivante de l'ordre des l
 113. L50-8 — échéances : archivage, lobby oublié, salon expiré → 23, 29, 83, 101, 112 — ✅ livrée le 27/09
 114. L100-8 (2e temps, `stale_room`) + L100-7 (3e temps, `stale_lobby`) → 24, 113 — ✅ livrée le 27/09
 115. L50-7b — gel, « Rejouer », concurrence du lancement → 6, 83, 89, 97, 102 — ✅ livrée le 27/09
-116. L50-9 — retardataires (lot J1 ordinaire, D35) → 6, 91, 101, 102
+116. L50-9 — retardataires (lot J1 ordinaire, D35) → 6, 91, 101, 102 — ✅ livrée le 27/09
 117. L70-10 — écran de saisie, grille QCM → 8, 39, 95, 99, 104, 105, 107, 109
 118. L80-7 — composants de classement, récapitulatif, podium → 8, 62, 69, 82, 88, 92, 95, 99
 119. L60-14 — états de manche, de révélation et de pause → 15, 39, 95, 99, 109, 110, 112, 117, 118

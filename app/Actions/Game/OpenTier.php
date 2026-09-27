@@ -42,7 +42,13 @@ use LogicException;
  * **Seule écrivaine** de `round_tier.served_at` et de `seen_frame` (C8 § 2,
  * E10-47 ; prouvé par `TierServingWritersTest`). Sous les verrous `game` →
  * `round` → `round_tier` (ordre global room → player → game → round →
- * round_player, § 4.5), dans cet ordre :
+ * round_player, § 4.5), précédés en multijoueur du verrou PARTAGÉ du salon :
+ * l'upsert de `seen_frame` (étape 6) vérifie sa clé étrangère vers `room`,
+ * donc prend sur cette ligne un verrou partagé implicite (InnoDB) ; pris en
+ * dernier, il fermerait un cycle avec tout geste qui tient `room` en
+ * exclusif puis attend `game` ou `round` (prise de siège d'un retardataire,
+ * départ d'un siège, « Rejouer »). Pris en premier, il se sérialise derrière
+ * eux sans cycle, et deux ouvertures le partagent. Dans cet ordre :
  *
  * 1. **péremption** (§ 4.3) : partie close ou en pause, manche ni `pending`
  *    ni `running` ou non programmée, palier dont `Tᵢ ≥ ended_at` (fin
@@ -138,6 +144,11 @@ final readonly class OpenTier
         // transaction fixe son instantané (30 § 6.5). Faite après les verrous,
         // la lecture des sièges voit tout ce qui a été validé avant eux.
         $gameId = (int) Round::query()->whereKey($tier->round_id)->value('game_id');
+        // Le salon aussi, hors de la transaction pour la même raison : lu
+        // dedans, il figerait l'instantané avant l'attente de ses verrous, et
+        // les sièges ne verraient plus une participation validée pendant
+        // cette attente (retardataire admis à cette manche, 50 § 15.2).
+        $roomId = Game::query()->whereKey($gameId)->value('room_id');
 
         // Les clôtures de saisie de l'étape 4 (cas terminal du QCM en Normal)
         // sont émises dans la transaction IMBRIQUÉE de la composition, dont
@@ -147,17 +158,25 @@ final readonly class OpenTier
         // programmation de la frontière suivante, qu'une exception de
         // l'écouteur empêcherait. Elles sont donc retenues jusqu'après la
         // transaction et ses rappels (E108-1).
-        Event::defer(fn () => $this->open($tier, $now, $gameId), [InputClosed::class]);
+        Event::defer(fn () => $this->open($tier, $now, $gameId, is_int($roomId) ? $roomId : null), [InputClosed::class]);
     }
 
     /**
      * Les étapes 1 à 7, dans une seule transaction.
      *
+     * @param  int|null  $roomId  Salon de la partie ; nul en solo.
+     *
      * @throws LogicException
      */
-    private function open(RoundTier $tier, CarbonImmutable $now, int $gameId): void
+    private function open(RoundTier $tier, CarbonImmutable $now, int $gameId, ?int $roomId): void
     {
-        DB::transaction(function () use ($tier, $now, $gameId): void {
+        DB::transaction(function () use ($tier, $now, $gameId, $roomId): void {
+            // Premier verrou de l'ordre global, partagé : celui que la clé
+            // étrangère de `seen_frame` prendrait sinon en dernier (en-tête).
+            if ($roomId !== null) {
+                Room::query()->whereKey($roomId)->sharedLock()->first();
+            }
+
             $lockedGame = Game::query()->whereKey($gameId)->lockForUpdate()->firstOrFail();
             $lockedRound = Round::query()->whereKey($tier->round_id)->lockForUpdate()->firstOrFail();
             // Garde d'idempotence relue sous verrou, jamais par une lecture

@@ -7,6 +7,7 @@ import { ConnectionBanner } from '@/components/game/connection-banner';
 import { GameHelp } from '@/components/game/game-help';
 import { PoolStatus } from '@/components/room/pool-status';
 import { ReplayButton } from '@/components/room/replay-button';
+import { RoomSettingsForm } from '@/components/room/room-settings-form';
 import { LeaveRoomAction } from '@/components/room/seat-actions';
 import type { RoomGestureContext } from '@/components/room/seat-actions';
 import { SeatList } from '@/components/room/seat-list';
@@ -97,9 +98,11 @@ function firstError(errors: Record<string, string>): string | null {
  * ramène au lobby, sans démonter la souscription, l'horloge ni l'annonceur.
  *
  * **État de lobby**, composé ici :
- * - pour tous : le code et le lien de partage, le nombre de joueurs et la
- *   liste des sièges, le compteur de vivier et le blocage, qui nomme le
- *   réglage fautif — non-répétition comprise (D28 du 23/09) —, l'aide ;
+ * - pour tous : le code et le lien de partage, les réglages — éditables
+ *   par l'hôte seul, dont l'interrupteur des retardataires (§ 15.4) —, le
+ *   nombre de joueurs et la liste des sièges, le compteur de vivier et le
+ *   blocage, qui nomme le réglage fautif — non-répétition comprise (D28 du
+ *   23/09) —, l'aide ;
  * - pour l'hôte : les remèdes du vivier et « Lancer la partie », désactivé
  *   avec son motif quand le vivier est bloqué, quand moins de
  *   `launch.minConnected` sièges sont connectés, ou pendant un drainage
@@ -134,6 +137,7 @@ export default function Lobby({
     settings: settingsProp,
     limits,
     launch,
+    editor,
 }: LobbyPageProps) {
     const { t, locale } = useTranslations();
     const { errors, maintenance } = usePage().props;
@@ -261,12 +265,18 @@ export default function Lobby({
     };
     const leaveGesture: RoomGestureContext = { ...gestures, disabled: !active };
 
-    // En partie, les sièges sont les participations gelées au lancement ou à
-    // l'admission d'un retardataire : un siège qui n'y figure pas n'a aucune
-    // participation, et attend la partie suivante (§ 15.3).
+    // En partie, les sièges sont les participations gelées au lancement
+    // (`firstRoundNumber` 1) ou à l'admission d'un retardataire (sa manche
+    // d'entrée) : un siège qui n'y figure pas, ou qui n'y figure qu'en vue de
+    // lobby (`firstRoundNumber` nul — son propre `seat.updated` de présence,
+    // reçu en partie), n'a aucune participation et attend la partie suivante
+    // (§ 15.3). Le retardataire admis, lui, attend sa manche (`member` faux).
+    const selfSeat = state.seats.find(
+        (seat) => seat.publicId === state.self.publicId,
+    );
     const waitingNextGame =
         phase === 'game' &&
-        !state.seats.some((seat) => seat.publicId === state.self.publicId);
+        (selfSeat === undefined || selfSeat.firstRoundNumber === null);
 
     // Le podium : la partie est figée (`game.ended`, ou le paquet relu). Le
     // drainage refuse « Rejouer » (§ 14) : le bouton le dit, le serveur
@@ -317,6 +327,16 @@ export default function Lobby({
                     {phase === 'lobby' ? (
                         <>
                             <ShareCode code={room.code} url={shareUrl} />
+
+                            <RoomSettingsForm
+                                roomCode={room.code}
+                                settings={settings.settings}
+                                editable={isHost}
+                                lateJoinAvailable={editor.lateJoinAvailable}
+                                disabled={!canWrite}
+                                onHttpException={onHttpException}
+                                onRefused={announce}
+                            />
 
                             <PoolStatus
                                 pool={pool}

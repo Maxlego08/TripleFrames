@@ -11,10 +11,9 @@ import type { TranslationKey } from '@/types/translations';
 /**
  * État de la page d'entrée (spec 50 § 7.2), calculé par le serveur dans cet
  * ordre de priorité, et seulement INDICATIF : la prise de siège le recalcule
- * sous le verrou du salon. `late_join` (retardataires admis) arrive avec le
- * lot L50-9.
+ * sous le verrou du salon.
  */
-type RoomEntryState = 'kicked' | 'full' | 'in_progress' | 'open';
+type RoomEntryState = 'kicked' | 'full' | 'late_join' | 'in_progress' | 'open';
 
 type RoomJoinProps = {
     room: { code: string };
@@ -29,8 +28,13 @@ const CLOSED_ENTRY_KEYS: Partial<Record<RoomEntryState, TranslationKey>> = {
     full: 'room.join.full',
 };
 
-/** États à formulaire qui portent un message : la partie en cours. */
+/**
+ * États à formulaire qui portent un message : la partie en cours, où le
+ * retardataire entre à la manche suivante sans aucun point (`late_join`,
+ * § 15), ou attend la partie suivante (`in_progress`).
+ */
 const OPEN_ENTRY_KEYS: Partial<Record<RoomEntryState, TranslationKey>> = {
+    late_join: 'room.join.late_join',
     in_progress: 'room.join.in_progress',
 };
 
@@ -44,12 +48,14 @@ const OPEN_ENTRY_KEYS: Partial<Record<RoomEntryState, TranslationKey>> = {
  * sélecteur. Le titre ne porte ni code ni paramètre (§ 6.5).
  *
  * États : `kicked` et `full` sans formulaire ni mention des CGU, avec un
- * lien vers l'accueil ; `in_progress` avec le formulaire (le siège attendra
- * la partie suivante) ; `open`. Un refus rendu APRÈS l'envoi (salon devenu
- * complet, jeton expulsé entre-temps) revient sous l'erreur `room`, dans la
- * langue du joueur ; une page rechargée dans l'un des deux états sans
- * formulaire le dit déjà, et l'erreur n'y est pas répétée. Aucune donnée à
- * charger ; un refus du limiteur (429) rend la page `error`.
+ * lien vers l'accueil ; `late_join` avec le formulaire (le siège entrera à
+ * la manche suivante, sans aucun point) ; `in_progress` avec le formulaire
+ * (le siège attendra la partie suivante) ; `open`. Un refus rendu APRÈS
+ * l'envoi (salon devenu complet, jeton expulsé entre-temps) revient sous
+ * l'erreur `room`, dans la langue du joueur ; une page rechargée dans l'un
+ * des deux états sans formulaire le dit déjà, et l'erreur n'y est pas
+ * répétée. Aucune donnée à charger ; un refus du limiteur (429) rend la page
+ * `error`.
  */
 export default function RoomJoin({
     room,

@@ -189,6 +189,43 @@ class Round extends Model
     }
 
     /**
+     * Les manches où un retardataire peut entrer à `$now`, dans l'ordre de
+     * jeu (spec 50 § 15.2, étape 2) : les manches à jouer ({@see self::toPlay()},
+     * remplaçante comprise tant qu'elle n'a pas démarré, réserve sans numéro
+     * jamais) dont `started_at` est nul ou **postérieur** à `$now` — une
+     * manche dont `T₁` est franchi est jouée (60 § 1.2), même si son
+     * ouverture tarde : elle n'est jamais donnée au retardataire.
+     *
+     * L'instant passe par le format du modèle (`Y-m-d H:i:s.v`) : aucune
+     * milliseconde n'est perdue (10 § 1.2). Pendant exact de
+     * {@see self::isLateJoinableAt()}, qui relit le prédicat sous verrou.
+     *
+     * @param  Builder<Round>  $query
+     */
+    #[Scope]
+    protected function lateJoinableAt(Builder $query, CarbonImmutable $now): void
+    {
+        $instant = $query->getModel()->fromDateTime($now);
+
+        $query->toPlay()->where(static function (Builder $notStarted) use ($instant): void {
+            $notStarted->whereNull('started_at')->orWhere('started_at', '>', $instant);
+        });
+    }
+
+    /**
+     * Le prédicat de {@see self::lateJoinableAt()} sur la ligne chargée —
+     * relu sous le verrou de la manche par la prise de siège (50 § 15.2) :
+     * `pending`, numérotée, `started_at` nul ou postérieur à `$now` (à la
+     * milliseconde, comme en base).
+     */
+    public function isLateJoinableAt(CarbonImmutable $now): bool
+    {
+        return $this->status === RoundStatus::Pending
+            && $this->round_number !== null
+            && ($this->started_at === null || $this->started_at->greaterThan($now->startOfMillisecond()));
+    }
+
+    /**
      * Le prédicat de fin anticipée du § 7.7, en toutes lettres.
      *
      * **Participants** = les lignes `round_player` de cette manche dont le

@@ -14,7 +14,9 @@ return [
     | la page du salon et son vivier (L50-4 : `room.lobby.*`, `room.pool.*`),
     | les gestes d’hôte et le départ (L50-6 : `room.lobby.{kick,transfer,leave}*`),
     | la page du salon expiré (L50-8 : `room.expired.*`), « Rejouer » sur le
-    | podium (L50-7b : `room.replay.*`),
+    | podium (L50-7b : `room.replay.*`), les retardataires (L50-9 :
+    | `room.join.late_join`, l’interrupteur `room.settings.allowLateJoin.*` et
+    | le titre `room.lobby.settings_title`),
     | et les huit lignes des presets — {@see \App\Enums\SettingPresetKey} construit
     | `room.presets.<clé>.{label,description}` — : la spec interdit d’inventer
     | des clés pour des écrans absents. `setting_preset` n’a **aucune colonne
@@ -52,7 +54,8 @@ return [
     /*
     | Entrée dans un salon (spec 50 § 7.2 et § 7.3). `kicked` et `full` sont
     | aussi les messages des refus `JoinRefusal`, construits par
-    | `messageKey()` ; `late_join` arrive avec les retardataires (L50-9).
+    | `messageKey()` ; `late_join` annonce l'entrée d'un retardataire à la
+    | manche suivante (§ 15, L50-9).
     */
 
     'join' => [
@@ -61,6 +64,21 @@ return [
         'kicked' => 'The host removed you from this room: you cannot come back.',
         'full' => 'This room is full.',
         'in_progress' => 'A game is in progress: you will wait in the room and play the next one.',
+        'late_join' => 'A game is in progress: you will join from the next round, with no points yet.',
+    ],
+
+    /*
+    | Réglages du salon (spec 50 § 20.1) : libellé et aide de chaque champ,
+    | `room.settings.<champ>.{label,help}`. Seul l’interrupteur des
+    | retardataires est livré (L50-9) ; les autres champs de l’onglet Simple
+    | arrivent avec leur formulaire (L50-5).
+    */
+
+    'settings' => [
+        'allowLateJoin' => [
+            'label' => 'Late arrivals',
+            'help' => 'Allow joining mid-game, from the next round, with no points yet.',
+        ],
     ],
 
     /*
@@ -94,8 +112,8 @@ return [
     | Page du salon (spec 50 § 8.1 et § 20.3, lot L50-4) : code et lien de
     | partage, sièges, lancement, annonces du lobby ; gestes d’hôte et départ
     | (spec 50 § 11.3 et § 11.4, lot L50-6) : retirer, nommer hôte, quitter,
-    | leurs confirmations et leurs refus. Les nombres passent en
-    | placeholders, formatés par le client.
+    | leurs confirmations et leurs refus ; titre de la section des réglages
+    | (L50-9). Les nombres passent en placeholders, formatés par le client.
     */
 
     'lobby' => [
@@ -130,6 +148,7 @@ return [
         'transfer_unavailable' => 'This player is not connected.',
         'leave' => 'Leave room',
         'leave_confirm' => 'Leave the room? You can come back with the link.',
+        'settings_title' => 'Settings',
     ],
 
     /*

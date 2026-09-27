@@ -310,7 +310,7 @@ export function displayedRound(
 
 /**
  * Le siège `publicId` est-il membre de la manche `round` d'après les sièges
- * de la partie (non expulsé, `firstRoundNumber` nul ou atteint) ? Un siège
+ * de la partie (non expulsé, `firstRoundNumber` non nul et atteint) ? Un siège
  * non membre — retardataire en attente — ne voit aucune image de la manche
  * (60 § 13.7) : le service d'image la lui refuse, ses références diffusées
  * au salon ne se demandent donc pas.
@@ -448,7 +448,14 @@ function openedTierOf(round: RoundState): number {
     }
 }
 
-/** Le siège est-il membre de la manche `roundNumber` d'après les sièges de la partie ? */
+/**
+ * Le siège est-il membre de la manche `roundNumber` d'après les sièges de la
+ * partie ? Toute participation porte une manche d'entrée non nulle (1 au
+ * lancement, celle d'un retardataire admis) : une vue à `firstRoundNumber`
+ * nul est une vue de LOBBY — un siège qui attend la partie suivante reçoit
+ * en partie son propre `seat.updated` de présence, que `upsertSeat()` ajoute
+ * aux sièges —, jamais une participation (50 § 15.3).
+ */
 function memberOf(
     seats: readonly SeatView[],
     publicId: string,
@@ -459,7 +466,8 @@ function memberOf(
     return (
         seat !== undefined &&
         !seat.kicked &&
-        (seat.firstRoundNumber === null || seat.firstRoundNumber <= roundNumber)
+        seat.firstRoundNumber !== null &&
+        seat.firstRoundNumber <= roundNumber
     );
 }
 

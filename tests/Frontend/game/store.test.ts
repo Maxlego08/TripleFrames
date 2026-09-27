@@ -1107,6 +1107,45 @@ describe('store', () => {
         expect(waiting.resyncs).toEqual([]);
         waiting.stop();
 
+        // Siège qui attend la partie suivante, sans participation : absent
+        // des sièges de la partie, il reçoit en partie sa propre vue de LOBBY
+        // (`seat.updated` de présence, `firstRoundNumber` nul), que le magasin
+        // ajoute aux sièges — il n'est membre d'aucune manche.
+        vi.setSystemTime(ORIGIN_MS + 12_000);
+
+        const outsider = harness(
+            packet(12_000, {
+                round: round(1, 0, 'running', { currentTierIndex: 2 }),
+                seats: [seat(RIVAL, { firstRoundNumber: 1, isHost: true })],
+                self: {
+                    ...packet(0).self,
+                    isHost: false,
+                    member: false,
+                    participates: false,
+                    input: null,
+                },
+            }),
+        );
+
+        await advanceTo(12_500);
+        outsider.store.receive(
+            'seat.updated',
+            event<'seat.updated'>(12_500, {
+                seat: seat(SELF, { isHost: false }),
+            }),
+        );
+        await playRounds(outsider);
+
+        const outside = outsider.store.getState();
+
+        expect(outside.seats.map((each) => each.publicId)).toContain(SELF);
+        expect(outside.self.member).toBe(false);
+        expect(outside.self.participates).toBe(false);
+        expect(isMemberOfRound(outside.seats, SELF, timeline(2, 0))).toBe(
+            false,
+        );
+        outsider.stop();
+
         // Réponse de soumission arrivée avant `tier.opened` du palier 1 (le
         // joueur répond à `T₁`, l'événement tarde) : la saisie de CETTE
         // manche est gardée, sans rien de celle de la manche révélée.

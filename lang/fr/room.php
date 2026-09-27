@@ -37,7 +37,8 @@ return [
     /*
     | Entrée dans un salon (spec 50 § 7.2 et § 7.3). `kicked` et `full` sont
     | aussi les messages des refus `JoinRefusal`, construits par
-    | `messageKey()` ; `late_join` arrive avec les retardataires (L50-9).
+    | `messageKey()` ; `late_join` annonce l'entrée d'un retardataire à la
+    | manche suivante (§ 15, L50-9).
     */
 
     'join' => [
@@ -46,6 +47,21 @@ return [
         'kicked' => 'L’hôte vous a retiré de ce salon : vous ne pouvez pas y revenir.',
         'full' => 'Ce salon est complet.',
         'in_progress' => 'Une partie est en cours : vous attendrez dans le salon et jouerez la suivante.',
+        'late_join' => 'Une partie est en cours : vous entrerez à la manche suivante, sans aucun point.',
+    ],
+
+    /*
+    | Réglages du salon (spec 50 § 20.1) : libellé et aide de chaque champ,
+    | `room.settings.<champ>.{label,help}`. Seul l’interrupteur des
+    | retardataires est livré (L50-9) ; les autres champs de l’onglet Simple
+    | arrivent avec leur formulaire (L50-5).
+    */
+
+    'settings' => [
+        'allowLateJoin' => [
+            'label' => 'Retardataires',
+            'help' => 'Autoriser l’arrivée en cours de partie, à la manche suivante, sans aucun point.',
+        ],
     ],
 
     /*
@@ -79,8 +95,8 @@ return [
     | Page du salon (spec 50 § 8.1 et § 20.3, lot L50-4) : code et lien de
     | partage, sièges, lancement, annonces du lobby ; gestes d’hôte et départ
     | (spec 50 § 11.3 et § 11.4, lot L50-6) : retirer, nommer hôte, quitter,
-    | leurs confirmations et leurs refus. Les nombres passent en
-    | placeholders, formatés par le client.
+    | leurs confirmations et leurs refus ; titre de la section des réglages
+    | (L50-9). Les nombres passent en placeholders, formatés par le client.
     */
 
     'lobby' => [
@@ -115,6 +131,7 @@ return [
         'transfer_unavailable' => 'Ce joueur n’est pas connecté.',
         'leave' => 'Quitter le salon',
         'leave_confirm' => 'Quitter le salon ? Vous pourrez revenir avec le lien.',
+        'settings_title' => 'Réglages',
     ],
 
     /*

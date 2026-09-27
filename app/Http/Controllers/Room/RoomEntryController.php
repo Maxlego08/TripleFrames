@@ -9,11 +9,14 @@ use App\Enums\RoomStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Room\Concerns\PresentsSeatForm;
 use App\Http\Requests\Room\JoinRoomRequest;
+use App\Models\Game;
 use App\Models\Player;
 use App\Models\Room;
+use App\Models\Round;
 use App\Support\Identity\PlayerTokenManager;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Date;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response as InertiaResponse;
@@ -44,9 +47,16 @@ class RoomEntryController extends Controller
     private const string ENTRY_FULL = 'full';
 
     /**
-     * Partie en cours, podium compris : formulaire et `room.join.in_progress`,
-     * le siège attendant la partie suivante. L'état `late_join` (retardataires
-     * ouverts, § 15) arrive avec le lot L50-9.
+     * Partie en cours, retardataires admis (§ 15) : formulaire et
+     * `room.join.late_join`, le siège entrant à la manche suivante, sans
+     * aucun point.
+     */
+    private const string ENTRY_LATE_JOIN = 'late_join';
+
+    /**
+     * Partie en cours dans tout autre cas — retardataires fermés, plus aucune
+     * manche à démarrer, podium affiché : formulaire et
+     * `room.join.in_progress`, le siège attendant la partie suivante.
      */
     private const string ENTRY_IN_PROGRESS = 'in_progress';
 
@@ -117,7 +127,7 @@ class RoomEntryController extends Controller
 
     /**
      * L'état de la page d'entrée, dans l'ordre de priorité du § 7.2 :
-     * expulsé, complet, partie en cours, lobby.
+     * expulsé, complet, retardataires admis, partie en cours, lobby.
      */
     private function entry(Request $request, Room $room, PlayerTokenManager $tokens, int $headcount): string
     {
@@ -129,6 +139,40 @@ class RoomEntryController extends Controller
             return self::ENTRY_FULL;
         }
 
-        return $room->status === RoomStatus::Playing ? self::ENTRY_IN_PROGRESS : self::ENTRY_OPEN;
+        if ($room->status !== RoomStatus::Playing) {
+            return self::ENTRY_OPEN;
+        }
+
+        return self::lateJoinOpen($room) ? self::ENTRY_LATE_JOIN : self::ENTRY_IN_PROGRESS;
+    }
+
+    /**
+     * `late_join` (§ 7.2, § 15.2) : salon ouvert aux retardataires (projection
+     * `allow_late_join`), partie en cours — la dernière du salon, `ended_at`
+     * NULL — et une manche numérotée `pending` qui reste à démarrer,
+     * remplaçante comprise ({@see Round::lateJoinableAt()}). Lecture simple,
+     * sans verrou : l'état est indicatif, la prise de siège le recalcule sous
+     * verrou.
+     */
+    private static function lateJoinOpen(Room $room): bool
+    {
+        if (! $room->allow_late_join) {
+            return false;
+        }
+
+        $game = Game::query()
+            ->where('room_id', $room->id)
+            ->orderByDesc('started_at')
+            ->orderByDesc('id')
+            ->first();
+
+        if ($game === null || $game->ended_at !== null) {
+            return false;
+        }
+
+        return Round::query()
+            ->where('game_id', $game->id)
+            ->lateJoinableAt(Date::now()->toImmutable())
+            ->exists();
     }
 }

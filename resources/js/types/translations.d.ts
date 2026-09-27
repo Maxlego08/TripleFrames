@@ -1591,6 +1591,7 @@ export type TranslationKey =
     | 'room.join.full'
     | 'room.join.in_progress'
     | 'room.join.kicked'
+    | 'room.join.late_join'
     | 'room.join.submit'
     | 'room.join.title'
     | 'room.lobby.cannot_kick_self'
@@ -1611,6 +1612,7 @@ export type TranslationKey =
     | 'room.lobby.seat.disconnected'
     | 'room.lobby.seat.kicked'
     | 'room.lobby.seat.left'
+    | 'room.lobby.settings_title'
     | 'room.lobby.settings_updated'
     | 'room.lobby.share'
     | 'room.lobby.share_hint'
@@ -1651,7 +1653,9 @@ export type TranslationKey =
     | 'room.refusal.room_archived'
     | 'room.refusal.settings_outdated'
     | 'room.replay.action'
-    | 'room.replay.waiting';
+    | 'room.replay.waiting'
+    | 'room.settings.allowLateJoin.help'
+    | 'room.settings.allowLateJoin.label';
 
 export type TranslationKeyFor<D extends TranslationDomain> = Extract<
     TranslationKey,
