@@ -32,7 +32,8 @@ use Illuminate\View\Middleware\ShareErrorsFromSession;
 | spec 50 § 17.3) : `game-read` sur les lectures, `game-write` sur les
 | écritures, `frame-serve` sur les octets d'image, clés sur le hash du
 | `player_token`, repli sur l'IP ; `room-create` (par adresse) et `room-join`
-| (par jeton, repli sur l'IP) sur les deux gestes qui prennent un siège.
+| (par jeton, repli sur l'IP) sur les deux gestes qui prennent un siège ;
+| `answer` (spec 70 § 8, par siège résolu par `seat.active`) sur la saisie.
 |
 | Pile SANS SESSION de `clock.show` et `frame.serve` (contrat C8 § 2) : ni
 | session, ni `Set-Cookie`. `PreventRequestForgery` lirait la session pour
@@ -146,9 +147,12 @@ Route::middleware(['seat.active', 'throttle:game-write'])->group(function (): vo
 // en mémoire le siège et sa partie courante, AVANT la liaison implicite. JSON
 // à destinataire unique, aucune page rendue : aucun domaine de traduction.
 //
-// Le limiteur `throttle:answer` (clé sur le siège résolu, 70 § 8) rejoint
-// cette pile avec son limiteur nommé, au lot L70-14 : déclaré sans lui,
-// `ThrottleRequests` lèverait `MissingRateLimiterException` à chaque requête.
+// `throttle:answer` (70 § 8) est clé sur le siège que `seat.active` a résolu,
+// jamais sur l'IP ni sur le `public_id` : l'ordre écrit ici n'est pas l'ordre
+// d'exécution, que fixe la liste de priorité de `bootstrap/app.php` —
+// `SetLocale`, `seat.active`, `throttle:answer`, puis la liaison. Un tiers
+// reçoit 403 sans consommer le budget du siège ; un 429 sort dans la langue
+// de la requête et n'est ni évalué ni compté.
 Route::post('seat/{player:public_id}/answer', [AnswerController::class, 'store'])
     ->name('round.answer.store')
-    ->middleware('seat.active');
+    ->middleware(['seat.active', 'throttle:answer']);

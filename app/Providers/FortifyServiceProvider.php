@@ -4,11 +4,14 @@ namespace App\Providers;
 
 use App\Actions\Fortify\CreateNewUser;
 use App\Actions\Fortify\ResetUserPassword;
+use App\Http\Middleware\EnsureActiveSeat;
 use App\Settings\EngineConstants;
+use App\Settings\RoomSettingsBounds;
 use App\Support\Identity\AccountSwitches;
 use App\Support\Identity\PlayerTokenManager;
 use App\Support\Room\RoomRateLimits;
 use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\RateLimiter;
@@ -18,6 +21,8 @@ use Illuminate\Validation\Rules\Password;
 use Inertia\Inertia;
 use Laravel\Fortify\Features;
 use Laravel\Fortify\Fortify;
+use LogicException;
+use Symfony\Component\HttpFoundation\Response;
 
 class FortifyServiceProvider extends ServiceProvider
 {
@@ -26,6 +31,16 @@ class FortifyServiceProvider extends ServiceProvider
 
     /** Espace des clés de limiteur de jeu comptées par adresse, faute de jeton. */
     private const string SEAT_THROTTLE_IP_PREFIX = 'ip:';
+
+    /**
+     * Les deux budgets du limiteur `answer` par siège (spec 70 § 8) : la
+     * route de soumission, par son nom, et le budget qu'elle consomme. Liste
+     * close ; `round.choice.store` arrive au lot L70-9.
+     */
+    private const array ANSWER_BUDGETS = [
+        'round.answer.store' => 'text',
+        'round.choice.store' => 'choice',
+    ];
 
     /**
      * Register any application services.
@@ -229,7 +244,88 @@ class FortifyServiceProvider extends ServiceProvider
                 ->by($this->seatThrottleKey($request));
         });
 
+        $this->configureAnswerRateLimiting();
         $this->configureRoomRateLimiting();
+    }
+
+    /**
+     * Le limiteur `answer` de la saisie (spec 70 § 8, contrat C10 § 2 et
+     * § 3), sur `round.answer.store` et, au lot L70-9, `round.choice.store`.
+     *
+     * **Clé sur le SIÈGE, jamais sur l'IP ni sur le seul `public_id`** :
+     * aucune IP n'entre dans une donnée du domaine, et une clé sur le
+     * `public_id` laisserait un tiers qui le connaît vider le budget d'un
+     * autre. Le siège est celui que `seat.active` a résolu et mis en mémoire
+     * ({@see EnsureActiveSeat::seat()}), qui s'exécute AVANT ce limiteur par
+     * son rang dans la liste de priorité (`bootstrap/app.php`) : un tiers
+     * reçoit 403 sans jamais atteindre le compteur. Un siège non résolu a
+     * donc déjà reçu 403 ; `Limit::none()` n'est qu'un filet.
+     *
+     * **Deux budgets par siège**, un pour le texte, un pour le clic
+     * ({@see self::ANSWER_BUDGETS}) ; deux sièges d'une même personne doublent
+     * le budget, résidu assumé (10 § 7.1, A-08).
+     *
+     * **Cadence** : `attemptsPerSecond` du `settings_snapshot` de la partie
+     * courante, que `seat.active` met aussi en mémoire
+     * ({@see EnsureActiveSeat::game()}) ; sans partie courante, le défaut de
+     * `RoomSettingsBounds` — le contrôleur répond alors 409. Jamais un
+     * littéral (règle 2).
+     *
+     * **Cadence non atomique, résidu du limiteur du framework** :
+     * `ThrottleRequests::handleRequest()` lit le compteur (`tooManyAttempts`)
+     * puis l'incrémente (`hit`) en deux temps. Des soumissions PARALLÈLES d'un
+     * même siège, lancées au même instant, peuvent donc toutes lire un
+     * compteur sous la cadence et passer. La cadence tient contre un client
+     * qui enchaîne ses requêtes, pas contre un script qui les parallélise :
+     * seul le plafond `attemptsPerRound`, gardé par l'`UPDATE … WHERE
+     * wrong_attempts < :cap` atomique du refus (70 § 7.5), borne la manche,
+     * et le budget réel du palier 1 est au plus `attemptsPerRound`, et non
+     * `d₁ × attemptsPerSecond` (70 § 13.2). Écart signalé au porteur (journal
+     * d'implémentation, E105-6).
+     *
+     * **Refus** : 429 `{ message }` (`game.answer.too_fast`), résolu dans la
+     * locale de la requête — `SetLocale` passe lui aussi avant le limiteur —,
+     * non évalué et non compté : la requête n'atteint ni l'action ni
+     * `round_player`. La clé ne vit que dans le cache du limiteur, jamais en
+     * base, et ne quitte jamais le serveur.
+     */
+    private function configureAnswerRateLimiting(): void
+    {
+        RateLimiter::for('answer', function (Request $request): Limit {
+            $seat = EnsureActiveSeat::seat($request);
+
+            if ($seat === null) {
+                return Limit::none();
+            }
+
+            $snapshot = EnsureActiveSeat::game($request)?->settings_snapshot;
+
+            return Limit::perSecond($snapshot->attemptsPerSecond ?? RoomSettingsBounds::DEFAULT_ATTEMPTS_PER_SECOND)
+                ->by(sprintf('answer:%s:%d', $this->answerBudget($request), $seat->id))
+                ->response(static fn (Request $request, array $headers): JsonResponse => response()->json(
+                    ['message' => __('game.answer.too_fast')],
+                    Response::HTTP_TOO_MANY_REQUESTS,
+                    $headers,
+                ));
+        });
+    }
+
+    /**
+     * Le budget du limiteur `answer` que consomme la route : `text` ou
+     * `choice` ({@see self::ANSWER_BUDGETS}).
+     *
+     * @throws LogicException `throttle:answer` posé sur une autre route que
+     *                        les deux soumissions de la saisie.
+     */
+    private function answerBudget(Request $request): string
+    {
+        $name = $request->route()?->getName();
+
+        return self::ANSWER_BUDGETS[$name ?? ''] ?? throw new LogicException(sprintf(
+            'Le limiteur answer ne compte que les soumissions de la saisie (%s), pas la route « %s » (spec 70 § 8).',
+            implode(', ', array_keys(self::ANSWER_BUDGETS)),
+            $name ?? $request->path(),
+        ));
     }
 
     /**
