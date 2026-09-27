@@ -19,7 +19,8 @@ return [
     | le titre `room.lobby.settings_title`), le formulaire Simple, ses
     | presets et ses avertissements (L50-5 : `room.settings.*` de chaque clé
     | éditable ou rapportable, `room.warnings.*`, `room.lobby.{presets_title,
-    | changes_title,preset_grayed,preset_unplayable}`),
+    | changes_title,preset_grayed,preset_unplayable}`), la page d’entrée du
+    | solo (L60-15, préfixe rédigé par 60 : `room.solo.*`),
     | et les huit lignes des presets — {@see \App\Enums\SettingPresetKey} construit
     | `room.presets.<clé>.{label,description}` — : la spec interdit d’inventer
     | des clés pour des écrans absents. `setting_preset` n’a **aucune colonne
@@ -68,6 +69,22 @@ return [
         'full' => 'This room is full.',
         'in_progress' => 'A game is in progress: you will wait in the room and play the next one.',
         'late_join' => 'A game is in progress: you will join from the next round, with no points yet.',
+    ],
+
+    /*
+    | Page d’entrée du solo `room/solo` (spec 60 § 16.4, lot L60-15 ; préfixe
+    | rédigé par 60, écart (l) du § 22 bis) : choix d’un des quatre presets du
+    | site, puis pseudo et avatar du premier siège solo. `choose_preset` et
+    | `start` servent aussi la relance depuis `game/solo` (L60-16). Aucune
+    | unicité du pseudo en solo : l’aide ne la mentionne pas.
+    */
+
+    'solo' => [
+        'title' => 'Play solo',
+        'intro' => 'Practise on your own on the catalogue: pick a preset, a nickname and an avatar.',
+        'choose_preset' => 'Choose a preset',
+        'start' => 'Start training',
+        'nickname_hint' => 'Between :min and :max characters.',
     ],
 
     /*

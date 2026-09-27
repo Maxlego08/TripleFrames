@@ -38,9 +38,10 @@ type PresetPickerProps = {
  * Libellé et description de chaque preset (`room.presets.<clé>`) : une table
  * de clés littérales, jamais une clé composée (C15 § 2.7). Aucun chiffre
  * dans ces textes : les chiffres s'affichent depuis les réglages rendus,
- * une fois le preset appliqué (§ 5.1).
+ * une fois le preset appliqué (§ 5.1). Partagée avec le choix du preset
+ * du solo (`solo-preset-field.tsx`, spec 60 § 16.4).
  */
-const PRESET_KEYS: Record<
+export const PRESET_KEYS: Record<
     PresetKey,
     { label: TranslationKey; description: TranslationKey }
 > = {

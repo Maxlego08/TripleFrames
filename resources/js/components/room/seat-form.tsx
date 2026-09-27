@@ -1,5 +1,6 @@
 import { Form } from '@inertiajs/react';
 import { useId, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import { AvatarPicker } from '@/components/game/avatar-picker';
 import type { AvatarPickerOption } from '@/components/game/avatar-picker';
 import { Button } from '@/components/ui/button';
@@ -13,12 +14,14 @@ import {
 } from '@/lib/game/avatar-keys';
 import { terms } from '@/routes/legal';
 import type { AvatarPresetKey, AvatarPresetOption } from '@/types/player';
+import type { TranslationKey } from '@/types/translations';
 import type { RouteFormDefinition } from '@/wayfinder';
 
 /**
- * Props `avatars` des pages `room/create` et `room/join` (spec 50 § 6.2 et
- * § 7.2 ; contrat C5 § 3) : le catalogue, les avatars des sièges tenus du
- * salon, et la présélection déterministe du serveur (`suggest()`, I5.8).
+ * Props `avatars` des pages `room/create`, `room/join` (spec 50 § 6.2 et
+ * § 7.2) et `room/solo` (spec 60 § 16.4) ; contrat C5 § 3 : le catalogue,
+ * les avatars des sièges tenus du salon (aucun en solo), et la présélection
+ * déterministe du serveur (`suggest()`, I5.8).
  */
 export type SeatAvatars = {
     options: AvatarPresetOption[];
@@ -42,6 +45,23 @@ type SeatFormProps = {
     nickname: NicknameBounds;
     /** Libellé DÉJÀ traduit du bouton d'envoi. */
     submitLabel: string;
+    /**
+     * Aide du pseudo (`:min`, `:max`) : `room.identity.nickname_hint` par
+     * défaut, qui dit l'unicité dans le salon ; `room.solo.nickname_hint` en
+     * solo, où aucune unicité ne s'applique (contrat C5).
+     */
+    nicknameHintKey?: TranslationKey;
+    /**
+     * Champs propres à la page, rendus EN TÊTE du formulaire et envoyés avec
+     * lui — le choix du preset de `room/solo` (spec 60 § 16.4). Leurs erreurs
+     * se lisent dans les props de la page.
+     */
+    children?: ReactNode;
+    /**
+     * Rappel après un refus, une fois le focus rendu au pseudo s'il est en
+     * cause : la page y porte le focus sur ses propres champs.
+     */
+    onError?: (errors: Partial<Record<string, string>>) => void;
 };
 
 /** Champs du formulaire, tels que le serveur les valide (C5 § 2). */
@@ -50,8 +70,9 @@ const AVATAR_FIELD = 'avatar';
 
 /**
  * Le formulaire de pseudo et d'avatar d'un siège, commun à la création du
- * salon et à l'entrée (spec 50 § 6.2 et § 7.2 ; spec 90 § 10, écran
- * « Pseudo et avatar »).
+ * salon, à l'entrée (spec 50 § 6.2 et § 7.2) et au premier siège solo (spec
+ * 60 § 16.4, qui y ajoute le choix du preset en tête) ; spec 90 § 10, écran
+ * « Pseudo et avatar ».
  *
  * - `<Form>` d'Inertia, jamais un état de formulaire maison ; le pseudo est
  *   un champ natif, l'avatar un `RadioGroup` à nom natif (`AvatarPicker`),
@@ -80,6 +101,9 @@ export function SeatForm({
     avatars,
     nickname,
     submitLabel,
+    nicknameHintKey = 'room.identity.nickname_hint',
+    children,
+    onError,
 }: SeatFormProps) {
     const { t, locale } = useTranslations();
     const id = useId();
@@ -114,11 +138,15 @@ export function SeatForm({
                 if (NICKNAME_FIELD in errors) {
                     nicknameInput.current?.focus();
                 }
+
+                onError?.(errors);
             }}
             className="flex flex-col gap-6"
         >
             {({ processing, errors }) => (
                 <>
+                    {children}
+
                     <div className="grid gap-2">
                         <Label htmlFor={nicknameId}>
                             {t('room.identity.nickname_label')}
@@ -144,7 +172,7 @@ export function SeatForm({
                             id={hintId}
                             className="text-sm text-muted-foreground"
                         >
-                            {t('room.identity.nickname_hint', {
+                            {t(nicknameHintKey, {
                                 min: number.format(nickname.min),
                                 max: number.format(nickname.max),
                             })}

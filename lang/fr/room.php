@@ -51,6 +51,22 @@ return [
     ],
 
     /*
+    | Page d’entrée du solo `room/solo` (spec 60 § 16.4, lot L60-15 ; préfixe
+    | rédigé par 60, écart (l) du § 22 bis) : choix d’un des quatre presets du
+    | site, puis pseudo et avatar du premier siège solo. `choose_preset` et
+    | `start` servent aussi la relance depuis `game/solo` (L60-16). Aucune
+    | unicité du pseudo en solo : l’aide ne la mentionne pas.
+    */
+
+    'solo' => [
+        'title' => 'Jouer en solo',
+        'intro' => 'Entraînez-vous seul sur le catalogue : choisissez un preset, un pseudo et un avatar.',
+        'choose_preset' => 'Choisissez un preset',
+        'start' => 'Commencer l’entraînement',
+        'nickname_hint' => 'Entre :min et :max caractères.',
+    ],
+
+    /*
     | Réglages du salon (spec 50 § 20.1 et § 20.2, lots L50-5 et L50-9) :
     | libellé et aide de chaque champ, `room.settings.<champ>.{label,help}`,
     | pour chaque clé de `SIMPLE_KEYS ∪ ADVANCED_KEYS` — le libellé d’un champ

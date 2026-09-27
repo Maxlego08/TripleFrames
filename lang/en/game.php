@@ -45,9 +45,13 @@ return [
 
     // Spec 60 § 5.4 (lot L60-13) : `not_revealing`, code du 409 du geste
     // « manche suivante » de l’hôte hors révélation, rendu par le client.
+    // Spec 60 § 16.3 (lot L60-15) : `pool_too_small`, refus du démarrage solo
+    // quand aucun nombre d’images par manche n’est jouable pour le preset,
+    // rendu par le serveur dans la langue de la requête.
     'errors' => [
         'seat_superseded' => 'This tab is no longer in control: you are playing in another tab. Reload the page to take over here.',
         'not_revealing' => 'The next round can only be brought forward during the reveal.',
+        'pool_too_small' => 'The catalogue does not have enough films for this preset yet, even with fewer frames per round. Choose another one.',
     ],
 
     // Spec 70 § 17 (lot L70-5) : la saisie en texte libre. `rejected`,

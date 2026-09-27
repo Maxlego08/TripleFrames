@@ -10,8 +10,9 @@ use App\Support\Identity\PlayerToken;
 use Illuminate\Support\Facades\App;
 
 /**
- * Ce que partagent les deux formulaires de siège, `room/create` et
- * `room/join` (spec 50 § 6.2 et § 7.2 ; 40 § 2.1, étape 2 ; contrat C5 § 3).
+ * Ce que partagent les formulaires de siège, `room/create` et `room/join`
+ * (spec 50 § 6.2 et § 7.2) et `room/solo` (spec 60 § 16.4, aucun avatar
+ * pris : un solo n'a pas de salon) ; 40 § 2.1, étape 2 ; contrat C5 § 3.
  *
  * Réponse au seul demandeur, jamais diffusée : le catalogue des avatars
  * prédéfinis, les avatars déjà pris, la présélection déterministe

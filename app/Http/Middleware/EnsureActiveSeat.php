@@ -7,6 +7,7 @@ use App\Models\Game;
 use App\Models\Player;
 use App\Models\Room;
 use App\Support\Game\CurrentGame;
+use App\Support\Game\SoloSeat;
 use App\Support\Identity\PlayerTokenManager;
 use Closure;
 use Illuminate\Database\Eloquent\Builder;
@@ -26,9 +27,10 @@ use Symfony\Component\HttpFoundation\Response;
  *    C4 I4.9), expulsé toujours exclu : siège lié `{player}` (le `public_id`,
  *    tenu par ce jeton), sinon siège du salon `{room}` (le `room_code` du
  *    créneau actif, par `PlayerTokenManager::seatIn()`), sinon siège solo
- *    (`room_id IS NULL`, `left_at IS NULL`, `player_token_idx`). Un
- *    `public_id` ne donne **aucun droit** : il ne fait que désigner un siège
- *    que le jeton doit tenir. Sans siège : **403** ;
+ *    ({@see SoloSeat::heldBy()} : `room_id IS NULL`, `left_at IS NULL`,
+ *    `player_token_idx`). Un `public_id` ne donne **aucun droit** : il ne
+ *    fait que désigner un siège que le jeton doit tenir. Sans siège :
+ *    **403** ;
  * 2. compare l'en-tête `X-Seat-Token` à `player.active_seat_token`, le jeton
  *    d'onglet frappé par {@see ClaimSeatTab} : en cas d'écart — jeton
  *    supplanté, en-tête absent, ou aucun onglet n'a encore pris la main —,
@@ -170,13 +172,10 @@ final class EnsureActiveSeat
             return $this->tokens->seatIn($request, $room);
         }
 
-        return Player::query()
-            ->whereNull('room_id')
-            ->heldByToken($token)
-            ->whereNull('left_at')
-            ->whereNull('kicked_at')
-            ->orderByDesc('id')
-            ->first();
+        // Le siège solo, par la définition unique du démarrage solo : au plus
+        // un par jeton (`player_solo_token_uq`, E10-N3) ; l'ordre ne fait que
+        // rendre la lecture déterministe.
+        return SoloSeat::heldBy($token)->orderByDesc('id')->first();
     }
 
     /**

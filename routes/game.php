@@ -7,6 +7,7 @@ use App\Http\Controllers\Game\FrameServeController;
 use App\Http\Controllers\Game\NextRoundController;
 use App\Http\Controllers\Game\RoomHeartbeatController;
 use App\Http\Controllers\Game\RoomStateController;
+use App\Http\Controllers\Game\SoloGameController;
 use App\Http\Controllers\Room\HostTransferController;
 use App\Http\Controllers\Room\KickController;
 use App\Http\Controllers\Room\LaunchController;
@@ -89,6 +90,24 @@ Route::get('r/{room}/join', [RoomEntryController::class, 'show'])
 Route::post('r/{room}/join', [RoomEntryController::class, 'store'])
     ->name('room.join')
     ->middleware('throttle:room-join');
+
+// Mode solo (spec 60 § 10.1 et § 16 ; écart (l) du § 22 bis). La page
+// d'entrée `room/solo` suit l'apparence du visiteur, hors de
+// `game.appearance`, comme `room.entry` à côté de `room.show` ; `solo.show`
+// rend `game/solo` et redirige vers `solo.create` le visiteur sans siège solo
+// (§ 16.4). Un GET ne frappe jamais de jeton : seul `solo.store` en frappe
+// un, une fois les refus de drainage et de vivier écartés (C4 I4.1).
+Route::get('solo/new', [SoloGameController::class, 'create'])
+    ->name('solo.create')
+    ->middleware(['translations:room,legal', 'throttle:game-read']);
+
+Route::post('solo', [SoloGameController::class, 'store'])
+    ->name('solo.store')
+    ->middleware('throttle:game-write');
+
+Route::get('solo', [SoloGameController::class, 'show'])
+    ->name('solo.show')
+    ->middleware(['game.appearance', 'translations:game,room,legal', 'throttle:game-read']);
 
 Route::get('clock', [ClockController::class, 'show'])
     ->name('clock.show')

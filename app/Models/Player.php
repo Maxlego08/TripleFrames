@@ -68,6 +68,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  * @property string|null $nickname_normalized `#[Hidden]` : forme repliée, jamais affichée.
  * @property CarbonImmutable|null $nickname_masked_at
  * @property string|null $player_token_hash `#[Hidden]` : SHA-256 du `tid` du `player_token`, jamais de la valeur du cookie (spec 40 § 3.5).
+ * @property string|null $solo_token_hash `#[Hidden]` : créneau d'unicité du siège solo (E10-N3, `player_solo_token_uq`) — copie de `player_token_hash` si et seulement si `room_id` est nul, écrite dans la même écriture que lui par le démarrage solo et effacée avec lui. Hors `#[Fillable]`. La reprise d'un siège solo ne le lit jamais : elle passe par `player_token_hash` (`player_token_idx`).
  * @property string|null $active_seat_token
  * @property Locale $locale
  * @property AvatarKind|null $avatar_kind
