@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="fr">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <meta name="description" content="Découvrez comment rejoindre une partie et jouer à TripleFrames." />
+        <title>Comment jouer — TripleFrames</title>
+        <link rel="icon" href="../svg/brand-logo.svg" type="image/svg+xml" />
+        <link rel="stylesheet" href="../css/info-pages.css" />
+    </head>
+    <body>
+        <a class="skip-link" href="#main-content">Aller au contenu</a>
+
+        <header class="info-header">
+            <div class="info-header__inner">
+                <a class="info-header__brand" href="index.html" aria-label="TripleFrames, accueil">
+                    <img class="info-header__brand-logo" src="../svg/brand-logo.svg" alt="" width="44" height="36" />
+                    <span class="info-header__brand-name">TripleFrames</span>
+                </a>
+
+                <nav class="info-header__account-nav info-header__account-nav--guest" aria-label="Compte">
+                    <a class="info-header__nav-link" href="login.html">Connexion</a>
+                    <a class="info-header__nav-pill" href="register.html">S’inscrire</a>
+                </nav>
+
+                <nav class="info-header__account-nav info-header__account-nav--member" aria-label="Compte connecté">
+                    <a class="info-header__account-button" href="account.html">
+                        <span class="info-header__account-avatar" aria-hidden="true">MC</span>
+                        <span>Mon compte</span>
+                    </a>
+                </nav>
+            </div>
+        </header>
+
+        <main class="info-main" id="main-content">
+            <header class="info-hero">
+                <h1>Comment jouer</h1>
+                <p>Un écran, quelques amis et trois images pour retrouver le bon film.</p>
+            </header>
+
+            <article class="info-surface how-to">
+                <header class="how-to__intro">
+                    <h2>Une partie en quatre temps</h2>
+                    <p>
+                        L’hôte lance la salle. Les autres joueurs rejoignent depuis leur téléphone,
+                        puis tout le monde répond au même rythme.
+                    </p>
+                </header>
+
+                <div class="play-sequence" aria-label="Déroulement d’une partie">
+                    <section class="play-step">
+                        <span class="play-step__number" aria-hidden="true"></span>
+                        <div class="play-step__copy">
+                            <h3>Rejoins ou crée une partie</h3>
+                            <p>
+                                Entre ton pseudo et le code affiché par l’hôte. Si tu crées la
+                                partie, partage simplement le code avec les autres joueurs.
+                            </p>
+                        </div>
+                        <span class="play-step__icon" aria-hidden="true">
+                            <img src="../svg/icons/user.svg" alt="" />
+                        </span>
+                    </section>
+
+                    <section class="play-step">
+                        <span class="play-step__number" aria-hidden="true"></span>
+                        <div class="play-step__copy">
+                            <h3>Observe les trois images</h3>
+                            <p>
+                                À chaque manche, trois photogrammes apparaissent sur l’écran.
+                                Ensemble, ils désignent un seul film.
+                            </p>
+                        </div>
+                        <span class="play-step__icon" aria-hidden="true">
+                            <img src="../svg/icons/play.svg" alt="" />
+                        </span>
+                    </section>
+
+                    <section class="play-step">
+                        <span class="play-step__number" aria-hidden="true"></span>
+                        <div class="play-step__copy">
+                            <h3>Réponds avant la fin du chrono</h3>
+                            <p>
+                                Écris le titre du film dans le champ de réponse. Tu peux corriger
+                                ta proposition tant que le temps n’est pas écoulé.
+                            </p>
+                        </div>
+                        <span class="play-step__icon" aria-hidden="true">
+                            <img src="../svg/icons/clock.svg" alt="" />
+                        </span>
+                    </section>
+
+                    <section class="play-step">
+                        <span class="play-step__number" aria-hidden="true"></span>
+                        <div class="play-step__copy">
+                            <h3>Marque des points</h3>
+                            <p>
+                                Une bonne réponse rapporte des points. Plus tu trouves tôt, plus
+                                ton score grimpe. Le meilleur total remporte la partie.
+                            </p>
+                        </div>
+                        <span class="play-step__icon" aria-hidden="true">
+                            <img src="../svg/icons/star.svg" alt="" />
+                        </span>
+                    </section>
+                </div>
+
+                <section class="round-demo" aria-labelledby="round-demo-title">
+                    <div class="round-demo__screen">
+                        <div>
+                            <img src="../svg/brand-logo.svg" alt="" />
+                            <strong id="round-demo-title">Quel est ce film&nbsp;?</strong>
+                            <p>Les trois images sont affichées sur l’écran de la partie.</p>
+                        </div>
+                    </div>
+                    <div class="round-demo__answer">
+                        <div class="round-demo__timer" aria-label="20 secondes restantes">
+                            <span></span>
+                        </div>
+                        <label for="demo-answer">Ta réponse</label>
+                        <input id="demo-answer" type="text" value="Retour vers le futur" readonly />
+                        <span>Bonne réponse : les points sont ajoutés à la fin du chrono.</span>
+                    </div>
+                </section>
+
+                <section class="tips" aria-labelledby="tips-title">
+                    <img class="tips__icon" src="../svg/icons/spark.svg" alt="" />
+                    <div>
+                        <h2 id="tips-title">Le conseil de la salle</h2>
+                        <p>Joue sur ton téléphone et garde l’écran principal visible par tout le monde.</p>
+                    </div>
+                    <a class="info-button" href="index.html">Revenir à l’accueil</a>
+                </section>
+            </article>
+        </main>
+
+        <footer class="info-footer">
+            <div class="info-footer__inner">
+                <p><strong>TripleFrames</strong> — Le cinéma se joue à plusieurs.</p>
+                <nav aria-label="Informations légales">
+                    <a href="how-to-play.html" aria-current="page">Comment jouer</a>
+                    <a href="terms.html">Conditions</a>
+                    <a href="privacy.html">Confidentialité</a>
+                </nav>
+            </div>
+        </footer>
+
+        <script src="../js/info-pages.js"></script>
+    </body>
+</html>
