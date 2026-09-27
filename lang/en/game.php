@@ -139,6 +139,10 @@ return [
             'none' => 'No correct answer in this game',
             'unfound' => ':count film nobody found|:count films nobody found',
         ],
+        // Lot L80-7 (ajout à la liste de la spec 80 § 15.2) : état d’erreur du
+        // podium, dont le bouton relance la resynchronisation (§ 20).
+        'unavailable' => 'The final standings could not be loaded.',
+        'retry' => 'Try again',
     ],
 
     'recap' => [

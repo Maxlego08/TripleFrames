@@ -132,6 +132,10 @@ return [
             'none' => 'Aucune bonne réponse dans cette partie',
             'unfound' => ':count film que personne n’a trouvé|:count films que personne n’a trouvés',
         ],
+        // Lot L80-7 (ajout à la liste de la spec 80 § 15.2) : état d’erreur du
+        // podium, dont le bouton relance la resynchronisation (§ 20).
+        'unavailable' => 'Le podium n’a pas pu être chargé.',
+        'retry' => 'Réessayer',
     ],
 
     'recap' => [

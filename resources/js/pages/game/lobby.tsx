@@ -5,6 +5,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import LaunchController from '@/actions/App/Http/Controllers/Room/LaunchController';
 import { ConnectionBanner } from '@/components/game/connection-banner';
 import { GameHelp } from '@/components/game/game-help';
+import { Podium } from '@/components/game/podium';
 import { PoolStatus } from '@/components/room/pool-status';
 import { ReplayButton } from '@/components/room/replay-button';
 import { RoomSettingsForm } from '@/components/room/room-settings-form';
@@ -112,14 +113,15 @@ function firstError(errors: Record<string, string>): string | null {
  * - pour les autres : l'attente de l'hôte, en lecture seule ;
  * - pour tous : « Quitter le salon », confirmé, qui mène à l'accueil.
  *
- * **États de partie** (manche, révélation, pause, podium) : composants de 60
- * et de 80 à venir (L60-14, L80-7), montés ici selon le magasin. D'ici là,
- * l'état de partie montre la liste des sièges, et au siège sans
- * participation, l'attente de la partie suivante (§ 15.3). Sur le podium
- * (partie figée), « Rejouer » (§ 13, `ReplayButton`) : le geste de l'hôte,
- * désactivé avec son motif pendant un drainage, qui le refuse ; les autres
- * attendent l'hôte. Au retour au lobby, un focus perdu avec l'état de
- * partie démonté revient au titre de la page.
+ * **États de partie** (manche, révélation, pause) : composants de 60 à venir
+ * (L60-14), montés ici selon le magasin. D'ici là, l'état de partie montre
+ * la liste des sièges, et au siège sans participation, l'attente de la
+ * partie suivante (§ 15.3). Sur le podium (partie figée), le `Podium` de 80
+ * (L80-7 : classement final, faits marquants, récapitulatif ; focus à son
+ * titre), composé autour de « Rejouer » (§ 13, `ReplayButton`) : le geste
+ * de l'hôte, désactivé avec son motif pendant un drainage, qui le refuse ;
+ * les autres attendent l'hôte. Au retour au lobby, un focus perdu avec
+ * l'état de partie démonté revient au titre de la page.
  *
  * États obligatoires (§ 8.1) : chargement (`processing` des boutons),
  * erreur (refus de lancement, de remède ou de geste d'hôte — erreur `room`
@@ -149,6 +151,7 @@ export default function Lobby({
     });
     const {
         state,
+        store,
         connection,
         seatNotice,
         settings,
@@ -278,10 +281,15 @@ export default function Lobby({
         phase === 'game' &&
         (selfSeat === undefined || selfSeat.firstRoundNumber === null);
 
-    // Le podium : la partie est figée (`game.ended`, ou le paquet relu). Le
-    // drainage refuse « Rejouer » (§ 14) : le bouton le dit, le serveur
-    // décide.
-    const onPodium = phase === 'game' && state.podium !== null;
+    // Le podium (80 § 11, L80-7) : la partie est figée — `game.ended`, ou le
+    // paquet relu, qui le rejoue à l'identique jusqu'à l'archivage. Un statut
+    // terminal sans podium (paquet incomplet) le dit attendu : chargement
+    // pendant la relecture, erreur rejouable sinon, « réessayer » relisant
+    // l'état. Le drainage refuse « Rejouer » (§ 14) : le bouton le dit, le
+    // serveur décide.
+    const gameEnded =
+        state.status === 'completed' || state.status === 'interrupted';
+    const onPodium = phase === 'game' && (state.podium !== null || gameEnded);
     const replayMotives = maintenance
         ? [t('common.maintenance.launch_blocked')]
         : [];
@@ -454,14 +462,20 @@ export default function Lobby({
                             )}
 
                             {onPodium && (
-                                <ReplayButton
-                                    roomCode={room.code}
-                                    isHost={isHost}
-                                    disabled={!canWrite}
-                                    motives={replayMotives}
-                                    onHttpException={onHttpException}
-                                    onRefused={announce}
-                                />
+                                <Podium
+                                    podium={state.podium}
+                                    failed={!state.resyncing}
+                                    onRetry={() => store.requestResync('retry')}
+                                >
+                                    <ReplayButton
+                                        roomCode={room.code}
+                                        isHost={isHost}
+                                        disabled={!canWrite}
+                                        motives={replayMotives}
+                                        onHttpException={onHttpException}
+                                        onRefused={announce}
+                                    />
+                                </Podium>
                             )}
 
                             <SeatList
