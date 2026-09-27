@@ -279,6 +279,7 @@ return [
         'noRepeatMovies' => 'no repeated movies',
         'password' => 'password',
         'password_confirmation' => 'password confirmation',
+        'publicId' => 'player',
         'real_name' => 'real name',
         'recovery_code' => 'recovery code',
         'remember' => 'remember me',

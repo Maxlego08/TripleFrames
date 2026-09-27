@@ -5,7 +5,10 @@ use App\Http\Controllers\Game\ChoiceController;
 use App\Http\Controllers\Game\ClockController;
 use App\Http\Controllers\Game\FrameServeController;
 use App\Http\Controllers\Game\RoomStateController;
+use App\Http\Controllers\Room\HostTransferController;
+use App\Http\Controllers\Room\KickController;
 use App\Http\Controllers\Room\LaunchController;
+use App\Http\Controllers\Room\LeaveRoomController;
 use App\Http\Controllers\Room\RoomController;
 use App\Http\Controllers\Room\RoomEntryController;
 use App\Http\Controllers\Room\RoomPresetController;
@@ -121,15 +124,16 @@ Route::get('r/{room}/state', [RoomStateController::class, 'show'])
     ->name('room.state')
     ->middleware(['translations:game,room,legal', 'throttle:game-read']);
 
-// Gestes de l'hôte au lobby (spec 50 § 3, § 5.3, § 12, § 17.1, § 21 ;
-// contrats C0 et C6) : l'onglet Simple, l'application d'un preset et le
-// lancement. Toute écriture du lobby passe par `seat.active` (contrat C7 :
+// Gestes de l'hôte (spec 50 § 3, § 5.3, § 11, § 12, § 17.1, § 21 ;
+// contrats C0 et C6) : l'onglet Simple, l'application d'un preset, le
+// lancement, l'expulsion et le transfert du rôle ; et le départ, geste de
+// tout joueur. Toute écriture du lobby passe par `seat.active` (contrat C7 :
 // 403 sans siège tenu par le jeton, 409 `seat_superseded` pour un onglet
 // supplanté), puis par `throttle:game-write`, dans cet ordre et avant la
 // liaison de `{room}` (liste de priorité de `bootstrap/app.php`). Aucun
 // domaine de traduction : ces routes ne rendent aucune page, elles
-// redirigent vers le lobby, refus et échec technique rendus dans la langue
-// de la requête.
+// redirigent vers le lobby (le départ, vers l'accueil), refus et échec
+// technique rendus dans la langue de la requête.
 Route::middleware(['seat.active', 'throttle:game-write'])->group(function (): void {
     Route::patch('r/{room}/settings', [RoomSettingsController::class, 'update'])
         ->name('room.settings.update');
@@ -139,6 +143,19 @@ Route::middleware(['seat.active', 'throttle:game-write'])->group(function (): vo
 
     Route::post('r/{room}/launch', [LaunchController::class, 'store'])
         ->name('room.launch');
+
+    // Pouvoirs de l'hôte (§ 11.3, § 11.4) et départ de tout joueur.
+    // `{target}` est le `public_id` du siège VISÉ, jamais `{player}` :
+    // `seat.active` lit `{player}` comme le siège du demandeur, que le jeton
+    // courant doit tenir — celui de l'hôte ne tient jamais la cible.
+    Route::post('r/{room}/players/{target}/kick', [KickController::class, 'store'])
+        ->name('room.players.kick');
+
+    Route::post('r/{room}/host', [HostTransferController::class, 'store'])
+        ->name('room.host.transfer');
+
+    Route::post('r/{room}/leave', [LeaveRoomController::class, 'store'])
+        ->name('room.leave');
 });
 
 // Soumission d'une réponse en texte libre (spec 70 § 7.1, contrat C10 § 2) :

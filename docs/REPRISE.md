@@ -539,7 +539,7 @@ Ensuite, à chaque session : **« Implémente l'étape suivante de l'ordre des l
 108. L60-11 — crochets de saisie, QCM ciblé, fin de partie → 6, 78, 89, 92, 93, 104, 106, 107 — ✅ livrée le 27/09
 109. L60-12 — resynchronisation de partie → 77, 78, 82, 85, 92, 93, 94, 107 — ✅ livrée le 27/09
 110. L50-4 — page `game/lobby`, page unique du salon → 39, 83, 85, 95, 99, 101, 109 — ✅ livrée le 27/09
-111. L50-6 — pouvoirs de l'hôte : expulsion (D15), transfert, départ → 65, 83, 93, 101, 110
+111. L50-6 — pouvoirs de l'hôte : expulsion (D15), transfert, départ → 65, 83, 93, 101, 110 — ✅ livrée le 27/09
 112. L60-13 — présence, reprise, pouvoir d'hôte en partie → 85, 89, 93, 97, 111
 113. L50-8 — échéances : archivage, lobby oublié, salon expiré → 23, 29, 83, 101, 112
 114. L100-8 (2e temps, `stale_room`) + L100-7 (3e temps, `stale_lobby`) → 24, 113

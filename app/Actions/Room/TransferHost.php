@@ -41,9 +41,10 @@ final readonly class TransferHost
 {
     /**
      * Désigne ce siège comme hôte — création du salon (§ 6.4) et transfert
-     * manuel (`HandOverHost`, § 11.4). La cible appartient au salon, n'est
-     * pas expulsée et est `connected` (à la création, le siège vient de
-     * naître).
+     * manuel ({@see HandOverHost}, § 11.4, qui refuse d'abord, sous le champ
+     * `publicId`, une cible non connectée ou expulsée). La cible appartient
+     * au salon, n'est pas expulsée et est `connected` (à la création, le
+     * siège vient de naître).
      *
      * @throws LogicException Transaction absente, ou cible hors de ces
      *                        conditions : un défaut de l'appelant, jamais un
@@ -65,9 +66,11 @@ final readonly class TransferHost
     }
 
     /**
-     * Transfert automatique — départ de l'hôte, lecture sans cible valide
-     * (prise de siège S8, lancement L3, « Rejouer » R3, rendu du salon),
-     * passage de l'hôte à `left` par la présence (`60`).
+     * Transfert automatique — départ volontaire de l'hôte ({@see LeaveRoom}),
+     * lecture sans cible valide (prise de siège S8, lancement L3, « Rejouer »
+     * R3, rendu du salon), passage de l'hôte à `left` par la présence (`60`).
+     * Jamais à la déconnexion : un hôte `disconnected` reste une cible valide
+     * ({@see self::hasValidHost()}) tant qu'il n'est pas parti.
      *
      * Cible, l'hôte courant toujours exclu : le siège `connected` non expulsé
      * de `joined_at` le plus ancien (puis `id`) ; à défaut, le siège non
@@ -143,9 +146,12 @@ final readonly class TransferHost
             return;
         }
 
+        // Le prédécesseur n'est nommé que s'il est un siège de CE salon : une
+        // référence souple sans cible (siège absent, ou d'ailleurs sur une
+        // base incohérente) ne publie jamais le `public_id` d'un autre salon.
         $previousPublicId = $previousId === null
             ? null
-            : Player::query()->whereKey($previousId)->value('public_id');
+            : Player::query()->whereKey($previousId)->whereBelongsTo($room)->value('public_id');
 
         HostChanged::dispatch($room, CurrentGame::of($target), [
             'hostPublicId' => $target->public_id,

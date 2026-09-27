@@ -76,9 +76,10 @@ return [
 
     /*
     | Page du salon (spec 50 § 8.1 et § 20.3, lot L50-4) : code et lien de
-    | partage, sièges, lancement, annonces du lobby. Les gestes d’hôte
-    | (retirer, nommer hôte, quitter) arrivent avec le lot L50-6. Les nombres
-    | passent en placeholders, formatés par le client.
+    | partage, sièges, lancement, annonces du lobby ; gestes d’hôte et départ
+    | (spec 50 § 11.3 et § 11.4, lot L50-6) : retirer, nommer hôte, quitter,
+    | leurs confirmations et leurs refus. Les nombres passent en
+    | placeholders, formatés par le client.
     */
 
     'lobby' => [
@@ -105,6 +106,14 @@ return [
         'launch' => 'Lancer la partie',
         'launching' => 'Lancement…',
         'need_players' => 'Il faut au moins :min joueurs connectés.',
+        'kick' => 'Retirer du salon',
+        'kick_confirm' => 'Retirer :nickname ? Ce joueur ne pourra pas revenir dans ce salon.',
+        'cannot_kick_self' => 'Vous ne pouvez pas vous retirer vous-même : quittez le salon.',
+        'transfer' => 'Nommer hôte',
+        'transfer_confirm' => 'Confier le rôle d’hôte à :nickname ?',
+        'transfer_unavailable' => 'Ce joueur n’est pas connecté.',
+        'leave' => 'Quitter le salon',
+        'leave_confirm' => 'Quitter le salon ? Vous pourrez revenir avec le lien.',
     ],
 
     /*

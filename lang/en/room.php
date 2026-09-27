@@ -12,6 +12,7 @@ return [
     | de geste de salon — {@see \App\Enums\RoomRefusal} construit
     | `room.refusal.<valeur>` — et l’échec technique du lancement (L50-7a),
     | la page du salon et son vivier (L50-4 : `room.lobby.*`, `room.pool.*`),
+    | les gestes d’hôte et le départ (L50-6 : `room.lobby.{kick,transfer,leave}*`),
     | et les huit lignes des presets — {@see \App\Enums\SettingPresetKey} construit
     | `room.presets.<clé>.{label,description}` — : la spec interdit d’inventer
     | des clés pour des écrans absents. `setting_preset` n’a **aucune colonne
@@ -88,9 +89,10 @@ return [
 
     /*
     | Page du salon (spec 50 § 8.1 et § 20.3, lot L50-4) : code et lien de
-    | partage, sièges, lancement, annonces du lobby. Les gestes d’hôte
-    | (retirer, nommer hôte, quitter) arrivent avec le lot L50-6. Les nombres
-    | passent en placeholders, formatés par le client.
+    | partage, sièges, lancement, annonces du lobby ; gestes d’hôte et départ
+    | (spec 50 § 11.3 et § 11.4, lot L50-6) : retirer, nommer hôte, quitter,
+    | leurs confirmations et leurs refus. Les nombres passent en
+    | placeholders, formatés par le client.
     */
 
     'lobby' => [
@@ -117,6 +119,14 @@ return [
         'launch' => 'Start game',
         'launching' => 'Starting…',
         'need_players' => 'At least :min connected players are needed.',
+        'kick' => 'Remove from room',
+        'kick_confirm' => 'Remove :nickname? This player won’t be able to come back to this room.',
+        'cannot_kick_self' => 'You cannot remove yourself: leave the room instead.',
+        'transfer' => 'Make host',
+        'transfer_confirm' => 'Hand the host role to :nickname?',
+        'transfer_unavailable' => 'This player is not connected.',
+        'leave' => 'Leave room',
+        'leave_confirm' => 'Leave the room? You can come back with the link.',
     ],
 
     /*

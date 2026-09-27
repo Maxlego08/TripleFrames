@@ -271,6 +271,7 @@ return [
         'noRepeatMovies' => 'non-répétition des films',
         'password' => 'mot de passe',
         'password_confirmation' => 'confirmation du mot de passe',
+        'publicId' => 'joueur',
         'real_name' => 'nom réel',
         'recovery_code' => 'code de récupération',
         'remember' => 'se souvenir de moi',

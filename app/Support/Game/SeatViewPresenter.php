@@ -84,6 +84,35 @@ final class SeatViewPresenter
     }
 
     /**
+     * La vue d'UN siège telle que la page du salon la tient (§ 11.5) : en
+     * partie si `$game` — la partie que décrit le paquet du siège
+     * ({@see CurrentGame::forState()} : la partie en cours, à défaut la
+     * dernière tant que le salon est en partie, podium compris) — porte une
+     * participation de ce siège, identité gelée comprise ; au lobby sinon,
+     * siège sans participation compris (il attend la partie suivante).
+     * Émetteurs : `seat.updated` au départ et à l'expulsion (50), et aux
+     * transitions de présence (60).
+     *
+     * @return SeatViewPayload
+     */
+    public static function ofSeat(Player $seat, ?Game $game, ?int $hostPlayerId): array
+    {
+        if ($game !== null) {
+            $participation = GamePlayer::query()
+                ->whereBelongsTo($game)
+                ->where('player_id', $seat->id)
+                ->with('player:'.implode(',', self::GAME_SEAT_COLUMNS))
+                ->first();
+
+            if ($participation !== null) {
+                return self::inGame($participation, $hostPlayerId);
+            }
+        }
+
+        return self::lobby($seat, $hostPlayerId);
+    }
+
+    /**
      * Les sièges d'un salon au lobby : **tous**, partis et expulsés compris
      * (l'état de chacun est dans sa vue), triés par `joined_at` croissant
      * puis par `id` (50 § 8.1).

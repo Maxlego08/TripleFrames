@@ -23,11 +23,11 @@ use App\Models\User;
  *   verrou du salon, l'hôte ayant pu changer entre la requête et le verrou
  *   (spec 50 § 2.5, § 12.6 invariant 2).
  *
- * Les autres gestes de la table du § 17.1 (`replay`, `kick`, `transferHost`,
- * `leave`) arrivent avec leurs lots (L50-6, L50-7b). `launch` a pour
- * appelant `room.launch` (L50-7a) ; `advanceRound` est posée au même lot pour
- * le geste « manche suivante » de `60` (contrat C7 § 2.4), dont l'action
- * l'évalue sous le verrou du salon.
+ * `replay` arrive avec son lot (L50-7b). `launch` a pour appelant
+ * `room.launch` (L50-7a) ; `advanceRound` est posée au même lot pour le geste
+ * « manche suivante » de `60` (contrat C7 § 2.4), dont l'action l'évalue sous
+ * le verrou du salon. `kick`, `transferHost` et `leave` ont pour appelants
+ * `room.players.kick`, `room.host.transfer` et `room.leave` (L50-6).
  */
 class RoomPolicy
 {
@@ -59,6 +59,35 @@ class RoomPolicy
     public function advanceRound(?User $user, Room $room, ?Player $seat): bool
     {
         return self::holdsHostSeat($room, $seat);
+    }
+
+    /**
+     * Retirer un siège du salon (`room.players.kick`, § 11.3) : même clause
+     * que {@see self::updateSettings()}. L'expulsion relit l'autorité sous le
+     * verrou du salon, et refuse que l'hôte se vise lui-même.
+     */
+    public function kick(?User $user, Room $room, ?Player $seat): bool
+    {
+        return self::holdsHostSeat($room, $seat);
+    }
+
+    /**
+     * Confier le rôle d'hôte à un autre siège (`room.host.transfer`, § 11.4) :
+     * même clause. Le transfert relit l'autorité sous le verrou du salon.
+     */
+    public function transferHost(?User $user, Room $room, ?Player $seat): bool
+    {
+        return self::holdsHostSeat($room, $seat);
+    }
+
+    /**
+     * Quitter le salon (`room.leave`, § 11.4) : vrai si et seulement si le
+     * siège appartient au salon. Chaque joueur peut quitter, hôte compris ;
+     * ce n'est pas un geste d'hôte.
+     */
+    public function leave(?User $user, Room $room, ?Player $seat): bool
+    {
+        return $seat !== null && $seat->room_id === $room->id;
     }
 
     /**

@@ -6,6 +6,8 @@ import LaunchController from '@/actions/App/Http/Controllers/Room/LaunchControll
 import { ConnectionBanner } from '@/components/game/connection-banner';
 import { GameHelp } from '@/components/game/game-help';
 import { PoolStatus } from '@/components/room/pool-status';
+import { LeaveRoomAction } from '@/components/room/seat-actions';
+import type { RoomGestureContext } from '@/components/room/seat-actions';
 import { SeatList } from '@/components/room/seat-list';
 import { ShareCode } from '@/components/room/share-code';
 import { ReadOnlyNotice } from '@/components/state/read-only-notice';
@@ -101,8 +103,10 @@ function firstError(errors: Record<string, string>): string | null {
  *   avec son motif quand le vivier est bloqué, quand moins de
  *   `launch.minConnected` sièges sont connectés, ou pendant un drainage
  *   (prop partagée `maintenance`) — une aide seulement : le serveur relit
- *   tout sous verrou ;
- * - pour les autres : l'attente de l'hôte, en lecture seule.
+ *   tout sous verrou ; et, sur chaque autre siège, « Retirer du salon » et
+ *   « Nommer hôte » (§ 11.3, § 11.4), au lobby comme en partie ;
+ * - pour les autres : l'attente de l'hôte, en lecture seule ;
+ * - pour tous : « Quitter le salon », confirmé, qui mène à l'accueil.
  *
  * **États de partie** (manche, révélation, pause, podium) : composants de 60
  * et de 80 à venir (L60-14, L80-7), montés ici selon le magasin. D'ici là,
@@ -110,9 +114,11 @@ function firstError(errors: Record<string, string>): string | null {
  * participation, l'attente de la partie suivante (§ 15.3).
  *
  * États obligatoires (§ 8.1) : chargement (`processing` des boutons),
- * erreur (refus rendu dans la page, en `Alert` au rôle `note`, et annoncé —
+ * erreur (refus de lancement, de remède ou de geste d'hôte — erreur `room`
+ * ou `publicId` — rendu dans la page, en `Alert` au rôle `note`, et annoncé —
  * jamais un toast, aucun `Toaster` sous `GameLayout`), déconnexion
- * (`ConnectionBanner`, contrôles d'hôte désactivés), onglet supplanté
+ * (`ConnectionBanner`, contrôles d'hôte désactivés, départ toujours
+ * possible), onglet supplanté
  * (`ReadOnlyNotice`, 409 intercepté). Le titre ne porte jamais le code
  * (§ 6.5) : `room.lobby.title`.
  */
@@ -138,6 +144,7 @@ export default function Lobby({
         seatNotice,
         settings,
         phase,
+        active,
         canWrite,
         onHttpException,
     } = lobby;
@@ -150,7 +157,15 @@ export default function Lobby({
     const framesPerRound = settings.settings.framesPerRound;
     const speedBonusMaxPercent =
         limits.speedBonusMaxPercent[String(framesPerRound)];
-    const refusal = typeof errors.room === 'string' ? errors.room : null;
+    // Refus d'un geste rendu dans la page : erreur `room` (lancement,
+    // retrait de soi-même, remède) ou `publicId` (transfert vers un siège
+    // non connecté, § 11.4).
+    const refusal =
+        typeof errors.room === 'string'
+            ? errors.room
+            : typeof errors.publicId === 'string'
+              ? errors.publicId
+              : null;
     const shareUrl = new URL(
         show.url({ room: room.code }),
         window.location.origin,
@@ -205,6 +220,19 @@ export default function Lobby({
             onFinish: () => setRemedyPending(false),
         });
     };
+
+    // Gestes de salon (§ 11.3, § 11.4) : retirer et nommer hôte pour l'hôte,
+    // quitter pour tous — au lobby comme en partie (§ 11.1). Les gestes
+    // d'hôte attendent la connexion (§ 8.1, état « déconnexion ») ; le
+    // départ, geste HTTP de tout joueur, ne cède qu'à un onglet supplanté ou
+    // à un siège déjà sorti.
+    const gestures: RoomGestureContext = {
+        roomCode: room.code,
+        disabled: !canWrite,
+        onHttpException,
+        onRefused: announce,
+    };
+    const leaveGesture: RoomGestureContext = { ...gestures, disabled: !active };
 
     // En partie, les sièges sont les participations gelées au lancement ou à
     // l'admission d'un retardataire : un siège qui n'y figure pas n'a aucune
@@ -341,7 +369,12 @@ export default function Lobby({
                                 seats={state.seats}
                                 selfPublicId={state.self.publicId}
                                 capacity={settings.settings.capacity}
+                                actions={isHost ? gestures : null}
                             />
+
+                            <div>
+                                <LeaveRoomAction {...leaveGesture} />
+                            </div>
 
                             {speedBonusMaxPercent !== undefined && (
                                 <div>
@@ -365,7 +398,12 @@ export default function Lobby({
                                 seats={state.seats}
                                 selfPublicId={state.self.publicId}
                                 capacity={settings.settings.capacity}
+                                actions={isHost ? gestures : null}
                             />
+
+                            <div>
+                                <LeaveRoomAction {...leaveGesture} />
+                            </div>
                         </>
                     )}
                 </div>

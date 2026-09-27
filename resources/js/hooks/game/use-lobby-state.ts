@@ -78,6 +78,13 @@ export type LobbyStateView = GameStateView & {
     /** L'état des réglages le plus récent : diffusé, à défaut la prop. */
     settings: RoomSettingsState;
     /**
+     * Onglet actif et siège toujours dans le salon, connexion d'Echo ou non.
+     * Garde « Quitter le salon » (§ 11.1, § 11.4) : un geste HTTP de tout
+     * joueur, que la perte du websocket ne suspend pas — seuls les contrôles
+     * d'hôte le sont (§ 8.1).
+     */
+    active: boolean;
+    /**
      * Ce siège peut écrire : onglet actif, connecté, toujours dans le salon.
      * Les contrôles d'hôte sont désactivés sinon (§ 8.1, état
      * « déconnexion ») ; le serveur relit tout sous verrou de toute façon.
@@ -238,5 +245,5 @@ export function useLobbyState(options: UseLobbyStateOptions): LobbyStateView {
         }
     }, [settingsSignature]);
 
-    return { ...view, phase, settings, canWrite, onHttpException };
+    return { ...view, phase, settings, active, canWrite, onHttpException };
 }
