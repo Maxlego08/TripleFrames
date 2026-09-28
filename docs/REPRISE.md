@@ -1,5 +1,7 @@
 # Reprise — TripleFrames
 
+**Répétition de la mise en service jouée sur la VM le 28/09/2026 : voir `docs/ops/repetition-vm.md`.**
+
 **Session du 28/09/2026 (après-midi) — gestion des comptes au back-office, livrée en avance du J2 et NON commitée (relecture du porteur demandée)** : lot L20-19 (écran de gestion des accès, correction du nom réel, EN20-3 inscrite) plus un annuaire de tous les comptes, décidé par le porteur le même jour (`20` § 2.8, points ouverts EL19-1 à EL19-8 au § 4 ci-dessous).
 
 **Dernière session : 24-28/09/2026 — phases A, B et C implémentées : back-office de curation et moteur de jeu complets sur develop (≈ 4 300 tests) ; reste la phase D, qui attend les gestes du porteur.** Étapes IA livrées : 6 à 25, 33 à 53, 62, 63 et 65 à 125. Les écarts relevés pendant l'implémentation (journal des écarts, entrées « E<étape>-<n> ») sont reportés dans les specs propriétaires : marqués « amendé le 25/09 » pour les phases A et B, « amendé le 28/09 » pour la phase C (étapes 62 à 125). Les gestes du porteur qu'ils ajoutent sont au § 3, ses questions au § 4. Restent dus, outre la phase 0 : avant la porte du pilote (56), les étapes 26 à 30, 32, 54 et 55, gestes du porteur ou préparation de la mise en service ; l'étape 64 (licence du pack d'avatars) ; puis la curation (57 à 61) et la phase D (126 à 134) — amendé le 28/09.

@@ -17,6 +17,8 @@
 #
 # « php artisan reverb:restart » (hook, étape 11) arrête le serveur par un
 # signal déposé dans le cache ; Restart=always le relève sur le nouveau code.
+# Après une perte du Redis dédié, Reverb s'arrête aussi de lui-même, en code 0
+# (répétition du 28/09) : Restart=on-failure le laisserait à terre.
 #
 # Syntaxe systemd : un commentaire n'est lu qu'en DÉBUT de ligne (vérifié par
 # tests/Feature/Deploy/OpsTemplatesTest.php).

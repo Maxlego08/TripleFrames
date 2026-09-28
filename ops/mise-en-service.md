@@ -1,6 +1,6 @@
 # Mise en service initiale du VPS — liste de contrôle
 
-Liste de contrôle de la mise en service initiale (spec `100` § 11.6), lot L100-9. Préparée par l'IA le 28/09/2026 (étape 26 de `docs/REPRISE.md`, annexe), **jouée par le porteur** : étapes 27 (mise en service, montage root), 28 (premier administrateur) et 29 (premier déploiement par le hook). Elle ne décide rien : en cas d'écart, la spec fait foi (`100` § 10, § 11, § 13.1, § 15).
+Liste de contrôle de la mise en service initiale (spec `100` § 11.6), lot L100-9. Préparée par l'IA le 28/09/2026 (étape 26 de `docs/REPRISE.md`, annexe), **jouée par le porteur** : étapes 27 (mise en service, montage root), 28 (premier administrateur) et 29 (premier déploiement par le hook). Elle ne décide rien : en cas d'écart, la spec fait foi (`100` § 10, § 11, § 13.1, § 15). **Répétée de bout en bout sur la VM Homestead le 28/09/2026** : `docs/ops/repetition-vm.md` donne, pour chaque étape ci-dessous, les commandes exactes jouées, le résultat obtenu et ce qui change sur le VPS (section « Ordre de rejeu sur le VPS »).
 
 **Terminé (L100-9)** quand `/up` et les sondes sont vertes, que le relevé et `ops/plesk/settings.md` sont consignés et qu'un premier déploiement complet par le hook a réussi, sous sa forme sans drainage.
 
@@ -41,12 +41,17 @@ Résultats à consigner, date comprise, dans `100` § 10.1 (« Résultats du rel
 | Utilisateur d'abonnement | `id <utilisateur>` ; `getent passwd <utilisateur>`                                                                                  | shell non chrooté, `HOME` défini                                                                         |
 | Outils (abonnement)      | `command -v mysqldump` ; chemin de `composer.phar`                                                                                  | accessibles                                                                                              |
 | Répertoire privé         | `ls -ld /var/www/vhosts/<DOMAINE>/private`                                                                                          | existe, hors `httpdocs`                                                                                  |
+| HOME de l'abonnement     | `stat -c '%A %U:%G' /var/www/vhosts/<DOMAINE>`                                                                                      | `drwx--x---`, utilisateur d'abonnement, groupe du serveur web (`psaserv`) ; jamais `0711`                |
 | Région                   | contrat de l'hébergeur                                                                                                              | **UE** (décision 17)                                                                                     |
 | Heure                    | `timedatectl` ; en SQL, `SELECT @@global.time_zone, @@session.time_zone, @@system_time_zone` ; `date.timezone` du PHP (CLI et pool) | UTC partout, NTP actif                                                                                   |
-| MySQL                    | en SQL, `SELECT VERSION(), @@explicit_defaults_for_timestamp` ; accès local (socket ou `127.0.0.1`)                                 | 8.0.x, `1` ; `DB_HOST` noté                                                                              |
+| MySQL                    | en SQL, `SELECT VERSION(), @@explicit_defaults_for_timestamp, @@gtid_mode` ; accès local (socket ou `127.0.0.1`)                    | 8.0.x, `1`, `OFF` ; `DB_HOST` noté                                                                       |
 | Pare-feu                 | Plesk › Pare-feu                                                                                                                    | politique entrante notée                                                                                 |
 
 La lisibilité de `/proc/meminfo` et de `/proc/cpuinfo` sous l'`open_basedir` de l'abonnement se vérifie à l'étape 5, par la sonde `load`.
+
+`@@gtid_mode` à `ON` : le vidage de `backup:snapshot` porterait `SET @@GLOBAL.GTID_PURGED`, que l'utilisateur d'une base Plesk ne peut pas rejouer, et toute restauration échouerait à l'import ; `--set-gtid-purged=OFF` est alors à ajouter à `backup:snapshot` avant la première sauvegarde (répétition du 28/09, `docs/ops/repetition-vm.md`, écart n° 16).
+
+**Relevé « avant » des voisins**, root, avant tout geste de l'étape 4 : PID des services du relevé (`systemctl show -p MainPID --value <unité>`), code HTTP de chaque site hébergé (`plesk bin site --list`), code et sujet du certificat que sert l'adresse du VPS sans SNI. Refait après l'étape 5 : mêmes PID, mêmes codes, même serveur par défaut ; seuls ports nouveaux, ceux de Redis et de Reverb, en `127.0.0.1`. Blocs : `docs/ops/repetition-vm.md`, étapes 1.0 et 1.13.
 
 **Paramètres dérivés du relevé.** Une fois le relevé fait, les paramètres non secrets (ports, utilisateur, groupe, chemin écrit avec `<DOMAINE>`) et les valeurs « À AJUSTER AU RELEVÉ » sont reportés **dans le dépôt**, par un commit « gabarits ajustés au relevé » ; sur le serveur ne restent à remplacer que `<DOMAINE>` et le mot de passe Redis.
 
@@ -70,6 +75,7 @@ Ce commit est porté sur `main`, la branche `deploy` est reconstruite par le job
 - [ ] Git selon `ops/plesk/settings.md` § 6 : branche `deploy`, clé en lecture seule, mode manuel, **sans** actions additionnelles.
 - [ ] Points du relevé propres à l'abonnement faits (utilisateur, répertoire privé, chemin de déploiement), puis commit « gabarits ajustés au relevé » (section 1) sur `main`, les deux workflows verts, `deploy` reconstruite par le job `artifacts` et tirée dans Plesk.
 - [ ] Premier « Déployer » : les fichiers arrivent, sans `vendor/`, sans `.env`, sans drapeau.
+- [ ] Fichiers servis lisibles du serveur web, en SSH de l'abonnement dans `__TF_DEPLOY_PATH__` : `find public \( -type f ! -perm -o=r \) -o \( -type d ! -perm -o=x \) | wc -l` rend `0`. Un fichier de `public/` en `640` est refusé en 403 par nginx (répétition du 28/09 : assets neufs déposés sous un umask `027`). Jamais corrigé en passant une session en `umask 022`, qui rendrait de nouveau lisibles les caches de démarrage : `chmod o+r` sur les fichiers et `o+rx` sur les répertoires de `public/` seuls, puis relever comment Plesk Git fixe les droits des fichiers déposés.
 
 ## 3. Étape 2 — `.env` de production, racines, `APP_KEY`
 
@@ -79,13 +85,13 @@ Abonnement :
 PHP=/opt/plesk/php/8.4/bin/php
 cd __TF_DEPLOY_PATH__
 (umask 077 && mkdir -p /var/www/vhosts/<DOMAINE>/private/tripleframes/frames \
-    /var/www/vhosts/<DOMAINE>/private/tripleframes/snapshots)
+    /var/www/vhosts/<DOMAINE>/private/tripleframes/snapshots ~/.config/tripleframes)
 (umask 077 && cp .env.example .env)
 "$PHP" -r 'echo "base64:".base64_encode(random_bytes(32)), PHP_EOL;'
 ```
 
-- [ ] Racines hors déploiement créées en `0700` à l'utilisateur d'abonnement (`composer setup` ne tourne pas en production, et `AppServiceProvider` vérifie la variable sans créer le répertoire).
-- [ ] `.env` en `0600`, hors dépôt, rempli selon le tableau ci-dessous (§ 10.10 fait foi).
+- [ ] Racines hors déploiement créées en `0700` à l'utilisateur d'abonnement (`composer setup` ne tourne pas en production, et `AppServiceProvider` vérifie la variable sans créer le répertoire), ainsi que `~/.config/tripleframes`, qui reçoit `hook.env` (étape 7) et la configuration de sauvegarde (L100-10).
+- [ ] `.env` en `0600`, hors dépôt, rempli selon le tableau ci-dessous (§ 10.10 fait foi). `.env.example` porte `DB_CONNECTION=sqlite`, les lignes `# DB_…` commentées et aucune ligne `SESSION_SECURE_COOKIE` : décommenter et remplir les premières, ajouter la dernière.
 - [ ] `APP_KEY` = la ligne `base64:…` ci-dessus : même format que `key:generate`, qui exige `vendor/`, absent avant l'étape 3.
 - [ ] **Copie immédiate d'`APP_KEY` hors machine**, dans les deux exemplaires (§ 13.4) : sans elle, une base restaurée rendrait illisible le second facteur de l'administrateur.
 
@@ -128,12 +134,17 @@ Abonnement, dans `__TF_DEPLOY_PATH__` (chemin de `composer.phar` relevé à la s
 
 ```bash
 umask 027
+PHP=/opt/plesk/php/8.4/bin/php
+cd __TF_DEPLOY_PATH__
 "$PHP" <chemin de composer.phar> install --no-dev --optimize-autoloader --no-interaction
+grep -E '^(APP_ENV|DB_CONNECTION|DB_HOST|DB_DATABASE|DB_USERNAME)=' .env
+"$PHP" artisan about --only=environment
 "$PHP" artisan migrate --force
 "$PHP" artisan db:seed --class=PlatformDataSeeder --force
 ```
 
-- [ ] Les trois commandes sortent en 0. Base vide : aucun instantané n'est requis (la règle 12 protège une curation qui n'existe pas encore) ; le hook le prendra à chaque migration suivante.
+- [ ] Avant `migrate`, la base et l'environnement relus : `APP_ENV=production`, `DB_CONNECTION=mysql`, base et utilisateur de l'étape 1 ; `about` : `production`, débogage désactivé.
+- [ ] Les trois commandes `composer`, `migrate` et `db:seed` sortent en 0. Base vide : aucun instantané n'est requis (la règle 12 protège une curation qui n'existe pas encore) ; le hook le prendra à chaque migration suivante.
 - [ ] Si une commande échoue sur une connexion Redis refusée, monter Redis d'abord (étape 4, bloc d'ouverture puis a), puis reprendre : une fois le bloc d'ouverture joué, l'ordre des gestes root a) à f) de l'étape 4 est libre.
 
 ## 5. Étape 4 — root : Redis, unités, nginx, pare-feu, planificateur, réglages Plesk
@@ -193,6 +204,8 @@ Abonnement (session ouverte par `umask 027`, comme le hook : `optimize` recopie 
 
 ```bash
 umask 027
+PHP=/opt/plesk/php/8.4/bin/php
+cd __TF_DEPLOY_PATH__
 "$PHP" artisan optimize
 "$PHP" artisan lang:hash
 stat -c '%a %n' bootstrap/cache/config.php
@@ -223,13 +236,13 @@ curl -s -D - -H 'Accept-Language: en' https://<DOMAINE>/ | grep -iE '^(age|x-cac
 
 Attendu : `<html lang="fr"` puis `<html lang="en"`, et aucune ligne `Age`, `X-Cache` ni `X-Proxy-Cache`.
 
-- [ ] **Sondes** (§ 15), jeton lu sans écho :
+- [ ] **Sondes** (§ 15), jeton lu sans écho et passé à `curl` par un fichier, jamais en argument : sur un VPS mutualisé, la liste des processus (`/proc/<pid>/cmdline`) est lisible des voisins.
 
 ```bash
 read -rs TOKEN
 for probe in worker-game worker-default load integrity purge; do
     printf '%s ' "$probe"
-    curl -s -H "X-Probe-Token: $TOKEN" "https://<DOMAINE>/ops/probe/$probe"
+    curl -s -H @<(printf 'X-Probe-Token: %s\n' "$TOKEN") "https://<DOMAINE>/ops/probe/$probe"
     echo
 done
 unset TOKEN
@@ -266,11 +279,17 @@ Attendu : code 0 ; fichier `snapshot-AAAAMMJJTHHMMSSZ.sql.gz` en `-rw-------` ; 
 
 ## 8. Étape 7 — hook, puis premier déploiement par le hook (`docs/REPRISE.md`, étape 29)
 
-- [ ] Abonnement : `~/.config/tripleframes/hook.env`, une ligne `COMPOSER_PHAR=<chemin absolu de composer.phar>`, sans secret.
+- [ ] Abonnement : `~/.config/tripleframes/hook.env`, une ligne `COMPOSER_PHAR=<chemin absolu de composer.phar>`, sans secret, en `0600` :
+
+```bash
+(umask 077 && mkdir -p ~/.config/tripleframes && printf 'COMPOSER_PHAR=%s\n' '<chemin absolu de composer.phar>' > ~/.config/tripleframes/hook.env)
+stat -c '%a %U %n' ~/.config/tripleframes/hook.env
+```
+
 - [ ] Relevé des points que `ops/deploy/hook.sh` porte en tête : répertoire courant et délai des actions additionnelles (le hook dure le temps de `composer install` et des migrations), `HOME` défini pour l'utilisateur d'abonnement dans ce contexte.
 - [ ] Plesk Git : actions de déploiement additionnelles = `bash ops/deploy/hook.sh`.
 - [ ] Premier déploiement par le hook, procédure du § 11.4 **sans ses étapes 3 et 4** (pas de drainage : les lignes `# drain:` du hook restent inactives, leur activation est l'étape 126) : tirer `deploy`, « Déployer », lire la sortie `[1/12]` à `[11/12]`, étapes 3 et 12 absentes, sans erreur.
-- [ ] `/up` et les sondes de nouveau vertes.
+- [ ] `/up` et les sondes de nouveau vertes ; `stat -c '%a %n' bootstrap/cache/*.php` : `config.php`, `events.php`, `routes-v7.php` et `lang-version.php` en `640` (`packages.php` et `services.php` en `750`, réécrits par `package:discover`, sans secret) ; `public/` toujours lisible du serveur web (même contrôle `find` qu'à l'étape 1). À refaire après **chaque** « Déployer », surtout quand les assets changent.
 
 ## 9. Contrôle final des gabarits recopiés
 
