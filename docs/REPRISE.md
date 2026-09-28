@@ -597,7 +597,7 @@ Ensuite, à chaque session : **« Implémente l'étape suivante de l'ordre des l
 126. P + IA — déploiement du moteur par la transition du drainage (I-13) ; ensuite, tout déploiement suit `100` § 11.4 → 62 à 125
 127. P — recette de L90-9 sur téléphone réel (360 × 640, clavier ouvert) et lecteur d'écran réel → 125, 126
 128. IA + P, L100-10 (2e temps) — restauration chronométrée sur cible jetable → 30, 96, 126
-129. L100-12 — outillage de charge (scénarios A, A2, B ; `loadtest:forget`) → 29, 97, tous les lots J1 de `50`, `60` et `70`
+129. L100-12 — outillage de charge (scénarios A, A2, B ; `loadtest:forget`) → 29, 97, tous les lots J1 de `50`, `60` et `70` — ✅ livrée le 28/09
 130. P + IA — répétition à deux salons contre la production → 58, 126, 129
 131. P + IA, L100-13 — séance de charge complète (D33) : 20 salons, environ 150 joueurs, voisins non dégradés → 30, 32, 129, 130
 132. IA + P — clôture de L70-11 : `answers:collisions` sur le catalogue publié, calibrage de `70` § 13.1 → 61, 74

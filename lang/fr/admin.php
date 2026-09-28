@@ -2199,6 +2199,22 @@ return [
         ],
 
         /*
+        | Nettoyage des données synthétiques du test de charge (spec 100
+        | § 16.5), joué avant l'archivage des salons. Des nombres seulement :
+        | ni pseudo ni code de salon ; `:file` est le chemin passé à la
+        | commande.
+        */
+        'loadtest' => [
+            'deleted' => 'Salons synthétiques oubliés (faits de partie, sièges et salon) : :rooms.',
+            'dry_run' => 'Simulation : salons synthétiques qui seraient oubliés : :rooms. Rien n’a été supprimé.',
+            'skipped_real_seat' => 'Salons écartés parce qu’au moins un de leurs sièges ne porte pas de pseudo synthétique : :count. Rien n’y a été supprimé.',
+            'skipped_in_progress' => 'Salons écartés parce qu’une partie y est encore en cours : :count. Relancez la commande une fois ces parties terminées.',
+            'not_found' => 'Codes sans salon actif : :count (code inconnu, ou salon déjà archivé : ses pseudos sont effacés, il n’est plus reconnaissable comme synthétique).',
+            'missing_file' => 'Liste des codes illisible : :file. Rien n’a été supprimé.',
+            'failed' => 'Salons dont l’oubli a échoué : :count. Chacun est resté intact ; le détail est dans le journal de l’application.',
+        ],
+
+        /*
         | Drainage de déploiement (spec 100 § 11.3, contrat C18-bis). Lu par le
         | porteur en SSH et dans la sortie du hook. `:until` est un instant
         | ISO-8601 UTC ; `:phase` est rendue par `phase.*`, jamais par la
