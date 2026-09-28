@@ -1391,8 +1391,9 @@ return [
     | Recadreur (spec 20 § 6.3 et § 6.4). Le cadre se tient dans l’espace du
     | master, et ses dimensions s’y lisent : `:width` et `:height` en pixels
     | du master, `:percent` la part de sa surface que couvre le cadre.
-    | `instructions` décrit l’opérabilité au clavier, toujours affichée sous
-    | le cadre : l’alternative non gestuelle du principe 8 ne se cache pas ;
+    | `instructions` décrit l’opérabilité au clavier, toujours accessible
+    | depuis l’aide focalisable du recadreur ; les boutons qui forment
+    | l’alternative non gestuelle du principe 8 restent tous visibles.
     | `:steps` y est le nombre de pas d’un geste fait avec Maj.
     | Les refus du plancher sont ceux de `validation.crop.*`, communs au
     | recadreur et au serveur.
@@ -1466,9 +1467,9 @@ return [
         'heading' => 'Raccourcis de débit',
         'description' => 'Facultatifs : chaque geste a aussi son bouton, et l’outil s’utilise entièrement sans eux. Aucun raccourci n’agit pendant une saisie dans un champ.',
         'classify' => '1 à 5, le cadre sélectionné : classe l’image à ce niveau et l’ajoute à la banque en un seul geste.',
-        'neighbour' => '[ et ] : visuel précédent ou suivant de la bande, sans quitter le cadre. Sur un clavier AZERTY, AltGr + ( et AltGr + ).',
+        'neighbour' => 'Page précédente et Page suivante : visuel précédent ou suivant de la bande, sans quitter le cadre. [ et ] restent disponibles ; sur un clavier AZERTY, AltGr + ( et AltGr + ).',
         'pass' => 'Entrée, dans la passe de revue : conforme, publier. Sur un bouton ou une case, Entrée garde son effet habituel.',
-        'cropper_hint' => 'Raccourcis : 1 à 5 classent et ajoutent l’image depuis le cadre sélectionné ; [ et ] passent au visuel voisin de la bande.',
+        'cropper_hint' => 'Raccourcis : Page précédente et Page suivante changent de visuel ; 1 à 5 classent et ajoutent l’image depuis le cadre sélectionné. [ et ] restent disponibles.',
         'pass_hint' => 'Raccourci : Entrée, hors d’un bouton ou d’une case, vaut « Conforme, publier ».',
         'announce' => [
             'sending' => 'Niveau :level — :label : ajout de l’image à la banque.',

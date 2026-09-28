@@ -9,8 +9,8 @@
  * la barre « terminé » :
  *
  * - **cadre focalisé : `1` à `5`** = classer et envoyer en un geste ;
- * - **`[` et `]`** = visuel précédent et suivant de la bande, sans quitter
- *   le cadre ;
+ * - **`Page précédente` et `Page suivante`**, ou **`[` et `]`** = visuel
+ *   précédent et suivant de la bande, sans quitter le cadre ;
  * - **passe de revue : `Entrée`** = « conforme, publier » (§ 7.4). « Entrée
  *   publie » dans le recadreur est impossible : la publication d'une image
  *   exige une revue sur le rendu final, que produit un job que le curateur
@@ -237,8 +237,18 @@ function composesCharacter(input: ShortcutKeyInput): boolean {
     );
 }
 
-/** `[` et `]` : le sens du pas dans la bande. */
-function bracketDirection(input: ShortcutKeyInput): StripDirection | null {
+/** Les touches de navigation : le sens du pas dans la bande. */
+function neighbourDirection(input: ShortcutKeyInput): StripDirection | null {
+    if (input.shiftKey !== true && isPlain(input)) {
+        if (input.key === 'PageUp') {
+            return 'previous';
+        }
+
+        if (input.key === 'PageDown') {
+            return 'next';
+        }
+    }
+
     if (!composesCharacter(input)) {
         return null;
     }
@@ -305,7 +315,7 @@ export function shortcutAction(
         return { kind: 'pass' };
     }
 
-    const direction = bracketDirection(input);
+    const direction = neighbourDirection(input);
 
     if (direction !== null) {
         return { kind: 'neighbour', direction };

@@ -3,7 +3,9 @@ import {
     ArrowLeftIcon,
     ArrowRightIcon,
     ArrowUpIcon,
+    CircleHelpIcon,
     CrosshairIcon,
+    KeyboardIcon,
     MaximizeIcon,
     MinimizeIcon,
     RotateCcwIcon,
@@ -14,6 +16,11 @@ import type { PointerEvent as ReactPointerEvent } from 'react';
 import { AdminErrorState } from '@/components/admin/admin-error-state';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { useCropperKeyboard } from '@/hooks/admin/use-cropper-keyboard';
 import { useTranslations } from '@/hooks/use-translations';
 import {
@@ -66,18 +73,18 @@ const MOVE_BUTTONS: ReadonlyArray<{
     Icon: LucideIcon;
 }> = [
     {
-        direction: 'left',
-        dx: -1,
-        dy: 0,
-        label: 'admin.cropper.move_left',
-        Icon: ArrowLeftIcon,
-    },
-    {
         direction: 'up',
         dx: 0,
         dy: -1,
         label: 'admin.cropper.move_up',
         Icon: ArrowUpIcon,
+    },
+    {
+        direction: 'left',
+        dx: -1,
+        dy: 0,
+        label: 'admin.cropper.move_left',
+        Icon: ArrowLeftIcon,
     },
     {
         direction: 'down',
@@ -94,6 +101,14 @@ const MOVE_BUTTONS: ReadonlyArray<{
         Icon: ArrowRightIcon,
     },
 ];
+
+/** Disposition spatiale du pavé directionnel affiché à droite du visuel. */
+const MOVE_BUTTON_POSITION_CLASSES: Record<MoveDirection, string> = {
+    up: 'lg:col-start-2 lg:row-start-1',
+    left: 'lg:col-start-1 lg:row-start-2',
+    down: 'lg:col-start-2 lg:row-start-3',
+    right: 'lg:col-start-3 lg:row-start-2',
+};
 
 /**
  * Place et curseur de chaque poignée d'angle (L20-9b) : à l'intérieur du
@@ -205,6 +220,8 @@ type Props = {
      * technologies d'assistance (`aria-keyshortcuts`).
      */
     keyShortcuts?: string;
+    /** Rappel des raccourcis propres à l'écran qui contient le recadreur. */
+    shortcutHint?: string;
     className?: string;
 };
 
@@ -280,6 +297,7 @@ export function FrameCropper({
     disabled = false,
     autoFocus = false,
     keyShortcuts,
+    shortcutHint,
     className,
 }: Props) {
     const { t, locale } = useTranslations();
@@ -583,219 +601,306 @@ export function FrameCropper({
     };
 
     return (
-        <div className={cn('flex w-full flex-col gap-3', className)}>
-            <div
-                ref={regionRef}
-                role="group"
-                aria-label={t('admin.cropper.region_label')}
-                aria-describedby={`${descriptionId} ${violationId} ${instructionsId}`}
-                aria-disabled={regionDisabled ? true : undefined}
-                aria-busy={status === 'loading' ? true : undefined}
-                aria-keyshortcuts={keyShortcuts}
-                tabIndex={status === 'ready' ? 0 : -1}
-                {...shortcutFrameAttribute}
-                onKeyDown={handleKeyDown}
-                className="relative w-full max-w-7xl overflow-hidden rounded-md bg-muted outline-none select-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-            >
-                <img
-                    key={`${imageUrl}#${attempt}`}
-                    src={imageUrl}
-                    alt={t('admin.cropper.image_alt')}
-                    width={FRAME_GEOMETRY.masterWidth}
-                    height={masterHeight}
-                    draggable={false}
-                    decoding="async"
-                    referrerPolicy="no-referrer"
-                    onLoad={() => settle('ready')}
-                    onError={() => settle('failed')}
-                    className={cn(
-                        'block h-auto w-full',
-                        status !== 'ready' && 'invisible',
-                    )}
-                />
-
-                {status === 'ready' && (
-                    <div
-                        aria-hidden
-                        onPointerDown={handlePointerDown}
-                        onPointerMove={handlePointerMove}
-                        onPointerUp={endPointer}
-                        onPointerCancel={endPointer}
-                        onLostPointerCapture={endPointer}
+        <div className={cn('flex w-full flex-col gap-2', className)}>
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-center">
+                <div
+                    ref={regionRef}
+                    role="group"
+                    aria-label={t('admin.cropper.region_label')}
+                    aria-describedby={`${descriptionId} ${violationId} ${instructionsId}`}
+                    aria-disabled={regionDisabled ? true : undefined}
+                    aria-busy={status === 'loading' ? true : undefined}
+                    aria-keyshortcuts={keyShortcuts}
+                    tabIndex={status === 'ready' ? 0 : -1}
+                    {...shortcutFrameAttribute}
+                    onKeyDown={handleKeyDown}
+                    className="relative w-full max-w-4xl overflow-hidden rounded-md bg-muted outline-none select-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background lg:min-w-0 lg:flex-1"
+                >
+                    <img
+                        key={`${imageUrl}#${attempt}`}
+                        src={imageUrl}
+                        alt={t('admin.cropper.image_alt')}
+                        width={FRAME_GEOMETRY.masterWidth}
+                        height={masterHeight}
+                        draggable={false}
+                        decoding="async"
+                        referrerPolicy="no-referrer"
+                        onLoad={() => settle('ready')}
+                        onError={() => settle('failed')}
                         className={cn(
-                            'absolute touch-none border-2 border-primary outline-[100vmax] outline-background/70',
-                            interactive ? 'cursor-move' : 'cursor-not-allowed',
+                            'block h-auto w-full',
+                            status !== 'ready' && 'invisible',
                         )}
-                        style={{
-                            left: percentOf(crop.x, FRAME_GEOMETRY.masterWidth),
-                            top: percentOf(crop.y, masterHeight),
-                            width: percentOf(
-                                crop.width,
-                                FRAME_GEOMETRY.masterWidth,
-                            ),
-                            height: percentOf(crop.height, masterHeight),
-                        }}
-                    >
-                        {/*
-                         * Poignées d'angle : un carré visible au token
-                         * `primary`, et une zone de saisie élargie par un
-                         * pseudo-élément à 2,75 rem de côté — l'équivalent
-                         * de `min-h-11 min-w-11` exigé des gestes répétitifs
-                         * (§ 13.4), à la mesure d'un doigt.
-                         */}
-                        {interactive &&
-                            CROP_CORNERS.map((corner) => (
-                                <div
-                                    key={corner}
-                                    data-crop-corner={corner}
-                                    className={cn(
-                                        'absolute size-3 bg-primary before:absolute before:-inset-4',
-                                        CORNER_CLASSES[corner],
-                                    )}
-                                />
-                            ))}
-                    </div>
-                )}
+                    />
 
-                {status === 'loading' && (
-                    <div role="status" className="absolute inset-0">
-                        <Skeleton className="size-full rounded-none" />
-                        <span className="sr-only">
-                            {t('admin.cropper.image_loading')}
-                        </span>
-                    </div>
-                )}
-
-                {status === 'failed' && (
-                    <div className="absolute inset-0 flex items-center justify-center p-4">
-                        <AdminErrorState
-                            title={t('admin.cropper.image_failed')}
-                            description={t(
-                                'admin.cropper.image_failed_description',
+                    {status === 'ready' && (
+                        <div
+                            aria-hidden
+                            onPointerDown={handlePointerDown}
+                            onPointerMove={handlePointerMove}
+                            onPointerUp={endPointer}
+                            onPointerCancel={endPointer}
+                            onLostPointerCapture={endPointer}
+                            className={cn(
+                                'absolute touch-none border-2 border-primary outline-[100vmax] outline-background/70',
+                                interactive
+                                    ? 'cursor-move'
+                                    : 'cursor-not-allowed',
                             )}
-                            retryLabel={t('admin.cropper.retry')}
-                            onRetry={() => setAttempt((current) => current + 1)}
-                            className="max-w-xl bg-background"
-                        />
+                            style={{
+                                left: percentOf(
+                                    crop.x,
+                                    FRAME_GEOMETRY.masterWidth,
+                                ),
+                                top: percentOf(crop.y, masterHeight),
+                                width: percentOf(
+                                    crop.width,
+                                    FRAME_GEOMETRY.masterWidth,
+                                ),
+                                height: percentOf(crop.height, masterHeight),
+                            }}
+                        >
+                            {/*
+                             * Poignées d'angle : un carré visible au token
+                             * `primary`, et une zone de saisie élargie par un
+                             * pseudo-élément à 2,75 rem de côté — l'équivalent
+                             * de `min-h-11 min-w-11` exigé des gestes répétitifs
+                             * (§ 13.4), à la mesure d'un doigt.
+                             */}
+                            {interactive &&
+                                CROP_CORNERS.map((corner) => (
+                                    <div
+                                        key={corner}
+                                        data-crop-corner={corner}
+                                        className={cn(
+                                            'absolute size-3 bg-primary before:absolute before:-inset-4',
+                                            CORNER_CLASSES[corner],
+                                        )}
+                                    />
+                                ))}
+                        </div>
+                    )}
+
+                    {status === 'loading' && (
+                        <div role="status" className="absolute inset-0">
+                            <Skeleton className="size-full rounded-none" />
+                            <span className="sr-only">
+                                {t('admin.cropper.image_loading')}
+                            </span>
+                        </div>
+                    )}
+
+                    {status === 'failed' && (
+                        <div className="absolute inset-0 flex items-center justify-center p-4">
+                            <AdminErrorState
+                                title={t('admin.cropper.image_failed')}
+                                description={t(
+                                    'admin.cropper.image_failed_description',
+                                )}
+                                retryLabel={t('admin.cropper.retry')}
+                                onRetry={() =>
+                                    setAttempt((current) => current + 1)
+                                }
+                                className="max-w-xl bg-background"
+                            />
+                        </div>
+                    )}
+                </div>
+
+                <div
+                    role="group"
+                    aria-label={t('admin.cropper.controls_label')}
+                    className="flex shrink-0 flex-col gap-2 lg:w-72"
+                >
+                    <div className="flex flex-col gap-1">
+                        <p
+                            id={descriptionId}
+                            aria-live="polite"
+                            aria-atomic="true"
+                            className="text-sm text-foreground"
+                        >
+                            <span>{dimensions}</span>
+                            {/*
+                             * Les mentions de borne ne valent que pour un
+                             * cadre admis : un cadre initial hors plancher
+                             * (re-recadrage après un durcissement) n'est ni
+                             * « le plus large » ni « le plus serré » admis,
+                             * et sa violation le dit déjà.
+                             */}
+                            {violation === null && !widenable && (
+                                <>
+                                    {' '}
+                                    <span>{t('admin.cropper.at_widest')}</span>
+                                </>
+                            )}
+                            {violation === null && !narrowable && (
+                                <>
+                                    {' '}
+                                    <span>
+                                        {t('admin.cropper.at_narrowest')}
+                                    </span>
+                                </>
+                            )}
+                        </p>
+                        <p
+                            id={violationId}
+                            aria-live="polite"
+                            aria-atomic="true"
+                            className="text-sm text-destructive"
+                        >
+                            {violation === null
+                                ? null
+                                : t(CROP_VIOLATION_KEYS[violation])}
+                        </p>
                     </div>
-                )}
-            </div>
 
-            <div className="flex flex-col gap-1">
-                <p
-                    id={descriptionId}
-                    aria-live="polite"
-                    aria-atomic="true"
-                    className="text-sm text-foreground"
-                >
-                    <span>{dimensions}</span>
-                    {/*
-                     * Les mentions de borne ne valent que pour un cadre admis :
-                     * un cadre initial hors plancher (re-recadrage après un
-                     * durcissement) n'est ni « le plus large » ni « le plus
-                     * serré » admis, et sa violation le dit déjà.
-                     */}
-                    {violation === null && !widenable && (
-                        <>
-                            {' '}
-                            <span>{t('admin.cropper.at_widest')}</span>
-                        </>
-                    )}
-                    {violation === null && !narrowable && (
-                        <>
-                            {' '}
-                            <span>{t('admin.cropper.at_narrowest')}</span>
-                        </>
-                    )}
-                </p>
-                <p
-                    id={violationId}
-                    aria-live="polite"
-                    aria-atomic="true"
-                    className="text-sm text-destructive"
-                >
-                    {violation === null
-                        ? null
-                        : t(CROP_VIOLATION_KEYS[violation])}
-                </p>
-            </div>
+                    <div className="flex justify-center gap-2 lg:grid lg:grid-cols-3 lg:grid-rows-3 lg:gap-1 lg:self-center">
+                        {MOVE_BUTTONS.map(
+                            ({ direction, dx, dy, label, Icon }) => {
+                                const allowed = movable[direction];
 
-            <div
-                role="group"
-                aria-label={t('admin.cropper.controls_label')}
-                className="flex flex-wrap gap-2"
-            >
-                <Button
-                    type="button"
-                    variant="outline"
-                    aria-disabled={interactive && widenable ? undefined : true}
-                    onClick={() =>
-                        command({ kind: 'resize', steps: 1 }, widenable)
-                    }
-                    className="min-h-11 aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
-                >
-                    <MaximizeIcon aria-hidden />
-                    {t('admin.cropper.widen')}
-                </Button>
-                <Button
-                    type="button"
-                    variant="outline"
-                    aria-disabled={interactive && narrowable ? undefined : true}
-                    onClick={() =>
-                        command({ kind: 'resize', steps: -1 }, narrowable)
-                    }
-                    className="min-h-11 aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
-                >
-                    <MinimizeIcon aria-hidden />
-                    {t('admin.cropper.narrow')}
-                </Button>
-                {MOVE_BUTTONS.map(({ direction, dx, dy, label, Icon }) => {
-                    const allowed = movable[direction];
+                                return (
+                                    <Button
+                                        key={direction}
+                                        type="button"
+                                        variant="outline"
+                                        size="icon"
+                                        aria-label={t(label)}
+                                        aria-disabled={
+                                            interactive && allowed
+                                                ? undefined
+                                                : true
+                                        }
+                                        onClick={() =>
+                                            command(
+                                                { kind: 'move', dx, dy },
+                                                allowed,
+                                            )
+                                        }
+                                        className={cn(
+                                            'min-h-11 min-w-11 aria-disabled:cursor-not-allowed aria-disabled:opacity-50',
+                                            MOVE_BUTTON_POSITION_CLASSES[
+                                                direction
+                                            ],
+                                        )}
+                                    >
+                                        <Icon aria-hidden />
+                                    </Button>
+                                );
+                            },
+                        )}
+                    </div>
 
-                    return (
+                    <div className="grid grid-cols-2 gap-2">
                         <Button
-                            key={direction}
                             type="button"
                             variant="outline"
-                            size="icon"
-                            aria-label={t(label)}
                             aria-disabled={
-                                interactive && allowed ? undefined : true
+                                interactive && widenable ? undefined : true
                             }
                             onClick={() =>
-                                command({ kind: 'move', dx, dy }, allowed)
+                                command({ kind: 'resize', steps: 1 }, widenable)
                             }
-                            className="min-h-11 min-w-11 aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+                            className="min-h-11 w-full justify-start aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
                         >
-                            <Icon aria-hidden />
+                            <MaximizeIcon aria-hidden />
+                            {t('admin.cropper.widen')}
                         </Button>
-                    );
-                })}
-                <Button
-                    type="button"
-                    variant="outline"
-                    aria-disabled={interactive ? undefined : true}
-                    onClick={() => command({ kind: 'center' })}
-                    className="min-h-11 aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
-                >
-                    <CrosshairIcon aria-hidden />
-                    {t('admin.cropper.center')}
-                </Button>
-                <Button
-                    type="button"
-                    variant="outline"
-                    aria-disabled={interactive ? undefined : true}
-                    onClick={() => command({ kind: 'reset' })}
-                    className="min-h-11 aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
-                >
-                    <RotateCcwIcon aria-hidden />
-                    {t('admin.cropper.reset')}
-                </Button>
-            </div>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            aria-disabled={
+                                interactive && narrowable ? undefined : true
+                            }
+                            onClick={() =>
+                                command(
+                                    { kind: 'resize', steps: -1 },
+                                    narrowable,
+                                )
+                            }
+                            className="min-h-11 w-full justify-start aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+                        >
+                            <MinimizeIcon aria-hidden />
+                            {t('admin.cropper.narrow')}
+                        </Button>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            aria-disabled={interactive ? undefined : true}
+                            onClick={() => command({ kind: 'center' })}
+                            className="col-span-2 min-h-11 w-full justify-start aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+                        >
+                            <CrosshairIcon aria-hidden />
+                            {t('admin.cropper.center')}
+                        </Button>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            aria-disabled={interactive ? undefined : true}
+                            onClick={() => command({ kind: 'reset' })}
+                            className="col-span-2 min-h-11 w-full justify-start aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+                        >
+                            <RotateCcwIcon aria-hidden />
+                            {t('admin.cropper.reset')}
+                        </Button>
+                    </div>
 
-            <p id={instructionsId} className="text-xs text-muted-foreground">
-                {t('admin.cropper.instructions', { steps: CROP_FAST_STEPS })}
-            </p>
+                    <p id={instructionsId} className="sr-only">
+                        {t('admin.cropper.instructions', {
+                            steps: CROP_FAST_STEPS,
+                        })}
+                    </p>
+
+                    <div className="flex items-center gap-2 border-t border-border pt-2">
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="icon"
+                                    aria-label={t(
+                                        'admin.cropper.instructions',
+                                        { steps: CROP_FAST_STEPS },
+                                    )}
+                                    className="min-h-11 min-w-11"
+                                >
+                                    <CircleHelpIcon aria-hidden />
+                                </Button>
+                            </TooltipTrigger>
+                            <TooltipContent
+                                side="left"
+                                className="max-w-md leading-relaxed text-pretty"
+                            >
+                                {t('admin.cropper.instructions', {
+                                    steps: CROP_FAST_STEPS,
+                                })}
+                            </TooltipContent>
+                        </Tooltip>
+
+                        {shortcutHint !== undefined && (
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="icon"
+                                        aria-label={shortcutHint}
+                                        className="min-h-11 min-w-11"
+                                    >
+                                        <KeyboardIcon aria-hidden />
+                                    </Button>
+                                </TooltipTrigger>
+                                <TooltipContent
+                                    side="left"
+                                    className="max-w-sm leading-relaxed text-pretty"
+                                >
+                                    {shortcutHint}
+                                </TooltipContent>
+                            </Tooltip>
+                        )}
+                    </div>
+                </div>
+            </div>
         </div>
     );
 }

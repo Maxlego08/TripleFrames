@@ -42,6 +42,8 @@ const SHORTCUT_KEYS: ShortcutKeyInput[] = [
     { key: '[', code: 'BracketLeft' },
     { key: ']', code: 'BracketRight' },
     { key: '[', code: 'Digit5', ctrlKey: true, altKey: true },
+    { key: 'PageUp', code: 'PageUp' },
+    { key: 'PageDown', code: 'PageDown' },
     { key: 'Enter', code: 'Enter' },
     { key: 'Enter', code: 'NumpadEnter' },
 ];
@@ -155,6 +157,68 @@ describe('shortcutAction', () => {
         // `Entrée` ne publie jamais depuis le recadreur (n° 2, A-24).
         expect(
             shortcutAction({ key: 'Enter', code: 'Enter' }, 'frame', CROPPER),
+        ).toBeNull();
+    });
+
+    it('navigue entre les visuels avec Page précédente et Page suivante', () => {
+        for (const target of ['frame', 'control', 'surface'] as const) {
+            expect(
+                shortcutAction(
+                    { key: 'PageUp', code: 'PageUp' },
+                    target,
+                    CROPPER,
+                ),
+            ).toEqual({ kind: 'neighbour', direction: 'previous' });
+            expect(
+                shortcutAction(
+                    { key: 'PageDown', code: 'PageDown' },
+                    target,
+                    CROPPER,
+                ),
+            ).toEqual({ kind: 'neighbour', direction: 'next' });
+        }
+
+        // Les raccourcis historiques restent disponibles.
+        expect(
+            shortcutAction({ key: '[', code: 'BracketLeft' }, 'frame', CROPPER),
+        ).toEqual({ kind: 'neighbour', direction: 'previous' });
+        expect(
+            shortcutAction(
+                { key: ']', code: 'BracketRight' },
+                'frame',
+                CROPPER,
+            ),
+        ).toEqual({ kind: 'neighbour', direction: 'next' });
+
+        for (const modifier of [
+            { shiftKey: true },
+            { ctrlKey: true },
+            { altKey: true },
+            { metaKey: true },
+            { repeat: true },
+        ]) {
+            expect(
+                shortcutAction(
+                    { key: 'PageDown', code: 'PageDown', ...modifier },
+                    'frame',
+                    CROPPER,
+                ),
+            ).toBeNull();
+        }
+
+        expect(
+            shortcutAction({ key: 'PageDown', code: 'PageDown' }, 'frame', {
+                screen: 'cropper',
+                canSend: true,
+                busy: true,
+            }),
+        ).toBeNull();
+        expect(
+            shortcutAction(
+                { key: 'PageDown', code: 'PageDown' },
+                'surface',
+                REVIEW,
+            ),
         ).toBeNull();
     });
 

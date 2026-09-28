@@ -135,9 +135,9 @@ const PREVIEW_FRAME_PARAMETER = 'preview_frame';
 
 /**
  * Raccourcis de débit que le cadre déclare (`aria-keyshortcuts`, § 6.4) : les
- * cinq niveaux, puis les deux pas de la bande.
+ * cinq niveaux, puis les deux paires de touches pour parcourir la bande.
  */
-const CROPPER_KEY_SHORTCUTS = '1 2 3 4 5 [ ]';
+const CROPPER_KEY_SHORTCUTS = '1 2 3 4 5 PageUp PageDown [ ]';
 
 /**
  * Le visuel ouvert dans le cadre, et le cadre lui-même. `focusFrame` : le
@@ -352,10 +352,11 @@ export default function AdminCatalogBank({
     }
 
     /**
-     * Le visuel voisin de la bande dans le cadre (`[`, `]`, boutons et
-     * glissement de la bande, § 6.2). `focusFrame` : le pas part du cadre ou
-     * de ses contrôles, que l'ouverture remplace — le nouveau cadre prend le
-     * focus ; depuis la bande, le focus reste dans la bande.
+     * Le visuel voisin de la bande dans le cadre (`Page précédente` /
+     * `Page suivante`, `[`, `]`, boutons et glissement de la bande, § 6.2).
+     * `focusFrame` : le pas part du cadre ou de ses contrôles, que l'ouverture
+     * remplace — le nouveau cadre prend le focus ; depuis la bande, le focus
+     * reste dans la bande.
      */
     function stepVisual(
         direction: StripDirection,
@@ -628,8 +629,8 @@ export default function AdminCatalogBank({
                 </Card>
 
                 {/* Zone 2 — le recadreur, le niveau et l'envoi (§ 6.3). */}
-                <Card>
-                    <CardHeader>
+                <Card className="gap-3 py-4">
+                    <CardHeader className="gap-1 px-4 sm:px-5 lg:flex-row lg:items-baseline lg:gap-3">
                         <AdminCardTitle>
                             {t('admin.bank.cropper.heading')}
                         </AdminCardTitle>
@@ -637,7 +638,7 @@ export default function AdminCatalogBank({
                             {t('admin.bank.cropper.description')}
                         </CardDescription>
                     </CardHeader>
-                    <CardContent className="space-y-4">
+                    <CardContent className="space-y-3 px-4 sm:px-5">
                         <p className="text-sm text-muted-foreground lg:hidden">
                             {t('admin.bank.desktop_required')}
                         </p>
@@ -696,7 +697,7 @@ export default function AdminCatalogBank({
                                         )
                                     }
                                     onKeyDown={handleCropperShortcut}
-                                    className="flex flex-col gap-4"
+                                    className="flex flex-col gap-3"
                                 >
                                     {({ processing, errors }) => {
                                         const blocked =
@@ -749,6 +750,9 @@ export default function AdminCatalogBank({
                                                     keyShortcuts={
                                                         CROPPER_KEY_SHORTCUTS
                                                     }
+                                                    shortcutHint={t(
+                                                        'admin.shortcuts.cropper_hint',
+                                                    )}
                                                     state={opened.state}
                                                     onCommand={(command) =>
                                                         setOpened({
@@ -774,74 +778,82 @@ export default function AdminCatalogBank({
                                                     }
                                                 />
 
-                                                <LevelPicker
-                                                    value={level}
-                                                    onValueChange={setLevel}
-                                                    error={errors.frame_level}
-                                                    disabled={processing}
-                                                />
-
-                                                {level === null && (
-                                                    <p className="text-sm text-muted-foreground">
-                                                        {t(
-                                                            'admin.bank.cropper.level_required',
-                                                        )}
-                                                    </p>
-                                                )}
-
-                                                <div className="flex flex-wrap gap-2">
-                                                    <Button
-                                                        type="submit"
-                                                        aria-disabled={
-                                                            blocked ||
-                                                            processing
-                                                                ? true
-                                                                : undefined
+                                                <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-end">
+                                                    <LevelPicker
+                                                        value={level}
+                                                        onValueChange={setLevel}
+                                                        error={
+                                                            errors.frame_level
                                                         }
-                                                        aria-busy={
-                                                            processing ||
-                                                            undefined
-                                                        }
-                                                        onClick={(event) => {
-                                                            if (
-                                                                blocked ||
-                                                                processing
-                                                            ) {
-                                                                event.preventDefault();
-                                                            }
-                                                        }}
-                                                        className="min-h-11 aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
-                                                    >
-                                                        <ImagePlusIcon
-                                                            aria-hidden
-                                                        />
-                                                        {processing
-                                                            ? t(
-                                                                  'admin.bank.cropper.adding',
-                                                              )
-                                                            : t(
-                                                                  'admin.bank.cropper.add',
-                                                              )}
-                                                    </Button>
-                                                    <Button
-                                                        type="button"
-                                                        variant="outline"
-                                                        onClick={closeVisual}
                                                         disabled={processing}
-                                                        className="min-h-11"
-                                                    >
-                                                        <XIcon aria-hidden />
-                                                        {t(
-                                                            'admin.bank.cropper.close',
-                                                        )}
-                                                    </Button>
-                                                </div>
+                                                    />
 
-                                                <p className="text-xs text-muted-foreground">
-                                                    {t(
-                                                        'admin.shortcuts.cropper_hint',
-                                                    )}
-                                                </p>
+                                                    <div className="flex flex-col gap-2 xl:min-w-max">
+                                                        {level === null && (
+                                                            <p className="text-xs text-muted-foreground">
+                                                                {t(
+                                                                    'admin.bank.cropper.level_required',
+                                                                )}
+                                                            </p>
+                                                        )}
+
+                                                        <div className="flex flex-wrap gap-2">
+                                                            <Button
+                                                                type="submit"
+                                                                aria-disabled={
+                                                                    blocked ||
+                                                                    processing
+                                                                        ? true
+                                                                        : undefined
+                                                                }
+                                                                aria-busy={
+                                                                    processing ||
+                                                                    undefined
+                                                                }
+                                                                onClick={(
+                                                                    event,
+                                                                ) => {
+                                                                    if (
+                                                                        blocked ||
+                                                                        processing
+                                                                    ) {
+                                                                        event.preventDefault();
+                                                                    }
+                                                                }}
+                                                                className="min-h-11 aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+                                                            >
+                                                                <ImagePlusIcon
+                                                                    aria-hidden
+                                                                />
+                                                                {processing
+                                                                    ? t(
+                                                                          'admin.bank.cropper.adding',
+                                                                      )
+                                                                    : t(
+                                                                          'admin.bank.cropper.add',
+                                                                      )}
+                                                            </Button>
+                                                            <Button
+                                                                type="button"
+                                                                variant="outline"
+                                                                onClick={
+                                                                    closeVisual
+                                                                }
+                                                                disabled={
+                                                                    processing
+                                                                }
+                                                                className="min-h-11"
+                                                            >
+                                                                <XIcon
+                                                                    aria-hidden
+                                                                />
+                                                                {t(
+                                                                    'admin.bank.cropper.close',
+                                                                )}
+                                                            </Button>
+                                                        </div>
+                                                    </div>
+                                                </div>
                                             </>
                                         );
                                     }}
@@ -858,14 +870,14 @@ export default function AdminCatalogBank({
                                 role="status"
                                 aria-live="polite"
                                 aria-atomic="true"
-                                className="mt-4 text-sm text-foreground"
+                                className="mt-2 text-xs text-foreground"
                             >
                                 {announcement}
                             </p>
 
                             {abilities.createFrame &&
                                 backdrops?.status === 'ready' && (
-                                    <div className="mt-6">
+                                    <div className="mt-3">
                                         <BackdropStrip
                                             items={backdrops.items}
                                             openedPath={

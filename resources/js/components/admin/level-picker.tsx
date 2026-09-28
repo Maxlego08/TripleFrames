@@ -1,7 +1,13 @@
+import { InfoIcon } from 'lucide-react';
 import { useId } from 'react';
 import { AdminInputError } from '@/components/admin/admin-input-error';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { useTranslations } from '@/hooks/use-translations';
 import { cn } from '@/lib/utils';
 import type { FrameLevel } from '@/types/admin';
@@ -49,8 +55,8 @@ type Props = {
 };
 
 /**
- * Choix du niveau d'une image, avec le guide normatif à côté de chaque
- * option (spec 20 § 6.4 et § 6.5, lot L20-9a).
+ * Choix compact du niveau d'une image, avec le guide normatif dans
+ * l'infobulle de chaque option (spec 20 § 6.4 et § 6.5, lot L20-9a).
  *
  * Groupe de boutons radio standard (`radio-group` de shadcn, Radix) : un seul
  * arrêt de tabulation, les flèches changent le niveau, `Espace` coche. Le
@@ -58,10 +64,14 @@ type Props = {
  * défaut serait un classement non décidé ; `required` le dit au navigateur et
  * aux technologies d'assistance.
  *
- * Chaque guide est rattaché à son option par `aria-describedby` : le lecteur
- * d'écran lit « Niveau 1 — Très cryptique », puis ce que l'image doit
- * montrer. Radix rend, dans un formulaire, un champ natif caché nommé
- * `name` : le `<Form>` d'Inertia soumet donc `frame_level` sans code.
+ * Les cinq options restent sur une ligne : elles partagent la largeur
+ * disponible sur grand écran et la ligne défile horizontalement si elle ne
+ * tient pas. Chaque guide reste rattaché à son option par
+ * `aria-describedby` même lorsqu'il est visuellement rangé dans une
+ * infobulle : le lecteur d'écran lit « Niveau 1 — Très cryptique », puis ce
+ * que l'image doit montrer. Radix rend, dans un formulaire, un champ natif
+ * caché nommé `name` : le `<Form>` d'Inertia soumet donc `frame_level` sans
+ * code.
  *
  * Aucune couleur ni taille en dur : tokens seulement (règle 5).
  */
@@ -81,8 +91,8 @@ export function LevelPicker({
     const hasError = error !== undefined && error !== '';
 
     return (
-        <div className={cn('flex flex-col gap-3', className)}>
-            <div className="flex flex-col gap-1">
+        <div className={cn('flex flex-col gap-2', className)}>
+            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
                 <p id={legendId} className="text-sm font-medium">
                     {t('admin.level.legend')}
                 </p>
@@ -106,7 +116,7 @@ export function LevelPicker({
                 aria-labelledby={legendId}
                 aria-describedby={hasError ? `${hintId} ${errorId}` : hintId}
                 aria-invalid={hasError ? true : undefined}
-                className="gap-2"
+                className="flex w-full flex-nowrap gap-2 overflow-x-auto pb-1"
             >
                 {FRAME_LEVELS.map((level) => {
                     const itemId = `${baseId}-level-${level}`;
@@ -116,31 +126,56 @@ export function LevelPicker({
                     return (
                         <div
                             key={level}
-                            className="flex items-start gap-3 rounded-md border border-border px-3 py-2 has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-accent"
+                            className="flex min-h-11 min-w-40 flex-1 items-center gap-2 rounded-md border border-border bg-background px-2.5 transition-[border-color,background-color,box-shadow] has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-accent has-[[data-state=checked]]:shadow-xs"
                         >
                             <RadioGroupItem
                                 id={itemId}
                                 value={String(level)}
                                 aria-describedby={guideId}
-                                className="mt-3.5"
+                                aria-label={t('admin.level.option', {
+                                    level,
+                                    label: t(keys.label),
+                                })}
                             />
-                            <div className="flex flex-1 flex-col gap-1">
-                                <Label
-                                    htmlFor={itemId}
-                                    className="flex min-h-11 cursor-pointer items-center"
-                                >
-                                    {t('admin.level.option', {
-                                        level,
-                                        label: t(keys.label),
-                                    })}
-                                </Label>
-                                <p
-                                    id={guideId}
-                                    className="pb-1 text-xs text-muted-foreground"
+                            <Label
+                                htmlFor={itemId}
+                                className="flex min-h-11 min-w-0 flex-1 cursor-pointer items-center gap-1.5 text-sm"
+                            >
+                                <span className="text-xs text-muted-foreground tabular-nums">
+                                    {level}
+                                </span>
+                                <span className="truncate">
+                                    {t(keys.label)}
+                                </span>
+                            </Label>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <button
+                                        type="button"
+                                        aria-label={t('admin.level.option', {
+                                            level,
+                                            label: t(keys.label),
+                                        })}
+                                        aria-describedby={guideId}
+                                        className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors outline-none hover:bg-background hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
+                                        disabled={disabled}
+                                    >
+                                        <InfoIcon
+                                            aria-hidden
+                                            className="size-4"
+                                        />
+                                    </button>
+                                </TooltipTrigger>
+                                <TooltipContent
+                                    side="top"
+                                    className="max-w-xs leading-relaxed text-pretty"
                                 >
                                     {t(keys.guide)}
-                                </p>
-                            </div>
+                                </TooltipContent>
+                            </Tooltip>
+                            <span id={guideId} className="sr-only">
+                                {t(keys.guide)}
+                            </span>
                         </div>
                     );
                 })}

@@ -32,8 +32,9 @@ type Props = {
     /** Ouvrir une vignette de la bande dans le cadre. */
     onOpen: (backdrop: AdminBackdrop) => void;
     /**
-     * Passer au visuel voisin : boutons, glissement, `[` et `]`. Rend le
-     * visuel ouvert, ou `null` au bord de la bande.
+     * Passer au visuel voisin : boutons, glissement, `Page précédente` /
+     * `Page suivante`, `[` / `]`. Rend le visuel ouvert, ou `null` au bord de
+     * la bande.
      */
     onStep: (direction: StripDirection) => AdminBackdrop | null;
 };
@@ -50,11 +51,12 @@ type SwipeStart = {
  * recadreur, la rangée horizontale des visuels du film **non encore
  * utilisés**, dans l'ordre de la grille.
  *
- * - `[` et `]`, un **glissement** parti d'une vignette (au doigt comme à la
- *   souris ; jamais la barre de défilement de la rangée, qui la fait défiler)
- *   ou les boutons « précédent » / « suivant » passent au visuel voisin
- *   **sans quitter le cadre** : le visuel s'y ouvre, et le focus reste où il
- *   est — sur le bouton, ou sur la vignette du visuel ouvert.
+ * - `Page précédente` / `Page suivante`, `[` / `]`, un **glissement** parti
+ *   d'une vignette (au doigt comme à la souris ; jamais la barre de défilement
+ *   de la rangée, qui la fait défiler) ou les boutons « précédent » /
+ *   « suivant » passent au visuel voisin **sans quitter le cadre** : le
+ *   visuel s'y ouvre, et le focus reste où il est — sur le bouton, ou sur la
+ *   vignette du visuel ouvert.
  * - **Un seul arrêt de tabulation** dans la rangée (tabindex itinérant) : les
  *   flèches passent d'une vignette à l'autre, Entrée ou Espace ouvre la
  *   vignette dans le cadre — ce sont des boutons natifs.
@@ -262,11 +264,17 @@ export function BackdropStrip({
             aria-describedby={descriptionId}
             className="flex flex-col gap-2"
         >
-            <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
                 <h3 id={headingId} className="text-sm font-semibold">
                     {t('admin.bank.strip.heading')}
                 </h3>
-                <p className="text-sm text-muted-foreground">
+                <p
+                    id={descriptionId}
+                    className="min-w-64 flex-1 text-xs text-muted-foreground"
+                >
+                    {t('admin.bank.strip.description')}
+                </p>
+                <p className="text-xs text-muted-foreground">
                     {position !== null
                         ? t('admin.bank.strip.position', {
                               index: position.index,
@@ -277,9 +285,6 @@ export function BackdropStrip({
                           : null}
                 </p>
             </div>
-            <p id={descriptionId} className="text-xs text-muted-foreground">
-                {t('admin.bank.strip.description')}
-            </p>
 
             {strip.length === 0 ? (
                 <AdminEmptyState
@@ -332,7 +337,7 @@ export function BackdropStrip({
                                             itemsRef.current.set(path, node);
                                         }
                                     }}
-                                    className="w-36 shrink-0"
+                                    className="w-32 shrink-0"
                                 >
                                     <button
                                         ref={(node) => {

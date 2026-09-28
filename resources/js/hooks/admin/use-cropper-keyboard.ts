@@ -17,8 +17,9 @@ import type { CropCommand } from '@/lib/admin/crop-state';
  * - empêcher le défilement de la page par les flèches quand elles déplacent
  *   le cadre, et seulement alors.
  *
- * Les raccourcis de débit (`1` à `5`, `[` et `]`) n'en font pas partie : ils
- * relèvent du lot L20-11, hors de la barre « terminé ».
+ * Les raccourcis de débit (`1` à `5`, `Page précédente` / `Page suivante`,
+ * `[` / `]`) n'en font pas partie : ils relèvent du lot L20-11, hors de la
+ * barre « terminé ».
  */
 export function useCropperKeyboard(
     onCommand: (command: CropCommand) => void,

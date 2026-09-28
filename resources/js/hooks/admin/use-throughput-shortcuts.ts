@@ -19,7 +19,7 @@ import type { FrameLevel } from '@/types/admin';
 export type ThroughputHandlers = {
     /** `1` à `5` depuis le cadre : poser le niveau, et envoyer si `send`. */
     onClassify?: (level: FrameLevel, send: boolean) => void;
-    /** `[` et `]` : ouvrir le visuel voisin de la bande. */
+    /** `Page précédente` / `Page suivante`, `[` / `]` : visuel voisin. */
     onNeighbour?: (direction: StripDirection) => void;
     /** `Entrée` dans la passe de revue : « Conforme, publier ». */
     onPass?: () => void;

@@ -2481,9 +2481,434 @@ grep -h '"sequenceIndex":1,"tierIndex":2' /var/www/vhosts/tripleframes-prod.test
 - **Écart — anomalie du produit (BUG-P1, consignée au journal des anomalies de la répétition)** : en solo, une réponse qui clôt la manche (bonne réponse, ou mauvaise proposition) **n'affiche jamais la révélation** : l'écran garde la manche close (« Trouvé ! Gagné : 283 points »), **le chrono continue de décompter**, puis passe directement au décompte de la manche suivante environ 4 s plus tard. Cause relevée sur l'enregistrement : aucune lecture de `solo.state` après la réponse ; la lecture suivante, programmée d'avance (`nextTransitionAt`), tombe après la garde de préchargement de la manche suivante, qui est alors rendue en `scheduled`. La révélation n'est vue que par « Voir la réponse » (le geste répond par le paquet), à `D`, ou par hasard du calendrier. Scores et anti-triche non touchés. Non corrigé dans cette phase.
 - **Sur le VPS Plesk :** mêmes gestes sur le téléphone du porteur, après correction de BUG-P1 ; vérifier que la révélation s'affiche après une bonne réponse.
 
+### Étape 4.12 — Transition du drainage : artefact d'activation, « Tirer » (plan D5, étape 126 du REPRISE)
+
+- **But** : `100` § 11, transition I-13 : le commit d'activation retire le préfixe `# drain: ` des deux lignes du hook (étapes 3 `deploy:guard` et 12 `deploy:release`) ; il est livré par un déploiement joué selon la procédure **complète** du § 11.4. Ici, commit **dans le clone jetable seulement**, jamais dans le dépôt du porteur.
+- **Commandes** — [poste], Git Bash, dans `<scratchpad>/vm/build/src` : édition des deux lignes de `ops/deploy/hook.sh` (préfixe `# drain: ` retiré, rien d'autre ; équivalent : `sed -i 's/^# drain: step 3 /step 3 /; s/^# drain: step 12 /step 12 /' ops/deploy/hook.sh`), puis :
+
+```bash
+bash -n ops/deploy/hook.sh && echo "bash -n OK"
+git diff --stat                                  # ops/deploy/hook.sh | 4 ++--
+git commit -qam "répétition : activation du drainage dans le hook (I-13, étapes 3 et 12), jamais poussé"
+export PATH="/c/…/<scratchpad>/vm/build/php-stub:$PATH"
+cp public/build/manifest.json ../manifest-4.json
+npm run build
+cmp -s public/build/manifest.json ../manifest-4.json && echo "manifest identique au build n° 4"
+refused="$(find public/build \( -iname '*.php' -o -iname '*.php[0-9]' -o -iname '*.phtml' -o -iname '*.pht' -o -iname '*.phps' -o -iname '*.phar' -o -name '.*' \) -print)"
+[ -z "$refused" ] && echo "Verify Build Contents : OK" || echo "REFUSÉS : $refused"
+bash -s < <scratchpad>/vm/deploiement/rv10-artifacts.sh      # bloc de l'étape 2.4
+git diff --stat deploy~1 deploy
+git bundle create ../deploy-5.bundle deploy
+scp -i <clé> ../deploy-5.bundle vagrant@192.168.10.10:/home/vagrant/tripleframes-repetition/deploy-5.bundle
+```
+
+  Puis [vagrant] → [abo], « Tirer » **sans déployer** (`100` § 11.4, étape 2) :
+
+```bash
+H=/var/www/vhosts/tripleframes-prod.test
+sudo install -o tripleframes -g tripleframes -m 0600 /home/vagrant/tripleframes-repetition/deploy-5.bundle "$H/incoming/deploy-5.bundle"
+sudo -u tripleframes -H bash
+umask 027
+cd ~
+git -C ~/git/tripleframes.git bundle verify -q ~/incoming/deploy-5.bundle && echo "bundle vérifié"
+git -C ~/git/tripleframes.git fetch -q ~/incoming/deploy-5.bundle deploy:deploy
+git -C ~/git/tripleframes.git log --oneline -2 deploy
+grep -c '^step \(3\|12\) ' ~/tripleframes/ops/deploy/hook.sh     # 0 : le checkout n'a pas bougé
+```
+
+- **Attendu et vérification** (vers 14:38 UTC) : commit source `047b1ba` ; `npm run build` : manifest identique au build n° 4 ; `Verify Build Contents : OK` ; « Publié : deploy 9e5ed5a…, source 047b1ba… », parent `a775555`, différence limitée à `ops/deploy/hook.sh` (2 lignes) ; 115 fichiers sous `public/build/`, ni `.github/`, ni `vendor/`, ni `.env` ; « bundle vérifié » ; `deploy` = `9e5ed5a` au-dessus de `a775555` ; checkout de production inchangé (0 ligne active).
+- **Écart** : le commit d'activation de la spec a **deux** moitiés — les deux lignes du hook **et** `deployHookDrainSteps()` qui rend `[]` dans `tests/Feature/Deploy/DeployHookTest.php`. La seconde n'a pas été faite dans le clone jetable : la modification d'un fichier de test a été refusée par le garde-fou de permissions de la session. Sans effet sur ce qui est déployé (les tests ne tournent pas sur le serveur), mais le vrai commit d'activation (étape 126) doit porter les deux moitiés, sinon `DeployHookTest` passe au rouge en CI (étapes 3 et 12 trouvées actives alors que la liste les dit absentes).
+- **Sur le VPS Plesk :** le commit d'activation est fait par le porteur dans le dépôt (les deux moitiés), poussé, les deux workflows verts sur ce commit (§ 11.4, étape 1), le job `artifacts` publie `deploy` ; puis « Tirer les mises à jour » dans Plesk Git, **sans** « Déployer ».
+
+### Étape 4.13 — Drainage pendant une partie, puis second déploiement par le hook (D31, D32)
+
+- **But** : `100` § 11.3 et § 11.4, procédure complète : une partie en cours n'est ni coupée ni retardée ; pendant le drainage, tout lancement (multijoueur, « Rejouer », solo) est refusé avec `common.maintenance.launch_blocked`, le bandeau paraît à la réponse Inertia suivante ; la fenêtre libre s'ouvre après deux relevés nuls ; `deploy:guard` rend 0 ; le hook joue `[1/12]` à `[12/12]` et lève le drapeau.
+- **Préparation** — [poste] : **salon A** `555FP9` (hôte `Camille`, invité `Robin` : le salon `V5GACS` refusait tout lancement, « Films jouables : 1 pour 3 manches — Lancement impossible : pas assez de films jouables avec ces réglages. Ce salon a déjà joué la plupart des films disponibles. Créer un nouveau salon (17 films jouables…) », mémoire du salon après 16 films joués) réglé N = 2, D = 20 s, R = 3 s, M = 3, Normal ; **salon B** `V2GV6M` au lobby (hôte `Zoé`, navigateur tiers ; invité `Yann`, contexte de navigation isolé du même navigateur), N = 2, D = 10 s, R = 3 s, M = 3 ; **onglet solo** (navigateur tiers) au podium de la partie 5. [abo] `deploy:guard` → **code 2** (aucune fenêtre).
+- **Commandes** — [poste] : hôte A « Lancer la partie » (partie 6). Puis [abo], **dans `tmux`** (une coupure SSH ne doit pas tuer la commande ; à défaut, elle vaut abandon à l'échéance) :
+
+```bash
+sudo -u tripleframes -H bash          # sur le VPS : SSH de l'utilisateur d'abonnement
+umask 027
+cd ~/tripleframes
+tmux has-session -t tf-drain 2>/dev/null && echo "tf-drain déjà ouverte (déploiement précédent) : lire ~/drain.log, puis tmux kill-session -t tf-drain"
+tmux new-session -s tf-drain -c ~/tripleframes
+# dans la session tmux :
+/opt/plesk/php/8.4/bin/php artisan deploy:drain 2>&1 | tee -a ~/drain.log; echo "deploy:drain code=${PIPESTATUS[0]}" | tee -a ~/drain.log
+# détacher : Ctrl-b puis d ; revenir : tmux attach -t tf-drain
+```
+
+  (Joué par le pilote sous la forme détachée équivalente : `tmux new-session -d -s tf-drain -c ~/tripleframes "/opt/plesk/php/8.4/bin/php artisan deploy:drain 2>&1 | tee -a ~/drain.log; echo \"deploy:drain code=\${PIPESTATUS[0]}\" | tee -a ~/drain.log; sleep 900"`.) Dans une seconde session [abo], pendant le drainage puis à la fenêtre :
+
+```bash
+cd ~/tripleframes
+/opt/plesk/php/8.4/bin/php artisan deploy:guard; echo "deploy:guard code=$?"
+cat ~/drain.log
+```
+
+  Gestes — [poste], pendant le drainage : hôte B « Lancer la partie » ; onglet solo : preset « Rapide », « Commencer l'entraînement » ; invité B : rechargement de la page ; à la fin de la partie 6, hôte A « Rejouer », puis rechargement. À la fenêtre, **dans la seconde session [abo], hors de `tmux`** (celle du bloc précédent, ouverte par `umask 027`) — « Déployer », puis fermeture de la session du drainage :
+
+```bash
+cd ~
+git --git-dir=$HOME/git/tripleframes.git --work-tree=$HOME/tripleframes checkout -f deploy
+cd ~/tripleframes
+grep -cE '^step (3|12) ' ops/deploy/hook.sh        # 2
+bash ops/deploy/hook.sh; echo "code du hook = $?"
+/opt/plesk/php/8.4/bin/php artisan deploy:guard; echo "deploy:guard code=$?"
+/opt/plesk/php/8.4/bin/php artisan deploy:release; echo "deploy:release code=$?"
+cat ~/drain.log                                      # sortie complète de deploy:drain, « deploy:drain code=0 » en dernière ligne
+tmux kill-session -t tf-drain                        # [abo], dans la seconde session (hors tmux), une fois ~/drain.log lu
+tmux ls 2>&1                                         # « no server running on /tmp/tmux-<uid>/default » (ou aucune ligne tf-drain)
+exit
+```
+
+  `tmux kill-session` se tape **avant** `exit`, dans la session de l'utilisateur d'abonnement : le serveur `tmux` est propre à chaque utilisateur (`/tmp/tmux-<uid>/`). Tapé après `exit`, la ligne tourne sous `vagrant` sur la VM (« no server running ») ou ne s'exécute jamais sur le VPS (la session SSH est fermée) ; `tf-drain` resterait alors ouverte, et le `tmux new-session -s tf-drain` du déploiement suivant échouerait (« duplicate session: tf-drain »). La session `tmux` du drainage n'est pas fermée plus tôt : sa sortie reste lisible par `tmux attach -t tf-drain` jusqu'au bout du déploiement.
+
+  Puis [root] : bloc de sondes de l'étape 3.1, et `stat -c '%a %U %n' /var/www/vhosts/tripleframes-prod.test/tripleframes/bootstrap/cache/*.php`.
+- **Attendu et vérification** (horloge du poste ; journal `vm/partie/logs/drainage.marks.jsonl`, captures `drain-*`) :
+
+| Instant | Observé |
+| --- | --- |
+| 14:45:28 | partie 6 lancée (salon A) |
+| 14:45:31 | `deploy:drain` : « Drainage commencé : aucune nouvelle partie ne peut plus être lancée. Attente de la fin des parties en cours. », tableau des parties (`multiplayer · running · 0/3`), « Parties encore en cours : 1 » |
+| 14:45:34 | `deploy:guard` → « Garde refusée : parties en cours : 1. Rien ne doit être migré ni redémarré… », **code 1** |
+| 14:45:36 | salon B « Lancer la partie » → **refusé** : « Une mise à jour du site est en préparation : impossible de lancer une partie pour le moment. Réessayez un peu plus tard. », bandeau affiché |
+| 14:45:37 | solo « Commencer l'entraînement » → **refusé**, même message, bandeau |
+| 14:45:38 | invité B rechargé : bandeau « Une mise à jour du site est en préparation : aucune nouvelle partie ne peut être lancée pour le moment. Les parties en cours continuent normalement. » |
+| 14:45:57 | partie 6, manche 2 : **la partie continue** (`deploy:guard` code 1) |
+| 14:46:43 | partie 6 terminée normalement (3 manches `completed`, podium) |
+| 14:46:45 | salon A « Rejouer » → **refusé** (même message), le salon reste au podium ; rechargé : bandeau |
+| 14:47:03 | `deploy:drain` : « Fenêtre libre ouverte jusqu'à 2026-09-28T15:17:02Z : aucune partie en cours. Vérifiez deploy:guard, puis cliquez « Déployer » dans Plesk. », **code 0** (92 s en tout, 18 s après la fin de la partie : deux relevés nuls) ; `deploy:guard` → « Garde franchie : fenêtre libre ouverte et aucune partie en cours. », **code 0** |
+| 14:47:03 → 14:47:10 | hook, **7 s**, code 0 : `[1/12]` « Nothing to install, update or remove » ; `[2/12]` `optimize:clear --except=cache` ; **`[3/12]` `deploy:guard` « Garde franchie »** ; `[4/12]` « Aucune migration en attente » ; `[5/12]` « Nothing to migrate » ; `[6/12]` `PlatformDataSeeder … DONE` ; `[7/12]` « Films reprojetés par différence : 17 » ; `[8/12]` `optimize` ; `[9/12]` empreinte `b8e47251…` inchangée ; `[10/12]` « Broadcasting queue restart signal » ; `[11/12]` « Broadcasting Reverb restart signal » ; **`[12/12]` `deploy:release` « Drapeau de drainage levé : les lancements sont de nouveau permis. »** |
+| 14:47:16 | PID des workers et de Reverb tous changés (258776/258137/258859 → 261297/261305/261302) ; `deploy:guard` → code **2** ; `deploy:release` → « Aucun drapeau de drainage : rien à lever », code 0 ; invité B rechargé : **plus de bandeau** |
+| 14:48-14:50 | après rechargement des pages (voir l'écart) : « Rejouer » admis (salon A), « Lancer la partie » admis (salon B, partie 7, 3 manches `completed`), démarrage solo admis (partie 8, 8 manches passées, podium) |
+
+  Anti-triche (étape 4.9) sur les parties 6 et 7 : 0 trame fautive (6 fenêtres et 132 trames pour la partie 6 ; 3 fenêtres pour la partie 7, une fois écartées les 15 occurrences venues de l'onglet solo du même navigateur, qui sont les récapitulatifs de podium des parties solo 5 et 8).
+
+  Sondes après le déploiement (14:51) : cinq `ok`, `/up` 200, sans jeton et jeton faux 404, battements `game` et `default` frais ; caches de démarrage `config.php`, `events.php`, `routes-v7.php`, `lang-version.php` en `640` (`tripleframes`) ; **`packages.php` et `services.php` en `750`** : attendu, ils sont réécrits à chaque hook par `package:discover` (`Filesystem::replace`, qui applique `0777 − umask`, soit `750` sous l'umask `027`) et ne contiennent aucun secret (liste des paquets et fournisseurs de services) — déjà relevé à l'étape 2.18 ; seuls les quatre caches cités doivent être en `640`, et aucun fichier ne doit être lisible par « les autres » (dernier chiffre `0`). En base, 8 parties `completed`, aucune `running`. Reverb redémarré par le hook : les lobbies se reconnectent seuls ; la première tentative, une seconde après l'arrêt, tombe pendant le `RestartSec=2` de l'unité, la suivante réussit environ 16 s plus tard (délai de reconnexion du client) — aucune partie n'était en cours.
+- **Écart — anomalie du produit (BUG-P2, journal des anomalies)** : après la levée du drapeau, les trois pages qui avaient vu le drainage (hôte A au podium, hôte B au lobby, solo au podium) gardent le bandeau et le motif « Réessayez un peu plus tard » avec **« Rejouer », « Lancer la partie » et « Commencer l'entraînement » désactivés**, jusqu'à un rechargement manuel : la prop `maintenance` n'est relue qu'à une réponse Inertia, et le bouton désactivé empêche justement la requête qui la relirait. Contournement pour le porteur : après chaque déploiement, prévenir les joueurs présents de recharger la page.
+- **Observation (non reproduite)** : le premier rechargement de l'onglet de l'hôte B après le hook l'a laissé dans l'état « Vous jouez désormais dans un autre onglet… » (deux `seat.superseded` à 18 ms d'intervalle sur son canal de siège) ; un second rechargement l'a rétabli. Onglet piloté en arrière-plan par CDP (`bringToFront` juste avant) : probablement propre au pilote, à surveiller sur le VPS.
+- **Impasses levées (pilote)** : (1) un onglet d'arrière-plan de Chrome headless ne rend plus d'image, et `page.click()` y attend sans fin (dépassement `Runtime.callFunctionOn`) : `bringToFront()` avant chaque geste ; (2) la création d'un salon est une visite Inertia (XHR + `pushState`), pas une navigation : attendre l'adresse `/r/<code>` plutôt que `waitForNavigation` (sinon le code lu vaut `new`, puis `/r/new/join` → 404) ; (3) salon `V5GACS` épuisé par sa mémoire (16 films joués sur 17) : nouveau salon, comme l'écran le propose.
+- **Sur le VPS Plesk (déploiement) :** procédure du § 11.4 telle quelle : (1) workflows verts sur le commit source ; (2) Plesk › Git › « Tirer les mises à jour » ; (3) SSH de l'abonnement, `tmux`, `deploy:drain` jusqu'au code 0 (un code 1 = abandon à l'échéance, un code 2 = drainage déjà en cours : arrêter) ; (4) `deploy:guard` → 0 ; (5) Plesk › Git › « Déployer » (les fichiers sont déposés puis les actions additionnelles lancent `bash ops/deploy/hook.sh`) ; (6) lire la sortie dans Plesk, vérifier `[3/12]` et `[12/12]`, puis sondes et `stat -c '%a %U %n' bootstrap/cache/*.php` (quatre caches en `640`, `packages.php` et `services.php` en `750`) ; (7) dans la seconde session SSH de l'abonnement, **hors de `tmux`** et **avant** de la quitter : `cat ~/drain.log`, `tmux kill-session -t tf-drain`, `tmux ls` (plus de `tf-drain`), puis `exit` — sinon le déploiement suivant bute sur « duplicate session: tf-drain ». Tant que BUG-P2 n'est pas corrigé, annoncer aux joueurs présents de recharger la page après le déploiement.
+
+### Étape 4.14 — Redis dédié redémarré hors partie, rattrapage `game:reschedule`
+
+- **But** : plan P4 ; `60` (rattrapage des parties après une perte de Redis) : un redémarrage du Redis dédié, **hors partie**, ne laisse aucun service applicatif à terre.
+- **Commandes** — [root] (`vm/partie/vm/p-redis.sh`) :
+
+```bash
+APP=/var/www/vhosts/tripleframes-prod.test/tripleframes; E="$APP/.env"
+MYSQL_PWD="$(sed -n 's/^DB_PASSWORD=//p' $E)" mysql --no-defaults --protocol=socket -u tripleframes_prod tripleframes_prod -N \
+    -e "SELECT COUNT(*) FROM game WHERE status IN ('running','paused')"          # 0 : aucune partie
+for u in tripleframes-redis tripleframes-worker@game tripleframes-worker@default tripleframes-reverb; do printf '%s=%s ' $u "$(systemctl show -p MainPID --value $u)"; done; echo
+systemctl restart tripleframes-redis
+sleep 8
+for u in tripleframes-redis tripleframes-worker@game tripleframes-worker@default tripleframes-reverb; do printf '%s=%s ' $u "$(systemctl show -p MainPID --value $u)"; done; echo
+sudo -u tripleframes -H bash -c 'umask 027; cd ~/tripleframes && /opt/plesk/php/8.4/bin/php artisan game:reschedule; echo "game:reschedule code=$?"'
+journalctl -u tripleframes-worker@game --since "-1min" --no-pager -o short-precise | tail -12
+```
+
+  Puis le bloc de sondes de l'étape 3.1.
+- **Attendu et vérification** (14:52:56 UTC) : redémarrage de Redis en 0,25 s (arrêt 14:52:56,74, `Started` 14:52:56,98) ; **les deux workers** perdent leur connexion et sortent **en code 1** (`Stream is already at the end [tcp://127.0.0.1:6390]` ; `status=1/FAILURE` à 14:52:56,85 pour `game`, 14:52:57,33 pour `default`), puis sont **relevés par systemd 2 s plus tard** (`Scheduled restart job` à 14:52:58,89 et 14:52:59,35) ; **Reverb** s'arrête seul, sans message, **en code 0** (`tripleframes-reverb.service: Deactivated successfully` à 14:52:59,60, environ 3 s après le redémarrage de Redis), et c'est **`Restart=always`** qui le relance 2 s plus tard (`Scheduled restart job` 14:53:01,64, « Starting server on 127.0.0.1:8090 » 14:53:02,01 : ≈ 5 s au total) — avec `Restart=on-failure`, Reverb resterait à terre. Contrôle des sorties :
+
+```bash
+journalctl -u tripleframes-worker@game -u tripleframes-worker@default -u tripleframes-reverb --since "-2min" --no-pager -o short-precise \
+    | grep -E 'exited|Deactivated|Scheduled restart|Starting server'
+systemctl show -p Restart,RestartUSec tripleframes-reverb     # Restart=always, RestartUSec=2s
+```
+
+  PID tous changés (Redis 237325 → 261868, workers 261297/261305 → 261882/261887, Reverb 261302 → 261897) ; `game:reschedule` code 0 (rien à rattraper) ; cinq sondes `ok`, `/up` 200.
+- **Sur le VPS Plesk :** même geste en root, **jamais pendant une partie** (une partie en cours perdrait ses jobs différés : c'est le cas que `game:reschedule` rattrape, `100` § 13.5 (g)) ; vérifier que les trois unités applicatives repartent seules (workers en ≈ 2 s après leur sortie en code 1 ; Reverb en ≈ 5 s, sortie en code 0 relevée par `Restart=always` : vérifier que l'unité recopiée à l'étape 4 b porte bien `Restart=always`, et non `on-failure`).
+
+### Étape 4.15 — Corrections du contrôle de la phase Partie
+
+- **Joué** le 28/09, 15:10-15:25 UTC. Runbook corrigé ; sur la VM, seul `/home/vagrant/tripleframes-repetition/outils/` reçoit deux scripts sans secret ; aucun service, aucune base, aucun fichier de l'abonnement modifiés. Aucun gabarit `ops/` ni code touché (`ops/systemd/tripleframes-reverb.service` porte déjà `Restart=always`, vérifié).
+- **But** : lever les cinq constats du contrôle de la phase 4, chacun vérifié avant d'agir.
+- **Commandes de vérification** — [root] :
+
+```bash
+sudo -u tripleframes -H bash -c 'tmux ls 2>&1; echo "tmux=$?"'
+stat -c '%a %U %n' /var/www/vhosts/tripleframes-prod.test/tripleframes/bootstrap/cache/*.php
+journalctl -u tripleframes-reverb --since "2026-09-28 14:52:50" --until "2026-09-28 14:53:10" --no-pager -o short-precise
+journalctl -u tripleframes-worker@game -u tripleframes-worker@default --since "2026-09-28 14:52:50" --until "2026-09-28 14:53:05" \
+    --no-pager -o short-precise | grep -E "exited|Scheduled|Started|Deactivated"
+journalctl -u tripleframes-redis --since "2026-09-28 14:52:50" --until "2026-09-28 14:53:05" --no-pager -o short-precise \
+    | grep -E "Stopp|Started|Deactivated"
+journalctl _PID=261302 --no-pager -o short-precise | tail -5          # derniers messages de l'ancien Reverb
+systemctl show -p Restart,RestartUSec tripleframes-reverb
+```
+
+  [poste], Git Bash : `ls -la <scratchpad>/vm/partie/ | grep profile`.
+- **Constats vérifiés et corrections** :
+    1. **`tmux kill-session` après `exit`** (étape 4.13) — vérifié : `tmux ls` sous `tripleframes` → « no server running on /tmp/tmux-1001/default » (la variante détachée du pilote a été fermée autrement ; la ligne du runbook, elle, n'aurait jamais tourné sous le bon utilisateur). Corrigé : bloc « Déployer » tapé dans la seconde session [abo] **hors de `tmux`**, `cat ~/drain.log`, `tmux kill-session -t tf-drain` et `tmux ls` **avant** `exit` ; garde `tmux has-session -t tf-drain` avant le `tmux new-session` ; point (7) ajouté à la ligne « Sur le VPS Plesk » de l'étape 4.13.
+    2. **Reverb « en code 1 »** (étape 4.14, écart n° 27) — vérifié : Redis arrêté à 14:52:56,74, relancé à 14:52:56,98 ; workers `status=1/FAILURE` (14:52:56,85 et 14:52:57,33), relevés à 14:52:58,89 et 14:52:59,35 ; Reverb (PID 261302) **sans aucun message** après « Starting server » de 14:47:14, puis `Deactivated successfully` (code 0) à 14:52:59,60, `Scheduled restart job` à 14:53:01,64, « Starting server » à 14:53:02,01 (PID 261897) ; `Restart=always`, `RestartUSec=2s`. Corrigé : attendu de 4.14 (avec le `journalctl` de contrôle), ligne « Sur le VPS Plesk » et écart n° 27 (`Restart=always` nécessaire pour Reverb).
+    3. **Profils Chrome de la phase 4 non effacés** (« Retour arrière ») — vérifié : `profile-hote`, `profile-invite`, `profile-tiers` présents (16:56, heure du poste). Corrigé : ajoutés à la commande `rm -rf` du poste et à la phrase qui la précède.
+    4. **`packages.php` et `services.php` en `750`** (étape 4.13) — vérifié : quatre caches en `640`, ces deux-là en `750` (`tripleframes`). Corrigé : attendu de 4.13 complété (réécrits par `package:discover`, `0777 − umask`, sans secret, déjà relevé à l'étape 2.18) et contrôle `stat` ajouté au point (6) de la ligne « Sur le VPS Plesk ».
+    5. **Contrôle « 0 secret » fait hors de la VM** (exécution de la phase 4) — vérifié par le rapport de l'exécutant : les valeurs avaient transité par un fichier temporaire du poste (`C:\Users\Admin\AppData\Local\Temp\secrets.<pid>`, supprimé aussitôt, absent aujourd'hui), contraire à la règle « secrets stockés uniquement sur la VM ». Consigné (RV-15 du journal, impasse ci-dessous) ; contrôle refait **sur la VM**, par le script ci-dessous : seuls deux nombres reviennent sur le poste.
+- **Contrôle des secrets, forme retenue pour toute la suite** — script sans secret, posé dans le sous-dossier dédié (`<scratchpad>/vm/outils/compte-secrets.sh`, sha256 `90c556f8…`) :
+
+```bash
+#!/bin/bash
+# Compte les lignes de l'entrée standard qui contiennent une valeur secrète de la répétition.
+# À lancer en root SUR LA VM : ssh … 'sudo bash /home/vagrant/tripleframes-repetition/outils/compte-secrets.sh' < fichier
+# Les valeurs ne quittent jamais la VM : liste en /dev/shm (0600), supprimée à la sortie ;
+# seuls deux nombres reviennent (valeurs comparées, lignes fautives).
+set -euo pipefail
+umask 077
+H=/var/www/vhosts/tripleframes-prod.test
+E="$H/tripleframes/.env"
+R=/etc/tripleframes/tripleframes-redis.conf
+B="$H/.config/tripleframes/backup.env"
+K=/root/tripleframes-hors-machine/backup-age-key.txt
+L="$(mktemp /dev/shm/tf-secrets.XXXXXX)"
+trap 'rm -f -- "$L"' EXIT
+
+val() { sed -n "s/^$1=//p" "$2" | tail -1 | sed -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'$/\1/"; }
+
+# REVERB_APP_KEY n'y figure pas : clé PUBLIQUE du protocole Pusher, présente par construction
+# dans l'URL wss (/app/<clé>) de chaque navigateur ; le secret est REVERB_APP_SECRET.
+for k in APP_KEY DB_PASSWORD REDIS_PASSWORD REVERB_APP_SECRET MAIL_PASSWORD \
+         AWS_SECRET_ACCESS_KEY TMDB_API_KEY TMDB_API_READ_ACCESS_TOKEN OPS_PROBE_TOKEN; do
+    v="$(val "$k" "$E")"; v="${v#base64:}"
+    [ "${#v}" -ge 8 ] && printf '%s\n' "$v" >> "$L"
+done
+[ -r "$B" ] && { v="$(val BACKUP_HEARTBEAT_URL "$B")"; [ "${#v}" -ge 8 ] && printf '%s\n' "$v" >> "$L"; }
+awk '$1 == "requirepass" { gsub(/"/, "", $2); if (length($2) >= 8) print $2 }' "$R" >> "$L"
+[ -r "$K" ] && grep -o '^AGE-SECRET-KEY-[A-Z0-9]*' "$K" >> "$L" || true
+
+n="$(wc -l < "$L")"
+c="$(grep -cF -f "$L" || true)"
+echo "valeurs comparées=$n lignes fautives=$c"
+```
+
+  [poste], Git Bash (`<clé>` = `-i <scratchpad>/vm/id_vm -o UserKnownHostsFile=<scratchpad>/vm/known_hosts`) :
+
+```bash
+scp <clé> <scratchpad>/vm/outils/compte-secrets.sh vagrant@192.168.10.10:/home/vagrant/tripleframes-repetition/outils/compte-secrets.sh
+ssh <clé> vagrant@192.168.10.10 'chmod 0755 /home/vagrant/tripleframes-repetition/outils/compte-secrets.sh'
+# témoin positif, fabriqué et consommé sur la VM seulement (2 lignes secrètes sur 3) :
+ssh <clé> vagrant@192.168.10.10 'sudo bash -c "sed -n \"s/^REDIS_PASSWORD=/x /p\" /var/www/vhosts/tripleframes-prod.test/tripleframes/.env; grep -o \"^AGE-SECRET-KEY-[A-Z0-9]*\" /root/tripleframes-hors-machine/backup-age-key.txt; echo sans secret" | sudo bash /home/vagrant/tripleframes-repetition/outils/compte-secrets.sh; ls /dev/shm | grep -c tf- || true'
+cd C:/Users/Admin/Desktop/groupez/tripleframes
+for f in docs/ops/repetition-vm.md <scratchpad>/vm/bugs.md <scratchpad>/journal-ecarts-impl.md <scratchpad>/vm/partie/logs/*; do
+    printf '%s : ' "${f##*/}"
+    ssh <clé> vagrant@192.168.10.10 'sudo bash /home/vagrant/tripleframes-repetition/outils/compte-secrets.sh' < "$f"
+done
+```
+
+- **Attendu et vérification** : témoin positif → `valeurs comparées=8 lignes fautives=2`, puis `0` fichier `tf-*` restant dans `/dev/shm` ; pour le runbook, `bugs.md`, `journal-ecarts-impl.md`, les deux scripts et les 18 fichiers de `vm/partie/logs/` (dont `partie-1.jsonl`, `partie-2.jsonl`, `drainage-run.log`) → `lignes fautives=0`. Relevé final à 15:23 UTC, après toutes les corrections ci-dessus : 23 fichiers, 0 fautif, 0 fichier `tf-*` dans `/dev/shm`.
+- **Écart (impasse levée)** : une première passe incluait `REVERB_APP_KEY` et trouvait 97 lignes dans `partie-1.jsonl` et 176 dans `partie-2.jsonl`. Diagnostic sans sortir la valeur, par une variante qui compte **par nom de clé** (`<scratchpad>/vm/outils/compte-secrets-par-cle.sh`, même invocation) : `REVERB_APP_KEY=97`, `=176`, toutes les autres clés à 0 ; ce sont les URL `wss://tripleframes-prod.test/app/<clé>` des enregistrements CDP. Cette clé est publique par construction (protocole Pusher, envoyée par chaque navigateur) : retirée de la liste, commentaire dans le script. Le secret de Reverb (`REVERB_APP_SECRET`) reste comparé.
+- **Sur le VPS Plesk :** même principe pour tout document qui quitte le serveur (runbook du VPS, journaux, relevés, captures en texte) : la comparaison se fait **sur le VPS**, jamais sur le poste — script posé en root hors de l'abonnement (par exemple `/root/tripleframes-outils/compte-secrets.sh`, `0700`), `H=/var/www/vhosts/<DOMAINE>`, `R=/etc/tripleframes/tripleframes-redis.conf` inchangé, `K` = emplacement réel de la clé privée `age` s'il est sur le serveur (jamais : elle vit hors machine ; laisser la ligne, elle ne fait rien si le fichier est absent), et `ssh root@<VPS> 'bash /root/tripleframes-outils/compte-secrets.sh' < fichier`. Ajouter à la liste les secrets que la VM n'a pas, s'ils vivent ailleurs que dans le `.env` ou `backup.env` : mot de passe de la configuration `rclone` (clé d'écriture du stockage objet), jetons des adresses d'alerte de la supervision.
+
 ## Phase 5 — Charge
 
-_À remplir à l'exécution. Répétition de l'outillage et de la procédure seulement : la VM (2 vCPU, 3,9 Go, charge émise depuis le même hôte physique) ne dit rien de la décision D33, qui se joue sur le VPS._
+Jouée le 28/09/2026 à partir de 15:26 UTC, contre `https://tripleframes-prod.test` (déploiement n° 5, `9e5ed5a`). **Répétition de l'outillage et de la procédure** (`100` § 16, étapes 130 et 131 du REPRISE) : la VM (2 vCPU, 3,9 Go, charge émise depuis le poste, sur le même hôte physique) ne décide rien de D33, qui se joue sur le VPS. Les mesures ci-dessous sont **indicatives** et ne s'inscrivent jamais dans `100` § 16.6.
+
+**Protection de la machine du porteur** (la VM héberge sa base de développement et ses sites `*.test`) : chaque exécution de k6 est accompagnée d'un **échantillonneur** sur la VM (une ligne toutes les 5 s : charge, mémoire, swap, file PHP-FPM, processeur et mémoire de chaque unité, Redis, MySQL, temps de réponse des voisins) et d'une **veille** sur le poste, qui arrête k6 par son API à la première saturation : charge sur 1 minute au-dessus de 2 × nproc (4) pendant plus de 60 s, échange mémoire soutenu, ou mémoire disponible sous 10 %. Une saturation est un **résultat**, consigné comme tel, jamais un incident à contourner.
+
+**Où tourne quoi** : k6 sur le poste (Git Bash), dans `<scratchpad>/vm/k6/` (copie du scénario, enveloppe, `.data/`) ; rien dans le dépôt (`tests/Load/.data/` reste vide). Sur la VM, tout ce qui est propre à la séance vit sous `/home/vagrant/tripleframes-repetition/charge/`.
+
+### Étape 5.1 — Préalables : état de la production, binaire k6, liste des titres
+
+- **But** : `100` § 16.2 (préalables) et en-tête de `tests/Load/game-load.js` : sondes vertes, aucune partie ni drainage en cours, catalogue suffisant ; k6 officiel ; liste des titres publiés extraite **une fois**, en lecture, et jamais exposée par une route.
+- **Commandes** — [root] : bloc de sondes de l'étape 3.1, tel quel. [poste], Git Bash (`<clé>` = `-i <scratchpad>/vm/id_vm -o UserKnownHostsFile=<scratchpad>/vm/known_hosts`) :
+
+```bash
+# Binaire k6 officiel (déjà téléchargé depuis les releases GitHub : même empreinte que la liste publiée).
+curl -sSL https://github.com/grafana/k6/releases/download/v2.3.0/k6-v2.3.0-checksums.txt | grep windows-amd64.zip
+sha256sum <scratchpad>/k6/k6.zip
+<scratchpad>/k6/k6-v2.3.0-windows-amd64/k6.exe version
+# Espace de travail : copie du scénario du dépôt, identique octet pour octet.
+mkdir -p <scratchpad>/vm/k6/.data
+cp tests/Load/game-load.js <scratchpad>/vm/k6/game-load.js
+sha256sum tests/Load/game-load.js <scratchpad>/vm/k6/game-load.js
+```
+
+  Liste des titres — [abo], par l'entrée standard (`<scratchpad>/vm/charge/c1-titres.sh`), sortie redirigée sur le poste :
+
+```bash
+# [abo] Étape 5.1 — liste des titres publiés (lecture seule, utilisateur de la base dédié).
+E=/var/www/vhosts/tripleframes-prod.test/tripleframes/.env
+MYSQL_PWD="$(sed -n 's/^DB_PASSWORD=//p' "$E")" mysql --no-defaults --protocol=socket -u tripleframes_prod tripleframes_prod -N -B -e \
+  "SELECT DISTINCT mt.title FROM movie_title mt JOIN movie m ON m.id = mt.movie_id WHERE m.availability = 'published' ORDER BY mt.title;"
+```
+
+```bash
+ssh <clé> vagrant@192.168.10.10 'sudo -u tripleframes -H bash -s' < <scratchpad>/vm/charge/c1-titres.sh > <scratchpad>/vm/k6/.data/titles.txt
+wc -l <scratchpad>/vm/k6/.data/titles.txt
+```
+
+  Enveloppe `<scratchpad>/vm/k6/enveloppe.js` (**propre à la répétition**) : k6 n'a ni option ni variable pour la résolution de noms, et Windows n'approuve pas la CA de Homestead. Elle réexporte le scénario tel quel :
+
+```javascript
+import * as scenario from './game-load.js';
+
+const VM = '192.168.10.10';
+
+export const options = Object.assign({}, scenario.options, {
+    hosts: {
+        'tripleframes-prod.test': VM,
+        'tripleframes-voisin.test': VM,
+        'atomsdle.test': VM,
+    },
+    insecureSkipTLSVerify: true,
+});
+
+export const setup = scenario.setup;
+export const players = scenario.players;
+export const neighbours = scenario.neighbours;
+export const handleSummary = scenario.handleSummary;
+```
+
+- **Attendu et vérification** (15:29-15:32 UTC) : cinq unités actives, `/up` 200, cinq sondes `ok`, 404 sans jeton et jeton faux ; battements `game` 4,8 s et `default` 3,0 s ; Redis dédié 1,15 Mo sur 256 Mo ; **8 parties, toutes `completed`**, aucune en cours ; aucun drainage (`deploy:guard` 2 depuis l'étape 4.13) ; empreinte du zip `112276d4…` = celle de la liste publiée pour `k6-v2.3.0-windows-amd64.zip`, `k6.exe v2.3.0 (commit/e088784614, go1.26.8, windows/amd64)` ; copie du scénario identique (`0ec1da90…`) ; **27 titres** (17 œuvres publiées, titres français et anglais). Machine au repos : charge 0,12, 2 171 Mo disponibles, swap 27 Mo.
+- **Écart** : le préalable « porteur prévenu, séance hors de son usage de la VM » n'a pas pu être vérifié de vive voix ; relevé à 15:27 : une connexion MySQL du poste sur la base de développement (`homestead@192.168.10.1`, `tripleframes`, active 2 s plus tôt), aucun autre usage visible. La séance a donc été jouée **sous garde-fou automatique** (étape 5.3), qui s'arrête avant toute gêne durable.
+- **Sur le VPS Plesk :** k6 installé sur le poste du porteur (même binaire officiel, empreinte vérifiée), `k6 run` lancé **depuis la racine du dépôt** (`tests/Load/.data/`, ignoré par git) ; **aucune enveloppe** : DNS public et Let's Encrypt. La requête des titres se joue en SSH de l'abonnement (`mysql` avec l'utilisateur de la base Plesk, mot de passe tapé ou lu dans le `.env`), sortie redirigée dans `tests/Load/.data/titles.txt` du poste. Prévenir les autres occupants du VPS et choisir une heure creuse **à laquelle la référence des voisins sera prise** (§ 16.2).
+
+### Étape 5.2 — Voisins mesurés : un site existant et un voisin témoin (propre à la répétition)
+
+- **But** : critère 2 de `100` § 16.4 (« les voisins ne se dégradent pas »), mesuré **sans toucher** aux sites de développement du porteur. Deux voisins :
+  - **`https://atomsdle.test/robots.txt`**, site existant de la VM (serveur par défaut de nginx) : fichier statique servi par nginx, **aucune écriture**, ni base, ni session, ni PHP. Les pages PHP des sites existants sont écartées : une page Laravel ouvre une session en base, donc écrirait dans une base du porteur ;
+  - **`http://tripleframes-voisin.test/`**, voisin témoin créé pour la séance : une page PHP d'environ 10 ms de processeur, sans base, servie par un **second pool du même master PHP-FPM** que TripleFrames (utilisateur `tfvoisin`), comme deux abonnements Plesk sur la même version de PHP.
+- **Commandes** — [root] (`<scratchpad>/vm/charge/c2-voisin.sh`, envoyé par `ssh … 'sudo bash -s' <`) :
+
+```bash
+set -euo pipefail
+# [root] Étape 5.2 — voisin témoin (propre à la répétition) : un « abonnement voisin »
+# servi par le même master PHP-FPM que TripleFrames, comme deux abonnements Plesk
+# sur la même version de PHP. Page dynamique d'environ 10 ms de processeur, sans base.
+echo "== avant : masters PHP-FPM existants et nginx"
+for u in php8.1-fpm php8.3-fpm php8.4-fpm nginx tripleframes-php-fpm; do printf '%-22s MainPID=%s\n' $u "$(systemctl show -p MainPID --value $u)"; done
+useradd --system --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin --user-group tfvoisin
+install -d -o root -g root -m 0755 /var/www/vhosts/tripleframes-voisin.test /var/www/vhosts/tripleframes-voisin.test/httpdocs
+install -d -o root -g root -m 0755 /var/www/vhosts/system/tripleframes-voisin.test
+cat > /var/www/vhosts/tripleframes-voisin.test/httpdocs/index.php <<'PHP'
+<?php
+// Voisin témoin de la séance de charge (répétition VM) : ~10 ms de processeur, aucune base.
+$h = '';
+for ($i = 0; $i < 30000; $i++) {
+    $h = hash('sha256', $h.$i);
+}
+header('Content-Type: text/plain; charset=utf-8');
+header('Cache-Control: no-store');
+echo 'voisin ok ', substr($h, 0, 8), "\n";
+PHP
+chmod 0644 /var/www/vhosts/tripleframes-voisin.test/httpdocs/index.php
+
+cat > /etc/tripleframes/php-fpm/pool.d/tripleframes-voisin.conf <<'EOF'
+; Voisin témoin de la séance de charge (répétition VM seulement).
+[tripleframes-voisin]
+user = tfvoisin
+group = tfvoisin
+listen = /var/www/vhosts/system/tripleframes-voisin.test/php-fpm.sock
+listen.owner = root
+listen.group = vagrant
+listen.mode = 0660
+pm = ondemand
+pm.max_children = 4
+pm.max_requests = 500
+pm.process_idle_timeout = 10s
+chdir = /
+php_admin_value[memory_limit] = 64M
+php_admin_value[date.timezone] = UTC
+php_admin_value[open_basedir] = /var/www/vhosts/tripleframes-voisin.test/:/tmp/
+EOF
+chmod 0644 /etc/tripleframes/php-fpm/pool.d/tripleframes-voisin.conf
+
+cat > /etc/tripleframes/nginx/tripleframes-voisin.test.conf <<'EOF'
+# Voisin témoin de la séance de charge (répétition VM seulement), HTTP seul.
+server {
+    listen 80;
+    server_name tripleframes-voisin.test;
+    root /var/www/vhosts/tripleframes-voisin.test/httpdocs;
+    access_log off;
+    error_log /var/www/vhosts/system/tripleframes-voisin.test/error_log;
+    location = / {
+        fastcgi_pass unix:/var/www/vhosts/system/tripleframes-voisin.test/php-fpm.sock;
+        include fastcgi_params;
+        fastcgi_param SCRIPT_FILENAME $document_root/index.php;
+        fastcgi_param SCRIPT_NAME /index.php;
+    }
+    location / {
+        return 404;
+    }
+}
+EOF
+chmod 0644 /etc/tripleframes/nginx/tripleframes-voisin.test.conf
+
+php-fpm8.4 -t -y /etc/tripleframes/php-fpm/php-fpm.conf
+systemctl reload tripleframes-php-fpm
+sleep 2
+systemctl is-active tripleframes-php-fpm
+ls -l /var/www/vhosts/system/tripleframes-voisin.test/php-fpm.sock
+ln -s /etc/tripleframes/nginx/tripleframes-voisin.test.conf /etc/nginx/sites-enabled/zz-tripleframes-voisin.test
+nginx -t && systemctl reload nginx
+sleep 1
+echo "== vérifications"
+curl -s -w ' %{http_code} ttfb=%{time_starttransfer}\n' --resolve tripleframes-voisin.test:80:127.0.0.1 http://tripleframes-voisin.test/
+curl -s -o /dev/null -w 'atomsdle robots %{http_code} ttfb=%{time_starttransfer}\n' -k --resolve atomsdle.test:443:127.0.0.1 https://atomsdle.test/robots.txt
+curl -s -o /dev/null -w 'tripleframes /up %{http_code}\n' --cacert /etc/ssl/certs/ca.homestead.homestead.crt --resolve tripleframes-prod.test:443:127.0.0.1 https://tripleframes-prod.test/up
+curl -s -o /dev/null -m 10 -w 'défaut http %{http_code}\n' http://127.0.0.1/
+echo | openssl s_client -connect 127.0.0.1:443 2>/dev/null | openssl x509 -noout -subject
+echo "== après"
+for u in php8.1-fpm php8.3-fpm php8.4-fpm nginx tripleframes-php-fpm; do printf '%-22s MainPID=%s\n' $u "$(systemctl show -p MainPID --value $u)"; done
+```
+
+  Puis, [poste], essai d'une minute de la phase `neighbours` (depuis `<scratchpad>/vm/k6/`) :
+
+```bash
+K6=<scratchpad>/k6/k6-v2.3.0-windows-amd64/k6.exe
+cd <scratchpad>/vm/k6
+"$K6" run --no-usage-report --quiet --address 127.0.0.1:6566 -e PHASE=neighbours \
+    -e NEIGHBOUR_URLS=http://tripleframes-voisin.test/,https://atomsdle.test/robots.txt \
+    -e NEIGHBOUR_MINUTES=1 -e NEIGHBOUR_INTERVAL_SECONDS=5 -e LOAD_DATA_DIR=.data enveloppe.js
+```
+
+- **Attendu et vérification** (15:33-15:36 UTC) : configuration PHP-FPM valide, `tripleframes-php-fpm` rechargé (`USR2`, même PID 237663), socket `srw-rw---- root vagrant` ; `nginx -t` réussi, nginx rechargé (même PID 973) ; `voisin ok … 200` en 12 ms ; `atomsdle robots 200` en 5 ms ; `/up` de TripleFrames 200 ; serveur par défaut inchangé (`défaut http 200`, `CN = atomsdle.test`) ; masters `php8.1-fpm`, `php8.3-fpm`, `php8.4-fpm` inchangés (735, 736, 737). Essai k6 : `tf_neighbour_failures count=0`, voisin témoin médiane 10,9 ms, `atomsdle` 0,5 ms (vus du poste, connexion réutilisée).
+- **Sur le VPS Plesk :** **aucun voisin témoin** : on mesure les **vrais** sites voisins du VPS, leur page d'accueil (`NEIGHBOUR_URLS=https://<voisin 1>/,https://<voisin 2>/`, § 16.4), à faible cadence (10 s par défaut). Une page d'accueil de site vitrine ou WordPress en lecture ne crée rien de durable ; à vérifier avec leurs propriétaires si un voisin écrit à chaque visite (compteur, session en base).
+
+### Étape 5.3 — Échantillonneur et garde-fou (propre à la répétition)
+
+- **But** : relever pendant chaque exécution ce que k6 ne voit pas (`100` § 16.4 : file PHP-FPM, cgroups, Redis, mémoire et swap de la machine) et **protéger la VM** : arrêt de k6 à la première saturation.
+- **Commandes** — [poste] : `<scratchpad>/vm/charge/echantillonneur.sh` (sans secret : mot de passe Redis par `REDISCLI_AUTH`, MySQL par `MYSQL_PWD`, lus sur la VM) copié sur la VM, et `<scratchpad>/vm/charge/veille.sh`, qui le lance par `ssh`, recopie ses lignes et arrête k6 par son API REST à la première ligne `STOP` :
+
+```bash
+scp <clé> <scratchpad>/vm/charge/echantillonneur.sh vagrant@192.168.10.10:/home/vagrant/tripleframes-repetition/charge/echantillonneur.sh
+ssh <clé> vagrant@192.168.10.10 'bash -n /home/vagrant/tripleframes-repetition/charge/echantillonneur.sh && sudo bash /home/vagrant/tripleframes-repetition/charge/echantillonneur.sh essai 11'
+```
+
+  Relevé par ligne (CSV) : `load1`, `load5`, processeur occupé (`/proc/stat`), mémoire totale et disponible, swap utilisé et pages échangées depuis la ligne précédente (`/proc/vmstat`), statut du pool `tripleframes` par `cgi-fcgi` (`listen queue`, `max listen queue`, processus actifs et totaux, `max children reached`), processeur (en % d'un cœur, `cpu.stat`) et mémoire (`memory.current`) des cgroups `tripleframes-php-fpm`, `tripleframes-redis`, `tripleframes-worker@game`, `tripleframes-worker@default`, `tripleframes-reverb`, `mysql`, `nginx`, `php8.4-fpm` (pool des sites du porteur), mémoire et clients du Redis dédié, `Threads_connected` et `Threads_running` de MySQL (utilisateur dédié), temps jusqu'au premier octet, **vu de la VM**, du voisin témoin, d'`atomsdle.test/robots.txt` et du `/up` de TripleFrames. Règle d'arrêt (forme finale, après les deux faux positifs de l'écart ci-dessous), une seule ligne `STOP` : `load1` > 2 × nproc plus de 60 s d'affilée ; **au moins 256 pages (1 Mio) échangées** (entrée ou sortie, `pswpin` + `pswpout`) à chacun de 3 relevés de suite, ou swap + 100 Mo **alors que** la mémoire disponible est sous 20 % ; mémoire disponible < 10 %. Les colonnes `swap_in_pages` et `swap_out_pages` sont séparées.
+
+  Veille (arrêt propre de k6 : `PATCH /v1/status` `stopped: true`, puis `handleSummary` écrit le résumé et la liste des salons) :
+
+```bash
+bash <scratchpad>/vm/charge/veille.sh <étiquette> <durée en s> 6565     # en arrière-plan, à côté de k6 (API sur 127.0.0.1:6565)
+```
+
+- **Attendu et vérification** (15:34 UTC) : syntaxe valide ; deux lignes d'essai au repos : charge 0,12, processeur 1 à 3 %, 2 171 Mo disponibles, swap 27 Mo sans échange, pool `tripleframes` 1 processus sans file, MySQL 1 258 Mo (instance partagée), `php8.4-fpm` 257 Mo, Redis dédié 1 Mo et 8 clients, voisin témoin 11 à 15 ms, `atomsdle` 5 ms, `/up` 19 à 22 ms.
+- **Écart — deux faux positifs du garde-fou, règle corrigée** :
+  1. **Au repos** (mesure de référence, étape 5.4, 15:38:27 UTC) : le noyau a vidé d'un coup 117 Mo de pages froides vers le swap (surtout de MySQL, 1 259 → 1 049 Mo résidents) alors que la mémoire disponible **montait** de 2 155 à 2 343 Mo ; la première règle (« swap + 100 Mo ») a écrit `STOP` sans aucune charge. Ce n'est pas une saturation : récupération de mémoire ordinaire (`swappiness` 60). Règle corrigée : « swap + 100 Mo » ne compte que sous 20 % de mémoire disponible.
+  2. **Répétition à deux salons, premier essai** (étape 5.5, 15:44:11 UTC) : 16, 26 puis 3 pages **relues** du swap à trois relevés de suite (moins de 200 Kio en tout, 2,25 Go disponibles), au lancement des deux parties ; la veille a arrêté k6 au bout de 82 s. Règle corrigée : 256 pages (1 Mio) au moins à chacun des 3 relevés. Au passage, l'arrêt par l'API a été **vérifié** : `test run stopped from REST API`, code 103, `handleSummary` a bien écrit la liste des salons (`rooms-A-…txt`) et le résumé.
+  - **Leçon pour le VPS** : le swap utilisé ne dit rien seul ; c'est le **débit** d'échange soutenu (`vmstat 5`, colonnes `si`/`so` durablement non nulles, par Mio) sous faible mémoire disponible qui signe la saturation.
+  - Le script remplacé (`scp`) pendant qu'un échantillonneur tournait encore a été rechargé proprement : **ne jamais recopier un script `bash` en cours d'exécution** (`bash` le lit au fil de l'eau, et `scp` réécrit le même fichier) ; l'échantillonneur resté orphelin sur la VM après l'arrêt de la veille a été arrêté (`sudo pkill -f "^bash /home/vagrant/tripleframes-repetition/charge/echantillonneur.sh A-1"` : motif ancré, sans quoi `pkill -f` tue aussi le `bash -c` de la session `ssh` qui le tape, code 255).
+- **Sur le VPS Plesk :** pas de garde-fou automatique écrit d'avance : le porteur surveille en direct dans une session root (`uptime`, `free -m`, `vmstat 5`, `systemctl status tripleframes-*`) et arrête k6 au clavier (`Ctrl+C` une fois : arrêt propre) sur les mêmes seuils ; l'échantillonneur peut être recopié tel quel (chemins `<DOMAINE>`, port Redis relevé, **pool de l'abonnement** : le socket `cgi-fcgi` de Plesk `/var/www/vhosts/system/<DOMAINE>/php-fpm.sock` et le cgroup `plesk-php84-fpm.service` au lieu de `tripleframes-php-fpm`, `php8.4-fpm` remplacé par les services des voisins).
+
+### Étape 5.4 — Mesure de référence des voisins
+
+- **But** : `100` § 16.2 et § 16.4 (critère 2) : p95 du temps jusqu'au premier octet de chaque voisin, pris **dans les 10 minutes qui précèdent** la séance, sans charge ; il sert de seuil (`NEIGHBOUR_BASELINE_P95_MS`, seuil = 1,2 × référence) aux exécutions suivantes.
+- **Commandes** — [poste], Git Bash, deux commandes en parallèle (5 minutes, un relevé toutes les 5 s) :
+
+```bash
+S=<scratchpad>; K6=$S/k6/k6-v2.3.0-windows-amd64/k6.exe
+cd $S/vm/k6
+bash $S/vm/charge/veille.sh reference-1 300 6599 &
+"$K6" run --no-usage-report --quiet --address 127.0.0.1:6566 -e PHASE=neighbours \
+    -e NEIGHBOUR_URLS=http://tripleframes-voisin.test/,https://atomsdle.test/robots.txt \
+    -e NEIGHBOUR_MINUTES=5 -e NEIGHBOUR_INTERVAL_SECONDS=5 -e LOAD_DATA_DIR=.data enveloppe.js
+wait
+python $S/vm/charge/resume.py $S/vm/charge/echantillons-reference-1.csv
+```
+
+- **Attendu et vérification** (15:37:16 → 15:42:17 UTC) : `tf_neighbour_failures count=0` ; vus du poste (k6), **p95 de référence : voisin témoin 17,23 ms** (médiane 11,2 ms), **`atomsdle` 1,58 ms** (médiane 1,0 ms) ; vus de la VM (échantillonneur) : voisin 15,5 ms, `atomsdle` 7,9 ms, `/up` de TripleFrames 28,7 ms au p95 ; machine : charge ≤ 0,3, processeur occupé 5 % en moyenne (41 % au plus, une tâche de fond), mémoire disponible ≥ 2 153 Mo, pool `tripleframes` sans file. Seuils des exécutions suivantes : `NEIGHBOUR_BASELINE_P95_MS=17.23,1.58`, soit p95 ≤ 21 ms et ≤ 2 ms.
+- **Écart** : le voisin statique a une référence inférieure à 2 ms : à cette échelle, la gigue du réseau VirtualBox pèse autant que la machine, et le seuil de 1,2 × est plus fragile que pour une page dynamique. Le critère 2 se lit donc d'abord sur le voisin témoin (page PHP) et sur les mesures prises **de la VM**. Premier faux positif du garde-fou (étape 5.3).
+- **Sur le VPS Plesk :** même commande depuis la racine du dépôt, `NEIGHBOUR_URLS` = pages d'accueil des vrais voisins, `NEIGHBOUR_MINUTES=10` (défaut), à la même heure que la séance ; noter les p95 rendus, qui deviennent `NEIGHBOUR_BASELINE_P95_MS` (dans l'ordre des adresses).
 
 ## Impasses rencontrées et contournements
 
@@ -2506,6 +2931,13 @@ _À remplir à l'exécution. Répétition de l'outillage et de la procédure seu
 - **L100-10 absent** (phase 3) : ni `ops/backup/`, ni `backup:manifest`, ni `backup:verify`. Levée (répétition seulement) : préfigurations `backup-hot.sh` et `backup-cold.sh` écrites en entier aux étapes 3.6 et 3.7, posées hors du dépôt ; (e) de la restauration joué par une boucle `sha256sum` qui applique la définition de `backup:verify` (écart n° 3).
 - **Se connecter à une cible restaurée qui n'a pas de site** (phase 3, étape 3.9 (h)) : la copie jetable n'a ni vhost, ni certificat, ni pool. Levée : `php artisan serve --host=127.0.0.1` dans la copie, joint depuis le poste par un tunnel SSH (`ssh -N -L 127.0.0.1:18080:127.0.0.1:18080 …`) ; `.env` de la cible en `APP_URL=http://127.0.0.1:18080` et `SESSION_SECURE_COOKIE=false` (HTTP en boucle locale, derrière le tunnel chiffré). Aucun geste root, aucun site Plesk à créer : rejouable tel quel sur le VPS.
 - **Horloges du poste et de la VM** (phase 3, chronométrage) : la VM avance d'environ 1,2 s sur le poste. La chronologie de l'étape 3.9 note l'horloge de chaque machine ; le code TOTP (fenêtre de 30 s) n'en est pas affecté.
+- **Pilote : rechargements involontaires** (phase 4, étape 4.8) : l'émulation `isMobile`/`hasTouch` de puppeteer recharge la page à chaque connexion CDP, donc supplante l'onglet (`seat.superseded`). Levée : `setViewport({ width: 390, height: 844 })` seul. Chrome headless sous Windows refuse une fenêtre de moins de 500 px de large.
+- **Pilote : anti-spam** (phase 4, étape 4.9) : deux saisies à 0,6 s d'intervalle → `429 One attempt at a time.` (`attemptsPerSecond` = 1) : comportement attendu du produit ; le pilote attend 1,1 s entre deux saisies d'un même joueur.
+- **Pilote : onglets d'arrière-plan et visites Inertia** (phase 4, étape 4.13) : `page.click()` attend sans fin dans un onglet d'arrière-plan (plus aucune image rendue) → `bringToFront()` avant chaque geste ; la création d'un salon est une visite Inertia (XHR + `pushState`) → attendre l'adresse `/r/<code>`, jamais `waitForNavigation`.
+- **Salon épuisé par sa mémoire** (phase 4, étape 4.13) : après 16 films joués sur 17, le salon `V5GACS` refuse tout lancement (« Films jouables : 1 pour 3 manches ») et propose d'en créer un nouveau : comportement attendu (`noRepeatMovies`), nouveau salon créé.
+- **Commit d'activation du drainage incomplet dans le clone jetable** (phase 4, étape 4.12) : la moitié « test » (`deployHookDrainSteps()` → `[]`) a été refusée par le garde-fou de permissions de la session (modification d'un fichier de test) ; seule la moitié « hook » est livrée par l'artefact n° 5, ce qui suffit au comportement déployé. Le vrai commit d'activation (étape 126) porte les deux.
+- **Contrôles `tinker`/SQL depuis le poste** (phase 4) : le pilote lit la base par `ssh … 'sudo bash …/sqlp.sh "$(cat)"'`, la requête passant par l'entrée standard (aucun guillemet à échapper, aucun secret en argument).
+- **Contrôle « 0 secret » fait sur le poste** (phase 4, relevé par le contrôle) : pour vérifier l'absence de secrets dans le runbook, l'exécutant a rapatrié leurs valeurs dans un fichier temporaire du poste (`C:\Users\Admin\AppData\Local\Temp\secrets.<pid>`, hors du scratchpad), supprimé aussitôt : contraire à la règle « secrets stockés uniquement sur la VM ». Levée (étape 4.15) : la comparaison se fait **sur la VM**, le fichier à contrôler envoyé sur l'entrée standard d'un script root (`compte-secrets.sh`) qui lit les valeurs dans le `.env`, `backup.env`, `tripleframes-redis.conf` et la clé `age`, les place en `/dev/shm` (`0600`, supprimé à la sortie) et ne rend que deux nombres. Au passage : `REVERB_APP_KEY` est publique (URL `wss://…/app/<clé>`), à exclure de la liste sous peine de faux positifs dans tout enregistrement de navigateur.
 
 ## État final
 
@@ -2514,6 +2946,8 @@ _À remplir en fin de répétition : unités actives, sondes, déploiements jou�
 **État à la fin de la phase Déploiement (28/09, 12:50 UTC)** : cinq unités `tripleframes-*` actives (`php-fpm`, `redis`, `worker@game`, `worker@default`, `reverb`), les trois dernières activées ; tâche planifiée posée ; `https://tripleframes-prod.test` servi (`/up` 200, `noindex` partout, HSTS court, `wss` de bout en bout, 6390 et 8090 fermés depuis le poste) ; cinq sondes vertes ; trois artefacts `deploy` (`0d33814`, `fe47155`, `e7cdb5c`) : un déploiement manuel (§ 11.6) puis deux par le hook, sans drainage ; administrateur `admin@tripleframes-prod.test` avec second facteur confirmé ; catalogue : 16 films de démonstration + 1 film curé (TMDB 129) publiés, vivier de 17 œuvres à N = 2 et 3 ; trois instantanés (`backup:snapshot` : 12:19, 12:34, 12:37). **Corrections du contrôle (13:11-13:17 UTC, RV-10)** : caches de démarrage et journal en `640`, unités PHP sous `Umask: 0027`, quatrième artefact `deploy` (`a775555`, hook avec `umask 027`) déployé par le hook, sans drainage ; cinq sondes vertes, `/up`, `/login`, `/` en 200, `wss` de bout en bout. **Restent** : transition du drainage (D5), phases 3 (exploitation, tier chaud, restauration), 4 (partie multijoueur et solo), 5 (charge), retour arrière.
 
 **État à la fin de la phase Exploitation (28/09, 13:37 UTC)** : cinq unités `tripleframes-*` actives ; `/up` et cinq sondes vertes, chacune **vue au rouge** puis revenue (`worker-game` 503 à 80 s d'arrêt du worker, `purge` 503 sous suspension, 404 sans jeton, jeton faux ou sonde inconnue) ; trois exécutions complètes de la purge (`purge_run` : 6 lignes `completed` par exécution, 0 ligne supprimée) ; six instantanés `backup:snapshot` (12:19, 12:34, 12:37, 13:27, 13:30, 13:31) ; clé `age` (privée dans `/root/tripleframes-hors-machine/`, publique dans `~/.config/tripleframes/backup-recipient.txt`) ; stockage distant simulé `/srv/tripleframes-stockage-distant-simule/` : deux tiers chauds du jour (`hot/2026-09-28/`, 13:30:52 et 13:31:37), 4 objets froids (`cold/game/`) ; tâches planifiées du tier chaud (03:10 chaque jour) et du tier froid (03:20 le dimanche) posées dans la crontab de `tripleframes` ; contrôle de lisibilité vert ; **restauration chronométrée jouée sur cible jetable : environ 32 s** de la décision au dernier contrôle vert (connexion de l'administrateur, second facteur compris, sur la copie restaurée portant l'`APP_KEY` de l'exemplaire hors machine), cible supprimée ensuite (base, utilisateur, copie, racines, index Redis 8 et 9) ; contrôle final des gabarits conforme (écart n° 5). **Corrections du contrôle (13:58-14:00 UTC)** : `backup-hot.sh` réinstallé (battement par `curl -K -`, sha256 `224d93a2…`, `0750 tripleframes`), section du battement vérifiée seule contre des adresses factices en boucle locale ; tier chaud non rejoué ; aucune autre modification de la VM. **Restent** : transition du drainage (D5), phase 4 (partie multijoueur et solo), phase 5 (charge), retour arrière.
+
+**État à la fin de la phase Partie (28/09, 14:53 UTC)** : cinq unités `tripleframes-*` actives (PID relevés après le redémarrage de Redis : Redis 261868, workers 261882/261887, Reverb 261897) ; `/up` et cinq sondes vertes ; **cinq artefacts `deploy`** : `0d33814` (mise en service manuelle), `fe47155`, `e7cdb5c`, `a775555` (hook sans drainage), **`9e5ed5a`** (commit d'activation du drainage, hook complet `[1/12]` à `[12/12]`, déployé après `deploy:drain` et `deploy:guard` : la transition I-13 est jouée) ; checkout de production sur `9e5ed5a`, hook avec les étapes 3 et 12 actives ; aucun drapeau de drainage (`deploy:guard` 2). Parties jouées : 8 (`game` 1 à 8), toutes `completed` — multijoueur 1, 2, 3 (salon `V5GACS`), 6 (`555FP9`, pendant le drainage), 7 (`V2GV6M`, après le hook) ; solo 4, 5, 8 ; film curé n° 17 joué en partie 3 (manche 3) et en solo (partie 4, manche 5). Contrôle anti-triche : 0 fuite (multijoueur : 41 fenêtres de manche, parties 1, 2, 3, 6 et 7 ; solo : 56 paquets hors révélation). Scores : les 30 lignes `guess` (24 multijoueur, 6 solo) recalculées par la formule de `80` § 4.2 à partir de leur `round_tier` : 30 conformes. Deux anomalies du produit consignées (BUG-P1 solo sans révélation après réponse, BUG-P2 boutons bloqués après la levée du drapeau). Trois salons non archivés (archivage par `room:archive-idle` à l'échéance). Sur le poste : trois Chrome headless fermés en fin de phase, profils `vm/partie/profile-{hote,invite,tiers}` conservés (cookies `player_token` de répétition seulement). **Corrections du contrôle (15:10-15:25 UTC, étape 4.15)** : runbook seul (fermeture de `tf-drain` avant `exit`, sortie en code 0 de Reverb relevée par `Restart=always`, `packages.php`/`services.php` en `750` attendus, profils de la phase 4 dans la commande de nettoyage du poste) ; contrôle des secrets refait **sur la VM** (`compte-secrets.sh`, 0 ligne fautive) ; aucune autre modification de la VM. **Restent** : phase 5 (charge), retour arrière.
 
 ## Écarts à reporter dans les specs
 
@@ -2554,6 +2988,15 @@ Constats de la phase 3 (28/09) :
 21. **Non prouvé par la répétition** : le battement du tier chaud vers la supervision (sonde « sauvegarde de moins de 26 h ») et la réception des alertes par e-mail et second canal (L100-11) ; la clé d'écriture seule et le versionnage du stockage objet (le dépôt simulé `1730` n'empêche pas l'abonnement de supprimer ses propres objets) ; `rclone` (non installé sur la VM).
 22. **Notification des tâches de sauvegarde** (proposition, à reporter dans `ops/plesk/settings.md` § 4 si le porteur l'accepte) : § 4 impose « sortie non notifiée » à toutes les tâches de l'abonnement, à raison pour `schedule:run` (un courriel par minute). Pour les deux tâches de sauvegarde, la notification Plesk « seulement en cas d'erreur » donnerait un second signal, en plus du battement. À confirmer au relevé : ce que Plesk tient pour une erreur (code de sortie non nul ou sortie d'erreur), la sortie étant redirigée vers `backup.log`.
 
+Constats de la phase 4 — Partie (28/09) :
+
+23. **Solo : aucune révélation après une réponse qui clôt la manche** (BUG-P1, anomalie du produit) : le client solo ne relit pas `solo.state` après une saisie ; la lecture suivante, programmée d'avance, tombe après la garde de préchargement de la manche suivante. À reporter : `60` § 16.4 (« après chaque geste » doit couvrir une saisie qui clôt la manche, ou la réponse doit porter `fetchNotBefore`/le paquet en solo), et un test de bout en bout du calendrier de sondage solo (`100` § 2).
+24. **Prop `maintenance` figée après la levée du drapeau** (BUG-P2, anomalie du produit) : les gestes désactivés sur `maintenance` (lobby, podium, relance solo) le restent jusqu'à un rechargement. À reporter : `100` § 11.3 (le bandeau « paraît à la réponse Inertia suivante » ; il faut dire aussi comment il disparaît), `50`/`90` (le geste ne doit pas être désactivé par une prop qu'il est seul à pouvoir rafraîchir), note de déploiement de l'étape 126 (« demander aux joueurs présents de recharger »).
+25. **Commit d'activation du drainage** : deux moitiés indissociables (hook et `deployHookDrainSteps()`) ; la répétition n'a livré que la première (garde-fou de la session). Rien à changer dans la spec ; à respecter à l'étape 126.
+26. **Reconnexion des lobbies après `reverb:restart`** : la première tentative du client tombe pendant le `RestartSec=2` de l'unité ; la reconnexion suivante arrive environ 16 s après (délai du client). Sans partie en cours (drainage), sans conséquence ; à noter dans la note de déploiement (« les lobbies retrouvent le temps réel en une vingtaine de secondes »). Pendant une partie (étape 4.10, `systemctl restart`), la reconnexion a pris 1 s.
+27. **Redémarrage de Redis** : les deux workers sortent en code 1 (`Stream is already at the end …`) et sont relevés 2 s plus tard ; Reverb s'arrête seul, **en code 0** (« Deactivated successfully »), environ 3 s après, et `Restart=always` le relance 2 s plus tard (≈ 5 s au total) ; `game:reschedule` rattrape les parties s'il y en avait. Conforme ; à écrire dans `100` § 10.3 (le redémarrage de Redis relance les trois unités applicatives) et § 10.5 : **`Restart=always` est nécessaire pour Reverb** — il sort en 0 après une perte de Redis, et une unité en `Restart=on-failure` le laisserait à terre (aucune ligne `status=1/FAILURE` à chercher pour lui).
+28. **Même œuvre publiée deux fois** (catalogue de démonstration + curation, films 2 et 17, sans `movie_group`) : tirées dans la même partie. Le back-office les propose au regroupement (onglet « Même œuvre ») ; rappel pour la curation du VPS : regrouper homonymes et remakes avant de publier.
+
 ## Retour arrière
 
 Liste de ce que la répétition a créé sur la VM, **à compléter par chaque phase**. Désinstallation complète, [root], dans cet ordre (propre à la VM : rien de cela ne se joue sur le VPS, où l'on supprime l'abonnement dans Plesk et les fichiers root de l'étape 4).
@@ -2563,6 +3006,8 @@ Créé par la phase 1 : paquet `age` ; utilisateurs `tripleframes` (HOME `/var/w
 Créé par la phase 2 : dans le HOME de `tripleframes` (supprimé avec lui) : checkout de déploiement (`vendor/`, `.env`, caches), dépôt nu `git/` (branche `deploy`, quatre commits), `incoming/deploy-{1,2,3,4}.bundle`, `.config/tripleframes/hook.env`, `~/.cache/composer`, instantanés sous `private/tripleframes/snapshots/`, images sous `private/tripleframes/frames/` ; crontab de `tripleframes` ; `/root/tripleframes-hors-machine/` (copie d'`APP_KEY`) ; `/root/tripleframes-secrets/` **supprimé** (transit) ; dans `/home/vagrant/tripleframes-repetition/` : `ci/` (étape PHP du runner), `source-1.bundle`, `deploy-{1,2,3,4}.bundle`, `rv10-overlay.tar`, `wayfinder-1.tar.gz`, `outils/` (pilote `pty`, `sqlp.sh`), copies des fichiers corrigés ; base `tripleframes_prod` : comptes (dont trois de démonstration neutralisés), catalogue de démonstration, film 17. Sur le poste (scratchpad, hors dépôt) : clone `vm/build/src`, *bundles*, profil Chrome et pilote CDP, identifiants de l'administrateur (`vm/admin-credentials.txt`).
 
 Créé par la phase 3 : `/root/tripleframes-hors-machine/backup-age-key.txt` (clé privée `age`, supprimée avec le répertoire) ; `/srv/tripleframes-stockage-distant-simule/` (stockage distant simulé : `hot/`, `cold/game/`) ; dans le HOME de `tripleframes` (supprimé avec lui) : `repetition-backup/` (préfigurations `backup-hot.sh`, `backup-cold.sh`), `.config/tripleframes/{backup.env,backup-recipient.txt,backup-cold-sent.txt}`, trois instantanés de plus, `tripleframes/storage/logs/backup.log` ; deux lignes de plus dans la crontab de `tripleframes` (03:10 et 03:20) ; dans `/home/vagrant/tripleframes-repetition/` : copies de `backup-hot.sh` et `backup-cold.sh`. **Déjà supprimé** par l'étape 3.10 : base et utilisateur `tripleframes_restore_tmp`, `restore-tmp-app/`, `private/restore-tmp/`, `/root/tripleframes-restauration/`, index Redis 8 et 9. Sur le poste (scratchpad) : scripts `vm/exploitation/`, pilote `vm/driver/restore-login.mjs`, profil Chrome `vm/driver/profile-restore/`, captures `30-*` et `31-*`.
+
+Créé par la phase 4 — Partie : dans le HOME de `tripleframes` (supprimé avec lui) : `incoming/deploy-5.bundle`, commit `deploy` `9e5ed5a` du dépôt nu, `~/drain.log` (sortie de `deploy:drain`) ; en base `tripleframes_prod` (supprimée avec elle) : 8 parties, 3 salons (`V5GACS`, `555FP9`, `V2GV6M`) et leurs joueurs invités (pseudos de répétition `Camille`, `Robin`, `Zoé`, `Yann`, `Alex`), lignes `seen_frame`, `guess`, `round_*` ; dans `/home/vagrant/tripleframes-repetition/` : `deploy-5.bundle`, `outils/compte-secrets.sh` et `outils/compte-secrets-par-cle.sh` (étape 4.15, sans secret). Aucune session `tmux` laissée (`tf-drain` fermée, `tmux ls` sous `tripleframes` : « no server running », vérifié à 15:12 UTC). Sur le poste (scratchpad) : clone `vm/build/src` (commit `047b1ba`), `vm/build/deploy-5.bundle`, `vm/build/manifest-4.json`, pilote `vm/driver/p-*.mjs`, enregistrements et relevés `vm/partie/logs/`, captures `vm/partie/shots/`, profils Chrome `vm/partie/profile-{hote,invite,tiers}` (cookies de joueurs invités de la répétition, effacés par la commande du poste ci-dessous), journal des anomalies `vm/bugs.md`, scripts `vm/outils/compte-secrets{,-par-cle}.sh`.
 
 ```bash
 systemctl disable --now tripleframes-worker@game tripleframes-worker@default tripleframes-reverb tripleframes-redis tripleframes-php-fpm
@@ -2590,10 +3035,10 @@ rm -rf /home/vagrant/tripleframes-repetition
 NEEDRESTART_MODE=l apt-get remove -y age
 ```
 
-Puis, [poste], Git Bash, une fois la VM rendue (identifiants de l'administrateur, clé TOTP comprise, et cookies de session des profils Chrome) :
+Puis, [poste], Git Bash, une fois la VM rendue (identifiants de l'administrateur, clé TOTP comprise, cookies de session des profils Chrome du back-office et de la restauration, cookies `player_token` des trois profils de joueurs de la phase 4) :
 
 ```bash
-rm -rf <scratchpad>/vm/admin-credentials.txt <scratchpad>/vm/driver/profile <scratchpad>/vm/driver/profile-restore
+rm -rf <scratchpad>/vm/admin-credentials.txt <scratchpad>/vm/driver/profile <scratchpad>/vm/driver/profile-restore <scratchpad>/vm/partie/profile-hote <scratchpad>/vm/partie/profile-invite <scratchpad>/vm/partie/profile-tiers
 ```
 
 - **Correction du contrôle de la phase 3** (28/09, 14:00 UTC, bloc documenté seulement) : `userdel -r tripleframes` suivait immédiatement `crontab -r`. Or un `schedule:run` de `tripleframes` est toujours vivant (relevé à 13:58 : PID 256741 et 256744), puisque le battement `everyThirtySeconds` le tient toute la minute (`ops/plesk/settings.md` § 4) ; à 03:10, `backup-hot.sh` peut aussi tourner. `userdel` aurait refusé (code 8), les lignes suivantes se seraient exécutées quand même, et le HOME serait resté en place, avec `.env`, instantanés, images, clé publique et `backup.env`. Ligne `pkill` insérée. Les éléments du poste étaient listés sans commande de suppression, alors que `vm/admin-credentials.txt` porte le mot de passe administrateur et la clé TOTP, et les profils `vm/driver/profile*` des cookies de session : commande ajoutée.
