@@ -42,8 +42,10 @@ import type { Leaderboard, Podium } from '@/types/scoring';
  *   (§ 4.4 : un rattrapage n'émet que l'état courant) ;
  * - à `seat.superseded`, à toute réponse 409 `seat_superseded`, à un 403 ou
  *   404 persistant du chargeur d'images (signalés par l'appelant) ;
- * - à la reconnexion d'Echo, au retour de visibilité et en ligne (signalés
- *   par `use-game-state`) ;
+ * - à la reconnexion d'Echo, au retour de visibilité et en ligne, et à
+ *   chaque confirmation des deux canaux du siège par le serveur — première
+ *   souscription comprise, avant laquelle Reverb n'a rien remis (BUG-01) —
+ *   (signalés par `use-game-state`) ;
  * - **à toute garde de palier dont il ne détient pas l'URL**
  *   (`Tᵢ − preload_lead_ms`, palier 1 de la manche suivante compris) : les
  *   gardes des manches connues se calculent sur la chronologie et l'avance
@@ -103,6 +105,7 @@ export type ResyncReason =
     | 'replayed'
     | 'superseded'
     | 'reconnected'
+    | 'subscribed'
     | 'visible'
     | 'online'
     | 'frame_unavailable'

@@ -31,6 +31,17 @@ import type { GameEventName, RealtimeConfig } from '@/types/game-wire';
  * `broadcastAs` préfixé d'un point (`.round.scheduled`), hors de l'espace de
  * noms `App.Events` d'Echo.
  *
+ * **Confirmation des abonnements** (BUG-01). Reverb ne remet un événement
+ * qu'à un canal dont l'abonnement est confirmé
+ * (`pusher:subscription_succeeded`), et ne rejoue jamais rien : ce qui part
+ * entre l'instant du paquet de la page et cette confirmation est perdu —
+ * un `seat.choices` émis à `T_N` pendant l'autorisation d'un onglet qui
+ * vient d'être rechargé, par exemple. La connexion ouverte ne le dit pas :
+ * elle précède les autorisations. L'abonné est donc prévenu à chaque
+ * confirmation de **la paire** (présence du salon et privé du siège), à la
+ * première souscription comme à la resouscription que `pusher-js` fait à
+ * chaque reconnexion, et relit l'état (60 § 12.6).
+ *
  * Le module ne décide rien du jeu : il relaie les charges à l'abonné (le
  * magasin, `lib/game/store.ts`) et publie l'état de la connexion. La
  * présence Reverb ne fait jamais foi (60 § 13.1) : seuls les battements HTTP
@@ -185,6 +196,14 @@ export function connectionStateOf(
 /** Une souscription à un canal, partagée par ses abonnés. */
 type ChannelSubscription = {
     listeners: Set<GameEventListener>;
+    /**
+     * Abonnement confirmé par le serveur depuis la dernière ouverture de la
+     * connexion. Faux dès qu'elle n'est plus ouverte : `pusher-js` oublie
+     * alors ses abonnements et les refait à la reconnexion.
+     */
+    confirmed: boolean;
+    /** Rappels des paires qui suivent ce canal, joués à chaque confirmation. */
+    confirmations: Set<() => void>;
     leaveTimer: ReturnType<typeof setTimeout> | null;
 };
 
@@ -209,6 +228,10 @@ function notifyStatus(): void {
 
     if (status === 'connected') {
         everConnected = true;
+    } else {
+        for (const subscription of subscriptions.values()) {
+            subscription.confirmed = false;
+        }
     }
 
     lastStatus = status;
@@ -277,19 +300,21 @@ function cancelDisconnect(): void {
     }
 }
 
-/** Rejoint `name` (une fois) et y ajoute l'abonné. */
+/** Rejoint `name` (une fois), y ajoute l'abonné et rend la souscription. */
 function attach(
     client: Echo<'reverb'>,
     kind: 'presence' | 'private',
     name: string,
     events: readonly GameEventName[],
     listener: GameEventListener,
-): void {
+): ChannelSubscription {
     let subscription = subscriptions.get(name);
 
     if (subscription === undefined) {
         const created: ChannelSubscription = {
             listeners: new Set(),
+            confirmed: false,
+            confirmations: new Set(),
             leaveTimer: null,
         };
         const channel =
@@ -303,6 +328,15 @@ function attach(
             });
         }
 
+        // Première souscription et chaque resouscription d'une reconnexion.
+        channel.subscribed(() => {
+            created.confirmed = true;
+
+            for (const each of created.confirmations) {
+                each();
+            }
+        });
+
         subscriptions.set(name, created);
         subscription = created;
     }
@@ -313,6 +347,8 @@ function attach(
     }
 
     subscription.listeners.add(listener);
+
+    return subscription;
 }
 
 /**
@@ -355,11 +391,20 @@ function detach(name: string, listener: GameEventListener): void {
  * relaie chaque événement de la liste close à `listener`. Rend le
  * désabonnement. Sans clé d'application configurée, rien n'est suivi et
  * l'état passe à `unavailable`.
+ *
+ * `onSubscribed` est appelé chaque fois que **les deux** abonnements sont
+ * confirmés par le serveur : à la première souscription, à chaque
+ * resouscription après une reconnexion, et au branchement d'un abonné sur
+ * une paire déjà confirmée (un autre abonné la tenait : ce qui est parti
+ * avant ne l'a pas atteint). Tout événement émis avant cet instant a pu être
+ * perdu ; tout événement émis après est remis. L'abonné y relit l'état. Comme
+ * `listener`, l'appelant le garde stable.
  */
 export function subscribeGameChannels(
     config: RealtimeConfig,
     channels: GameChannels,
     listener: GameEventListener,
+    onSubscribed: () => void,
 ): () => void {
     const client = ensureEcho(config);
 
@@ -368,10 +413,36 @@ export function subscribeGameChannels(
     }
 
     cancelDisconnect();
-    attach(client, 'presence', channels.room, ROOM_EVENTS, listener);
-    attach(client, 'private', channels.seat, SEAT_EVENTS, listener);
+
+    const room = attach(
+        client,
+        'presence',
+        channels.room,
+        ROOM_EVENTS,
+        listener,
+    );
+    const seat = attach(
+        client,
+        'private',
+        channels.seat,
+        SEAT_EVENTS,
+        listener,
+    );
 
     let active = true;
+
+    const confirmed = (): void => {
+        if (active && room.confirmed && seat.confirmed) {
+            onSubscribed();
+        }
+    };
+
+    room.confirmations.add(confirmed);
+    seat.confirmations.add(confirmed);
+
+    if (room.confirmed && seat.confirmed) {
+        queueMicrotask(confirmed);
+    }
 
     return () => {
         if (!active) {
@@ -379,6 +450,8 @@ export function subscribeGameChannels(
         }
 
         active = false;
+        room.confirmations.delete(confirmed);
+        seat.confirmations.delete(confirmed);
         detach(channels.room, listener);
         detach(channels.seat, listener);
     };
@@ -406,7 +479,10 @@ export function subscribeRealtimeStatus(listener: () => void): () => void {
  * Abonnement aux **reconnexions** : retour à `connected` d'une connexion qui
  * l'avait déjà été. La page s'y resynchronise et refait la poignée de main
  * d'horloge (60 § 2.4, § 12.6) — les événements émis pendant la coupure ne
- * sont jamais rejoués par Reverb.
+ * sont jamais rejoués par Reverb. Cette relecture précède la resouscription
+ * des canaux : celle qui rattrape tout ce qui a précédé est la suivante,
+ * à la confirmation de la paire (`onSubscribed` de
+ * {@link subscribeGameChannels}).
  */
 export function subscribeReconnected(listener: () => void): () => void {
     reconnectedListeners.add(listener);

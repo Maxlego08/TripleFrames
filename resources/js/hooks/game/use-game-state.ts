@@ -62,7 +62,11 @@ import type { RoomSettingsState } from '@/types/room-settings';
  *   à chaque retour de visibilité (`clockSamples` de la prop `realtime`) ;
  *   recalage sur chaque `serverNow` reçu.
  * - **Resynchronisation** à la reconnexion d'Echo, au retour de visibilité
- *   et au retour en ligne ; les autres déclencheurs vivent dans le magasin.
+ *   et au retour en ligne ; **à chaque confirmation des deux canaux du
+ *   siège** (BUG-01) — première souscription comprise : ce qui est émis entre
+ *   l'instant du paquet et la confirmation n'est jamais remis ni rejoué par
+ *   Reverb, et la reconnexion elle-même précède la resouscription ; les
+ *   autres déclencheurs vivent dans le magasin.
  * - **Connexion** : `offline` si le navigateur l'est — ou, en solo, si la
  *   dernière lecture de l'état a échoué (`unreachable`) —, `reconnecting` si
  *   le temps réel est perdu ; au retour à `connected`, annonce
@@ -122,7 +126,12 @@ export type GameStateView = {
     frames: GameFrames;
 };
 
-type GameRuntime = { store: GameStore; loader: FrameLoader };
+type GameRuntime = {
+    store: GameStore;
+    loader: FrameLoader;
+    /** Relecture à la confirmation des canaux, stable pour tout le montage. */
+    onChannelsSubscribed: () => void;
+};
 
 /** Phases d'une manche close, dont seuls les paliers ouverts restent servis. */
 const ENDED_PHASES: ReadonlySet<RoundState['phase']> = new Set<
@@ -204,9 +213,13 @@ export function useGameState(options: UseGameStateOptions): GameStateView {
             onResyncNeeded: (reason) => store.requestResync(reason),
         });
 
-        return { store, loader };
+        return {
+            store,
+            loader,
+            onChannelsSubscribed: () => store.requestResync('subscribed'),
+        };
     });
-    const { store, loader } = runtime;
+    const { store, loader, onChannelsSubscribed } = runtime;
 
     const state = useSyncExternalStore(store.subscribe, store.getState);
 
@@ -272,9 +285,14 @@ export function useGameState(options: UseGameStateOptions): GameStateView {
     }, [store, clockSamples]);
 
     // Canaux du siège, quittés à la sortie (`seat.kicked`, `room.archived`,
-    // 403) et au démontage.
+    // 403) et au démontage ; l'état relu à chaque confirmation de la paire.
     const channels = state.exit === null ? state.channels : null;
-    const realtimeStatus = useGameChannel(channels, realtime, store.receive);
+    const realtimeStatus = useGameChannel(
+        channels,
+        realtime,
+        store.receive,
+        onChannelsSubscribed,
+    );
     const online = useSyncExternalStore(
         subscribeOnline,
         isOnline,

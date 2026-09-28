@@ -32,12 +32,17 @@ import type { RealtimeConfig } from '@/types/game-wire';
  * la réponse avant la révélation (60 § 18).
  *
  * Ce hook ne lit ni n'écrit l'état du jeu : il relaie chaque événement de la
- * liste close à `onEvent`, qui décide.
+ * liste close à `onEvent`, qui décide, et signale à `onSubscribed` chaque
+ * confirmation des deux abonnements par le serveur — première souscription
+ * comprise —, avant laquelle un événement a pu être perdu (BUG-01). Comme
+ * `onEvent`, l'appelant garde `onSubscribed` stable : une fonction recréée à
+ * chaque rendu referait la souscription, donc une relecture, à chaque rendu.
  */
 export function useGameChannel(
     channels: GameChannels | null,
     realtime: RealtimeConfig,
     onEvent: GameEventListener,
+    onSubscribed: () => void,
 ): RealtimeStatus {
     const room = channels?.room ?? null;
     const seat = channels?.seat ?? null;
@@ -61,6 +66,7 @@ export function useGameChannel(
                           },
                           { room, seat },
                           onEvent,
+                          onSubscribed,
                       );
 
             return () => {
@@ -78,6 +84,7 @@ export function useGameChannel(
             heartbeatIntervalMs,
             clockSamples,
             onEvent,
+            onSubscribed,
         ],
     );
 
