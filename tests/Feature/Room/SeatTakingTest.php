@@ -371,6 +371,11 @@ it('re-signe le player_token avec l\'avatar choisi', function (): void {
     // la première clé libre sinon.
     [$free] = seatTakingRoom();
     [$busy] = seatTakingRoom();
+
+    // L'hôte de `$free` tient une clé fixe, autre que celle du jeton : tirée
+    // au hasard par la fabrique, elle tomberait une fois sur 24 sur la clé
+    // revendiquée, et le salon ne serait plus libre.
+    Player::query()->whereBelongsTo($free)->update(['avatar_preset' => SeatEntry::avatar(1)]);
     Player::query()->whereBelongsTo($busy)->update(['avatar_preset' => SeatEntry::avatar(11)]);
     Player::factory()->for($busy)->create(['avatar_preset' => SeatEntry::avatar(1)]);
 
