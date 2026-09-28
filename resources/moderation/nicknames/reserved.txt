@@ -21,6 +21,7 @@ staff
 officiel
 official
 tripleframes
+tripleframe
 hote
 host
 tmdb
