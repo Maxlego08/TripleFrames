@@ -1,0 +1,45 @@
+# TripleFrames — instance Redis dédiée (spec 100 § 10.3).
+#
+# Gabarit versionné, recopié UNE fois par root (ops/mise-en-service.md, étape 4) :
+#
+#   install -o root -g root -m 0644 ops/systemd/tripleframes-redis.service \
+#       /etc/systemd/system/tripleframes-redis.service
+#   systemctl daemon-reload && systemctl enable --now tripleframes-redis
+#
+# Syntaxe systemd : un commentaire n'est lu qu'en DÉBUT de ligne. Un « # … » en
+# fin de ligne entrerait dans la valeur, et systemd ignorerait le réglage avec
+# un simple avertissement : le plafond disparaîtrait en silence (vérifié par
+# tests/Feature/Deploy/OpsTemplatesTest.php).
+
+[Unit]
+Description=TripleFrames - Redis dédié (boucle locale)
+After=network.target
+# Jamais d'abandon après une rafale d'échecs : RestartSec borne déjà la cadence,
+# et /up comme la sonde worker-game alertent si Redis ne revient pas.
+StartLimitIntervalSec=0
+
+[Service]
+Type=notify
+User=tfredis
+Group=tfredis
+# À AJUSTER AU RELEVÉ : chemin du binaire (command -v redis-server), construit
+# avec le support systemd (ldd "$(command -v redis-server)" | grep libsystemd) ;
+# sans lui, Type=notify ne reçoit jamais le signal de démarrage.
+ExecStart=/usr/bin/redis-server /etc/tripleframes/tripleframes-redis.conf
+Restart=always
+RestartSec=2
+StateDirectory=tripleframes-redis
+StateDirectoryMode=0700
+UMask=0077
+# À AJUSTER AU RELEVÉ : au-dessus du maxmemory de tripleframes-redis.conf (256mb),
+# pour que le plafond de Redis joue avant celui du cgroup ; revu à la baisse avec
+# lui si le VPS a moins de 4 Go.
+MemoryMax=320M
+CPUWeight=80
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

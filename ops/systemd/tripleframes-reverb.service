@@ -1,0 +1,54 @@
+# TripleFrames — serveur Reverb en boucle locale (spec 100 § 10.5).
+#
+# Reverb n'est jamais exposé directement : il écoute sur 127.0.0.1 et nginx
+# publie le seul chemin WebSocket /app/ (ops/nginx/additional-directives.conf) ;
+# l'API HTTP /apps/ reste dans la boucle locale. Hôte et port d'écoute sont lus
+# dans la configuration de l'application (REVERB_SERVER_HOST=127.0.0.1,
+# REVERB_SERVER_PORT = port de Reverb relevé, dans le .env de production), jamais
+# sur la ligne de commande : une seule source, relue par « optimize ».
+#
+# Gabarit versionné, recopié UNE fois par root (ops/mise-en-service.md, étape 4) :
+#
+#   install -o root -g root -m 0644 ops/systemd/tripleframes-reverb.service \
+#       /etc/systemd/system/tripleframes-reverb.service
+#   systemctl daemon-reload && systemctl enable tripleframes-reverb
+#
+# Démarrage (systemctl start) à l'étape 5 seulement, après « optimize ».
+#
+# « php artisan reverb:restart » (hook, étape 11) arrête le serveur par un
+# signal déposé dans le cache ; Restart=always le relève sur le nouveau code.
+#
+# Syntaxe systemd : un commentaire n'est lu qu'en DÉBUT de ligne (vérifié par
+# tests/Feature/Deploy/OpsTemplatesTest.php).
+
+[Unit]
+Description=TripleFrames - Reverb (WebSocket, boucle locale)
+After=network-online.target tripleframes-redis.service
+Wants=network-online.target tripleframes-redis.service
+# Jamais d'abandon après une rafale d'échecs : RestartSec borne déjà la cadence,
+# et la sonde reverb (handshake wss de bout en bout) alerte s'il ne revient pas.
+StartLimitIntervalSec=0
+
+[Service]
+# À AJUSTER AU RELEVÉ : utilisateur système de l'abonnement Plesk et son groupe
+# (id <utilisateur>, d'ordinaire psacln). Jamais root.
+User=__TF_SUBSCRIPTION_USER__
+Group=__TF_SUBSCRIPTION_GROUP__
+# À AJUSTER AU RELEVÉ : chemin absolu de déploiement de Plesk Git.
+WorkingDirectory=__TF_DEPLOY_PATH__
+# PHP de l'abonnement par chemin absolu, jamais un php du système.
+ExecStart=/opt/plesk/php/8.3/bin/php artisan reverb:start
+Restart=always
+RestartSec=2
+# À AJUSTER AU RELEVÉ : RAM du VPS (free -m) ; valeur de départ, recalibrée par
+# la séance de charge (D33 du 23/09).
+MemoryMax=256M
+CPUWeight=80
+# Une connexion WebSocket = un descripteur ; sous un millier de connexions, la
+# boucle stream_select suffit (à confirmer par D33 du 23/09).
+LimitNOFILE=4096
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

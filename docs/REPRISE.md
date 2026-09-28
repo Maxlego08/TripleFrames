@@ -485,7 +485,7 @@ Ensuite, à chaque session : **« Implémente l'étape suivante de l'ordre des l
 
 **Phase B — mise en service et back-office complet (90,5 à 128,5 h)**
 
-26. L100-9 (préparation) — gabarits `ops/` ajustés au relevé, liste de contrôle de `100` § 11.6 → 2, 10, 11, 13, 14*, 17*, 18*, 19, 20, 23
+26. L100-9 (préparation) — gabarits `ops/` ajustés au relevé, liste de contrôle de `100` § 11.6 → 2, 10, 11, 13, 14*, 17*, 18*, 19, 20, 23 — ✅ préparée le 28/09 (sous hypothèse, à ajuster au relevé)
 27. P — mise en service (`100` § 11.6, étapes 1 à 5), montage root, `.env` de production hors dépôt → 1, 2, 26
 28. P — premier admin de production, nom réel, second facteur, aucune passkey → 27
 29. P — premier déploiement par le hook, sans drainage ; L100-9 terminé → 28
