@@ -51,8 +51,10 @@ export type SoloStateView = GameStateView & {
  * - **Sondage** : le client tire `solo.state` au montage — ici, une fois par
  *   montage de la page, le double montage de `strictMode` compris —, à
  *   chaque `nextTransitionAt` et à chaque `fetchNotBefore` (minuteurs du
- *   magasin), au retour de visibilité et en ligne (`useGameState`), et après
- *   chaque geste, dont la réponse est le paquet à jour.
+ *   magasin), au retour de visibilité et en ligne (`useGameState`), après
+ *   chaque geste, dont la réponse est le paquet à jour, et après toute
+ *   saisie dont le verdict clôt la saisie ou dit la manche close
+ *   (`applySubmission` du magasin), faute de `round.closed` en solo.
  * - **Connexion** : une lecture de `solo.state` en échec (réseau, 5xx) passe
  *   le bandeau à `offline` (90 § 10) jusqu'à la lecture suivante réussie,
  *   que le magasin retente après `heartbeatIntervalMs` ; son retour est

@@ -63,8 +63,10 @@ import type { Leaderboard, Podium } from '@/types/scoring';
  *   révélation, fin de révélation, échéance de pause — à défaut,
  *   `nextTransitionAt`) une fois passés `heartbeatIntervalMs` après elle ;
  * - en solo, qui ne reçoit aucun événement : à chaque `nextTransitionAt` et
- *   à chaque `fetchNotBefore` (§ 16.4) ; la page le fait aussi après chaque
- *   geste, dont la réponse est un paquet.
+ *   à chaque `fetchNotBefore` (§ 16.4), et après toute soumission dont le
+ *   verdict clôt la saisie ou dit la manche close (`applySubmission`) — la
+ *   fin anticipée qui s'ensuit n'est annoncée par rien d'autre ; la page le
+ *   fait aussi après chaque geste, dont la réponse est un paquet.
  *
  * Une resynchronisation à la fois : une demande reçue pendant qu'une autre
  * court en provoque **une** de plus. Les événements sont appliqués dès leur
@@ -1544,6 +1546,22 @@ export function createGameStore(options: GameStoreOptions): GameStore {
             ...state,
             self: { ...state.self, participates: true, input: next },
         });
+
+        // Le solo ne reçoit ni `round.closed` ni `round.revealed` : une
+        // saisie qui se clôt (bonne réponse, clic faux, tentatives épuisées)
+        // y déclenche la fin anticipée, et un 409 `closed` dit une manche
+        // déjà close. Le magasin se relit donc aussitôt (§ 16.4, « après
+        // chaque geste ») ; sinon la manche close resterait affichée jusqu'au
+        // prochain instant de sondage de l'ancien paquet, et sa révélation
+        // pourrait n'être jamais lue (BUG-P1).
+        if (
+            state.mode === 'solo' &&
+            (result.result === 'closed' ||
+                !ACCEPTS_CHOICE.has(result.inputState))
+        ) {
+            requestResync('solo_poll');
+        }
+
         schedule();
     }
 

@@ -1053,6 +1053,211 @@ describe('store', () => {
         expect(solo.resyncs[1]).toBe('solo_poll');
     });
 
+    it('en solo, se relit après une saisie qui clôt la manche et rend la révélation (BUG-P1)', async () => {
+        vi.setSystemTime(ORIGIN_MS + 3000);
+
+        const soloPacket = (
+            atMs: number,
+            overrides: Partial<GameStatePacket>,
+        ): GameStatePacket =>
+            packet(atMs, { mode: 'solo', channels: null, ...overrides });
+        const lockedInput = {
+            inputState: 'locked' as const,
+            attemptsLeft: 5,
+            choices: null,
+            locked: {
+                lockRank: 1,
+                tierIndex: 1,
+                pointsTier: 300,
+                pointsBonus: 45,
+                pointsTotal: 345,
+            },
+        };
+        // Fin anticipée à 5 s, révélation de 5 s à partir de 5,2 s ; la
+        // manche 2 part à 10,5 s, sa garde de palier 1 tombe à 8,5 s.
+        const closedRound = {
+            endedAt: iso(5000),
+            revealStartsAt: iso(5200),
+            revealEndsAt: iso(10_200),
+        };
+
+        const solo = harness(
+            soloPacket(3000, {
+                round: round(1, 0, 'running', {
+                    currentTierIndex: 1,
+                    images: [image(0, 1)],
+                }),
+                nextTransitionAt: iso(8000),
+            }),
+        );
+
+        // La bonne réponse, jugée à 5 s, clôt la manche au serveur ; aucun
+        // événement ne le dira au solo : il se relit aussitôt, sans attendre
+        // la garde du palier 2 que portait son dernier paquet.
+        await advanceTo(5000);
+        solo.store.applySubmission(1, {
+            result: 'accepted',
+            inputState: 'locked',
+            lockRank: 1,
+            tierIndex: 1,
+            pointsTier: 300,
+            pointsBonus: 45,
+            pointsTotal: 345,
+        });
+        expect(solo.resyncs).toEqual(['solo_poll']);
+
+        await solo.answer({
+            kind: 'packet',
+            packet: soloPacket(5010, {
+                round: round(1, 0, 'closed', {
+                    currentTierIndex: 1,
+                    images: [image(0, 1)],
+                    ...closedRound,
+                }),
+                self: { ...packet(0).self, input: lockedInput },
+                nextTransitionAt: iso(5200),
+            }),
+        });
+
+        // Le paquet relu porte le début de la révélation : sondage à 5,2 s.
+        await advanceTo(5199);
+        expect(solo.resyncs).toHaveLength(1);
+        await advanceTo(5200);
+        expect(solo.resyncs).toHaveLength(2);
+
+        await solo.answer({
+            kind: 'packet',
+            packet: soloPacket(5210, {
+                round: round(1, 0, 'revealing', {
+                    images: [image(0, 1)],
+                    ...closedRound,
+                    reveal: { movie: MOVIE, finders: [] },
+                }),
+                self: { ...packet(0).self, input: lockedInput },
+                nextTransitionAt: iso(8500),
+            }),
+        });
+
+        await advanceTo(6000);
+        expect(displayedRound(solo.store.getState(), Date.now())).toMatchObject(
+            { sequenceIndex: 1, phase: 'revealing', reveal: { movie: MOVIE } },
+        );
+
+        // À la garde de la manche 2, le paquet ne porte plus qu'elle : la
+        // révélation déjà reçue reste montrée jusqu'à son terme.
+        await advanceTo(8500);
+        expect(solo.resyncs).toHaveLength(3);
+
+        await solo.answer({
+            kind: 'packet',
+            packet: soloPacket(8510, {
+                round: round(2, 10_500, 'scheduled', {
+                    images: [image(10_500, 1)],
+                }),
+                self: { ...packet(0).self, input: null },
+                nextTransitionAt: iso(10_200),
+            }),
+        });
+
+        await advanceTo(9000);
+        expect(displayedRound(solo.store.getState(), Date.now())).toMatchObject(
+            { sequenceIndex: 1, phase: 'revealing' },
+        );
+        solo.stop();
+    });
+
+    it('en solo, ne se relit après une saisie que si elle clôt la saisie ou si la manche est close', async () => {
+        const verdicts: Array<{
+            result: Parameters<GameStore['applySubmission']>[1];
+            resyncs: ResyncReason[];
+        }> = [
+            {
+                result: {
+                    result: 'rejected',
+                    inputState: 'open',
+                    attemptsLeft: 4,
+                },
+                resyncs: [],
+            },
+            {
+                result: {
+                    result: 'rejected',
+                    inputState: 'text_exhausted',
+                    attemptsLeft: 0,
+                },
+                resyncs: [],
+            },
+            {
+                result: {
+                    result: 'rejected',
+                    inputState: 'qcm_wrong',
+                    attemptsLeft: 0,
+                },
+                resyncs: ['solo_poll'],
+            },
+            {
+                result: {
+                    result: 'rejected',
+                    inputState: 'attempts_exhausted',
+                    attemptsLeft: 0,
+                },
+                resyncs: ['solo_poll'],
+            },
+            {
+                result: {
+                    result: 'closed',
+                    inputState: 'open',
+                    message: 'Cette manche est terminée.',
+                },
+                resyncs: ['solo_poll'],
+            },
+        ];
+
+        for (const { result, resyncs } of verdicts) {
+            vi.setSystemTime(ORIGIN_MS + 3000);
+
+            const solo = harness(
+                packet(3000, {
+                    mode: 'solo',
+                    channels: null,
+                    round: round(1, 0, 'running', {
+                        currentTierIndex: 1,
+                        images: [image(0, 1)],
+                    }),
+                    nextTransitionAt: iso(8000),
+                }),
+            );
+
+            await advanceTo(5000);
+            solo.store.applySubmission(1, result);
+            expect(solo.resyncs).toEqual(resyncs);
+            solo.stop();
+        }
+
+        // En multijoueur, `round.closed` et `round.revealed` le disent : une
+        // saisie qui clôt ne fait rien relire.
+        vi.setSystemTime(ORIGIN_MS + 3000);
+
+        const room = harness(
+            packet(3000, {
+                round: round(1, 0, 'running', {
+                    currentTierIndex: 1,
+                    images: [image(0, 1)],
+                }),
+                nextTransitionAt: iso(8000),
+            }),
+        );
+
+        await advanceTo(5000);
+        room.store.applySubmission(1, {
+            result: 'rejected',
+            inputState: 'qcm_wrong',
+            attemptsLeft: 0,
+        });
+        expect(room.resyncs).toEqual([]);
+        room.stop();
+    });
+
     it("se relit si aucun événement n'a suivi la prochaine étape attendue", async () => {
         vi.setSystemTime(ORIGIN_MS + 12_000);
 
