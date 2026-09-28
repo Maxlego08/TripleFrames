@@ -242,8 +242,18 @@ test('deux derniers verrouillages concurrents clôturent la manche une seule foi
     $rival = 'early_end_hook_rival';
     $blocked = null;
     $blockedQueries = [];
+    $recording = false;
 
     config(["database.connections.{$rival}" => config("database.connections.{$default}")]);
+
+    // Les requêtes abouties de la connexion par défaut pendant l'écouteur
+    // bloqué, et pendant lui seul (patron de `LaunchConcurrencyTest`) : ni le
+    // `SET SESSION` qui le précède, ni les lectures de contrôle qui le suivent.
+    DB::listen(static function (QueryExecuted $query) use (&$blockedQueries, &$recording, $default): void {
+        if ($recording && $query->connectionName === $default) {
+            $blockedQueries[] = $query->sql;
+        }
+    });
 
     try {
         // 1. L'écouteur du premier, sur la jumelle, transaction laissée
@@ -263,16 +273,14 @@ test('deux derniers verrouillages concurrents clôturent la manche une seule foi
         DB::setDefaultConnection($default);
         DB::statement('SET SESSION innodb_lock_wait_timeout = 1');
 
-        DB::listen(static function (QueryExecuted $query) use (&$blockedQueries, $default): void {
-            if ($query->connectionName === $default) {
-                $blockedQueries[] = $query->sql;
-            }
-        });
+        $recording = true;
 
         try {
             app(CloseSeatInput::class)->answerAccepted($accepted[1]);
         } catch (QueryException $exception) {
             $blocked = $exception;
+        } finally {
+            $recording = false;
         }
 
         expect(Round::query()->whereKey($round->id)->value('ended_at'))->toBeNull()
