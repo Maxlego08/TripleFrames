@@ -83,8 +83,11 @@ function statusOf(error: unknown): number | null {
     return typeof response?.status === 'number' ? response.status : null;
 }
 
-/** Réveils de l'onglet : retour de visibilité, retour en ligne. */
-function subscribeWake(listener: () => void): () => void {
+/**
+ * Réveils de l'onglet : retour de visibilité, retour en ligne. Partagés avec
+ * la relecture du drapeau de drainage (`use-maintenance-refresh`).
+ */
+export function subscribeWake(listener: () => void): () => void {
     const onVisibility = (): void => {
         if (document.visibilityState === 'visible') {
             listener();

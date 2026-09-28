@@ -699,7 +699,7 @@ type LobbyPageProps = {
 
 Tous voient le code, le lien de partage et le nombre de joueurs (`room.lobby.players`, `:count`, `:capacity`).
 
-**Le bouton « Lancer la partie »** est désactivé, avec son motif affiché, quand le vivier est bloqué, quand moins de `launch.minConnected` sièges sont connectés, ou quand la prop partagée `maintenance` est vraie. C'est une aide d'affichage : le serveur relit tout sous verrou (§ 12). **« Rejouer »** l'est de même pendant un drainage (prop `maintenance`), avec le motif `common.maintenance.launch_blocked` lié par `aria-describedby`. Au retour au lobby, un focus perdu avec l'état de partie démonté revient au titre `h1` (`tabIndex=-1`), sans être volé à un contrôle qui l'a gardé — amendé le 28/09 (E115-4, E115-6).
+**Le bouton « Lancer la partie »** est désactivé, avec son motif affiché, quand le vivier est bloqué, quand moins de `launch.minConnected` sièges sont connectés, ou quand la prop partagée `maintenance` est vraie. C'est une aide d'affichage : le serveur relit tout sous verrou (§ 12). **« Rejouer »** l'est de même pendant un drainage (prop `maintenance`), avec le motif `common.maintenance.launch_blocked` lié par `aria-describedby`. **Tant que la prop vaut vrai**, la page la relit par un rechargement partiel de la seule prop (`only: ['maintenance']`) toutes les `heartbeatIntervalMs` (prop `realtime`) et au réveil de l'onglet, depuis l'onglet qui tient le siège seulement (sinon le rendu reprendrait la main, 60 § 12.7) : sur le podium, le geste désactivé était la seule requête qui l'aurait relue, et la page restait bloquée après la levée du drapeau jusqu'à un rechargement manuel — amendé le 28/09 (BUG-P2 de la répétition VM ; même relecture sur `game/solo`, 60 § 16.4). Au retour au lobby, un focus perdu avec l'état de partie démonté revient au titre `h1` (`tabIndex=-1`), sans être volé à un contrôle qui l'a gardé — amendé le 28/09 (E115-4, E115-6).
 
 **États obligatoires**, barre « terminé » :
 - **chargement** — amendé le 28/09 (E120-3) :
@@ -1074,7 +1074,7 @@ Le drapeau est posé et levé par les seules commandes `deploy:*` de `100` (cont
   - une entrée dans un salon ;
   - une expulsion ou un transfert ;
   - une partie en cours, une reprise après pause, un retardataire admis (contrat C17).
-- Le lobby affiche le bandeau de `90` (prop partagée `maintenance`) et désactive « Lancer la partie ». **Le refus serveur est la seule garantie** : la prop n'est rafraîchie qu'à la réponse Inertia suivante.
+- Le lobby affiche le bandeau de `90` (prop partagée `maintenance`) et désactive « Lancer la partie ». **Le refus serveur est la seule garantie** : la prop n'est rafraîchie qu'à la réponse Inertia suivante — que la page provoque elle-même tant que la prop vaut vrai (§ 8.1, BUG-P2).
 - Un lancement validé juste avant la pose du drapeau est attendu par la règle des deux relevés de `deploy:drain` ; le résidu est rattrapé par `deploy:guard`.
 - **Ordre de livraison (D37 du 23/09).** La garde naît avec le lancement (L50-7a), qui dépend de `DeployDrain` (L100-5). Le drainage est donc obligatoire avant la **première partie** sur le VPS, jamais avant la curation : tant qu'aucun moteur ni aucun lancement n'existe, aucune partie ne peut être en cours, et le hook de déploiement de `100` fonctionne sans drainage (`deploy:guard` trivialement vrai) — amendé le 23/09.
 

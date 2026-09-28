@@ -26,6 +26,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Spinner } from '@/components/ui/spinner';
 import { useLobbyState } from '@/hooks/game/use-lobby-state';
 import type { LobbyStateView } from '@/hooks/game/use-lobby-state';
+import { useMaintenanceRefresh } from '@/hooks/game/use-maintenance-refresh';
 import { useNextRound } from '@/hooks/game/use-next-round';
 import { useRoundStage } from '@/hooks/game/use-round-stage';
 import { useTranslations } from '@/hooks/use-translations';
@@ -174,6 +175,12 @@ export default function Lobby({
         onHttpException,
         settingsChanges,
     } = lobby;
+
+    // « Lancer la partie » et « Rejouer » sont désactivés pendant un
+    // drainage : la page relit le drapeau tant qu'elle l'affiche, sans quoi
+    // elle le garderait après sa levée (BUG-P2).
+    useMaintenanceRefresh(maintenance && active);
+
     const [remedyPending, setRemedyPending] = useState(false);
     const [remedyError, setRemedyError] = useState<string | null>(null);
     const motiveId = useId();

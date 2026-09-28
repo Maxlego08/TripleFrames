@@ -1,14 +1,21 @@
 <?php
 
 use App\Enums\Locale;
+use App\Http\Middleware\EnsureActiveSeat;
+use App\Http\Middleware\HandleInertiaRequests;
 use App\Models\User;
 use App\Support\Deploy\DeployDrain;
 use App\Support\I18n\LocaleCookie;
 use App\Support\I18n\TranslationDomains;
+use App\Support\Identity\PlayerToken;
 use App\ValueObjects\Deploy\DrainState;
 use Carbon\CarbonImmutable;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Testing\TestResponse;
+use Tests\Support\I18n\FrontSource;
+use Tests\Support\Room\LobbyWrites;
+use Tests\Support\Room\SeatEntry;
 
 /*
 |--------------------------------------------------------------------------
@@ -134,5 +141,48 @@ it('partage le drapeau de drainage en booléen avec toute page joueur', function
 
     foreach (maintenanceBannerProps($pages, null) as $label => $value) {
         expect($value)->toBeFalse($label);
+    }
+});
+
+it('relit le drapeau levé par un rechargement partiel de la seule prop, sans supplanter l’onglet (BUG-P2)', function (): void {
+    SeatEntry::isolateCookies();
+
+    $token = PlayerToken::mint(Locale::French);
+    [$room, $host] = LobbyWrites::hostedRoom($token);
+    LobbyWrites::actAs($this, $token);
+
+    $active = (string) $host->active_seat_token;
+    $drain = app(DeployDrain::class);
+
+    // Le rechargement partiel que la page envoie tant qu'elle affiche le
+    // drapeau : jeton d'onglet présenté, seule `maintenance` demandée.
+    $reload = fn (): array => $this->get(route('room.show', $room), [
+        'X-Inertia' => 'true',
+        'X-Requested-With' => 'XMLHttpRequest',
+        'X-Inertia-Version' => (string) app(HandleInertiaRequests::class)->version(Request::create('/')),
+        'X-Inertia-Partial-Component' => 'game/lobby',
+        'X-Inertia-Partial-Data' => 'maintenance',
+        EnsureActiveSeat::HEADER => $active,
+    ])->assertOk()->json('props');
+
+    $drain->start(DeployDrain::defaultTimeoutMinutes());
+
+    expect($reload()['maintenance'] ?? null)->toBeTrue();
+
+    $drain->release();
+    $props = $reload();
+
+    // Levé, relu faux ; ni paquet, ni réglages, ni jeton reconstruits, et
+    // l'onglet garde la main.
+    expect($props['maintenance'] ?? null)->toBeFalse()
+        ->and(array_values(array_intersect(array_keys($props), ['state', 'seatToken', 'settings', 'presets'])))->toBe([])
+        ->and($host->fresh()?->active_seat_token)->toBe($active);
+
+    // Les deux pages qui désactivent un geste pendant le drainage le relisent
+    // tant qu'elles l'affichent et que l'onglet tient le siège.
+    foreach (['lobby', 'solo'] as $page) {
+        $source = FrontSource::withoutComments((string) file_get_contents(resource_path("js/pages/game/{$page}.tsx")));
+
+        expect($source)->toContain('useMaintenanceRefresh(maintenance && active)');
     }
 });

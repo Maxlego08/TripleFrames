@@ -13,6 +13,7 @@ import { LoadingState } from '@/components/state/loading-state';
 import { ReadOnlyNotice } from '@/components/state/read-only-notice';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { useMaintenanceRefresh } from '@/hooks/game/use-maintenance-refresh';
 import { useRoundStage } from '@/hooks/game/use-round-stage';
 import { useSoloGestures } from '@/hooks/game/use-solo-gestures';
 import { useSoloState } from '@/hooks/game/use-solo-state';
@@ -83,8 +84,20 @@ export default function Solo({
     const { t } = useTranslations();
     const { maintenance } = usePage().props;
     const solo = useSoloState({ state: packet, seatToken, settingsNotice });
-    const { state, store, connection, seatNotice, canWrite, noticeMessage } =
-        solo;
+    const {
+        state,
+        store,
+        connection,
+        seatNotice,
+        active,
+        canWrite,
+        noticeMessage,
+    } = solo;
+
+    // La relance est désactivée pendant un drainage : la page relit le
+    // drapeau tant qu'elle l'affiche, sans quoi elle le garderait après sa
+    // levée (BUG-P2).
+    useMaintenanceRefresh(maintenance && active);
 
     const gameEnded =
         state.status === 'completed' || state.status === 'interrupted';
