@@ -7,6 +7,8 @@ import {
     LayoutDashboard,
     ListChecks,
     ListOrdered,
+    ShieldCheck,
+    Users,
 } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { AdminBrand } from '@/components/admin/admin-brand';
@@ -37,11 +39,13 @@ import {
     dashboard as adminDashboard,
     guide as adminGuide,
 } from '@/routes/admin';
+import { index as accessIndex } from '@/routes/admin/access';
 import { index as catalogIndex } from '@/routes/admin/catalog';
 import { index as curationIndex } from '@/routes/admin/curation';
 import { index as importIndex } from '@/routes/admin/import';
 import { index as reviewIndex } from '@/routes/admin/review';
 import { index as throughputIndex } from '@/routes/admin/throughput';
+import { index as usersIndex } from '@/routes/admin/users';
 import type { AdminNavItem } from '@/types/navigation';
 
 /**
@@ -146,6 +150,23 @@ export function AdminSidebar() {
         },
     ];
 
+    // Les écrans de l'administrateur seul (spec 20 § 2.8) : un groupe à part,
+    // que `AdminNav` ne rend pas du tout pour un curateur.
+    const administrationItems: AdminNavItem[] = [
+        {
+            title: t('admin.nav.users'),
+            href: usersIndex(),
+            icon: Users,
+            minRole: 'admin',
+        },
+        {
+            title: t('admin.nav.access'),
+            href: accessIndex(),
+            icon: ShieldCheck,
+            minRole: 'admin',
+        },
+    ];
+
     const body = (
         <>
             <SidebarHeader>
@@ -166,6 +187,11 @@ export function AdminSidebar() {
                     className="flex w-full min-w-0 flex-col"
                 >
                     <AdminNav items={navItems} role={auth.user.role} />
+                    <AdminNav
+                        items={administrationItems}
+                        role={auth.user.role}
+                        label={t('admin.nav.administration')}
+                    />
                 </nav>
             </SidebarContent>
 

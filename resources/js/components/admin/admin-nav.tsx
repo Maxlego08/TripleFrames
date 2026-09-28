@@ -1,4 +1,5 @@
 import { Link } from '@inertiajs/react';
+import { useId } from 'react';
 import {
     SidebarGroup,
     SidebarGroupContent,
@@ -14,43 +15,51 @@ import { toUrl } from '@/lib/utils';
 import type { UserRole } from '@/types/auth';
 import type { AdminNavItem } from '@/types/navigation';
 
-const NAV_LABEL_ID = 'admin-nav-label';
-
 type Props = {
     items: AdminNavItem[];
     /** Rôle du curateur connecté : sert au **masquage** d'une entrée, jamais à l'autorisation. */
     role: UserRole;
+    /** Libellé DÉJÀ traduit du groupe ; « Curation » par défaut. */
+    label?: string;
 };
 
 /**
- * Navigation principale du back-office.
+ * Un groupe de la navigation du back-office.
  *
  * Deux règles portées ici et nulle part ailleurs :
  *
- * 1. **Une entrée au-dessus du rôle ne s'affiche pas.** Aucune entrée n'est
- *    réservée à l'administrateur au jalon 1 — ses écrans sont tous au seuil
- *    `curator` —, mais la gestion des accès et la modération de la spec 20 le
- *    seront : elles porteront `minRole: 'admin'` et disparaîtront pour un
- *    curateur. Masquage seulement : le serveur reste le seul juge.
+ * 1. **Une entrée au-dessus du rôle ne s'affiche pas.** La gestion des accès
+ *    et l'annuaire des comptes (spec 20 § 2.8) portent `minRole: 'admin'` et
+ *    disparaissent pour un curateur ; un groupe dont aucune entrée n'est
+ *    visible ne se rend pas du tout, libellé compris. Masquage seulement : le
+ *    serveur reste le seul juge.
  * 2. **Le tableau de bord se compare en `exact`.** Son URL `/admin` est le
  *    préfixe de toutes les autres : en comparaison par préfixe, il resterait
  *    allumé sur la fiche d'un film.
+ *
+ * L'identifiant du libellé vient de `useId()` : deux groupes coexistent dans
+ * la barre, et un identifiant fixe se dupliquerait.
  */
-export function AdminNav({ items, role }: Props) {
+export function AdminNav({ items, role, label }: Props) {
     const { isCurrentUrl, isCurrentOrParentUrl } = useCurrentUrl();
     const { t } = useTranslations();
+    const labelId = useId();
 
     const visibleItems = items.filter((item) =>
         hasAtLeastRole(role, item.minRole ?? 'curator'),
     );
 
+    if (visibleItems.length === 0) {
+        return null;
+    }
+
     return (
         <SidebarGroup>
-            <SidebarGroupLabel id={NAV_LABEL_ID}>
-                {t('admin.nav.section')}
+            <SidebarGroupLabel id={labelId}>
+                {label ?? t('admin.nav.section')}
             </SidebarGroupLabel>
             <SidebarGroupContent>
-                <SidebarMenu aria-labelledby={NAV_LABEL_ID}>
+                <SidebarMenu aria-labelledby={labelId}>
                     {visibleItems.map((item) => {
                         const isActive =
                             item.match === 'exact'

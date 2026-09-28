@@ -8,6 +8,7 @@ use App\Events\Game\InputClosed;
 use App\Listeners\DiagnoseDependencies;
 use App\Listeners\Game\BroadcastGameEnded;
 use App\Listeners\Game\CloseSeatInput;
+use App\Listeners\RecordLastLogin;
 use App\Listeners\SyncCarbonLocale;
 use App\Settings\EngineConstants;
 use App\Settings\PlatformLimits;
@@ -22,6 +23,7 @@ use App\Support\Realtime\SeatPrincipal;
 use App\Support\Retention\PurgeHandler;
 use App\Support\Retention\PurgeHandlers;
 use Carbon\CarbonImmutable;
+use Illuminate\Auth\Events\Login;
 use Illuminate\Foundation\Events\DiagnosingHealth;
 use Illuminate\Foundation\Events\LocaleUpdated;
 use Illuminate\Http\Request;
@@ -67,6 +69,10 @@ class AppServiceProvider extends ServiceProvider
         // dépendent (spec 100 § 15) : le framework répond 500 dès qu'un
         // écouteur de `DiagnosingHealth` lève.
         Event::listen(DiagnosingHealth::class, DiagnoseDependencies::class);
+
+        // La date de dernière connexion (spec 10 § 5.1), lue par l'écran de
+        // gestion des accès et, au jalon 2, par le balayage de dormance.
+        Event::listen(Login::class, RecordLastLogin::class);
 
         $this->registerGameListeners();
         $this->registerPlayerGuard();

@@ -28,7 +28,7 @@ use Symfony\Component\Console\Output\OutputInterface;
  * qu'il faudrait ensuite penser à refermer. C'est la SEULE commande que le
  * back-office exige jamais, exécutée une fois, par le porteur, en SSH, après
  * l'achat du domaine ; l'attribution des rôles suivants appartient à l'écran de
- * gestion des accès (jalon 2).
+ * gestion des accès (spec 20 § 2.8).
  *
  * **Le nom réel est exigé** (D12 du 23/09) : c'est lui, et non le pseudo de
  * compte, que figent `frame_review.reviewer_name` et `admin_action.actor_name`.
@@ -49,9 +49,11 @@ use Symfony\Component\Console\Output\OutputInterface;
  *
  * **Idempotente.** Relancée sur un compte déjà administrateur, elle ne réécrit
  * rien et sort en succès. Avec `--real-name`, elle y CORRIGE le nom réel s'il
- * diffère — seule voie de correction au jalon 1 (D4 du 23/09) —, sans ligne
- * `role.changed`, puisque le rôle ne change pas, et sans autre ligne : la liste
- * fermée n'a aucun cas pour ce geste. Les instantanés déjà figés ne sont jamais
+ * diffère — voie de secours depuis que l'écran de gestion des accès corrige un
+ * nom réel (spec 20 § 2.8) —, sans ligne `role.changed`, puisque le rôle ne
+ * change pas, et sans autre ligne : `user.real_name_changed` n'admet pas
+ * l'acteur console (EN20-3), et l'opérateur de la console a de toute façon plus
+ * de pouvoir qu'un administrateur. Les instantanés déjà figés ne sont jamais
  * réécrits : la correction ne vaut que pour les gestes suivants. Elle refuse de
  * nommer un second administrateur tant qu'un premier, non anonymisé, existe —
  * `--force` est une procédure de secours, jamais une voie d'attribution.
@@ -178,7 +180,8 @@ class FirstAdminCommand extends Command
     /**
      * L'administrateur en place : rien à faire, sauf une correction du nom réel
      * demandée par `--real-name` (D4 du 23/09). Aucune ligne de journal — le
-     * rôle ne change pas, et la liste fermée n'a aucun cas pour ce geste.
+     * rôle ne change pas, et `user.real_name_changed` n'admet pas l'acteur
+     * console (EN20-3).
      */
     private function reconcileIncumbent(User $admin, string $email): int
     {

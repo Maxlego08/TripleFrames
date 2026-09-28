@@ -46,6 +46,11 @@ return [
         'review' => 'Revue',
         'throughput' => 'Débit',
         'guide' => 'Premiers pas',
+        // Le groupe de l'administrateur seul (spec 20 § 2.8) : invisible
+        // pour un curateur.
+        'administration' => 'Administration',
+        'users' => 'Comptes',
+        'access' => 'Accès',
         'back_to_site' => 'Retour au site',
         'role' => [
             'curator' => 'Curateur',
@@ -64,6 +69,13 @@ return [
         'open_run' => 'Ouvrir le balayage n° :id',
         'run_status' => 'État du balayage : :status',
         'pagination' => 'Pagination',
+        // Annuaire des comptes et gestion des accès (spec 20 § 2.8) : `:name`,
+        // le pseudo du compte.
+        'users_filters_form' => 'Filtres de l’annuaire des comptes',
+        'access_search_form' => 'Recherche d’un compte par son adresse',
+        'open_account' => 'Ouvrir la fiche du compte :name',
+        'change_role_of' => 'Changer le rôle de :name',
+        'correct_real_name_of' => 'Corriger le nom réel de :name',
         // Coquille mobile de `admin-sidebar.tsx` : titre et description
         // accessibles de SA feuille, jamais le « Sidebar » anglais figé de
         // `ui/sidebar` (spec 20 § 13.4, 90 § 2.5).
@@ -333,6 +345,15 @@ return [
             'fr' => 'Français',
             'en' => 'Anglais',
         ],
+        'user_role' => [
+            'player' => 'Joueur',
+            'curator' => 'Curateur',
+            'admin' => 'Administrateur',
+        ],
+        'oauth_provider' => [
+            'discord' => 'Discord',
+            'google' => 'Google',
+        ],
         /*
         | Journal `admin_action` : une feuille par cas de la liste fermée
         | (`AdminActionType::labelKey()`, points remplacés par `_`) et par
@@ -340,6 +361,7 @@ return [
         */
         'admin_action' => [
             'role_changed' => 'Changement de rôle',
+            'user_real_name_changed' => 'Nom réel corrigé',
             'movie_published' => 'Film publié',
             'movie_unpublished' => 'Film dépublié',
             'movie_republished' => 'Film republié',
@@ -2013,6 +2035,245 @@ return [
     ],
 
     /*
+    | Annuaire des comptes (`admin/users/index`, spec 20 § 2.8) — administrateur
+    | seul, en lecture seule. `results` : `:total`, un nombre déjà mis en forme.
+    | Tous les comptes y figurent, joueurs compris ; les gestes se font depuis
+    | la fiche d’un compte ou l’écran des accès.
+    */
+    'users' => [
+        'title' => 'Comptes',
+        'heading' => 'Annuaire des comptes',
+        'description' => 'Tous les comptes du site, joueurs compris. Cet écran ne modifie rien : le rôle et le nom réel d’un compte se changent depuis sa fiche ou depuis l’écran des accès.',
+        'results' => ':total compte(s) au filtre courant',
+
+        'counts' => [
+            'total' => 'Comptes actifs',
+            'players' => 'Joueurs',
+            'curators' => 'Curateurs',
+            'admins' => 'Administrateurs',
+        ],
+
+        'filters' => [
+            'heading' => 'Recherche et filtres',
+            'search' => [
+                'label' => 'Recherche',
+                'placeholder' => 'Adresse, pseudo, nom réel ou identifiant',
+                'hint' => 'Cherche dans l’adresse, le pseudo du compte et le nom réel ; une saisie entièrement numérique cherche aussi l’identifiant du compte.',
+            ],
+            'role' => 'Rôle',
+            'state' => [
+                'label' => 'État du compte',
+                'active' => 'Actifs',
+                'anonymized' => 'Anonymisés',
+            ],
+            'submit' => 'Filtrer',
+            'reset' => 'Tout effacer',
+        ],
+
+        'sort' => [
+            'label' => 'Tri',
+            'direction' => 'Sens',
+            'created_at' => 'Date de création',
+            'last_login_at' => 'Dernière connexion',
+            'name' => 'Pseudo',
+            'email' => 'Adresse',
+        ],
+
+        'list' => [
+            'heading' => 'Comptes',
+        ],
+
+        'column' => [
+            'name' => 'Pseudo',
+            'email' => 'Adresse',
+            'real_name' => 'Nom réel',
+            'role' => 'Rôle',
+            'two_factor' => 'Double authentification',
+            'last_login_at' => 'Dernière connexion',
+            'created_at' => 'Créé le',
+            'actions' => 'Actions',
+        ],
+
+        'row' => [
+            'open' => 'Ouvrir',
+        ],
+
+        'empty' => [
+            'heading' => 'Aucun compte',
+            'filtered' => 'Aucun compte ne correspond à cette recherche. Effacez les filtres pour revoir tout l’annuaire.',
+            'no_accounts' => 'Aucun compte n’existe encore.',
+        ],
+    ],
+
+    /*
+    | Fiche d’un compte (`admin/users/show`, spec 20 § 2.8) — administrateur
+    | seul. Elle ne montre jamais les configurations sauvegardées, privées y
+    | compris d’un administrateur, ni aucun secret, et elle le dit
+    | (`private_notice`).
+    */
+    'account' => [
+        'title' => 'Fiche du compte',
+        'description' => 'Identité, sécurité, consentements et historique des accès de ce compte.',
+        'back' => 'Retour à l’annuaire',
+        'never' => 'Jamais',
+        'two_factor' => [
+            'on' => 'Double authentification active',
+            'off' => 'Sans double authentification',
+        ],
+        'state' => [
+            'anonymized' => 'Compte anonymisé',
+        ],
+        'email' => [
+            'unverified' => 'Adresse non vérifiée',
+        ],
+        'access' => [
+            'heading' => 'Rôle et accès',
+            'self' => 'C’est votre compte : votre propre rôle ne se change pas ici. Un autre administrateur peut le faire.',
+            'anonymized' => 'Ce compte est anonymisé : il ne reçoit plus aucun rôle. Ce qu’il a signé — revues, lignes du journal — reste lisible.',
+        ],
+        'identity' => [
+            'heading' => 'Identité',
+            'id' => 'Identifiant',
+            'name' => 'Pseudo du compte',
+            'real_name' => 'Nom réel',
+            'email' => 'Adresse',
+            'email_verified_at' => 'Adresse vérifiée le',
+            'locale' => 'Langue d’interface',
+            'created_at' => 'Créé le',
+            'last_login_at' => 'Dernière connexion',
+            'anonymized_at' => 'Anonymisé le',
+        ],
+        'security' => [
+            'heading' => 'Sécurité',
+            'two_factor' => 'Double authentification confirmée le',
+            'passkeys' => 'Clés d’accès enregistrées',
+            'providers' => 'Comptes liés',
+        ],
+        'consents' => [
+            'heading' => 'Consentements',
+            'terms_version' => 'Version des CGU acceptée',
+            'terms_accepted_at' => 'CGU acceptées le',
+            'age_confirmed_at' => 'Âge minimum confirmé le',
+        ],
+        'traces' => [
+            'heading' => 'Preuves signées',
+            'description' => 'Ce que ce compte a signé. Ces preuves sont conservées même si le compte est un jour anonymisé.',
+            'frame_reviews' => 'Revues d’image',
+            'admin_actions' => 'Lignes du journal d’administration',
+            'import_runs' => 'Balayages d’import lancés',
+        ],
+        'history' => [
+            'heading' => 'Historique des accès',
+            'description' => 'Les changements de rôle et de nom réel de ce compte, du plus récent au plus ancien, tels que le journal d’administration les a consignés.',
+            'empty' => 'Aucun changement consigné pour ce compte.',
+        ],
+        'private_notice' => 'Les configurations de salon sauvegardées par ce compte restent privées, y compris d’un administrateur : elles n’apparaissent sur aucun écran du back-office.',
+    ],
+
+    /*
+    | Gestion des accès (`admin/access/index`, spec 20 § 2.8) — administrateur
+    | seul. `second_admin_missing.description` : `:count`, un nombre déjà mis
+    | en forme. `history.description` : `:count`, la borne de la liste.
+    | `history.role_change` : `:before` et `:after`, deux libellés de rôle.
+    | `promote.not_found` : `:email`, l’adresse cherchée. Les deux boîtes de
+    | dialogue reçoivent `:name`, le pseudo du compte. `errors.*` : refus
+    | relus sous verrou par le serveur, sous leur champ ; `flash.*` : toasts.
+    */
+    'access' => [
+        'title' => 'Accès',
+        'heading' => 'Gestion des accès',
+        'description' => 'Qui cure et qui administre le projet. Chaque changement de rôle et chaque correction de nom réel sont inscrits au journal d’administration, signés de votre nom réel.',
+        'second_admin_missing' => [
+            'title' => 'Un second administrateur nominatif manque',
+            'description' => 'Le projet compte :count administrateur(s). Deux administrateurs nominatifs sont exigés avant l’ouverture publique du site : si l’unique administrateur perd son accès, personne d’autre ne peut le rétablir depuis cet écran.',
+        ],
+        'privileged' => [
+            'heading' => 'Comptes privilégiés',
+            'description' => 'Les curateurs et les administrateurs. Un compte rétrogradé en joueur quitte cette liste ; son nom réel est conservé pour une attribution future.',
+            'empty' => 'Aucun compte privilégié.',
+        ],
+        'without_two_factor' => [
+            'heading' => 'Rôle privilégié sans double authentification',
+            'description' => 'Ces comptes ont un rôle de curateur ou d’administrateur, mais la porte du back-office leur reste fermée tant qu’ils n’ont pas confirmé leur double authentification.',
+            'empty' => 'Aucun : tous les comptes privilégiés ont confirmé leur double authentification.',
+            'since' => 'Dernière connexion : :date',
+        ],
+        'promote' => [
+            'heading' => 'Promouvoir un compte existant',
+            'description' => 'Saisissez l’adresse exacte du compte. Le compte doit exister et son adresse être vérifiée ; il n’est jamais créé depuis cet écran.',
+            'field' => 'Adresse exacte du compte',
+            'submit' => 'Chercher',
+            'not_found' => 'Aucun compte actif ne porte l’adresse « :email ».',
+        ],
+        'history' => [
+            'heading' => 'Historique des rôles et des noms réels',
+            'description' => 'Les :count derniers changements, du plus récent au plus ancien. L’historique complet d’un compte se lit sur sa fiche.',
+            'empty' => 'Aucun changement consigné.',
+            'role_change' => ':before → :after',
+            'column' => [
+                'at' => 'Date',
+                'subject' => 'Compte',
+                'action' => 'Geste',
+                'change' => 'Changement',
+                'actor' => 'Signé par',
+                'reason' => 'Motif',
+            ],
+            'actor_reserved' => [
+                'console' => 'Accès direct au serveur (premier administrateur)',
+                'system' => 'Geste automatique (seuil de signalements)',
+            ],
+        ],
+        'column' => [
+            'real_name' => 'Nom réel',
+            'name' => 'Pseudo',
+            'email' => 'Adresse',
+            'role' => 'Rôle',
+            'two_factor' => 'Double authentification',
+            'last_login_at' => 'Dernière connexion',
+            'actions' => 'Gestes',
+        ],
+        'self' => 'Votre compte',
+        'actions' => [
+            'change_role' => 'Changer le rôle',
+            'correct_real_name' => 'Corriger le nom réel',
+        ],
+        'reason_optional' => 'Motif (facultatif), inscrit au journal',
+        'role_dialog' => [
+            'title' => 'Changer le rôle de :name',
+            'description' => 'Le changement prend effet immédiatement et s’inscrit au journal d’administration, avec le rôle avant et après.',
+            'role' => 'Nouveau rôle',
+            'unchanged' => 'Choisissez un rôle différent du rôle actuel.',
+            'privileged_notice' => 'Un curateur cure, revoit et publie ; un administrateur fait tout cela et gère en plus les accès. Sans double authentification confirmée, la porte du back-office restera fermée à ce compte jusqu’à son enrôlement.',
+            'player_notice' => 'Le compte perd tout accès au back-office. Son nom réel est conservé, et ses preuves déjà signées restent intactes.',
+            'email_unverified' => 'L’adresse de ce compte n’est pas vérifiée : un rôle privilégié lui sera refusé tant qu’elle ne l’est pas.',
+            'real_name' => 'Nom réel de la personne',
+            'real_name_hint' => 'Exigé pour un rôle privilégié : il signera ses revues et ses gestes au journal. Jamais un pseudo.',
+            'submit' => 'Changer le rôle',
+        ],
+        'real_name_dialog' => [
+            'title' => 'Corriger le nom réel de :name',
+            'description' => 'Le nom réel signe les revues d’image et le journal d’administration. La correction y est inscrite.',
+            'notice' => 'La correction ne vaut que pour les gestes suivants : les revues et les lignes du journal déjà signées gardent l’ancien nom.',
+            'field' => 'Nom réel',
+            'unchanged' => 'Saisissez un nom différent du nom actuel.',
+            'hint' => 'Le nom complet de la personne, jamais un pseudo.',
+            'submit' => 'Corriger le nom réel',
+        ],
+        'errors' => [
+            'self' => 'Vous ne pouvez pas changer votre propre rôle : un autre administrateur doit le faire.',
+            'unchanged' => 'Ce compte porte déjà ce rôle.',
+            'email_unverified' => 'L’adresse de ce compte n’est pas vérifiée : un rôle privilégié ne peut pas lui être attribué.',
+            'real_name_required' => 'Saisissez le nom réel de la personne : il est exigé pour un rôle privilégié.',
+            'last_admin' => 'C’est le dernier administrateur du projet : nommez-en un autre avant de lui retirer ce rôle.',
+            'real_name_unchanged' => 'Ce nom est déjà le nom réel du compte.',
+        ],
+        'flash' => [
+            'role_changed' => 'Rôle changé et inscrit au journal.',
+            'real_name_corrected' => 'Nom réel corrigé et inscrit au journal.',
+        ],
+    ],
+
+    /*
     | Noms d’attribut des FormRequests d’administration. Ce sont des NOMS, pas
     | des phrases : Laravel compose le message depuis `lang/fr/validation.php`.
     | Les trois clés `ids.*` et `real_name`, elles, sont des messages complets
@@ -2050,6 +2311,10 @@ return [
             'invalid' => 'Aucun identifiant lisible dans ce collage : attendez un nombre nu ou une URL TMDB par ligne.',
         ],
         'real_name' => 'Ce nom est réservé au journal d’administration : saisissez le nom réel de la personne.',
+        'real_name_field' => 'nom réel',
+        'role' => 'rôle',
+        'account_state' => 'état du compte',
+        'email' => 'adresse',
         'tmdb_file_path' => 'visuel TMDB',
         'frame_level' => 'niveau',
         'crop_rect' => 'cadre',
@@ -2120,10 +2385,10 @@ return [
     ],
 
     /*
-    | `php artisan admin:first-admin` — la seule porte d’entrée du panneau tant
-    | que l’écran de gestion des accès de la spec 20 n’existe pas, et la seule
-    | voie de correction du nom réel au jalon 1. Locale forcée en français par
-    | la commande elle-même.
+    | `php artisan admin:first-admin` — la porte d’entrée du tout premier
+    | administrateur, les suivants étant nommés par l’écran de gestion des
+    | accès (spec 20 § 2.8), et la voie de secours de correction du nom réel.
+    | Locale forcée en français par la commande elle-même.
     */
     'console' => [
         /*

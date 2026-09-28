@@ -93,7 +93,7 @@ function deployHookStepsWithPrepared(): array
 /** Le seul PHP que le hook a le droit d'invoquer : celui de l'abonnement. */
 function deployHookPhp(): string
 {
-    return '/opt/plesk/php/8.3/bin/php';
+    return '/opt/plesk/php/8.4/bin/php';
 }
 
 function deployHookPath(): string
@@ -166,6 +166,12 @@ it('enchaîne les étapes du hook dans l\'ordre du § 11.5, sous set -e', functi
     // La première instruction arme l'arrêt au premier échec ; rien ne le
     // désarme ni ne rattrape un échec ensuite.
     expect($code[0] ?? null)->toBe('set -euo pipefail');
+
+    // Puis l'umask, avant toute écriture : `optimize` recopie tous les secrets
+    // du .env dans bootstrap/cache/config.php, qui ne doit jamais naître
+    // lisible par un autre compte (répétition sur VM, 28/09 : 0664 sous l'umask
+    // 0002 d'un utilisateur Ubuntu).
+    expect($code[1] ?? null)->toBe('umask 027');
 
     foreach ($code as $line) {
         expect($line)->not->toMatch('/^set\s+\+/', "Le hook désarme set -e : {$line}")

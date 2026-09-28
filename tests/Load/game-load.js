@@ -75,7 +75,7 @@
  * avec le résumé JSON. Une fois toutes les parties terminées et AVANT
  * l'archivage des salons (24 h), le fichier est copié sur le serveur puis,
  * en session SSH de l'abonnement, dans le répertoire de déploiement, avec
- * `PHP=/opt/plesk/php/8.3/bin/php` (ops/mise-en-service.md), jamais le `php`
+ * `PHP=/opt/plesk/php/8.4/bin/php` (ops/mise-en-service.md), jamais le `php`
  * du système :
  *   "$PHP" artisan loadtest:forget <fichier> --dry-run
  *   "$PHP" artisan loadtest:forget <fichier>
@@ -1750,7 +1750,7 @@ export function handleSummary(data) {
     if (rooms.length > 0) {
         files[`${DATA_DIR}/rooms-${PHASE}-${stamp}.txt`] =
             `# TripleFrames — test de charge, phase ${PHASE}, ${instant}\n` +
-            '# Avant l’archivage des salons (24 h), sur le serveur : "$PHP" artisan loadtest:forget <ce fichier> (PHP=/opt/plesk/php/8.3/bin/php)\n' +
+            '# Avant l’archivage des salons (24 h), sur le serveur : "$PHP" artisan loadtest:forget <ce fichier> (PHP=/opt/plesk/php/8.4/bin/php)\n' +
             `${rooms.join('\n')}\n`;
     }
 

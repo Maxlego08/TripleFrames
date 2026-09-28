@@ -13,6 +13,7 @@
  * Ce fichier n'est PAS généré : il se modifie à la main, en face du présentateur.
  */
 
+import type { UserRole } from '@/types/auth';
 import type { TranslationKey } from '@/types/translations';
 
 /** `{ data, meta }`, jamais le tableau `links` d'un paginateur Laravel. */
@@ -1038,4 +1039,118 @@ export type AdminGuideFloor = {
     max_surface_percent: number;
     /** Largeur minimale du cadre, en pixels du master. */
     min_width_px: number;
+};
+
+/*
+ * Annuaire des comptes et gestion des accès (spec 20 § 2.8) — miroir exact de
+ * `App\Support\Admin\AdminAccountPresenter`. Aucun secret n'y figure, et
+ * aucune configuration sauvegardée : elles sont privées, y compris d'un
+ * administrateur.
+ */
+
+/** Une ligne de compte : l'annuaire, les comptes privilégiés, la recherche. */
+export type AdminAccountRow = {
+    id: number;
+    /** Pseudo du compte (`users.name`), jamais le nom réel. */
+    name: string;
+    email: string | null;
+    /** Adresse présente ET vérifiée. */
+    email_verified: boolean;
+    /** Nom réel d'un compte privilégié (D12 du 23/09) ; conservé à la rétrogradation. */
+    real_name: string | null;
+    role: UserRole;
+    two_factor_confirmed: boolean;
+    last_login_at: string | null;
+    created_at: string | null;
+    /** Pierre tombale d'une anonymisation (spec 10 § 5.5). */
+    anonymized: boolean;
+};
+
+/** Ce que l'écran peut proposer sur un compte ; masque un bouton, n'autorise rien. */
+export type AdminAccountAbilities = {
+    updateRole: boolean;
+    updateRealName: boolean;
+};
+
+/** Une ligne de compte assortie de ses gestes (écran des accès, recherche). */
+export type AdminActionableAccount = AdminAccountRow & {
+    abilities: AdminAccountAbilities;
+    is_self: boolean;
+};
+
+/** La fiche d'un compte — la ligne, plus ce que la fiche affiche. */
+export type AdminAccountDetail = AdminAccountRow & {
+    email_verified_at: string | null;
+    two_factor_confirmed_at: string | null;
+    locale: string;
+    terms_version: string | null;
+    terms_accepted_at: string | null;
+    age_confirmed_at: string | null;
+    anonymized_at: string | null;
+};
+
+/** Les cas du journal qui visent un compte. */
+export type AdminAccountActionType =
+    | 'role.changed'
+    | 'user.real_name_changed'
+    | 'avatar.hidden'
+    | 'avatar.unhidden';
+
+/** Une ligne du journal visant un compte : l'auteur par son instantané signé. */
+export type AdminAccountHistoryLine = {
+    id: number;
+    action: AdminAccountActionType;
+    actor_name: string;
+    /** Le compte visé, sur l'écran des accès ; `null` sur la fiche du compte. */
+    subject: { id: number; name: string; real_name: string | null } | null;
+    role_before: UserRole | null;
+    role_after: UserRole | null;
+    reason: string | null;
+    created_at: string | null;
+};
+
+/** Les preuves que l'anonymisation conserve (spec 10 § 5.5). */
+export type AdminAccountTraces = {
+    frame_reviews: number;
+    admin_actions: number;
+    import_runs: number;
+};
+
+export type AdminAccountState = 'active' | 'anonymized';
+
+export type AdminUserDirectorySort =
+    | 'created_at'
+    | 'last_login_at'
+    | 'name'
+    | 'email';
+
+/** Les filtres de l'annuaire, miroir de la query string retenue. */
+export type AdminUserDirectoryFilters = {
+    q: string | null;
+    role: UserRole | null;
+    state: AdminAccountState | null;
+    sort: AdminUserDirectorySort;
+    direction: AdminCatalogSortDirection;
+};
+
+/** Listes blanches relues de `UserDirectoryRequest`. */
+export type AdminUserDirectoryOptions = {
+    role: UserRole[];
+    state: AdminAccountState[];
+    sort: AdminUserDirectorySort[];
+    direction: AdminCatalogSortDirection[];
+};
+
+/** Les comptes non anonymisés, par rôle. */
+export type AdminUserDirectoryCounts = {
+    total: number;
+    players: number;
+    curators: number;
+    admins: number;
+};
+
+/** La recherche par adresse exacte de l'écran des accès. */
+export type AdminAccessCandidate = {
+    email: string;
+    account: AdminActionableAccount | null;
 };

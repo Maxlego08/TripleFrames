@@ -72,6 +72,18 @@ class CatalogImportIdsCommand extends CatalogImportCommand
 
     private ?string $previewToken = null;
 
+    /**
+     * L'auteur et le jeton d'un aperçu précédent ne survivent jamais à son
+     * appel : voir {@see CatalogImportCommand::resetInvocationState()}.
+     */
+    protected function resetInvocationState(): void
+    {
+        parent::resetInvocationState();
+
+        $this->previewUserId = null;
+        $this->previewToken = null;
+    }
+
     public function handle(): int
     {
         if (! $this->readPreview()) {

@@ -290,6 +290,40 @@ test('une simulation n\'ouvre jamais de ligne import_run', function (): void {
     expect(ImportRun::query()->count())->toBe(1);
 });
 
+test('un aperçu ne laisse aucun état à l\'appel suivant de la même instance de commande', function (): void {
+    tmdbFake();
+
+    // Une même instance de commande sert tous les appels d'un processus : un
+    // worker `queue:work` enchaîne l'aperçu d'un collage puis son import réel
+    // (`PreviewCatalogPaste`, puis `RunCatalogImport` en `--resume`). Sans
+    // remise à zéro, le jeton de l'aperçu survivait, l'import se croyait
+    // simulation et échouait sans rien écrire (répétition du 28/09).
+    $author = User::factory()->curator()->create();
+    $token = PastePreview::open($author->id, [987654]);
+
+    $this->artisan('catalog:import-ids', [
+        'ids' => ['987654'],
+        '--preview' => $token,
+        '--actor' => (string) $author->id,
+    ])->assertSuccessful();
+
+    // Le collage tel que l'ouvre `ImportIdsController` : en cours, jamais démarré.
+    $run = ImportRun::factory()->paste()->running()->create([
+        'started_at' => null,
+        'total_seen' => 0,
+        'total_imported' => 0,
+        'total_skipped' => 0,
+        'total_refused_content' => 0,
+    ]);
+
+    $this->artisan('catalog:import-ids', ['ids' => ['987654'], '--resume' => true, '--run' => (string) $run->id])
+        ->assertSuccessful();
+
+    expect($run->fresh()?->status)->toBe(ImportRunStatus::Completed)
+        ->and($run->fresh()?->total_imported)->toBe(1)
+        ->and(Movie::query()->where('tmdb_id', 987654)->exists())->toBeTrue();
+});
+
 /*
 |--------------------------------------------------------------------------
 | La voie d'exception

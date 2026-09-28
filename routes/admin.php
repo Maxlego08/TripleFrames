@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Admin\AccessController;
 use App\Http\Controllers\Admin\CatalogController;
 use App\Http\Controllers\Admin\CurationHeartbeatController;
 use App\Http\Controllers\Admin\CurationQueueController;
@@ -30,10 +31,12 @@ use App\Http\Controllers\Admin\MovieTitleController;
 use App\Http\Controllers\Admin\MovieUnpublishController;
 use App\Http\Controllers\Admin\ThroughputController;
 use App\Http\Controllers\Admin\TwoFactorRequiredController;
+use App\Http\Controllers\Admin\UserDirectoryController;
 use App\Models\Frame;
 use App\Models\FrameReview;
 use App\Models\ImportRun;
 use App\Models\Movie;
+use App\Models\User;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -80,6 +83,11 @@ use Illuminate\Support\Facades\Route;
 | de provider, et surtout aucun `Gate::before` — il contournerait la
 | propriété d'une `saved_config`, déclarée strictement privée.
 |
+| **Une seconde porte, `role:admin`**, garde en plus le seul sous-groupe des
+| écrans de l'administrateur (annuaire des comptes et gestion des accès,
+| § 2.8) : prioritaire sur `SubstituteBindings` comme la première, elle rend à
+| un curateur le même 403 sur un identifiant réel ou inconnu.
+|
 | **Toute route ajoutée ici prend sa ligne dans `tests/Datasets/AdminRoutes.php`**,
 | la matrice des capacités de la spec 20 § 2.2 : `AuthorizationMatrixTest`
 | refuse une route `admin.*` sans ligne, une ligne sans route, et une garde
@@ -94,7 +102,9 @@ use Illuminate\Support\Facades\Route;
 | qu'en base — changer un niveau, passer une revue, dépublier ou écarter
 | une image, publier, dépublier ou écarter un film, cocher son contenu
 | vérifié, corriger ou retirer un titre, ajouter ou retirer un alias,
-| regrouper deux films — `throttle:admin-curation` (§ 13.7). Limiteurs nommés déclarés dans
+| regrouper deux films — et les deux gestes d'accès qui n'écrivent eux aussi
+| qu'en base — changer un rôle, corriger un nom réel (§ 2.8) —
+| `throttle:admin-curation` (§ 13.7). Limiteurs nommés déclarés dans
 | `FortifyServiceProvider::configureRateLimiting()`, là où vivent déjà
 | `login`, `two-factor` et `passkeys`.
 |
@@ -336,4 +346,44 @@ Route::middleware(['auth', 'verified', 'role:curator', 'admin.2fa', 'admin.local
         Route::post('import/seed-list', [ImportSeedListController::class, 'store'])
             ->middleware(['can:create,'.ImportRun::class, 'throttle:admin-import'])
             ->name('import.seed_list');
+
+        // Les écrans de l'administrateur seul (§ 2.8, lignes 34 et 40) :
+        // une seconde porte, `role:admin`, en plus de la garde `can:` de
+        // chaque route. Elle n'autorise rien de plus que les policies ; elle
+        // est là pour l'ÉNUMÉRATION. `role` précède `SubstituteBindings`
+        // (`bootstrap/app.php`), `Authorize` le suit : sans elle, un curateur
+        // passé la porte `role:curator` lirait 404 sur un `{user}` inconnu et
+        // 403 sur un compte réel, et le couple de codes de statut
+        // énumérerait la table `users`. Avec elle, il reçoit 403 sur tout
+        // identifiant, avant toute résolution.
+        Route::middleware('role:admin')->group(function (): void {
+            // L'annuaire des comptes et la fiche d'un compte (ligne 40) : deux
+            // lectures — l'annuaire montre l'adresse de chaque compte.
+            // `{user}` est lié par `id`.
+            Route::get('users', [UserDirectoryController::class, 'index'])
+                ->middleware('can:viewAny,'.User::class)
+                ->name('users.index');
+
+            Route::get('users/{user}', [UserDirectoryController::class, 'show'])
+                ->middleware('can:view,user')
+                ->name('users.show');
+
+            // La gestion des accès (ligne 34) : l'écran, puis ses deux
+            // gestes. Les refus d'état — son propre rôle, rôle inchangé,
+            // adresse non vérifiée, nom réel manquant, dernier
+            // administrateur, nom inchangé — sont des erreurs traduites
+            // relues sous verrou, jamais des 403. Chacun écrit sa ligne au
+            // journal.
+            Route::get('access', [AccessController::class, 'index'])
+                ->middleware('can:viewAny,'.User::class)
+                ->name('access.index');
+
+            Route::patch('access/{user}', [AccessController::class, 'update'])
+                ->middleware(['can:updateRole,user', 'throttle:admin-curation'])
+                ->name('access.update');
+
+            Route::patch('access/{user}/real-name', [AccessController::class, 'updateRealName'])
+                ->middleware(['can:updateRealName,user', 'throttle:admin-curation'])
+                ->name('access.real_name.update');
+        });
     });

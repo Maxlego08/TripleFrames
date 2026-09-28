@@ -38,9 +38,17 @@
 
 set -euo pipefail
 
+# Tout fichier créé par le hook naît illisible des autres comptes, quel que
+# soit l'umask de la session (0002 pour un utilisateur Ubuntu, 022 d'ordinaire
+# sous Plesk) : « optimize » écrit bootstrap/cache/config.php, copie de TOUS les
+# secrets du .env. Rien de ce que crée le hook n'est servi par nginx (public/
+# vient du checkout ; composer install ne publie rien) ; tous les processus de
+# l'application tournent sous l'utilisateur d'abonnement.
+umask 027
+
 # PHP de l'abonnement, figé AVANT la lecture de hook.env : `readonly` interdit
 # à ce fichier de le redéfinir.
-readonly PHP=/opt/plesk/php/8.3/bin/php
+readonly PHP=/opt/plesk/php/8.4/bin/php
 
 # Répertoire courant forcé sur la racine du déploiement, quel que soit celui
 # des actions additionnelles.

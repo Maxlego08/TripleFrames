@@ -1,6 +1,9 @@
 import type {
+    AdminAccountActionType,
+    AdminAccountState,
     AdminCurationEntry,
     AdminCurationStatus,
+    AdminUserDirectorySort,
     CertificationCountry,
     ContentAvailability,
     ContentFlag,
@@ -13,6 +16,7 @@ import type {
     ThemeMembershipState,
     TmdbTagKind,
 } from '@/types/admin';
+import type { UserRole } from '@/types/auth';
 import type { TranslationKey } from '@/types/translations';
 
 /**
@@ -216,4 +220,51 @@ export const MISSING_TITLE_KEYS: Partial<Record<string, TranslationKey>> = {
 export const CURATION_ENTRY_KEYS: Record<AdminCurationEntry, TranslationKey> = {
     discover: 'admin.curation.filters.entry.discover',
     exception: 'admin.curation.filters.entry.exception',
+};
+
+/** Les trois rôles (`App\Enums\UserRole`), tels que la gestion des accès les nomme. */
+export const USER_ROLE_KEYS: Record<UserRole, TranslationKey> = {
+    player: 'admin.enum.user_role.player',
+    curator: 'admin.enum.user_role.curator',
+    admin: 'admin.enum.user_role.admin',
+};
+
+/** Les deux états d'un compte filtrables dans l'annuaire (spec 20 § 2.8). */
+export const ACCOUNT_STATE_KEYS: Record<AdminAccountState, TranslationKey> = {
+    active: 'admin.users.filters.state.active',
+    anonymized: 'admin.users.filters.state.anonymized',
+};
+
+/** Les quatre tris de l'annuaire (`UserDirectoryRequest::SORTS`). */
+export const USER_DIRECTORY_SORT_KEYS: Record<
+    AdminUserDirectorySort,
+    TranslationKey
+> = {
+    created_at: 'admin.users.sort.created_at',
+    last_login_at: 'admin.users.sort.last_login_at',
+    name: 'admin.users.sort.name',
+    email: 'admin.users.sort.email',
+};
+
+/**
+ * Les fournisseurs d'un compte lié (`App\Enums\OAuthProvider`) ; une valeur
+ * que la table ignore s'affiche brute.
+ */
+export const OAUTH_PROVIDER_KEYS: Partial<Record<string, TranslationKey>> = {
+    discord: 'admin.enum.oauth_provider.discord',
+    google: 'admin.enum.oauth_provider.google',
+};
+
+/**
+ * Les cas du journal qui visent un compte : les mêmes feuilles
+ * `admin.enum.admin_action.*` que `AdminActionType::labelKey()`.
+ */
+export const ACCOUNT_ACTION_KEYS: Record<
+    AdminAccountActionType,
+    TranslationKey
+> = {
+    'role.changed': 'admin.enum.admin_action.role_changed',
+    'user.real_name_changed': 'admin.enum.admin_action.user_real_name_changed',
+    'avatar.hidden': 'admin.enum.admin_action.avatar_hidden',
+    'avatar.unhidden': 'admin.enum.admin_action.avatar_unhidden',
 };

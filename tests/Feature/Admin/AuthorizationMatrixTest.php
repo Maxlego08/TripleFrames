@@ -367,4 +367,39 @@ test('les méthodes J1 des policies suivent la table du § 2.9, seuil et état c
     expect(Gate::forUser($privileged['curateur'])->allows('createFromCapture', [Frame::class, $draft]))->toBeTrue()
         ->and(Gate::forUser($privileged['curateur'])->allows('createFromCapture', [Frame::class, $suspended]))->toBeFalse()
         ->and(Gate::forUser($player)->allows('createFromCapture', [Frame::class, $draft]))->toBeFalse();
+
+    // Les comptes (§ 2.8, lignes 34 et 40) : administrateur seul, partout.
+    // Une pierre tombale ne reçoit plus de rôle ; seul un compte privilégié
+    // porte un nom réel à corriger.
+    $targets = [
+        'joueur' => User::factory()->player()->create(),
+        'curateur' => User::factory()->curator()->create(),
+        'pierre tombale' => User::factory()->anonymized()->create(),
+        // Anonymisé mais encore curateur : l'exclusion vient de
+        // `anonymized_at`, jamais du seul rôle.
+        'curateur anonymisé' => User::factory()->curator()->create(['anonymized_at' => now()]),
+    ];
+
+    foreach ([$player, $privileged['curateur']] as $refused) {
+        expect(Gate::forUser($refused)->allows('viewAny', User::class))->toBeFalse();
+
+        foreach ($targets as $target) {
+            foreach (['view', 'updateRole', 'updateRealName'] as $ability) {
+                expect(Gate::forUser($refused)->allows($ability, $target))->toBeFalse("{$ability} refusé sous le seuil admin");
+            }
+        }
+    }
+
+    $admin = $privileged['administrateur'];
+
+    expect(Gate::forUser($admin)->allows('viewAny', User::class))->toBeTrue()
+        ->and(Gate::forUser($admin)->allows('view', $targets['pierre tombale']))->toBeTrue()
+        ->and(Gate::forUser($admin)->allows('updateRole', $targets['joueur']))->toBeTrue()
+        ->and(Gate::forUser($admin)->allows('updateRole', $targets['pierre tombale']))->toBeFalse()
+        ->and(Gate::forUser($admin)->allows('updateRealName', $targets['curateur']))->toBeTrue()
+        ->and(Gate::forUser($admin)->allows('updateRealName', $targets['joueur']))->toBeFalse()
+        ->and(Gate::forUser($admin)->allows('updateRealName', $targets['pierre tombale']))->toBeFalse()
+        ->and(Gate::forUser($admin)->allows('updateRole', $targets['curateur anonymisé']))->toBeFalse()
+        ->and(Gate::forUser($admin)->allows('updateRealName', $targets['curateur anonymisé']))->toBeFalse()
+        ->and(Gate::forUser($admin)->allows('delete', $targets['joueur']))->toBeFalse();
 });

@@ -65,11 +65,12 @@ function adminJournalRawLine(AdminActionType $action, array $overrides = []): Ad
     return $line;
 }
 
-test('la liste fermée compte exactement vingt et un cas', function (): void {
-    expect(AdminActionType::cases())->toHaveCount(21)
+test('la liste fermée compte exactement vingt-deux cas', function (): void {
+    expect(AdminActionType::cases())->toHaveCount(22)
         ->and(array_map(static fn (AdminActionType $case): string => $case->value, AdminActionType::cases()))
         ->toEqualCanonicalizing([
             'role.changed',
+            'user.real_name_changed',
             'movie.published',
             'movie.unpublished',
             'movie.republished',
@@ -115,7 +116,10 @@ test('tout sujet movie, frame, takedown_request ou site est permanent', function
         }
     }
 
-    // Aucun cas de la liste du jalon 1 ne tombe en `rolling_12m` (`10` § 8.3).
+    // Aucun cas de la liste ne tombe en `rolling_12m` (`10` § 8.3) —
+    // `user.real_name_changed` compris, malgré son sujet `user` (EN20-3).
+    expect(AdminActionType::UserRealNameChanged->subject())->toBe(AdminActionSubject::User);
+
     foreach (AdminActionType::cases() as $case) {
         expect($case->retentionClass())->toBe(AdminActionRetention::Permanent, $case->value);
     }

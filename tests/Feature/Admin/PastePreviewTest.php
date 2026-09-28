@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\ImportRunStatus;
 use App\Enums\Locale;
 use App\Models\ImportRun;
 use App\Models\Movie;
@@ -236,4 +237,35 @@ test('le sondage de l\'aperçu ne reçoit jamais de 429', function (): void {
             ->assertJsonPath('props.paste_preview.status', PastePreview::PENDING)
             ->assertJsonMissingPath('props.runs');
     }
+});
+
+test('l\'import qui suit un aperçu dans le même processus importe vraiment', function (): void {
+    Http::fake([
+        '*themoviedb.org/3/movie/987654*' => pastePreviewJson('movie-987654'),
+    ]);
+
+    // Un worker `queue:work` est un processus long : `Artisan::call` y sert la
+    // MÊME instance de `catalog:import-ids` à l'aperçu puis à l'import réel. La
+    // file `sync` des tests fait de même dans l'application du test. L'aperçu
+    // ne doit rien laisser derrière lui : sans remise à zéro, l'import se
+    // croyait simulation et échouait en `simulation_resume`, sans rien écrire
+    // (répétition de la mise en service du 28/09).
+    $this->actingAs($this->curator)
+        ->post(route('admin.import.preview'), ['ids' => '987654'])
+        ->assertSessionHasNoErrors()
+        ->assertRedirect(route('admin.import.index'));
+
+    expect(ImportRun::query()->count())->toBe(0);
+
+    $this->actingAs($this->curator)
+        ->post(route('admin.import.ids'), ['ids' => '987654'])
+        ->assertSessionHasNoErrors();
+
+    /** @var ImportRun $run */
+    $run = ImportRun::query()->sole();
+
+    expect($run->status)->toBe(ImportRunStatus::Completed)
+        ->and($run->started_at)->not->toBeNull()
+        ->and($run->total_imported)->toBe(1)
+        ->and(Movie::query()->where('tmdb_id', 987654)->exists())->toBeTrue();
 });

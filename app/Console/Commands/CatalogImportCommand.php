@@ -93,6 +93,26 @@ abstract class CatalogImportCommand extends Command
         parent::initialize($input, $output);
 
         App::setLocale(Locale::French->value);
+
+        $this->resetInvocationState();
+    }
+
+    /**
+     * Remet à zéro l'état propre à UNE invocation, avant chaque exécution.
+     *
+     * Une même instance de commande sert tous les `Artisan::call` d'un
+     * processus. Un worker `queue:work` est un processus long : il enchaîne
+     * l'aperçu d'un collage (`PreviewCatalogPaste`, `--preview`) puis son import
+     * réel (`RunCatalogImport`, `--resume`) sur la même instance, et l'état du
+     * premier appel ne doit jamais fuir dans le second — sinon l'import se
+     * croit simulation et échoue en `simulation_resume` sans rien écrire
+     * (répétition de la mise en service du 28/09, invisible sous
+     * `queue:listen`, qui relance un processus par job).
+     */
+    protected function resetInvocationState(): void
+    {
+        $this->interrupted = false;
+        $this->simulation = false;
     }
 
     /**

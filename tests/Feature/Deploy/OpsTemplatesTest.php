@@ -58,7 +58,7 @@ function opsTemplateWorkerInstances(): array
 /** Le seul PHP qu'une unité a le droit d'invoquer : celui de l'abonnement. */
 function opsTemplatePhp(): string
 {
-    return '/opt/plesk/php/8.3/bin/php';
+    return '/opt/plesk/php/8.4/bin/php';
 }
 
 function opsTemplateSource(string $relative): string
@@ -323,7 +323,10 @@ it('lance chaque processus sous un utilisateur non privilégié, les processus P
         expect(opsTemplateValue($unit, 'ExecStart'))->toStartWith(opsTemplatePhp().' ')
             ->and(opsTemplateValue($unit, 'User'))->toBe(opsTemplateValue($php[0], 'User'))
             ->and(opsTemplateValue($unit, 'Group'))->toBe(opsTemplateValue($php[0], 'Group'))
-            ->and(opsTemplateValue($unit, 'WorkingDirectory'))->toBe(opsTemplateValue($php[0], 'WorkingDirectory'));
+            ->and(opsTemplateValue($unit, 'WorkingDirectory'))->toBe(opsTemplateValue($php[0], 'WorkingDirectory'))
+            // Journaux et fichiers écrits illisibles des autres comptes (0022
+            // par défaut sous systemd : journaux en 0644).
+            ->and(opsTemplateValue($unit, 'UMask'))->toBe('0027');
     }
 
     expect(opsTemplateValue('systemd/tripleframes-worker@.service', 'ExecStart'))

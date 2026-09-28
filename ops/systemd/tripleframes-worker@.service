@@ -50,10 +50,13 @@ EnvironmentFile=/etc/tripleframes/worker-%i.env
 # PHP de l'abonnement par chemin absolu, jamais un php du système. PHP_ARGS
 # (vide admis) règle le memory_limit du PHP CLI ; WORKER_ARGS porte les options
 # de queue:work de l'instance.
-ExecStart=/opt/plesk/php/8.3/bin/php $PHP_ARGS artisan queue:work redis --queue=%i $WORKER_ARGS
+ExecStart=/opt/plesk/php/8.4/bin/php $PHP_ARGS artisan queue:work redis --queue=%i $WORKER_ARGS
 Restart=always
 RestartSec=2
 Nice=5
+# Journaux (storage/logs) et fichiers écrits par le processus : illisibles des
+# autres comptes. Sans cette ligne, systemd applique 0022 (fichiers en 0644).
+UMask=0027
 NoNewPrivileges=true
 PrivateTmp=true
 

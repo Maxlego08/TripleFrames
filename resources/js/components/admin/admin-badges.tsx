@@ -6,6 +6,7 @@ import {
     IMPORT_RUN_KIND_KEYS,
     IMPORT_RUN_STATUS_KEYS,
     IMPORT_SOURCE_KEYS,
+    USER_ROLE_KEYS,
 } from '@/lib/admin-enum-keys';
 import type {
     AdminImportRunRow,
@@ -13,6 +14,7 @@ import type {
     ContentFlag,
     ImportSource,
 } from '@/types/admin';
+import type { UserRole } from '@/types/auth';
 
 /**
  * Les badges d'état du back-office.
@@ -142,4 +144,66 @@ export function WidenedBadge() {
     const { t } = useTranslations();
 
     return <Badge variant="secondary">{t('admin.import.runs.widened')}</Badge>;
+}
+
+const ROLE_VARIANTS: Record<UserRole, BadgeVariant> = {
+    player: 'outline',
+    curator: 'secondary',
+    admin: 'default',
+};
+
+/** Le rôle d'un compte (spec 20 § 2.8) : la variante suit le seuil. */
+export function RoleBadge({ value }: { value: UserRole }) {
+    const { t } = useTranslations();
+
+    return (
+        <Badge variant={ROLE_VARIANTS[value]}>{t(USER_ROLE_KEYS[value])}</Badge>
+    );
+}
+
+/**
+ * L'état du second facteur d'un compte. « Sans double authentification »
+ * n'est une ALERTE que pour un compte privilégié : la porte du back-office
+ * lui reste fermée tant qu'il ne l'a pas confirmée (spec 20 § 2.4). Pour un
+ * joueur, c'est un simple fait — un badge destructif sur chaque ligne de
+ * l'annuaire noierait les vrais signaux.
+ */
+export function TwoFactorBadge({
+    confirmed,
+    privileged,
+}: {
+    confirmed: boolean;
+    privileged: boolean;
+}) {
+    const { t } = useTranslations();
+
+    if (confirmed) {
+        return (
+            <Badge variant="outline">{t('admin.account.two_factor.on')}</Badge>
+        );
+    }
+
+    return (
+        <Badge variant={privileged ? 'destructive' : 'outline'}>
+            {t('admin.account.two_factor.off')}
+        </Badge>
+    );
+}
+
+/** La pierre tombale d'une anonymisation (spec 10 § 5.5). */
+export function AnonymizedBadge() {
+    const { t } = useTranslations();
+
+    return (
+        <Badge variant="secondary">{t('admin.account.state.anonymized')}</Badge>
+    );
+}
+
+/** Une adresse présente mais jamais vérifiée. */
+export function UnverifiedEmailBadge() {
+    const { t } = useTranslations();
+
+    return (
+        <Badge variant="outline">{t('admin.account.email.unverified')}</Badge>
+    );
 }

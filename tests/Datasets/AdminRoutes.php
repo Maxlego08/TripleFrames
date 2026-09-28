@@ -544,7 +544,74 @@ function adminRoutesMatrix(): array
                 return ['q' => 'Orchard'];
             },
         ),
+
+        // Ligne 40 — l'annuaire des comptes et la fiche d'un compte :
+        // administrateur seul, le curateur reçoit 403 à la garde.
+        'admin.users.index' => adminRoutesRow(
+            row: 40,
+            method: 'GET',
+            guards: ['can:viewAny,'.User::class],
+            curator: 403,
+            admin: 200,
+        ),
+
+        'admin.users.show' => adminRoutesRow(
+            row: 40,
+            method: 'GET',
+            guards: ['can:view,user'],
+            curator: 403,
+            admin: 200,
+            parameters: fn (): array => ['user' => User::factory()->player()->create()->getKey()],
+        ),
+
+        // Ligne 34 — la gestion des accès : l'écran, puis ses deux gestes,
+        // postés depuis la fiche du compte visé, où le retour arrière mène.
+        'admin.access.index' => adminRoutesRow(
+            row: 34,
+            method: 'GET',
+            guards: ['can:viewAny,'.User::class],
+            curator: 403,
+            admin: 200,
+        ),
+
+        // Attribuer `curator` à un joueur vérifié, sans nom réel : le nom
+        // réel voyage dans le même formulaire (D12 du 23/09).
+        'admin.access.update' => adminRoutesRow(
+            row: 34,
+            method: 'PATCH',
+            guards: ['can:updateRole,user'],
+            curator: 403,
+            admin: 302,
+            parameters: fn (): array => adminRoutesAccountGestureParameters(User::factory()->player()->create()),
+            payload: fn (): array => ['role' => 'curator', 'real_name' => 'Nom Réel Matrice'],
+            redirect: fn (array $parameters): string => route('admin.users.show', $parameters),
+        ),
+
+        // Corriger le nom réel d'un curateur.
+        'admin.access.real_name.update' => adminRoutesRow(
+            row: 34,
+            method: 'PATCH',
+            guards: ['can:updateRealName,user'],
+            curator: 403,
+            admin: 302,
+            parameters: fn (): array => adminRoutesAccountGestureParameters(User::factory()->curator()->create()),
+            payload: fn (): array => ['real_name' => 'Nom Corrigé Matrice'],
+            redirect: fn (array $parameters): string => route('admin.users.show', $parameters),
+        ),
     ];
+}
+
+/**
+ * Un geste d'accès sur un compte, posté depuis sa fiche, où le retour arrière
+ * mène.
+ *
+ * @return array{user: int}
+ */
+function adminRoutesAccountGestureParameters(User $user): array
+{
+    test()->from(route('admin.users.show', ['user' => $user->id]));
+
+    return ['user' => $user->id];
 }
 
 /**

@@ -37,7 +37,7 @@ Group=__TF_SUBSCRIPTION_GROUP__
 # À AJUSTER AU RELEVÉ : chemin absolu de déploiement de Plesk Git.
 WorkingDirectory=__TF_DEPLOY_PATH__
 # PHP de l'abonnement par chemin absolu, jamais un php du système.
-ExecStart=/opt/plesk/php/8.3/bin/php artisan reverb:start
+ExecStart=/opt/plesk/php/8.4/bin/php artisan reverb:start
 Restart=always
 RestartSec=2
 # À AJUSTER AU RELEVÉ : RAM du VPS (free -m) ; valeur de départ, recalibrée par
@@ -47,6 +47,9 @@ CPUWeight=80
 # Une connexion WebSocket = un descripteur ; sous un millier de connexions, la
 # boucle stream_select suffit (à confirmer par D33 du 23/09).
 LimitNOFILE=4096
+# Journaux (storage/logs) et fichiers écrits par le processus : illisibles des
+# autres comptes. Sans cette ligne, systemd applique 0022 (fichiers en 0644).
+UMask=0027
 NoNewPrivileges=true
 PrivateTmp=true
 

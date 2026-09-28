@@ -9,11 +9,13 @@ use App\Support\Admin\AdminJournal;
  * Liste FERMÉE des gestes engageants consignés au journal d'administration :
  * cast de `admin_action.action` (spec 10 § 8.3, contrat C14).
  *
- * **Vingt et un cas au jalon 1**, dont six entrés le 23/09 (`movie.published`,
- * `frame.unpublished`, `frame.grid_unpublished`, `frame.unsuspended`,
- * `site.closed`, `site.reopened`) sans migration : `action` reste un
- * `string(40)`. `10` possède la liste ; un cas nouveau s'y demande en exigence,
- * jamais par un ajout direct ici.
+ * **Vingt-deux cas** : les vingt et un du jalon 1, dont six entrés le 23/09
+ * (`movie.published`, `frame.unpublished`, `frame.grid_unpublished`,
+ * `frame.unsuspended`, `site.closed`, `site.reopened`), plus
+ * `user.real_name_changed`, inscrit le 28/09 avec l'écran de gestion des accès
+ * (EN20-3) — tous sans migration : `action` reste un `string(40)`. `10`
+ * possède la liste ; un cas nouveau s'y demande en exigence, jamais par un
+ * ajout direct ici.
  *
  * Le jalon de chaque GESTE appartient aux specs qui l'écrivent (`20`, `40`,
  * `100`) : un cas présent ici n'est pas un geste livré. Tous passent par
@@ -23,6 +25,14 @@ use App\Support\Admin\AdminJournal;
 enum AdminActionType: string
 {
     case RoleChanged = 'role.changed';
+
+    /**
+     * La correction du nom réel d'un compte privilégié à l'écran de gestion
+     * des accès (spec 20 § 2.8, EN20-3) : le nom qui signe les preuves ne
+     * change jamais sans trace. Geste d'administrateur seulement — la
+     * correction par la console n'en écrit aucune.
+     */
+    case UserRealNameChanged = 'user.real_name_changed';
 
     case MoviePublished = 'movie.published';
 
@@ -70,14 +80,16 @@ enum AdminActionType: string
     /**
      * Classe de conservation, écrite à l'insertion depuis l'action elle-même.
      * Permanent : tout geste dont le sujet est un film, une image, une demande
-     * de retrait ou le site, plus `role.changed` et les cinq gestes de masquage.
-     * Une trace ne peut jamais être plus courte que l'état qu'elle justifie —
-     * et aucun cas de la liste du jalon 1 ne tombe en `rolling_12m`.
+     * de retrait ou le site, plus `role.changed`, `user.real_name_changed` et
+     * les cinq gestes de masquage. Une trace ne peut jamais être plus courte
+     * que l'état qu'elle justifie — et aucun cas de la liste ne tombe en
+     * `rolling_12m`.
      */
     public function retentionClass(): AdminActionRetention
     {
         $alwaysPermanent = in_array($this, [
             self::RoleChanged,
+            self::UserRealNameChanged,
             self::AvatarHidden,
             self::AvatarUnhidden,
             self::NicknameMasked,
@@ -120,6 +132,7 @@ enum AdminActionType: string
             self::FrameUnsuspended,
             self::FrameWithdrawn => AdminActionSubject::Frame,
             self::RoleChanged,
+            self::UserRealNameChanged,
             self::AvatarHidden,
             self::AvatarUnhidden => AdminActionSubject::User,
             self::NicknameMasked,

@@ -1,5 +1,7 @@
 # Reprise — TripleFrames
 
+**Session du 28/09/2026 (après-midi) — gestion des comptes au back-office, livrée en avance du J2 et NON commitée (relecture du porteur demandée)** : lot L20-19 (écran de gestion des accès, correction du nom réel, EN20-3 inscrite) plus un annuaire de tous les comptes, décidé par le porteur le même jour (`20` § 2.8, points ouverts EL19-1 à EL19-8 au § 4 ci-dessous).
+
 **Dernière session : 24-28/09/2026 — phases A, B et C implémentées : back-office de curation et moteur de jeu complets sur develop (≈ 4 300 tests) ; reste la phase D, qui attend les gestes du porteur.** Étapes IA livrées : 6 à 25, 33 à 53, 62, 63 et 65 à 125. Les écarts relevés pendant l'implémentation (journal des écarts, entrées « E<étape>-<n> ») sont reportés dans les specs propriétaires : marqués « amendé le 25/09 » pour les phases A et B, « amendé le 28/09 » pour la phase C (étapes 62 à 125). Les gestes du porteur qu'ils ajoutent sont au § 3, ses questions au § 4. Restent dus, outre la phase 0 : avant la porte du pilote (56), les étapes 26 à 30, 32, 54 et 55, gestes du porteur ou préparation de la mise en service ; l'étape 64 (licence du pack d'avatars) ; puis la curation (57 à 61) et la phase D (126 à 134) — amendé le 28/09.
 
 **Session du 24-25/09/2026 — phases A et B implémentées (étapes 6 à 25 et 33 à 53), back-office de curation du J1 complet.** Écarts reportés dans les specs, marqués « amendé le 25/09 ».
@@ -60,13 +62,15 @@ Le code des phases A, B et C a été écrit du 24 au 27/09, un commit par lot su
 | `database/factories/`, `database/seeders/` | Catalogue de démonstration de 16 films jouables à N = 2 à 5 (78 `.webp` réels) ; la partie de 10 manches de bout en bout est prouvée par L100-14 (étape 103) | 22-27/09 |
 | `tests/` | 209 fichiers Pest (201 `Feature`, 7 `Concurrency` joués sur MySQL par le job `mysql-redis`, 1 `Unit`) et 23 fichiers Vitest | 22-27/09 |
 
+**Gestion des comptes, livrée le 28/09 en avance du J2, non commitée.** À la demande du porteur, le back-office gagne, pour l'administrateur seul, un groupe « Administration » : l'**annuaire des comptes** (`admin.users.index`, `admin.users.show` — tous les comptes, recherche, filtres, fiche en lecture, aucun secret ni `saved_config` sérialisés) et l'**écran de gestion des accès** (`admin.access.*` — comptes privilégiés, file « rôle privilégié sans 2FA », promotion par adresse exacte, historique, changement de rôle et correction du nom réel, chacun journalisé). Le journal compte désormais **22 cas** (`user.real_name_changed`, EN20-3 acceptée). `users.last_login_at` est écrit à chaque connexion aboutie (écouteur `RecordLastLogin`). Détail et écarts : `20` § 2.8 et lot L20-19, `10` § 5.1 et § 8.3, `40` § 8.4 et § 10.1. Les changements sont dans l'arbre de travail de `develop`, **sans commit** : le porteur relit d'abord — amendé le 28/09.
+
 **Catalogue réel de la base de dev.** Trois films sont importés depuis TMDB : Fight Club, Parasite et Le Labyrinthe de Pan. Tous sont en `draft` et `is_import_exception` (dont 2 pour `exception_for_language`). Aucune frame n'est curée, donc le vivier est vide à tout N. C'est normal : au jalon 1, la curation réelle naît **en production** (D1 du 23/09). Aucun film réel n'y est curé avant la **porte du pilote** (étape 56 de l'annexe, `20` § 10.3).
 
 **Suite de tests, dernier état vérifié le 28/09** (suite par défaut de `composer test`, SQLite, sans les groupes `mysql` et `locks-timing`) — amendé le 28/09 :
 
 - Pint passé ;
 - PHPStan niveau 7 : 0 erreur ;
-- **Pest : 4 313 tests passés sur 4 313, 99 061 assertions**, en 428 s sur le poste Windows.
+- **Pest : 4 313 tests passés sur 4 313, 99 061 assertions**, en 428 s sur le poste Windows ; **4 384 sur 4 384, 101 324 assertions, en 388 s** après la gestion des comptes (28/09, arbre non commité), `npm run check`, `tsc` et `npm run build` verts — amendé le 28/09.
 
 Trois réserves :
 
@@ -344,6 +348,19 @@ Les gestes du porteur relevés par ce report (nom réel dans `LICENSE`, logo TMD
 | **Réponses traitées après la révélation** : confirmer la transaction du clic faux (`round FOR SHARE`, fenêtre relue sous ce verrou, E107-1). Le refus texte, lui, ne relit pas la fenêtre et compte encore un texte faux traité après `RevealRound` : appliquer le correctif proposé au § 7.5 (409 `closed`), par une reprise de L70-5 ou un lot correctif (E107-5) | `70` § 7.5 et § 7.6 | E107-5 : lot correctif à planifier |
 | **Informations sans décision attendue** : vocabulaire anglais « image » dans les textes d'aide de `80` contre « frame » dans les clés de `90` (E88-6) ; « n manches jouées » ajoute une ligne sous chaque pseudo au podium en portrait (E118-6) | `80`, `90` point n° 23 | aucune |
 
+**Questions relevées par la livraison anticipée de L20-19 et de l'annuaire des comptes** (28/09). Écrites dans `20` § « Ce que cette spec ne décide pas » ; le code livré applique la lecture décrite au § 2.8 tant que le porteur ne s'est pas prononcé. Aucune ne bloque un lot.
+
+| Question | Propriétaire |
+|---|---|
+| **EL19-1** — refus de changer **son propre rôle** (lecture retenue) : le confirmer, ou autoriser la rétrogradation de soi hors dernier administrateur | `20` § 2.8 |
+| **EL19-2** — nom réel **conservé** à la rétrogradation en joueur (lecture retenue), ou vidé | `20`, `10` § 5.1 |
+| **EL19-3** — la correction du nom réel **par la console** n'écrit toujours aucune ligne : ouvrir `user.real_name_changed` à l'acteur `console` ? | `20` § 2.5, `10` § 8.3 |
+| **EL19-4** — l'annuaire montre l'adresse de chaque compte : à nommer dans la page de confidentialité du J2 | `90` (J2) |
+| **EL19-5** — ratifier l'écrivain de `last_login_at` (écouteur sur `Login`) dans la règle du compte | `40` (J2) |
+| **EL19-6** — limiteur `admin-curation` réemployé pour les gestes d'accès, ou limiteur dédié | `20` § 13.7 |
+| **EL19-7** — un compte **sans adresse** (Discord, J2) n'est jamais promu : à confirmer avec l'OAuth | `40` (J2) |
+| **EL19-8** — la preuve MySQL du verrou des administrateurs (`locks-timing`) n'est pas écrite : la VM Homestead n'a pas de base MySQL de test (seulement `tripleframes`, que `RefreshDatabase` viderait, et `tripleframes_prod`) ; en créer une est un geste du porteur | `20` L20-19, `100` § 2.1 |
+
 L'ordre d'exécution relève aussi des **correctifs de dépendances** (I-1 à I-13, annexe § A.3). Ils sont déjà appliqués dans l'ordre, mais pas encore reportés dans les specs propriétaires. **I-12** est appliqué depuis le 24/09 : `final_rank` élargi dans la migration de création (étape 25, accord du porteur ; `10` § 13.2, n° 47). Attendent encore l'accord du porteur : **I-13** (drainage livré en deux déploiements) et la **règle de branche pendant la curation** (§ A.2) — amendé le 25/09.
 
 Deux écarts documentaires restent à corriger :
@@ -421,7 +438,7 @@ Ensuite, à chaque session : **« Implémente l'étape suivante de l'ordre des l
 
 1. `php artisan admin:first-admin` crée ou promeut le premier administrateur. La commande est interactive : le mot de passe ne passe jamais en argument.
 2. Lancer `composer dev`.
-3. Ouvrir `/admin`. On y trouve le tableau de bord, le catalogue et l'import (`discover`, collage d'identifiants, reprise).
+3. Ouvrir `/admin`. On y trouve le tableau de bord, le catalogue et l'import (`discover`, collage d'identifiants, reprise). Un administrateur y trouve en plus, depuis le 28/09, le groupe « Administration » : « Comptes » (annuaire) et « Accès » (rôles, noms réels, historique). En développement, les comptes de démonstration (`DemoAccountsSeeder`, mot de passe `password`) permettent de l'essayer : `admin@tripleframes.test` administre, `curator@tripleframes.test` ne voit pas ce groupe.
 
 À partir de L20-1 (étape 17), la commande exige le **nom réel** (`--real-name=`, D12 du 23/09), et `--create` devient définitif. En production, elle est exécutée **une fois**, par le porteur, en SSH, **après l'achat du domaine** (étape 28).
 

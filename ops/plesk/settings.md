@@ -2,7 +2,7 @@
 
 Relevé des réglages saisis dans l'interface de Plesk, qui n'ont pas de fichier à recopier (spec `100` § 10). Un réglage système qu'on ne peut pas relire dans le dépôt ne peut pas être revu : ce fichier est mis à jour **dans le commit** qui change l'un d'eux, et le journal en fin de page en garde la trace.
 
-- **État** : préparé le 28/09/2026 (étape 26, lot L100-9), sous l'hypothèse S2 (accès root, Plesk, PHP de l'abonnement en `/opt/plesk/php/8.3/bin/php`). Rien n'est encore appliqué : chaque ligne est à confirmer à la mise en service (étape 27, `ops/mise-en-service.md`), puis datée dans le journal.
+- **État** : préparé le 28/09/2026 (étape 26, lot L100-9), sous l'hypothèse S2 (accès root, Plesk, PHP de l'abonnement en `/opt/plesk/php/8.4/bin/php`). Rien n'est encore appliqué : chaque ligne est à confirmer à la mise en service (étape 27, `ops/mise-en-service.md`), puis datée dans le journal.
 - **Marques** : `__TF_…__` = paramètre inconnu du dépôt, à remplacer ; « À AJUSTER AU RELEVÉ » = valeur de départ, à confirmer ou corriger selon le relevé du VPS (§ 10.1). Liste des paramètres : `ops/mise-en-service.md`, section 1.
 - **Jamais ici** : le nom de domaine (écrire `<DOMAINE>`, `NoLiteralDomainTest` balaie `ops/`), une adresse IP, un secret.
 - Les libellés de l'interface sont ceux de Plesk Obsidian en français, à corriger selon la version relevée.
@@ -32,7 +32,7 @@ Réglés dans l'interface, sans root. À AJUSTER AU RELEVÉ : champs réellement
 
 | Réglage                       | Valeur                                                   |
 | ----------------------------- | -------------------------------------------------------- |
-| Version, gestionnaire         | 8.3, application FPM servie par nginx                    |
+| Version, gestionnaire         | 8.4, application FPM servie par nginx                    |
 | `pm`                          | `ondemand`                                               |
 | `pm.max_children`             | `12` (valeur de départ, D33)                             |
 | `pm.max_requests`             | `500`                                                    |
@@ -61,7 +61,7 @@ Tâches de l'utilisateur d'abonnement, « Exécuter une commande », **sortie no
 | `backup-hot.sh`  | chaque jour, 03:10 UTC | L100-10 (étape 30) |
 | `backup-cold.sh` | chaque semaine         | L100-10 (étape 30) |
 
-- Commande du planificateur : `/opt/plesk/php/8.3/bin/php __TF_DEPLOY_PATH__/artisan schedule:run`.
+- Commande du planificateur : `/opt/plesk/php/8.4/bin/php __TF_DEPLOY_PATH__/artisan schedule:run`.
 - **Une tâche sous la minute tient `schedule:run` vivant toute la minute** : le battement de la file `game` est planifié toutes les 30 secondes (`everyThirtySeconds()`), si bien que chaque passage reste en vie jusqu'à la fin de sa minute pour lancer le second battement. Il y a donc en permanence un processus PHP CLI du planificateur, à compter dans le budget mémoire, et le passage suivant démarre quand le précédent se termine. Ne jamais activer la notification de sortie : un courriel par minute.
 - Le planificateur est surveillé indirectement : s'il s'arrête, les battements vieillissent et les sondes `worker-game` et `worker-default` alertent (§ 15).
 - Les deux tâches de sauvegarde naissent avec L100-10 (`ops/backup/`), qui les consigne ici.

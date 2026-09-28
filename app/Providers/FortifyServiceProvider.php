@@ -170,7 +170,9 @@ class FortifyServiceProvider extends ServiceProvider
         // changer le niveau d'une image, la dépublier ou l'écarter, et, aux
         // lots suivants, revoir une image, publier ou dépublier un film. Plus
         // large qu'`admin-frame` — aucun ne télécharge ni ne distribue de job
-        // Imagick —, au-dessus du débit de « Entrée = conforme, publier ». Par
+        // Imagick —, au-dessus du débit de « Entrée = conforme, publier ». Il
+        // borne aussi les deux gestes d'accès, qui n'écrivent eux aussi qu'en
+        // base : changer un rôle, corriger un nom réel (§ 2.8). Par
         // utilisateur ; valeur dans `catalog.curation.rate_limits.curation`.
         RateLimiter::for('admin-curation', function (Request $request) {
             return Limit::perMinute(Config::integer('catalog.curation.rate_limits.curation'))

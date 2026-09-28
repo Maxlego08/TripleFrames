@@ -9,7 +9,8 @@ Liste de contrôle de la mise en service initiale (spec `100` § 11.6), lot L100
 - `<DOMAINE>` : le nom de domaine, remplacé **sur le serveur seulement**. Il n'entre jamais dans le dépôt, ni aucune adresse IP ni aucun secret.
 - `__TF_…__` : paramètre inconnu du dépôt, à remplacer (liste à la section 1). Le contrôle final (section 9) vérifie qu'il n'en reste aucun sur le serveur.
 - « À AJUSTER AU RELEVÉ » : valeur de départ plausible, à confirmer ou corriger selon le relevé.
-- « root » : session SSH root. « abonnement » : session SSH de l'utilisateur d'abonnement, dans le répertoire de déploiement. Dans les commandes, `PHP=/opt/plesk/php/8.3/bin/php` : jamais un `php` du système, dont `artisan` et `composer.phar` désigneraient sinon le binaire par leur shebang.
+- « root » : session SSH root. « abonnement » : session SSH de l'utilisateur d'abonnement, dans le répertoire de déploiement. Dans les commandes, `PHP=/opt/plesk/php/8.4/bin/php` : jamais un `php` du système, dont `artisan` et `composer.phar` désigneraient sinon le binaire par leur shebang.
+- **Toute session de l'abonnement commence par `umask 027`**, comme le hook : un `"$PHP" artisan optimize` tapé à la main recrée `bootstrap/cache/config.php`, copie de **tous** les secrets du `.env`, avec l'umask de la session (`022` d'ordinaire sous Plesk, soit `644` : lisible par tout compte admis à traverser le HOME, serveur web compris).
 - Gabarits : `ops/redis/`, `ops/systemd/`, `ops/nginx/` (recopiés par root) ; `ops/plesk/settings.md` (réglages de l'interface). Chaque en-tête de gabarit porte sa commande d'installation.
 
 ## 0. Préalables bloquants
@@ -32,8 +33,8 @@ Résultats à consigner, date comprise, dans `100` § 10.1 (« Résultats du rel
 | cgroups                  | `stat -fc %T /sys/fs/cgroup`                                                                                                        | `cgroup2fs` (`MemoryMax`, `CPUWeight`)                                                                   |
 | RAM, vCPU, charge        | `free -m` ; `nproc` ; `uptime`                                                                                                      | ≥ 4 Go, ≥ 2 vCPU                                                                                         |
 | Ports en écoute          | `ss -ltnp`                                                                                                                          | deux ports de bouclage libres ; 6379 noté                                                                |
-| PHP de l'abonnement      | `/opt/plesk/php/8.3/bin/php -m`                                                                                                     | `imagick`, `pdo_mysql`, `mbstring`, `openssl`, `sodium` ; `pcntl` noté                                   |
-| `memory_limit` du CLI    | `/opt/plesk/php/8.3/bin/php -r 'echo ini_get("memory_limit"), PHP_EOL;'`                                                            | noté (`PHP_ARGS` des workers)                                                                            |
+| PHP de l'abonnement      | `/opt/plesk/php/8.4/bin/php -m`                                                                                                     | `imagick`, `pdo_mysql`, `mbstring`, `openssl`, `sodium` ; `pcntl` noté                                   |
+| `memory_limit` du CLI    | `/opt/plesk/php/8.4/bin/php -r 'echo ini_get("memory_limit"), PHP_EOL;'`                                                            | noté (`PHP_ARGS` des workers)                                                                            |
 | Redis                    | `command -v redis-server` ; `redis-server --version`                                                                                | présent, ou paquet à poser (étape 4 a)                                                                   |
 | Redis et systemd         | `ldd "$(command -v redis-server)" \| grep libsystemd`                                                                               | une ligne (`Type=notify`)                                                                                |
 | Plesk                    | `plesk version` ; interface                                                                                                         | nginx seul vers PHP-FPM, cache nginx, Git, actions additionnelles (répertoire, délai), tâches planifiées |
@@ -75,7 +76,7 @@ Ce commit est porté sur `main`, la branche `deploy` est reconstruite par le job
 Abonnement :
 
 ```bash
-PHP=/opt/plesk/php/8.3/bin/php
+PHP=/opt/plesk/php/8.4/bin/php
 cd __TF_DEPLOY_PATH__
 (umask 077 && mkdir -p /var/www/vhosts/<DOMAINE>/private/tripleframes/frames \
     /var/www/vhosts/<DOMAINE>/private/tripleframes/snapshots)
@@ -123,9 +124,10 @@ cd __TF_DEPLOY_PATH__
 
 ## 4. Étape 3 — dépendances, schéma, données de plateforme
 
-Abonnement, dans `__TF_DEPLOY_PATH__` (chemin de `composer.phar` relevé à la section 1) :
+Abonnement, dans `__TF_DEPLOY_PATH__` (chemin de `composer.phar` relevé à la section 1). La session s'ouvre par `umask 027`, comme le hook : quel que soit l'umask de l'utilisateur d'abonnement, rien de ce qu'elle crée ne naît lisible par un autre compte.
 
 ```bash
+umask 027
 "$PHP" <chemin de composer.phar> install --no-dev --optimize-autoloader --no-interaction
 "$PHP" artisan migrate --force
 "$PHP" artisan db:seed --class=PlatformDataSeeder --force
@@ -187,11 +189,13 @@ Attendu : `PONG` ; `flushall` refusé (commande inconnue) ; `aof_enabled:1` ; `m
 
 ## 6. Étape 5 — démarrage et vérifications
 
-Abonnement, puis root :
+Abonnement (session ouverte par `umask 027`, comme le hook : `optimize` recopie **tous** les secrets du `.env` dans `bootstrap/cache/config.php`), puis root :
 
 ```bash
+umask 027
 "$PHP" artisan optimize
 "$PHP" artisan lang:hash
+stat -c '%a %n' bootstrap/cache/config.php
 ```
 
 ```bash
@@ -201,12 +205,14 @@ systemctl show tripleframes-worker@game tripleframes-worker@default tripleframes
 ss -ltnp | grep -E ':(__TF_REDIS_PORT__|__TF_REVERB_PORT__)\b'
 ```
 
+- [ ] `bootstrap/cache/config.php` en `640` (jamais `644` ni `664` : ce serait une copie lisible de tous les secrets du `.env`, qui est, lui, en `600`). Sinon : `chmod 0640 bootstrap/cache/*.php`, puis rouvrir la session par `umask 027`.
 - [ ] Quatre unités actives ; `MemoryMax` et `CPUWeight` égaux aux gabarits (et non `infinity`) ; Redis et Reverb en écoute sur `127.0.0.1` seulement.
 - [ ] Depuis le poste, les deux ports sont injoignables sur l'adresse publique du VPS (`Test-NetConnection <IP du VPS> -Port <port>` sous Windows : `TcpTestSucceeded : False`).
 - [ ] `"$PHP" artisan about --only=environment` : `production`, débogage désactivé.
 - [ ] `curl -s -o /dev/null -w '%{http_code}\n' https://<DOMAINE>/up` : `200`.
 - [ ] `curl -sI https://<DOMAINE>/` porte `x-robots-tag: noindex, nofollow` et l'en-tête HSTS ; `https://<DOMAINE>/robots.txt` est le fichier statique (`Disallow: /admin`, `Disallow: /f/`).
 - [ ] `https://<DOMAINE>/register` répond 404 : inscription fermée (`AccountSwitches`).
+- [ ] `https://<DOMAINE>/login` répond 200, et non 502 : ses en-têtes (`Link` des assets préchargés et deux cookies) dépassent 4 Ko ; un 502 avec « upstream sent too big header » au journal d'erreurs nginx de l'abonnement signale que le tampon `fastcgi_buffer_size` des directives nginx supplémentaires manque.
 - [ ] `https://<DOMAINE>/legal/notice` : le bloc de contact des pages légales affiche l'adresse, ou la mention d'indisponibilité si elle ne répond pas encore (`LEGAL_CONTACT_EMAIL` vide ; renseignée plus tard, puis `"$PHP" artisan optimize`).
 - [ ] **Langue et cache** (§ 10.8), à rejouer après toute modification des directives nginx :
 
