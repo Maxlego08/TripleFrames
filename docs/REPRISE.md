@@ -2,7 +2,9 @@
 
 **Répétition de la mise en service jouée sur la VM le 28/09/2026 : voir `docs/ops/repetition-vm.md`.**
 
-**Session du 28/09/2026 (après-midi) — gestion des comptes au back-office, livrée en avance du J2 et NON commitée (relecture du porteur demandée)** : lot L20-19 (écran de gestion des accès, correction du nom réel, EN20-3 inscrite) plus un annuaire de tous les comptes, décidé par le porteur le même jour (`20` § 2.8, points ouverts EL19-1 à EL19-8 au § 4 ci-dessous).
+**Session du 28/09/2026 (soir) — voie capture ouverte au J1 et visuels TMDB porteurs d'une langue écartés, livrés et NON commités (relecture du porteur demandée)** : lot L20-33 passé au J1 et livré (D38 du 28/09 : téléversement ou collage d'une capture, normalisée par le navigateur, minutage `h:mm:ss` obligatoire, jeu toujours dérivé par le serveur, R-46 confirmé ; interrupteur `CURATION_CAPTURE_ENABLED` ouvert par défaut, `false` le ferme) ; backdrops TMDB auxquels TMDB attache une langue masqués, comptés et refusés à l'ajout (D39 du 28/09). Suite complète **4 401 / 4 401**. Décisions consignées dans `questions-ouvertes.md` § « Décisions du 28/09/2026 » (D38 à D40) ; détail dans `20` § 5.3, § 5.4, § 6.2, § 6.3 et L20-33, points ouverts EL33-1 à EL33-5 au § 4 ci-dessous — amendé le 28/09.
+
+**Session du 28/09/2026 (après-midi) — gestion des comptes au back-office, livrée en avance du J2 et NON commitée (relecture du porteur demandée)** : lot L20-19 (écran de gestion des accès, correction du nom réel, EN20-3 inscrite) plus un annuaire de tous les comptes, décidé par le porteur le même jour (D40 du 28/09 ; `20` § 2.8, points ouverts EL19-1 à EL19-8 au § 4 ci-dessous).
 
 **Dernière session : 24-28/09/2026 — phases A, B et C implémentées : back-office de curation et moteur de jeu complets sur develop (≈ 4 300 tests) ; reste la phase D, qui attend les gestes du porteur.** Étapes IA livrées : 6 à 25, 33 à 53, 62, 63 et 65 à 125. Les écarts relevés pendant l'implémentation (journal des écarts, entrées « E<étape>-<n> ») sont reportés dans les specs propriétaires : marqués « amendé le 25/09 » pour les phases A et B, « amendé le 28/09 » pour la phase C (étapes 62 à 125). Les gestes du porteur qu'ils ajoutent sont au § 3, ses questions au § 4. Restent dus, outre la phase 0 : avant la porte du pilote (56), les étapes 26 à 30, 32, 54 et 55, gestes du porteur ou préparation de la mise en service ; l'étape 64 (licence du pack d'avatars) ; puis la curation (57 à 61) et la phase D (126 à 134) — amendé le 28/09.
 
@@ -42,7 +44,7 @@ Il est réécrit à chaque fin de session. Il a été réécrit en entier à la 
 | `docs/specs/80-scoring-podium-et-fin-de-partie.md` | Score, podium, fin de partie | écrite le 23/09. Lots J1 : L80-1 à L80-7 | 1 176 l., 152 Ko |
 | `docs/specs/90-ecrans-etats-et-structure.md` | Écrans, états, structure, pages publiques | **partielle** : la section J1 (pages publiques et socle de coquille de jeu, D3 du 23/09) est écrite ; J2 à écrire. Lots J1 : L90-1 à L90-9, dont L90-3b, L90-6a et L90-6b | 1 028 l., 206 Ko |
 | `docs/specs/100-qualite-tests-et-ci.md` | Qualité, tests, CI, production | **partielle** : la section [J1] (socle minimal de production) est écrite sous hypothèse root (D30 et S2 du 23/09) ; J2 à écrire. Lots J1 : L100-1 à L100-14 | 1 084 l., 246 Ko |
-| `docs/specs/questions-ouvertes.md` | Journal des décisions : 19 du 22/09, S1-S4 et D1-D37 du 23/09, « Laissé ouvert le 23/09 », déjà tranché, risques | questionnaire clos, sauf le nom de domaine | 517 l., 148 Ko |
+| `docs/specs/questions-ouvertes.md` | Journal des décisions : 19 du 22/09, S1-S4 et D1-D37 du 23/09, « Laissé ouvert le 23/09 », D38-D40 du 28/09 (amendé le 28/09), déjà tranché, risques | questionnaire clos, sauf le nom de domaine | 517 l., 148 Ko |
 | `CLAUDE.md` | Mémoire projet chargée automatiquement à chaque session | **versionné désormais** (D9 du 23/09) : la ligne a été retirée de `.gitignore` et le fichier est exclu d'oxfmt dans `vite.config.ts`. Amendé le 23/09 | 165 l., 48 Ko |
 
 Les heures des sections « Lots d'implémentation » sont des **mesures de taille, jamais un calendrier** (D36 du 23/09). Les lots J1 des neuf specs mesurent **404,5 à 581,5 h brutes**. L'arithmétique vit dans `00` § Jalons, nulle part ailleurs.
@@ -64,7 +66,9 @@ Le code des phases A, B et C a été écrit du 24 au 27/09, un commit par lot su
 | `database/factories/`, `database/seeders/` | Catalogue de démonstration de 16 films jouables à N = 2 à 5 (78 `.webp` réels) ; la partie de 10 manches de bout en bout est prouvée par L100-14 (étape 103) | 22-27/09 |
 | `tests/` | 209 fichiers Pest (201 `Feature`, 7 `Concurrency` joués sur MySQL par le job `mysql-redis`, 1 `Unit`) et 23 fichiers Vitest | 22-27/09 |
 
-**Gestion des comptes, livrée le 28/09 en avance du J2, non commitée.** À la demande du porteur, le back-office gagne, pour l'administrateur seul, un groupe « Administration » : l'**annuaire des comptes** (`admin.users.index`, `admin.users.show` — tous les comptes, recherche, filtres, fiche en lecture, aucun secret ni `saved_config` sérialisés) et l'**écran de gestion des accès** (`admin.access.*` — comptes privilégiés, file « rôle privilégié sans 2FA », promotion par adresse exacte, historique, changement de rôle et correction du nom réel, chacun journalisé). Le journal compte désormais **22 cas** (`user.real_name_changed`, EN20-3 acceptée). `users.last_login_at` est écrit à chaque connexion aboutie (écouteur `RecordLastLogin`). Détail et écarts : `20` § 2.8 et lot L20-19, `10` § 5.1 et § 8.3, `40` § 8.4 et § 10.1. Les changements sont dans l'arbre de travail de `develop`, **sans commit** : le porteur relit d'abord — amendé le 28/09.
+**Gestion des comptes, livrée le 28/09 en avance du J2, non commitée.** Par D40 du 28/09, le back-office gagne, pour l'administrateur seul, un groupe « Administration » : l'**annuaire des comptes** (`admin.users.index`, `admin.users.show` — tous les comptes, recherche, filtres, fiche en lecture, aucun secret ni `saved_config` sérialisés) et l'**écran de gestion des accès** (`admin.access.*` — comptes privilégiés, file « rôle privilégié sans 2FA », promotion par adresse exacte, historique, changement de rôle et correction du nom réel, chacun journalisé). Le journal compte désormais **22 cas** (`user.real_name_changed`, EN20-3 acceptée). `users.last_login_at` est écrit à chaque connexion aboutie (écouteur `RecordLastLogin`). Détail et écarts : `20` § 2.8 et lot L20-19, `10` § 5.1 et § 8.3, `40` § 8.4 et § 10.1. Les changements sont dans l'arbre de travail de `develop`, **sans commit** : le porteur relit d'abord — amendé le 28/09.
+
+**Voie capture et visuels TMDB avec langue, livrés le 28/09 au soir, non commités.** Par D38 du 28/09, la voie capture est **ouverte au J1** avant l'arbitrage de licéité, que le porteur laisse ouvert au conseil : dans l'éditeur de la banque, « Choisir une image » ou un collage (`Ctrl + V`) ouvre une capture normalisée par le navigateur (WebP de 1920 de large, sous le plafond d'entrée) dans le même recadreur et le même formulaire que les visuels TMDB, avec un champ de minutage obligatoire ; le serveur (`FrameCaptureStoreRequest`, `FrameCaptureController`, `AddFrame::fromCapture`) revalide, renormalise toujours et dérive lui-même l'image de jeu. L'interrupteur `CURATION_CAPTURE_ENABLED` reste vide dans `.env.example` et vaut désormais **ouverte** ; `false` la ferme, route comprise. Par D39 du 28/09, les backdrops auxquels TMDB attache une langue ne sont plus proposés : l'écran dit combien sont écartés, et l'ajout les refuse côté serveur (`admin.frame.tmdb.with_text`). Le parcours n'a **pas été essayé à la main dans un navigateur** (geste 11 du § 3). Détail et écarts : `20` § 5.3, § 5.4, § 6.2, § 6.3, lot L20-33, EL33-1 à EL33-5 — amendé le 28/09.
 
 **Catalogue réel de la base de dev.** Trois films sont importés depuis TMDB : Fight Club, Parasite et Le Labyrinthe de Pan. Tous sont en `draft` et `is_import_exception` (dont 2 pour `exception_for_language`). Aucune frame n'est curée, donc le vivier est vide à tout N. C'est normal : au jalon 1, la curation réelle naît **en production** (D1 du 23/09). Aucun film réel n'y est curé avant la **porte du pilote** (étape 56 de l'annexe, `20` § 10.3).
 
@@ -72,7 +76,7 @@ Le code des phases A, B et C a été écrit du 24 au 27/09, un commit par lot su
 
 - Pint passé ;
 - PHPStan niveau 7 : 0 erreur ;
-- **Pest : 4 313 tests passés sur 4 313, 99 061 assertions**, en 428 s sur le poste Windows ; **4 384 sur 4 384, 101 324 assertions, en 388 s** après la gestion des comptes (28/09, arbre non commité), `npm run check`, `tsc` et `npm run build` verts — amendé le 28/09.
+- **Pest : 4 313 tests passés sur 4 313, 99 061 assertions**, en 428 s sur le poste Windows ; **4 384 sur 4 384, 101 324 assertions, en 388 s** après la gestion des comptes (28/09, arbre non commité), `npm run check`, `tsc` et `npm run build` verts — amendé le 28/09 ; **4 401 sur 4 401, 101 601 assertions, en 384 s, puis **4 404 sur 4 404, 101 630 assertions, en 440 s** après les correctifs de la revue du lot** après la voie capture et l'exclusion des visuels TMDB avec langue (28/09 au soir, arbre non commité), Vitest 112 / 112, `npm run check`, PHPStan, Pint et `npm run build` verts — amendé le 28/09.
 
 Trois réserves :
 
@@ -186,6 +190,16 @@ Conséquences qui gouvernent le travail :
 - **La barre « terminé » n'est jamais touchée.**
 - **Le drainage (D32) et le test de charge (D33) sont dus avant la première partie.** Ils ne le sont jamais avant la curation (D37).
 
+### Décisions du 28/09
+
+Relevé seulement ; détail dans `questions-ouvertes.md` § « Décisions du 28/09/2026 ». On les cite « D38 du 28/09 » — amendé le 28/09.
+
+| # | Décision | Écart |
+|---|---|---|
+| D38 | **Voie capture ouverte au J1**, avant l'arbitrage de licéité (resté ouvert au conseil) ; R-46 confirmé ; minutage obligatoire ; `CURATION_CAPTURE_ENABLED` ouvert par défaut, `false` le ferme | **oui** — lève le repli de la décision 7 |
+| D39 | Backdrops TMDB porteurs d'une langue masqués, comptés, refusés à l'ajout | — |
+| D40 | Gestion des comptes (L20-19) et annuaire livrés en avance du J2 ; EN20-3 acceptée | — |
+
 ---
 
 ## 3. Ce qui bloque — le chemin humain (D36 du 23/09)
@@ -200,11 +214,11 @@ Le développement ne borne plus rien : **ce qui fixe la date de la première vra
 | 4 | **Vérifier la licence du pack d'avatars** Kenney au téléchargement et la consigner dans `public/avatars/LICENSE.md` (D27 du 23/09). Le pack s'appelle aujourd'hui « Animal Pack Remastered » ; le fichier est encore à `[À FOURNIR]`. Vérifier aussi la lisibilité à 32 px et trancher l'élan `preset-13` (E63-1 à E63-3, § 4) — amendé le 28/09 | la clôture de L40-5 et la première partie (133), pas les lots suivants | 64 |
 | 5 | **Choisir les fournisseurs UE du J1** : stockage objet de sauvegarde chez un fournisseur **distinct** de l'hébergeur du VPS, supervision externe, second canal d'alerte ; ouvrir les comptes | la sauvegarde active avant la première image curée (30), donc le pilote | 4 |
 | 6 | **Nommer les sous-traitants UE (J2)** : un par catégorie branchée (hébergeur, SMTP, sauvegarde, supervision, second canal, suivi d'erreurs s'il est branché), plus le registrar | la page de confidentialité, donc l'ouverture du J2 | — |
-| 7 | **Commander les textes légaux (J2)** (décision 4). Délai externe de 2 à 6 semaines, **à lancer pendant le J1**. Poser au même conseil la question de la **licéité de la capture** (liste fermée des sources autorisées) | l'ouverture du J2 et la voie capture (L20-33, J2) | 5 |
+| 7 | **Commander les textes légaux (J2)** (décision 4). Délai externe de 2 à 6 semaines, **à lancer pendant le J1**. Poser au même conseil la question de la **licéité de la capture** (liste fermée des sources autorisées) | l'ouverture du J2 et la voie capture (L20-33, J2) — amendé le 28/09 : la voie capture n'attend plus la réponse, ouverte au J1 par D38 du 28/09 ; une réponse restrictive la fermerait (`CURATION_CAPTURE_ENABLED=false`) | 5 |
 | 8 | **Rafraîchir la base de dev** : `php artisan backup:snapshot` (code 0 exigé, règle 12), puis `php artisan migrate:fresh --seed`. La base de dev a joué l'ancienne migration de création de `game_player` et garde `final_rank` en `tinyint` (I-12) ; `migrate:fresh` recrée toute la base, catalogue compris (`10` § 13.2, n° 47, E25-1) — amendé le 25/09. Il joue aussi les migrations additives de la phase C (n° 44 à 46), dont la n° 46, livrée sans avoir été jouée sur la base MySQL de dev (E78-1) — amendé le 28/09 | la parité du schéma de dev avec celui des tests et de la production | tout de suite |
 | 9 | **Nom réel complet du titulaire dans `LICENSE`**. Le fichier a été livré par L100-2 avec le nom d'auteur git (« Maxence »), faute de saisie possible par une porte non interactive ; `LicenseTest` n'écrit aucun nom en dur (`100` § 7.6, E7-6, E7-15) — amendé le 25/09 | tout push vers la forge | avant le premier push |
 | 10 | **Déposer le logo officiel TMDB** dans `public/brand/tmdb.svg` et **dater ses conditions d'usage** dans `public/brand/LICENSE.md` ; dans le même commit, passer sa ligne dans « Actifs livrés » de `THIRD_PARTY_NOTICES.md` (`90` § 3.2 et point resté ouvert n° 13, E15-2) — amendé le 25/09 | la mise en service (27), au plus tard | 27 au plus tard |
-| 11 | **Vérifications manuelles au navigateur**, qu'aucune porte automatisée n'a pu jouer : (a) le back-office **à 375 px** — parcours clavier et affichage de la coquille mobile et d'`admin/two-factor-required` (`20`, L20-2, E18-9) ; (b) le **recadreur au clavier et à la souris sur la vraie page de l'éditeur** (L20-9a, L20-9b, L20-10) ; (c) sur **iOS Safari, l'appui long** sur une image de jeu, qui ne doit ouvrir aucun menu (`-webkit-touch-callout: none`, `90`, L90-6a, E39-6) — amendé le 25/09 | la porte du pilote (56) ; (c) est rejouée à la recette sur appareil réel (127) | avant 56 |
+| 11 | **Vérifications manuelles au navigateur**, qu'aucune porte automatisée n'a pu jouer : (a) le back-office **à 375 px** — parcours clavier et affichage de la coquille mobile et d'`admin/two-factor-required` (`20`, L20-2, E18-9) ; (b) le **recadreur au clavier et à la souris sur la vraie page de l'éditeur** (L20-9a, L20-9b, L20-10) ; (c) sur **iOS Safari, l'appui long** sur une image de jeu, qui ne doit ouvrir aucun menu (`-webkit-touch-callout: none`, `90`, L90-6a, E39-6) — amendé le 25/09 ; (d) la **voie capture** de bout en bout — choisir, coller, minutage, envoi, traitement, revue —, jamais essayée à la main à sa livraison (L20-33, D38 du 28/09) — amendé le 28/09 | la porte du pilote (56) ; (c) est rejouée à la recette sur appareil réel (127) | avant 56 |
 
 Les autres gestes du chemin humain :
 
@@ -232,9 +246,11 @@ Points secondaires, sans effet sur la date du J1 :
 |---|---|---|
 | **Lot 9 non posé**, trois questions : effet de « bannir un pseudo » (`nickname.banned`), preuve du consentement aux données provider, avatar d'un invité qui crée un compte | `40` § 10.2, à poser avec options et recommandation | à l'écriture de `40` J2 ; rien au J1 |
 | Confirmation de la 2FA de `curator` **et** `admin`, et de la dormance (24 mois + 30 jours). La garde `admin.2fa` (L20-2, livrée) applique déjà la 2FA aux deux rôles ; revenir à `admin` seul coûterait une condition dans `EnsurePrivilegedTwoFactor` et ses tests (E18-8) — amendé le 25/09 | `40` J2, `20` | réversible ; rien au J1 |
-| **R-46 — voie capture** : le serveur dérive toujours le dérivé de jeu du master et du rectangle ; le navigateur n'envoie qu'une source normalisée d'au plus 1 536 Ko et un rectangle. Tranché par le rédacteur, **à confirmer par le porteur** | `20` § 5.4 | sans effet au J1 (capture désactivée) |
+| **R-46 — voie capture** : le serveur dérive toujours le dérivé de jeu du master et du rectangle ; le navigateur n'envoie qu'une source normalisée d'au plus 1 536 Ko et un rectangle. Tranché par le rédacteur, **à confirmer par le porteur** — **confirmé par D38 du 28/09**, livré ainsi au J1 (L20-33) ; question close — amendé le 28/09 | `20` § 5.4 | sans effet au J1 (capture désactivée) — devenu effectif au J1, la voie étant ouverte (amendé le 28/09) |
 | **R-47** — suffixe `.label` des clés de la grille (`admin.exclusion_grid.v{n}.{slug}.label` et `.help`) : écart de forme seulement | `20` § 7.1 | à confirmer ; L20-12 applique la forme de `20` |
-| **Liste fermée des sources autorisées** pour une capture personnelle (licéité, décision 7) | conseil du porteur | bloque L20-33 (J2) ; au J1, voie TMDB seule |
+| **Liste fermée des sources autorisées** pour une capture personnelle (licéité, décision 7) | conseil du porteur | bloque L20-33 (J2) ; au J1, voie TMDB seule — amendé le 28/09 : ne bloque plus rien, L20-33 étant livré au J1 par D38 du 28/09, qui en assume le risque ; la question **reste ouverte** au conseil, et une réponse restrictive ferme la voie par `CURATION_CAPTURE_ENABLED=false`, puis se traite capture par capture (`source_kind`) |
+| **Tier froid des captures dès le J1** (D38 du 28/09, EL33-4) : une capture est irremplaçable ; le tier froid doit couvrir les deux fichiers de toute frame `source_kind = 'capture'` dès le J1, et être actif avant la première capture curée en production. `BackupManifestCommand` (`backup:manifest --cold`) n'est pas encore écrite | `100` § 13.3, L100-10 | étape 30, avant la première capture curée |
+| **`ops/mise-en-service.md` l.118** dit encore « vide : voie capture fermée au J1 (`20` § 5.4) », et `docs/ops/repetition-vm.md` liste la variable vide avec le même sens : la valeur vide reste juste, son sens a changé (ouverte). Fichiers modifiés par le porteur, non touchés le 28/09 ; à réaligner à la prochaine passe `ops/` (EL33-5) | le porteur, `100` | avant la mise en service (27) |
 | **N100-2** — passage du tier froid en **quotidien**. Proposé, non appliqué : il reste hebdomadaire jusqu'à accord | `100` § 13.3 | avant la première image curée (étape 30), idéalement |
 | **Typographie française** commune à tous les dictionnaires (U+00A0 ou U+202F avant « : ; ! ? % » et dans « »), signalée par `80` § 15.1 | `05` | aucun lot du J1 |
 | **Reformulation de `game.help.prefix`** : « jouables » y désigne le vivier au lexique de `00`. Proposition appliquée par L90-7 (« Quand le site compte plusieurs films d'une même saga… ») : la confirmer, ou rétablir le texte de `70` (E99-1) — amendé le 28/09 | `90` point 3 ↔ `70` § 7.7 et § 17, arbitrage du porteur | texte livré ; aucun lot bloqué |
@@ -363,6 +379,16 @@ Les gestes du porteur relevés par ce report (nom réel dans `LICENSE`, logo TMD
 | **EL19-7** — un compte **sans adresse** (Discord, J2) n'est jamais promu : à confirmer avec l'OAuth | `40` (J2) |
 | **EL19-8** — la preuve MySQL du verrou des administrateurs (`locks-timing`) n'est pas écrite : la VM Homestead n'a pas de base MySQL de test (seulement `tripleframes`, que `RefreshDatabase` viderait, et `tripleframes_prod`) ; en créer une est un geste du porteur | `20` L20-19, `100` § 2.1 |
 
+**Questions relevées par la livraison de L20-33 et de l'exclusion des visuels TMDB avec langue** (28/09 au soir). Écrites dans `20` § « Ce que cette spec ne décide pas » ; le code livré applique la lecture décrite aux § 5.4 et § 6.3 tant que le porteur ne s'est pas prononcé. Aucune ne bloque un lot — amendé le 28/09.
+
+| Question | Propriétaire |
+|---|---|
+| **EL33-1** — les textes du minutage disent « heures, minutes et secondes », jamais « h:mm:ss », que le balayage de `CuratorMessagesTest` lit comme un nom de commande : l'accepter, ou affiner le balayage | `20` § 5.4 |
+| **EL33-2** — pas de `forceFormData` (refusé par les types d'Inertia) : c'est le fichier ajouté qui rend l'envoi multipart ; aucun test ne rejoue l'envoi du navigateur | `20` § 6.3 |
+| **EL33-3** — le refus `admin.frame.tmdb.with_text` conseille « …ou envoyez une capture », faux si l'interrupteur ferme la voie : texte neutre, ou deux textes | `20` § 5.3 |
+| **EL33-4** — tier froid des captures dès le J1 (ligne ci-dessus) | `100` § 13.3 |
+| **EL33-5** — `ops/mise-en-service.md` et `docs/ops/repetition-vm.md` à réaligner (ligne ci-dessus) | le porteur |
+
 L'ordre d'exécution relève aussi des **correctifs de dépendances** (I-1 à I-13, annexe § A.3). Ils sont déjà appliqués dans l'ordre, mais pas encore reportés dans les specs propriétaires. **I-12** est appliqué depuis le 24/09 : `final_rank` élargi dans la migration de création (étape 25, accord du porteur ; `10` § 13.2, n° 47). Attendent encore l'accord du porteur : **I-13** (drainage livré en deux déploiements) et la **règle de branche pendant la curation** (§ A.2) — amendé le 25/09.
 
 Deux écarts documentaires restent à corriger :
@@ -477,7 +503,7 @@ Ensuite, à chaque session : **« Implémente l'étape suivante de l'ordre des l
 2. P — relever le VPS ; confirmer root et région UE → —
 3. P — liste d'amorçage, environ 200 identifiants TMDB (4-6 h) → —
 4. P — stockage de sauvegarde (UE, autre fournisseur), supervision externe, second canal d'alerte → —
-5. P — commander les textes légaux du J2 ; question de licéité de la capture (non bloquant) → —
+5. P — commander les textes légaux du J2 ; question de licéité de la capture (non bloquant ; voie ouverte au J1 par D38 du 28/09, amendé le 28/09) → —
 
 **Phase A — socle et prérequis de la mise en service (IA ; 68,5 à 102 h)**
 

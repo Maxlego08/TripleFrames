@@ -67,6 +67,9 @@ const FRAME_TMDB_BACKDROP = '/6a7b8c9d0e1f2a3b4c5d6e7f80912a3b.jpg';
 /** L'affiche de la fixture : jamais candidate à une image de jeu. */
 const FRAME_TMDB_POSTER = '/0e1f2a3b4c5d6e7f80912a3b4c5d6e7f.jpg';
 
+/** Un backdrop 16:9 de 1920 × 1080 de la fixture, auquel TMDB attache l'anglais. */
+const FRAME_TMDB_BACKDROP_WITH_TEXT = '/8c9d0e1f2a3b4c5d6e7f80912a3b4c5d.jpg';
+
 beforeEach(function (): void {
     // Un fichier ne participe à aucune transaction : sans ce `fake`, les
     // octets provisoires partiraient dans la racine réelle du disque.
@@ -263,6 +266,33 @@ test('un visuel absent des backdrops du film est refusé', function (): void {
         ->assertSessionHasErrors(['tmdb_file_path' => $refusal]);
 
     // Aucun original téléchargé, aucune image, aucun octet, aucun job.
+    expect(frameTmdbDownloaded())->toBeFalse()
+        ->and(Frame::query()->count())->toBe(0)
+        ->and(frameTmdbFiles())->toBe([]);
+
+    Queue::assertNothingPushed();
+});
+
+test('un visuel qui peut contenir du texte est refusé avant tout téléchargement', function (): void {
+    Queue::fake();
+    frameTmdbFake();
+
+    $movie = frameTmdbMovie();
+
+    // Un backdrop du film — il appartient à la liste que TMDB fournit, et ses
+    // dimensions comme le cadre sont admis —, mais TMDB lui attache une
+    // langue : il peut contenir du texte. La grille ne le propose pas ; un
+    // envoi forgé, ou une grille ouverte avant D39 du 28/09, non plus.
+    frameTmdbPost($movie, frameTmdbPayload(['tmdb_file_path' => FRAME_TMDB_BACKDROP_WITH_TEXT]))
+        ->assertRedirect(route('admin.catalog.show', ['movie' => $movie->id]))
+        ->assertSessionHasErrors(['tmdb_file_path' => frameTmdbText('admin.frame.tmdb.with_text')]);
+
+    // Un motif propre, jamais « étranger au film » ; lu en français.
+    expect(frameTmdbText('admin.frame.tmdb.with_text'))->not->toBe('admin.frame.tmdb.with_text')
+        ->and(frameTmdbText('admin.frame.tmdb.with_text'))->not->toBe(frameTmdbText('admin.frame.tmdb.not_a_backdrop'));
+
+    // Refusé AVANT tout téléchargement : aucun original, aucune image, aucun
+    // octet, aucun job.
     expect(frameTmdbDownloaded())->toBeFalse()
         ->and(Frame::query()->count())->toBe(0)
         ->and(frameTmdbFiles())->toBe([]);

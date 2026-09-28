@@ -16,7 +16,9 @@ use Illuminate\Support\Facades\RateLimiter;
 |
 | Aucune de ces valeurs n'est lue de l'environnement, hormis
 | `capture_enabled` : toute modification passe par un commit, et ce test est
-| la garde de leurs bornes croisées.
+| la garde de leurs bornes croisées. `capture_enabled` est ouverte par défaut
+| (D38 du 28/09) : vide ou absente, la voie capture reste ouverte, et seule
+| une valeur explicitement fausse la ferme.
 |
 | Les deux valeurs du worker `default` sont RECOPIÉES de la spec 100 § 10.4,
 | où elles sont des valeurs de départ recalibrées par D33 du 23/09 : le commit
@@ -50,6 +52,52 @@ const CURATION_HEARTBEAT_TABS = 2;
 
 /** La minute du limiteur, en secondes. */
 const CURATION_SECONDS_PER_MINUTE = 60;
+
+/**
+ * Relit `config/catalog.php` avec `CURATION_CAPTURE_ENABLED` posé à `$value`,
+ * ou absent quand `$value` est nul, et rend sa clé `curation.capture_enabled`.
+ *
+ * `env()` lit `$_SERVER`, puis `$_ENV`, puis `getenv()` : les trois sources
+ * sont posées ou retirées ensemble, puis rétablies, pour qu'une variable
+ * exportée dans le shell du développeur ne fausse ni ce test ni les suivants.
+ */
+function curationConfigCaptureEnabled(?string $value): mixed
+{
+    $name = 'CURATION_CAPTURE_ENABLED';
+    $hadServer = array_key_exists($name, $_SERVER);
+    $server = $hadServer ? $_SERVER[$name] : null;
+    $hadEnv = array_key_exists($name, $_ENV);
+    $env = $hadEnv ? $_ENV[$name] : null;
+    $process = getenv($name);
+
+    try {
+        if ($value === null) {
+            unset($_SERVER[$name], $_ENV[$name]);
+            putenv($name);
+        } else {
+            $_SERVER[$name] = $value;
+            $_ENV[$name] = $value;
+            putenv("{$name}={$value}");
+        }
+
+        /** @var array{curation: array{capture_enabled: mixed}} $config */
+        $config = require config_path('catalog.php');
+
+        return $config['curation']['capture_enabled'];
+    } finally {
+        unset($_SERVER[$name], $_ENV[$name]);
+
+        if ($hadServer) {
+            $_SERVER[$name] = $server;
+        }
+
+        if ($hadEnv) {
+            $_ENV[$name] = $env;
+        }
+
+        putenv($process === false ? $name : "{$name}={$process}");
+    }
+}
 
 it('les bornes croisées de la configuration de curation tiennent', function (): void {
     $int = static fn (string $key): int => Config::integer('catalog.curation.'.$key);
@@ -112,17 +160,33 @@ it('les bornes croisées de la configuration de curation tiennent', function ():
     expect($int('pilot.weekly_curation_hours'))->toBeGreaterThanOrEqual(0);
     expect($int('pilot.horizon_weeks'))->toBeGreaterThanOrEqual(0);
 
-    // La voie capture est fermée par défaut, et c'est la SEULE clé du bloc
-    // lue de l'environnement.
-    expect(Config::boolean('catalog.curation.capture_enabled'))->toBeFalse();
+    // La voie capture est ouverte par défaut (D38 du 28/09), et c'est la
+    // SEULE variable du bloc lue de l'environnement — lue deux fois par la
+    // même expression.
+    expect(Config::boolean('catalog.curation.capture_enabled'))->toBeTrue();
 
     $source = (string) file_get_contents(config_path('catalog.php'));
     $block = substr($source, (int) strpos($source, "'curation' => ["));
 
     preg_match_all("/env\\('([A-Z0-9_]+)'/", $block, $matches);
 
-    expect($matches[1])->toBe(['CURATION_CAPTURE_ENABLED']);
+    expect(array_values(array_unique($matches[1])))->toBe(['CURATION_CAPTURE_ENABLED']);
+
+    // L'exemple la laisse VIDE : ouverte, sans qu'une valeur y soit écrite.
     expect((string) file_get_contents(base_path('.env.example')))->toMatch('/^CURATION_CAPTURE_ENABLED=$/m');
+});
+
+test('une valeur fausse ferme la voie capture, une valeur vide ou absente la laisse ouverte', function (): void {
+    // Absente, vide (la ligne de `.env.example`), ou une valeur vraie :
+    // ouverte.
+    foreach ([null, '', 'true', '1', 'on', 'yes'] as $value) {
+        expect(curationConfigCaptureEnabled($value))->toBeTrue(var_export($value, true));
+    }
+
+    // Seule une valeur explicitement fausse la ferme.
+    foreach (['false', '0', 'off', 'no'] as $value) {
+        expect(curationConfigCaptureEnabled($value))->toBeFalse($value);
+    }
 });
 
 test('idle_seconds vaut soixante et heartbeat_seconds lui est inférieur', function (): void {

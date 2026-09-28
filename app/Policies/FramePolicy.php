@@ -34,10 +34,12 @@ use Illuminate\Support\Facades\Config;
 class FramePolicy
 {
     /**
-     * Motif du refus de la voie capture, tant qu'elle est fermée : une CLÉ de
-     * traduction du domaine `admin`, jamais un texte (§ 5.4). La même clé
-     * motive le refus de `FrameCaptureController`, seule réponse de la route
-     * au jalon 1.
+     * Motif du refus de la voie capture quand elle est fermée : une CLÉ de
+     * traduction du domaine `admin`, jamais un texte (§ 5.4). Ouverte par
+     * défaut (D38 du 28/09), la voie ne se ferme que par une valeur
+     * explicitement fausse de `catalog.curation.capture_enabled` ; la garde
+     * de la route répond alors 403 avec ce motif, avant toute résolution de
+     * requête.
      */
     public const string CAPTURE_DISABLED = 'admin.frame.capture.disabled';
 
@@ -80,16 +82,20 @@ class FramePolicy
     /**
      * Ajouter une variante par capture personnelle.
      *
-     * **Refus motivé tant que la voie est fermée** (§ 5.4) : sans arbitrage de
-     * la licéité de l'acte de capture, `catalog.curation.capture_enabled` reste
-     * faux, et la route répond 403 avant toute résolution de requête — seconde
-     * garde derrière l'absence de bouton. Le motif est la CLÉ
-     * `admin.frame.capture.disabled`, jamais un texte brut. Voie ouverte, le
-     * seuil est celui de {@see self::create()}.
+     * Voie ouverte (le défaut, D38 du 28/09) : le seuil et les états de
+     * {@see self::create()} — curateur au moins, jamais la banque d'un film
+     * `suspended` ni `withdrawn`. Rejouée sous le verrou du film par
+     * `AddFrame::fromCapture()`.
+     *
+     * **Refus motivé quand la voie est fermée** (§ 5.4) : une valeur
+     * explicitement fausse de `catalog.curation.capture_enabled` fait répondre
+     * la route 403 avant toute résolution de requête — seconde garde derrière
+     * l'absence de bouton. Le motif est la CLÉ `admin.frame.capture.disabled`,
+     * jamais un texte brut.
      */
     public function createFromCapture(User $user, Movie $movie): Response
     {
-        if (! Config::boolean('catalog.curation.capture_enabled', false)) {
+        if (! Config::boolean('catalog.curation.capture_enabled', true)) {
             return Response::deny(self::CAPTURE_DISABLED);
         }
 

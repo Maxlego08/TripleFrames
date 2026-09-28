@@ -124,8 +124,10 @@ return [
     | `App\Support\Frames\FrameGeometry`, jamais surchargeables. Le plancher
     | de recadrage non plus : il vit dans `PlatformLimits` (`config/game.php`).
     |
-    | - `capture_enabled` : voie capture fermée au jalon 1 (§ 5.4), faute
-    |   d'arbitrage de licéité ; vide ou absente = fermée.
+    | - `capture_enabled` : voie capture (§ 5.4), OUVERTE par défaut (D38 du
+    |   28/09) : vide ou absente = ouverte, seule une valeur explicitement
+    |   fausse la ferme — en un geste, sans commit, si la licéité de l'acte
+    |   de capture venait à être refusée.
     | - `tmdb_original_max_kilobytes` : l'original TMDB transite par la
     |   mémoire de la requête HTTP qui le télécharge (§ 5.3).
     | - `crop_seconds_max` : un cadre oublié ouvert ne fausse pas la médiane
@@ -207,7 +209,12 @@ return [
     */
 
     'curation' => [
-        'capture_enabled' => filter_var(env('CURATION_CAPTURE_ENABLED', false), FILTER_VALIDATE_BOOLEAN),
+        // Voie capture (spec 20 § 5.4) : OUVERTE par défaut (D38 du 28/09). Seule une
+        // valeur explicitement fausse la ferme. `env()` rend `false` pour « false »,
+        // `''` pour une ligne vide et `null` pour une variable absente : les deux
+        // derniers valent « non réglée », donc ouverte.
+        'capture_enabled' => in_array(env('CURATION_CAPTURE_ENABLED'), [null, ''], true)
+            || filter_var(env('CURATION_CAPTURE_ENABLED'), FILTER_VALIDATE_BOOLEAN),
         'tmdb_original_max_kilobytes' => 16_384,
         'crop_seconds_max' => 600,
 

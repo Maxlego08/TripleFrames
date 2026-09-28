@@ -99,6 +99,8 @@ export function unpublishKind(
 type Props = {
     frames: AdminMovieFrame[];
     movieId: number;
+    /** La voie capture est-elle offerte sur ce site ? L'état vide ne propose que ce qui l'est. */
+    captureEnabled: boolean;
     onGesture: (kind: FrameGestureKind, target: FrameGestureTarget) => void;
 };
 
@@ -117,11 +119,24 @@ type Props = {
  * Le rendu d'une image est l'aperçu admin (C9-bis), dans le conteneur de jeu
  * `GameFrame` : aucune URL n'est reconstruite ici.
  */
-export function FrameBankList({ frames, movieId, onGesture }: Props) {
+export function FrameBankList({
+    frames,
+    movieId,
+    captureEnabled,
+    onGesture,
+}: Props) {
     const { t } = useTranslations();
 
     if (frames.length === 0) {
-        return <AdminEmptyState title={t('admin.bank.list.empty')} />;
+        return (
+            <AdminEmptyState
+                title={t(
+                    captureEnabled
+                        ? 'admin.bank.list.empty'
+                        : 'admin.bank.list.empty_tmdb_only',
+                )}
+            />
+        );
     }
 
     return (

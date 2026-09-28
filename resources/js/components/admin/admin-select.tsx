@@ -30,6 +30,12 @@ type Props = SelectHTMLAttributes<HTMLSelectElement> & {
  * l'URL — partageable, rechargeable, indexé par l'historique du navigateur —
  * et il reste utilisable si le script ne charge pas.
  *
+ * Le fond et le texte des `<option>` sont posés explicitement : sous Windows,
+ * le menu natif n'hérite pas toujours du fond transparent du `<select>`, mais
+ * conserve sa couleur de texte, ce qui rendrait des libellés clairs illisibles
+ * sur le fond système clair. Les tokens `popover` gardent les deux thèmes
+ * cohérents sans imposer une couleur littérale.
+ *
  * Aucune couleur littérale, aucune taille en `px` : tout est token de thème.
  */
 export function AdminSelect({ options, className, ...props }: Props) {
@@ -37,12 +43,16 @@ export function AdminSelect({ options, className, ...props }: Props) {
         <select
             {...props}
             className={cn(
-                'h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm text-foreground shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50',
+                'h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm text-foreground shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50',
                 className,
             )}
         >
             {options.map((option) => (
-                <option key={option.value} value={option.value}>
+                <option
+                    key={option.value}
+                    value={option.value}
+                    className="bg-popover text-popover-foreground"
+                >
                     {option.label}
                 </option>
             ))}

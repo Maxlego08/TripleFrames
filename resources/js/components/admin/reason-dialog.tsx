@@ -28,7 +28,7 @@ type Props = {
     /** Un avertissement propre au geste, affiché au-dessus du motif. */
     notice?: string;
     reasonLabel: string;
-    /** Motif pré-rempli, modifiable (« Aucun visuel TMDB exploitable »). */
+    /** Motif pré-rempli, modifiable (« Aucune image exploitable »). */
     defaultReason?: string;
     submitLabel: string;
     /**

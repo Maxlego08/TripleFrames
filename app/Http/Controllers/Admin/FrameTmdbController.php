@@ -13,6 +13,7 @@ use App\Support\Tmdb\TmdbClient;
 use App\Support\Tmdb\TmdbErrorKind;
 use App\Support\Tmdb\TmdbException;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -33,17 +34,21 @@ use Inertia\Inertia;
  *    dans la liste que l'éditeur tient en cache
  *    ({@see FrameBankController::cachedBackdrops()}, § 6.2) — jamais une
  *    affiche ni un logo ;
- * 2. **Dimensions, avant tout téléchargement** : un visuel de moins de
+ * 2. **Langue, avant tout téléchargement** : un backdrop auquel TMDB attache
+ *    une langue peut contenir du texte ; l'éditeur ne le propose pas, et un
+ *    envoi forgé ou une grille périmée ne le fait pas entrer non plus
+ *    (`admin.frame.tmdb.with_text`, D39 du 28/09) ;
+ * 3. **Dimensions, avant tout téléchargement** : un visuel de moins de
  *    `FrameGeometry::GAME_WIDTH` de large, sans hauteur, en portrait, ou
  *    sur lequel aucun cadre n'est admis, échouerait au job en
  *    `source_too_small` ou `source_aspect` après avoir déposé des octets
  *    inutiles ;
- * 3. **Plancher à double borne** sur la hauteur de master tirée des
+ * 4. **Plancher à double borne** sur la hauteur de master tirée des
  *    métadonnées (`FrameGeometry::masterHeightFor()`, `violation()`) : la
  *    requête ne connaît que la largeur ;
- * 4. **Téléchargement** de l'original par le serveur, plafonné — un échec ne
+ * 5. **Téléchargement** de l'original par le serveur, plafonné — un échec ne
  *    crée aucune frame ;
- * 5. **Ajout** par {@see AddFrame::fromTmdb()}, dédoublonné sous verrou.
+ * 6. **Ajout** par {@see AddFrame::fromTmdb()}, dédoublonné sous verrou.
  *
  * Retour arrière avec le toast `admin.frame.flash.queued`, **sans chemin ni
  * empreinte** : le curateur n'attend jamais le job, il enchaîne (§ 6.1).
@@ -64,6 +69,15 @@ class FrameTmdbController extends Controller
         $filePath = $request->tmdbFilePath();
 
         $image = $this->backdrop($tmdb, $movie, $filePath);
+
+        if (! $image['language_neutral']) {
+            // Le refus ne propose la capture que si ce site l'offre.
+            throw ValidationException::withMessages([
+                'tmdb_file_path' => Config::boolean('catalog.curation.capture_enabled', true)
+                    ? __('admin.frame.tmdb.with_text')
+                    : __('admin.frame.tmdb.with_text_no_capture'),
+            ]);
+        }
 
         if (! FrameGeometry::acceptsSource($image['width'], $image['height'], $limits)) {
             throw ValidationException::withMessages([
@@ -114,8 +128,10 @@ class FrameTmdbController extends Controller
      * Un film sans identifiant TMDB (catalogue de démonstration) n'a aucun
      * visuel proposé, et un identifiant que TMDB ne connaît plus non plus :
      * dans les deux cas, le chemin n'est pas un backdrop du film. La liste
-     * est celle que l'éditeur affiche, en cache (§ 6.2) : une liste un peu
-     * ancienne est inoffensive, un chemin de fichier TMDB restant valide.
+     * est celle dont l'éditeur tire sa grille, en cache (§ 6.2) : une liste
+     * un peu ancienne est inoffensive, un chemin de fichier TMDB restant
+     * valide. Elle garde les backdrops auxquels TMDB attache une langue, que
+     * la grille ne propose pas : `store()` les refuse d'un motif propre.
      *
      * @return array{file_path: string, width: int, height: int, language_neutral: bool}
      *

@@ -171,7 +171,7 @@ return [
             'steps' => [
                 'heading' => 'Le parcours d’un film',
                 'open' => 'Ouvrez le film suivant de la file de curation. Les films entamés viennent d’abord : vous reprenez là où vous vous étiez arrêté.',
-                'crop' => 'Dans la banque d’images, choisissez un visuel, cadrez-le, choisissez son niveau, puis ajoutez l’image. Elle part en traitement : passez au visuel suivant sans l’attendre.',
+                'crop' => 'Dans la banque d’images, ouvrez un visuel TMDB — ou, quand l’écran le propose, envoyez une capture : une image du film prise par vous, avec son minutage dans le film —, cadrez l’image, choisissez son niveau, puis ajoutez-la. Elle part en traitement : passez à la suivante sans l’attendre.',
                 'review' => 'Une fois l’image traitée, passez-la en revue sur son rendu final : une revue conforme la publie.',
                 'publish' => 'Quand le contenu du film est vérifié et que les niveaux 1, 3 et 5 ont chacun une image en jeu, publiez le film.',
                 'next' => '« Film suivant » vous mène au prochain film de la file.',
@@ -214,7 +214,7 @@ return [
         ],
         'set_aside' => [
             'heading' => 'Écarter un film ou une image',
-            'movie' => 'Un film incurable, sans aucun visuel TMDB exploitable, sort de la file par « Écarter le film », avec un motif obligatoire inscrit au journal. Rien n’est perdu : un film écarté peut toujours être curé, puis publié.',
+            'movie' => 'Un film incurable — aucun visuel TMDB exploitable, et aucune capture possible — sort de la file par « Écarter le film », avec un motif obligatoire inscrit au journal. Rien n’est perdu : un film écarté peut toujours être curé, puis publié.',
             'unpublish_movie' => 'Dépublier un film publié le sort du vivier, motif obligatoire ; ses images restent publiées. Il revient en jeu par « Republier le film ».',
             'frame' => 'Écarter une image jamais publiée la met de côté pour de bon : elle ne repasse jamais en revue, et pour réutiliser son visuel, on ajoute une nouvelle variante. Dépublier une image publiée la sort du jeu ; elle y revient par une nouvelle revue.',
             'coverage' => 'Si le geste retire à un film publié sa dernière image jouable au niveau 1, 3 ou 5, l’écran le dit avant confirmation : le film reste publié, mais incomplet, et l’écran annonce jusqu’à combien d’images par manche il reste jouable.',
@@ -1245,7 +1245,7 @@ return [
             'title' => 'Écarter le film',
             'description' => 'Le film sort de la file de curation sans être publié. Rien n’est perdu : curé puis publié plus tard, il fera sa première publication.',
             'reason' => 'Motif de la mise à l’écart',
-            'default_reason' => 'Aucun visuel TMDB exploitable',
+            'default_reason' => 'Aucune image exploitable',
             'submit' => 'Écarter le film',
             'flash' => 'Film écarté : il sort de la file de curation.',
         ],
@@ -1293,24 +1293,67 @@ return [
         /*
         | Ajout depuis un visuel TMDB (spec 20 § 5.3). Chaque refus s’affiche
         | sous le visuel ou sous le cadre, et aucune image n’est créée.
+        | `with_text` : un backdrop auquel TMDB attache une langue, refusé
+        | avant tout téléchargement (D39 du 28/09) — la grille ne le propose
+        | pas, seul un envoi forgé ou une grille périmée l’atteint.
         | `duplicate` : même visuel ET même cadre qu’une image déjà dans la
         | banque du film — une même source recadrée autrement reste permise.
         */
         'tmdb' => [
             'not_a_backdrop' => 'Ce visuel ne fait pas partie des visuels de ce film proposés par TMDB : choisissez-en un dans la grille. Une affiche ou un logo ne devient jamais une image de jeu.',
+            'with_text' => 'Ce visuel peut contenir du texte : TMDB lui attache une langue. Choisissez un visuel sans texte, ou envoyez une capture.',
+            // Même refus quand l'envoi de captures est fermé sur ce site :
+            // il ne propose pas un geste que l'écran n'offre pas.
+            'with_text_no_capture' => 'Ce visuel peut contenir du texte : TMDB lui attache une langue. Choisissez un visuel sans texte.',
             'download_failed' => 'TMDB n’a pas pu fournir ce visuel (service indisponible ou connexion interrompue) : aucune image n’a été créée. Réessayez dans un instant ; si l’échec persiste, signalez-le à l’administrateur du site.',
             'too_large' => 'Ce visuel est plus lourd que ce que le serveur accepte de télécharger : aucune image n’a été créée. Choisissez un autre visuel du film.',
             'duplicate' => 'Cette image existe déjà dans la banque du film : même visuel, même cadre. Déplacez ou redimensionnez le cadre pour créer une autre variante.',
         ],
 
         /*
-        | Voie capture (spec 20 § 5.4), fermée au jalon 1 faute d’arbitrage sur
-        | sa licéité. `disabled` motive le refus du serveur ; `disabled_notice`
-        | explique l’attente à la place du bouton absent.
+        | Voie capture (spec 20 § 5.4, lot L20-33), ouverte au jalon 1 (D38 du
+        | 28/09) ; un site peut la fermer. `disabled` motive alors le refus du
+        | serveur, et `disabled_notice` le dit à la place du bouton absent —
+        | tous deux neutres : ils ne nomment ni la cause ni le réglage.
+        | `timecode` refuse un minutage absent ou hors de la forme h:mm:ss ;
+        | `duplicate` : même capture ET même cadre qu’une image déjà dans la
+        | banque du film.
+        |
+        | `ui.*` : l’écran de la capture, dans le recadreur de la banque.
+        | `too_small` : `:width`, la largeur d’une image de jeu ; `too_heavy` :
+        | `:max`, le plafond d’un envoi en Ko. `timecode_invalid` est le refus
+        | du navigateur, avant tout envoi ; `timecode_pending` annonce qu’un
+        | raccourci `1` à `5` a posé le niveau (`:level`, `:label`) mais que
+        | l’envoi attend un minutage conforme ; `opened` et `sent` sont
+        | annoncés par la région d’état du recadreur.
         */
         'capture' => [
-            'disabled' => 'L’ajout d’une capture personnelle est fermé : seuls les visuels TMDB du film peuvent devenir des images de jeu.',
-            'disabled_notice' => 'L’ajout d’une capture personnelle est désactivé dans l’attente d’un avis juridique sur sa licéité. En attendant, seuls les visuels TMDB du film peuvent devenir des images de jeu ; un film sans visuel exploitable s’écarte.',
+            'disabled' => 'L’ajout d’une capture est fermé sur ce site : seuls les visuels TMDB du film peuvent devenir des images de jeu.',
+            'disabled_notice' => 'L’envoi de captures est fermé sur ce site : seuls les visuels TMDB du film peuvent devenir des images de jeu.',
+            'timecode' => 'Indiquez le minutage de l’image dans le film, en heures, minutes et secondes : par exemple 0:12:34, ou 1:02:03 au-delà d’une heure.',
+            'duplicate' => 'Cette image existe déjà dans la banque du film : même capture, même cadre. Déplacez ou redimensionnez le cadre pour créer une autre variante.',
+            'ui' => [
+                'heading' => 'Envoyer une capture',
+                'description' => 'Une capture est une image du film que vous avez prise vous-même. Son minutage dans le film est obligatoire : il signe la source que votre revue déclarera.',
+                'choose' => 'Choisir une image',
+                'paste_hint' => 'ou collez-la depuis le presse-papiers (Ctrl + V)',
+                'preparing' => 'Préparation de l’image…',
+                'unreadable' => 'Cette image n’a pas pu être lue : choisissez un autre fichier d’image, ou copiez-la de nouveau.',
+                'too_small' => 'Cette image est en portrait, fait moins de :width pixels de large, ou ne laisse place à aucun cadre admis : elle ne peut pas donner une image de jeu. Choisissez une capture plus grande, en paysage.',
+                'too_heavy' => 'Même compressée au plus bas, cette image dépasse :max Ko, le poids maximal d’un envoi : choisissez une capture moins chargée.',
+                'unsupported' => 'Ce navigateur ne sait pas préparer l’image au format attendu : utilisez un navigateur récent, sur ordinateur.',
+                'timecode_label' => 'Minutage dans le film',
+                'timecode_hint' => 'Heures, minutes et secondes : par exemple 0:12:34.',
+                'timecode_invalid' => 'Saisissez le minutage en heures, minutes et secondes, par exemple 0:12:34 : les minutes et les secondes vont de 00 à 59.',
+                'timecode_pending' => 'Niveau :level — :label choisi. L’ajout attend le minutage de la capture.',
+                'opened' => 'Capture ouverte dans le cadre : choisissez son niveau et saisissez son minutage.',
+                'sent' => 'Capture ajoutée : elle part en traitement.',
+                'discard' => 'Abandonner la capture',
+                // Un pas de la bande pendant qu'une capture est ouverte : la
+                // capture n'est pas dans la bande et reste ouverte.
+                'strip_locked' => 'La capture reste ouverte : choisissez un visuel dans la grille, ou abandonnez la capture, pour passer à un visuel TMDB.',
+                'source_label' => 'Capture',
+            ],
         ],
 
         /*
@@ -1396,7 +1439,9 @@ return [
     | l’alternative non gestuelle du principe 8 restent tous visibles.
     | `:steps` y est le nombre de pas d’un geste fait avec Maj.
     | Les refus du plancher sont ceux de `validation.crop.*`, communs au
-    | recadreur et au serveur.
+    | recadreur et au serveur. `image_failed_description` dit l’échec d’un
+    | visuel TMDB ; `image_failed_capture`, celui d’une capture locale, que
+    | seul un nouvel envoi rouvre.
     */
     'cropper' => [
         'region_label' => 'Cadre de l’image de jeu',
@@ -1417,6 +1462,7 @@ return [
         'image_loading' => 'Chargement du visuel…',
         'image_failed' => 'Le visuel n’a pas pu être affiché',
         'image_failed_description' => 'Le serveur d’images de TMDB n’a pas répondu, ou la connexion est interrompue. Réessayez ; si l’échec persiste, choisissez un autre visuel du film.',
+        'image_failed_capture' => 'La capture n’a pas pu être affichée dans le cadre : abandonnez-la, puis choisissez ou collez-la de nouveau.',
         'retry' => 'Réessayer',
     ],
 
@@ -1486,13 +1532,17 @@ return [
     |
     | `backdrop_alt` : `:index` et `:count` situent le visuel dans la grille ;
     | `backdrop_used` : `:levels`, les niveaux des images qui en proviennent ;
+    | `backdrops_excluded` : `:count`, le nombre de visuels que TMDB attache à
+    | une langue, écartés de la grille (D39 du 28/09), choisi par `tChoice` ;
     | `list.image` et `list.actions` : `:index` est le rang de l'image dans
     | son niveau. `preview.*` : `:count` est un nombre d'images par manche,
     | `:tier` un rang de palier, `:levels` une liste de niveaux.
     */
     'bank' => [
         'title' => 'Banque d’images',
-        'description' => 'Ajoutez des images depuis les visuels TMDB du film, classez-les de 1 à 5, puis suivez leur traitement et la couverture du film. Une image n’entre en jeu qu’après une revue de son rendu final.',
+        'description' => 'Ajoutez des images depuis les visuels TMDB du film ou par une capture, classez-les de 1 à 5, puis suivez leur traitement et la couverture du film. Une image n’entre en jeu qu’après une revue de son rendu final.',
+        // Variante quand l'envoi de captures est fermé sur ce site.
+        'description_tmdb_only' => 'Ajoutez des images depuis les visuels TMDB du film, classez-les de 1 à 5, puis suivez leur traitement et la couverture du film. Une image n’entre en jeu qu’après une revue de son rendu final.',
         'back' => 'Retour à la fiche du film',
         'retry' => 'Réessayer',
         'cancel' => 'Annuler',
@@ -1503,21 +1553,23 @@ return [
 
         'backdrops' => [
             'heading' => 'Visuels TMDB du film',
-            'description' => 'Les visuels sans texte viennent d’abord. Une seule tabulation entre dans la grille : les flèches passent d’un visuel à l’autre, Entrée ou Espace ouvre le visuel dans le cadre.',
+            'description' => 'Seuls sont proposés les visuels auxquels TMDB n’attache aucune langue : les autres peuvent contenir du texte. Une seule tabulation entre dans la grille : les flèches passent d’un visuel à l’autre, Entrée ou Espace ouvre le visuel dans le cadre.',
             'list_label' => 'Visuels TMDB proposés',
             'loading' => 'Chargement des visuels TMDB…',
         ],
-        'no_backdrops' => 'Aucun visuel TMDB à proposer pour ce film : TMDB n’en fournit aucun, ou le film n’a pas d’identifiant TMDB (catalogue de démonstration).',
+        'no_backdrops' => 'Aucun visuel TMDB à proposer : TMDB n’en fournit aucun pour ce film, ou le film n’a pas d’identifiant TMDB (catalogue de démonstration).',
+        'no_backdrops_all_text' => 'Aucun visuel TMDB sans texte à proposer : TMDB attache une langue à tous les visuels de ce film.',
+        'backdrops_excluded' => ':count visuel écarté : TMDB lui attache une langue, il peut contenir du texte.|:count visuels écartés : TMDB leur attache une langue, ils peuvent contenir du texte.',
         'backdrops_failed' => 'Les visuels du film n’ont pas pu être obtenus auprès de TMDB (service indisponible ou connexion interrompue). Réessayez dans un instant.',
         'backdrop_alt' => 'Visuel :index sur :count',
         'backdrop_used' => 'Déjà utilisé (niveaux :levels)',
         'backdrop_opened' => 'Ouvert dans le cadre',
-        'backdrop_with_language' => 'Peut contenir du texte',
 
         'cropper' => [
             'heading' => 'Recadrer et classer',
             'description' => 'Le cadre s’ouvre sur le plus grand cadre admis, centré. Choisissez le niveau, puis ajoutez l’image : elle part en traitement et vous passez à un autre visuel sans attendre.',
-            'empty' => 'Choisissez un visuel dans la grille pour l’ouvrir dans le cadre.',
+            'empty' => 'Choisissez un visuel dans la grille, ou envoyez une capture, pour l’ouvrir dans le cadre.',
+            'empty_tmdb_only' => 'Choisissez un visuel dans la grille pour l’ouvrir dans le cadre.',
             'close' => 'Fermer ce visuel',
             'add' => 'Ajouter à la banque',
             'adding' => 'Ajout en cours…',
@@ -1551,7 +1603,8 @@ return [
         'list' => [
             'heading' => 'Banque du film',
             'description' => 'Les images du film, groupées par niveau, avec leur état. Une image rejetée en revue peut être re-recadrée ou écartée ; une image écartée ne revient jamais en revue.',
-            'empty' => 'Aucune image : ajoutez-en une depuis les visuels TMDB du film.',
+            'empty' => 'Aucune image : ajoutez-en une depuis les visuels TMDB du film, ou par une capture.',
+            'empty_tmdb_only' => 'Aucune image : ajoutez-en une depuis les visuels TMDB du film.',
             'level_empty' => 'Aucune image à ce niveau.',
             'image' => 'Image :index du niveau :level',
             'actions' => 'Gestes sur l’image :index du niveau :level',
@@ -2283,9 +2336,12 @@ return [
     | `App\Support\Frames\CropViolation`, qui les nomme
     | (`CropViolation::translationKey()`), lues par le contrôleur d’ajout et par
     | le retour immédiat du recadreur (spec 20 § 5.2 et § 6.3). Et
-    | `frame_source.dimensions`, le refus d’un visuel trop étroit ou en
-    | portrait avant tout téléchargement (§ 5.3), `:width` étant la largeur
-    | d’une image de jeu.
+    | `frame_source.dimensions`, le refus d’un visuel ou d’une capture trop
+    | étroits ou en portrait avant tout dépôt d’octets (§ 5.3, § 5.4),
+    | `:width` étant la largeur d’une image de jeu ; `frame_source.max` et
+    | `frame_source.mimetypes`, les refus d’une capture reçue (§ 5.4),
+    | `:max` étant le plafond d’un envoi en Ko — le même message couvre un
+    | fichier que le serveur a refusé avant toute validation.
     */
     'validation' => [
         'search' => 'recherche',
@@ -2317,6 +2373,8 @@ return [
         'account_state' => 'état du compte',
         'email' => 'adresse',
         'tmdb_file_path' => 'visuel TMDB',
+        'capture_source' => 'capture',
+        'source_timecode' => 'minutage',
         'frame_level' => 'niveau',
         'crop_rect' => 'cadre',
         'crop_seconds' => 'temps de recadrage',
@@ -2335,6 +2393,10 @@ return [
         'group_note' => 'note',
         'frame_source' => [
             'dimensions' => 'Ce visuel est en portrait, fait moins de :width pixels de large, ou ne laisse place à aucun cadre admis : il ne peut pas donner une image de jeu. Choisissez un autre visuel du film.',
+            'max' => 'Cette capture dépasse :max Ko, le poids maximal d’un envoi : aucune image n’a été créée. Rouvrez-la depuis l’écran, qui la prépare sous ce poids avant de l’envoyer.',
+            'mimetypes' => 'Cette capture n’est pas au format attendu (WebP) : aucune image n’a été créée. Rouvrez-la depuis l’écran, qui la prépare dans ce format avant de l’envoyer ; si l’échec persiste, utilisez un navigateur récent, sur ordinateur.',
+            'animated' => 'Cette capture est une image animée : seule une image fixe peut devenir une image de jeu. Aucune image n’a été créée. Rouvrez-la depuis l’écran, qui la prépare en image fixe.',
+            'upload_failed' => 'La capture n’a pas pu être reçue par le serveur : aucune image n’a été créée. Réessayez ; si l’échec persiste, signalez-le à l’administrateur du site.',
         ],
         'crop' => [
             'aspect' => 'Le cadre doit être exactement au format 16:9.',

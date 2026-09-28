@@ -12,8 +12,9 @@ use Illuminate\Validation\Validator;
  * Le rectangle de recadrage, tel qu'un formulaire du back-office le poste —
  * contrat C9, spec 20 § 5.2 et § 5.3.
  *
- * Partagé par les deux requêtes qui portent un cadre : l'ajout d'une variante
- * depuis TMDB (`FrameTmdbStoreRequest`) et le re-recadrage en place
+ * Partagé par les trois requêtes qui portent un cadre : l'ajout d'une variante
+ * depuis TMDB (`FrameTmdbStoreRequest`) ou par capture
+ * (`FrameCaptureStoreRequest`), et le re-recadrage en place
  * (`FrameCropUpdateRequest`). Réservé aux `FormRequest` : les accesseurs
  * lisent l'entrée validée par `$this->integer()`.
  *

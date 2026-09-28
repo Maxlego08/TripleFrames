@@ -16,6 +16,7 @@ use App\Support\Catalog\AnswerKeyProjector;
 use App\Support\Curation\ExclusionGrid;
 use App\Support\Curation\ReviewQueue;
 use App\Support\Frames\FrameGeometry;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Http;
 use Tests\Fixtures\TmdbFixture;
@@ -362,15 +363,22 @@ function adminRoutesMatrix(): array
             redirect: fn (array $parameters): string => route('admin.catalog.show', $parameters),
         ),
 
-        // Ligne 14 — la voie capture : 403 motivé tant qu'elle est fermée,
-        // pour tous les rôles, avant toute résolution de requête (§ 5.4).
+        // Ligne 14 — ajouter une variante par capture (§ 5.4, L20-33) :
+        // ouverte par défaut (D38 du 28/09), même seuil que la ligne 13. La
+        // source est un WebP synthétique et le traitement ne part pas
+        // (`Bus::fake()`) : le 302 est l'ajout lui-même, retour à la page
+        // d'où il est posté. Le refus motivé d'une voie fermée est tenu par
+        // les assertions de policy d'`AuthorizationMatrixTest` et par
+        // `FrameCaptureStoreTest`.
         'admin.catalog.frames.capture.store' => adminRoutesRow(
             row: 14,
             method: 'POST',
             guards: ['can:createFromCapture,'.Frame::class.',movie'],
-            curator: 403,
-            admin: 403,
-            parameters: fn (): array => ['movie' => Movie::factory()->create()->getKey()],
+            curator: 302,
+            admin: 302,
+            parameters: fn (): array => adminRoutesMovieGestureParameters(Movie::factory()->create()),
+            payload: fn (): array => adminRoutesCaptureFramePayload(),
+            redirect: fn (array $parameters): string => route('admin.catalog.show', $parameters),
         ),
 
         // Ligne 15 — re-recadrer et relancer (C9) : `FramePolicy::update`,
@@ -768,6 +776,28 @@ function adminRoutesTmdbFramePayload(): array
 
     return [
         'tmdb_file_path' => '/6a7b8c9d0e1f2a3b4c5d6e7f80912a3b.jpg',
+        'frame_level' => FrameLevel::Level3->value,
+        'crop_x' => $crop->x,
+        'crop_y' => $crop->y,
+        'crop_width' => $crop->width,
+        'crop_height' => $crop->height,
+    ];
+}
+
+/**
+ * Une capture conforme, telle que le navigateur l'enverrait : un WebP
+ * synthétique déjà à la largeur du master (1920 × 1080), son minutage, un
+ * niveau, et le cadre par défaut de son master.
+ *
+ * @return array<string, mixed>
+ */
+function adminRoutesCaptureFramePayload(): array
+{
+    $crop = FrameGeometry::defaultCrop(FrameGeometry::masterHeightFor(1920, 1080), PlatformLimits::current());
+
+    return [
+        'source' => UploadedFile::fake()->createWithContent('capture.webp', SourceImages::webp(1920, 1080)),
+        'source_timecode' => '0:12:34',
         'frame_level' => FrameLevel::Level3->value,
         'crop_x' => $crop->x,
         'crop_y' => $crop->y,

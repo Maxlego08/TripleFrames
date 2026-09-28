@@ -518,15 +518,17 @@ export type AdminFrameLimits = {
 
 /**
  * Un visuel TMDB proposé par l'éditeur (spec 20 § 6.2) : les backdrops seuls,
- * sans texte d'abord. `file_path` est la référence que l'ajout poste ;
- * `thumb_url` (`w300`) et `image_url` (`w1280`) pointent le serveur d'images
- * de TMDB, dans le navigateur du curateur seulement.
+ * et parmi eux ceux auxquels TMDB n'attache aucune langue (D39 du 28/09 : les
+ * autres peuvent contenir du texte, ne sont pas proposés et se comptent dans
+ * `AdminBackdropSet.excluded`), dans l'ordre de TMDB. `file_path` est la
+ * référence que l'ajout poste ; `thumb_url` (`w300`) et `image_url` (`w1280`)
+ * pointent le serveur d'images de TMDB, dans le navigateur du curateur
+ * seulement.
  */
 export type AdminBackdrop = {
     file_path: string;
     width: number;
     height: number;
-    language_neutral: boolean;
     thumb_url: string;
     image_url: string;
     /** Motif d'un visuel proposé désactivé — le refus que l'ajout opposerait. */
@@ -538,9 +540,14 @@ export type AdminBackdrop = {
 /**
  * La prop différée `backdrops` : un état, jamais une page d'erreur. `failed`
  * et `rate_limited` se rejouent d'un bouton ; `not_configured` non.
+ *
+ * `excluded` compte les backdrops que TMDB attache à une langue, écartés de
+ * `items` (D39 du 28/09) — 0 sur une panne, où rien n'a été compté. `empty`
+ * avec `excluded > 0` : tous les visuels du film sont écartés.
  */
 export type AdminBackdropSet = {
     status: 'ready' | 'empty' | 'failed' | 'rate_limited' | 'not_configured';
+    excluded: number;
     items: AdminBackdrop[];
 };
 

@@ -29,7 +29,6 @@ function backdrop(name: string, options: BackdropOptions = {}): AdminBackdrop {
         file_path: `/${name}.jpg`,
         width: 3840,
         height: 2160,
-        language_neutral: true,
         thumb_url: `w300/${name}.jpg`,
         image_url: `w1280/${name}.jpg`,
         refusal:

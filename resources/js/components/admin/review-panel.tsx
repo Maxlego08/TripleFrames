@@ -159,7 +159,7 @@ export function ReviewPanel({
             // pour que `Entrée` y vaille « Conforme, publier ».
             tabIndex={-1}
             onKeyDown={handleShortcut}
-            className="flex flex-col gap-6 rounded-lg border border-border bg-card p-4 text-card-foreground outline-none"
+            className="flex flex-col gap-4 rounded-lg border border-border bg-card p-4 text-card-foreground outline-none"
         >
             <h2
                 id={headingId}
@@ -176,9 +176,10 @@ export function ReviewPanel({
             <GameConditionsPreview
                 gameUrl={frame.game_url}
                 level={frame.frame_level}
+                compact
             />
 
-            <div className="grid gap-6 xl:grid-cols-2">
+            <div className="grid gap-4 xl:grid-cols-2">
                 <div className="flex flex-col gap-4">
                     <dl className="grid grid-cols-1 gap-x-4 gap-y-2 text-sm sm:grid-cols-3">
                         <dt className="font-medium text-muted-foreground">
@@ -300,7 +301,7 @@ export function ReviewPanel({
                     onError={(errors) => onRefused(refusalMessages(errors))}
                     onStart={() => setSending(true)}
                     onFinish={() => setSending(false)}
-                    className="flex flex-col gap-4"
+                    className="flex flex-col gap-3"
                 >
                     {({ processing, errors }) => {
                         const messages = refusalMessages(errors);
@@ -336,67 +337,13 @@ export function ReviewPanel({
                                     />
                                 ))}
 
-                                <section
-                                    aria-labelledby={itemsHeadingId}
-                                    className="flex flex-col gap-3"
-                                >
-                                    <div className="flex flex-col gap-1">
-                                        <h3
-                                            id={itemsHeadingId}
-                                            className="text-sm font-semibold"
-                                        >
-                                            {t(
-                                                'admin.review.panel.items.heading',
-                                                {
-                                                    version: frame.grid_version,
-                                                },
-                                            )}
-                                        </h3>
-                                        <p className="text-sm text-muted-foreground">
-                                            {failing
-                                                ? t(
-                                                      'admin.review.panel.fail_hint',
-                                                  )
-                                                : t(
-                                                      'admin.review.panel.items.description',
-                                                      {
-                                                          level: frame.frame_level,
-                                                      },
-                                                  )}
-                                        </p>
-                                    </div>
-
-                                    <ul className="flex flex-col gap-3">
-                                        {frame.items.map((item) => (
-                                            <ReviewItem
-                                                key={item.slug}
-                                                item={item}
-                                                failing={failing}
-                                                checked={failed.includes(
-                                                    item.slug,
-                                                )}
-                                                disabled={processing}
-                                                onCheckedChange={(checked) =>
-                                                    toggle(item.slug, checked)
-                                                }
-                                            />
-                                        ))}
-                                    </ul>
-                                </section>
-
-                                {messages.length > 0 && (
-                                    <Alert variant="destructive">
-                                        <TriangleAlertIcon aria-hidden />
-                                        <AlertDescription>
-                                            {messages.map((message) => (
-                                                <p key={message}>{message}</p>
-                                            ))}
-                                        </AlertDescription>
-                                    </Alert>
-                                )}
-
+                                {/*
+                                 * La décision ouvre la colonne de contrôle :
+                                 * elle reste dans le premier écran de revue,
+                                 * avant la grille détaillée qui peut s'allonger.
+                                 */}
                                 {failing ? (
-                                    <div className="flex flex-col gap-2">
+                                    <div className="flex flex-col gap-2 border-b border-border pb-3">
                                         {rejectBlocked && (
                                             <p
                                                 id={blockedHintId}
@@ -455,7 +402,7 @@ export function ReviewPanel({
                                         </div>
                                     </div>
                                 ) : (
-                                    <div className="flex flex-col gap-2">
+                                    <div className="flex flex-col gap-2 border-b border-border pb-3">
                                         <div className="flex flex-wrap gap-2">
                                             <Button
                                                 type="submit"
@@ -506,6 +453,65 @@ export function ReviewPanel({
                                         </p>
                                     </div>
                                 )}
+
+                                {messages.length > 0 && (
+                                    <Alert variant="destructive">
+                                        <TriangleAlertIcon aria-hidden />
+                                        <AlertDescription>
+                                            {messages.map((message) => (
+                                                <p key={message}>{message}</p>
+                                            ))}
+                                        </AlertDescription>
+                                    </Alert>
+                                )}
+
+                                <section
+                                    aria-labelledby={itemsHeadingId}
+                                    className="flex flex-col gap-3"
+                                >
+                                    <div className="flex flex-col gap-1">
+                                        <h3
+                                            id={itemsHeadingId}
+                                            className="text-sm font-semibold"
+                                        >
+                                            {t(
+                                                'admin.review.panel.items.heading',
+                                                {
+                                                    version: frame.grid_version,
+                                                },
+                                            )}
+                                        </h3>
+                                        <p className="text-sm text-muted-foreground">
+                                            {failing
+                                                ? t(
+                                                      'admin.review.panel.fail_hint',
+                                                  )
+                                                : t(
+                                                      'admin.review.panel.items.description',
+                                                      {
+                                                          level: frame.frame_level,
+                                                      },
+                                                  )}
+                                        </p>
+                                    </div>
+
+                                    <ul className="flex flex-col gap-3">
+                                        {frame.items.map((item) => (
+                                            <ReviewItem
+                                                key={item.slug}
+                                                item={item}
+                                                failing={failing}
+                                                checked={failed.includes(
+                                                    item.slug,
+                                                )}
+                                                disabled={processing}
+                                                onCheckedChange={(checked) =>
+                                                    toggle(item.slug, checked)
+                                                }
+                                            />
+                                        ))}
+                                    </ul>
+                                </section>
                             </>
                         );
                     }}

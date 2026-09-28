@@ -255,6 +255,16 @@ final class FrameImageProcessor
             ));
         }
 
+        // Une animation est refusée AVANT le décodage : `readImageBlob` décode
+        // chaque image et déborde sur le disque (quelque 11 Mo de cache de
+        // pixels par image en 1920 × 1080), si bien qu'un WebP animé de
+        // quelques Ko compté en milliers d'images remplirait le disque d'une
+        // machine partagée avant qu'aucune limite ne tombe. Le « ping » lit
+        // les seuls en-têtes et compte les images sans cache de pixels.
+        if (self::countImages($source) > 1) {
+            throw FrameProcessingException::because(FrameProcessingFailure::SourceAnimated, 'Source animée.');
+        }
+
         $image = self::decode($source);
 
         try {
@@ -494,6 +504,27 @@ final class FrameImageProcessor
         }
 
         $frame->refresh();
+    }
+
+    /**
+     * Le nombre d'images d'une source, lu par un « ping » — les en-têtes
+     * seuls, sans décodage ni cache de pixels —, sous les limites posées.
+     *
+     * @throws FrameProcessingException
+     */
+    private static function countImages(string $bytes): int
+    {
+        return self::imagick(FrameProcessingFailure::SourceUnreadable, 'lecture des en-têtes', static function () use ($bytes): int {
+            $probe = new Imagick;
+
+            try {
+                $probe->pingImageBlob($bytes);
+
+                return $probe->getNumberImages();
+            } finally {
+                $probe->clear();
+            }
+        });
     }
 
     /**

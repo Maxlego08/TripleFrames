@@ -112,7 +112,7 @@ class FrameBankController extends Controller
                 'frameCropMinWidthPx' => PlatformLimits::frameCropMinWidthPx(),
                 'frameUploadMaxKilobytes' => PlatformLimits::frameUploadMaxKilobytes(),
             ],
-            'captureEnabled' => Config::boolean('catalog.curation.capture_enabled', false),
+            'captureEnabled' => Config::boolean('catalog.curation.capture_enabled', true),
             'pollSeconds' => Config::integer('catalog.curation.poll_seconds'),
             // La cadence du battement de débit (§ 10.1) : l'éditeur est une
             // page du film, où le temps actif se mesure.
@@ -205,18 +205,25 @@ class FrameBankController extends Controller
 
     /**
      * Les visuels proposés : les **backdrops seuls** — affiches et logos ne
-     * sont jamais candidats (§ 6.2) —, sans texte d'abord, ordre de TMDB
-     * conservé à l'intérieur. Un visuel trop étroit ou en portrait reste
-     * proposé, désactivé, avec le motif que l'ajout opposerait.
+     * sont jamais candidats (§ 6.2) —, et parmi eux **ceux auxquels TMDB
+     * n'attache aucune langue**, dans l'ordre de TMDB (D39 du 28/09). Un
+     * visuel auquel TMDB attache une langue peut porter du texte : il n'est
+     * pas proposé, et l'ajout le refuse ; `excluded` dit combien le sont,
+     * pour que l'écran ne présente jamais une liste raccourcie comme la liste
+     * entière. Si tous le sont, l'état est `empty`, avec leur nombre.
      *
-     * @return array{status: string, items: list<array<string, mixed>>}
+     * Un visuel trop étroit ou en portrait reste proposé, désactivé, avec le
+     * motif que l'ajout opposerait. `excluded` vaut 0 sur toute panne : rien
+     * n'a été compté.
+     *
+     * @return array{status: string, excluded: int, items: list<array<string, mixed>>}
      */
     private function backdrops(TmdbClient $tmdb, FrameBankSnapshot $bank): array
     {
         $movie = $bank->movie;
 
         if ($movie->tmdb_id === null) {
-            return ['status' => self::BACKDROPS_EMPTY, 'items' => []];
+            return ['status' => self::BACKDROPS_EMPTY, 'excluded' => 0, 'items' => []];
         }
 
         try {
@@ -236,29 +243,32 @@ class FrameBankController extends Controller
                     TmdbErrorKind::Unauthorized, TmdbErrorKind::ServerError, TmdbErrorKind::Transport,
                     TmdbErrorKind::Malformed, TmdbErrorKind::UnexpectedStatus, TmdbErrorKind::TooLarge => self::BACKDROPS_FAILED,
                 },
+                'excluded' => 0,
                 'items' => [],
             ];
         }
 
-        if ($backdrops === []) {
-            return ['status' => self::BACKDROPS_EMPTY, 'items' => []];
-        }
+        $proposed = array_values(array_filter(
+            $backdrops,
+            static fn (array $backdrop): bool => $backdrop['language_neutral'],
+        ));
+        $excluded = count($backdrops) - count($proposed);
 
-        $neutral = array_filter($backdrops, static fn (array $backdrop): bool => $backdrop['language_neutral']);
-        $tagged = array_filter($backdrops, static fn (array $backdrop): bool => ! $backdrop['language_neutral']);
+        if ($proposed === []) {
+            return ['status' => self::BACKDROPS_EMPTY, 'excluded' => $excluded, 'items' => []];
+        }
 
         $limits = PlatformLimits::current();
         $usedLevels = $bank->usedLevelsByFilePath();
         $items = [];
 
-        foreach ([...$neutral, ...$tagged] as $backdrop) {
+        foreach ($proposed as $backdrop) {
             $path = $backdrop['file_path'];
 
             $items[] = [
                 'file_path' => $path,
                 'width' => $backdrop['width'],
                 'height' => $backdrop['height'],
-                'language_neutral' => $backdrop['language_neutral'],
                 'thumb_url' => $tmdb->imageUrl($path, self::THUMBNAIL_SIZE),
                 'image_url' => $tmdb->imageUrl($path, self::DISPLAY_SIZE),
                 'refusal' => FrameGeometry::acceptsSource($backdrop['width'], $backdrop['height'], $limits)
@@ -268,7 +278,7 @@ class FrameBankController extends Controller
             ];
         }
 
-        return ['status' => self::BACKDROPS_READY, 'items' => $items];
+        return ['status' => self::BACKDROPS_READY, 'excluded' => $excluded, 'items' => $items];
     }
 
     /**
@@ -280,6 +290,11 @@ class FrameBankController extends Controller
      * cache : une panne lève, n'écrit rien, et « Réessayer » rappelle TMDB.
      * Des tableaux et jamais des objets : le cache ne désérialise aucune
      * classe (`cache.serializable_classes`).
+     *
+     * **Tous les backdrops y entrent**, ceux auxquels TMDB attache une langue
+     * compris (`language_neutral` faux) : la grille ne les propose pas mais
+     * les compte, et l'ajout les refuse d'un motif précis — « peut contenir
+     * du texte » — plutôt que de les dire étrangers au film (D39 du 28/09).
      *
      * **Le même ensemble sert à la vérification d'appartenance de l'ajout**
      * ({@see FrameTmdbController}, § 5.3) : ce que la grille propose est ce

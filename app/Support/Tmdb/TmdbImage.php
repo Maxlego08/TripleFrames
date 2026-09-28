@@ -45,10 +45,18 @@ final readonly class TmdbImage
     /**
      * Vrai si TMDB n'attache aucune langue au visuel — `iso_639_1` nul ou vide.
      *
-     * Lecture d'une propriété, jamais un verdict : qu'un visuel sans langue soit
-     * plus souvent dépourvu de texte est une régularité utile à la curation,
-     * mais la règle « aucun texte qui nomme le film » est un item de la grille
-     * d'exclusion, tranché par un humain sur l'image réelle.
+     * C'est le critère d'exclusion de D39 du 28/09 : un visuel auquel TMDB
+     * attache une langue porte, le plus souvent, un titre ou un texte
+     * incrusté, et rien d'autre ne permet de l'écarter avant qu'un humain
+     * l'ait sous les yeux. L'éditeur de la banque ne le propose donc pas (il
+     * le compte) et l'ajout le refuse. Le critère ne vaut pas verdict dans
+     * l'autre sens : un visuel sans langue peut encore porter un texte qui
+     * nomme le film, et l'item `no_identifying_text` de la grille d'exclusion
+     * continue de s'appliquer, sur l'image réelle, à ces visuels comme aux
+     * captures.
+     *
+     * Le filtre n'est appliqué ni ici ni par `TmdbClient` : il vit là où il se
+     * compte et se refuse, dans `App\Http\Controllers\Admin`.
      */
     public function isLanguageNeutral(): bool
     {

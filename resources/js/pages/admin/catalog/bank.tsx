@@ -15,10 +15,11 @@ import {
     TriangleAlertIcon,
     XIcon,
 } from 'lucide-react';
-import { useEffect, useEffectEvent, useRef, useState } from 'react';
+import { useEffect, useEffectEvent, useId, useRef, useState } from 'react';
 import type { RefObject } from 'react';
 import { flushSync } from 'react-dom';
 import { toast } from 'sonner';
+import FrameCaptureController from '@/actions/App/Http/Controllers/Admin/FrameCaptureController';
 import FrameTmdbController from '@/actions/App/Http/Controllers/Admin/FrameTmdbController';
 import {
     AvailabilityBadge,
@@ -33,6 +34,8 @@ import { AdminPageHeading } from '@/components/admin/admin-page-heading';
 import { BackdropGrid } from '@/components/admin/backdrop-grid';
 import type { BackdropGridHandle } from '@/components/admin/backdrop-grid';
 import { BackdropStrip } from '@/components/admin/backdrop-strip';
+import { CaptureSourcePicker } from '@/components/admin/capture-source-picker';
+import type { CapturePickerStatus } from '@/components/admin/capture-source-picker';
 import { CoverageMeter } from '@/components/admin/coverage-meter';
 import { FrameBankList } from '@/components/admin/frame-bank-list';
 import type {
@@ -53,6 +56,7 @@ import {
     usePublicationPreview,
 } from '@/components/admin/publish-dialog';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
     Card,
@@ -60,6 +64,8 @@ import {
     CardDescription,
     CardHeader,
 } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { useCurationHeartbeat } from '@/hooks/admin/use-curation-heartbeat';
 import { useThroughputShortcuts } from '@/hooks/admin/use-throughput-shortcuts';
@@ -67,6 +73,14 @@ import { useTranslations } from '@/hooks/use-translations';
 import { stripAfterSend, stripNeighbour } from '@/lib/admin/backdrop-strip';
 import type { StripDirection } from '@/lib/admin/backdrop-strip';
 import { BANK_WRITE_PROPS } from '@/lib/admin/bank-visits';
+import {
+    CAPTURE_FILE_NAME,
+    CAPTURE_MIME_TYPE,
+    normalizeCapture,
+    parseTimecode,
+    pickClipboardImage,
+} from '@/lib/admin/capture-encoder';
+import type { CaptureRefusal } from '@/lib/admin/capture-encoder';
 import { curationFiltersFromUrl } from '@/lib/admin/curation-query';
 import {
     applyCropCommand,
@@ -75,7 +89,8 @@ import {
     openCrop,
 } from '@/lib/admin/crop-state';
 import type { CropState } from '@/lib/admin/crop-state';
-import { masterHeightFor } from '@/lib/frame-geometry';
+import { formatInteger } from '@/lib/admin-format';
+import { FRAME_GEOMETRY, masterHeightFor } from '@/lib/frame-geometry';
 import { dashboard as adminDashboard } from '@/routes/admin';
 import {
     index as catalogIndex,
@@ -140,15 +155,92 @@ const PREVIEW_FRAME_PARAMETER = 'preview_frame';
 const CROPPER_KEY_SHORTCUTS = '1 2 3 4 5 PageUp PageDown [ ]';
 
 /**
- * Le visuel ouvert dans le cadre, et le cadre lui-même. `focusFrame` : le
+ * Ce qui est ouvert dans le cadre, et le cadre lui-même. `focusFrame` : le
  * cadre prend le focus en s'ouvrant — visuel voisin ou suivant ouvert depuis
- * le cadre ou après un envoi, « sans quitter le cadre » (§ 6.2, § 6.3).
+ * le cadre ou après un envoi, « sans quitter le cadre » (§ 6.2, § 6.3), ou
+ * capture tout juste préparée.
+ *
+ * - `tmdb` : un visuel TMDB de la grille ou de la bande (§ 5.3) ;
+ * - `capture` : une capture choisie ou collée (§ 5.4, D38 du 28/09), déjà
+ *   préparée par le navigateur — `blob` est le WebP qui partira, `objectUrl`
+ *   son URL d'objet, affichée dans le cadre et rendue au navigateur dès que
+ *   la capture est remplacée, fermée, envoyée ou l'écran quitté ; `key`
+ *   distingue deux captures successives, pour un formulaire vierge chacune.
  */
-type OpenedVisual = {
-    backdrop: AdminBackdrop;
-    state: CropState;
-    focusFrame: boolean;
-};
+type OpenedVisual =
+    | {
+          kind: 'tmdb';
+          backdrop: AdminBackdrop;
+          state: CropState;
+          focusFrame: boolean;
+      }
+    | {
+          kind: 'capture';
+          key: string;
+          blob: Blob;
+          objectUrl: string;
+          state: CropState;
+          focusFrame: boolean;
+      };
+
+/**
+ * Le chemin TMDB du visuel ouvert — ce que la grille et la bande situent —,
+ * `null` sans visuel ouvert ou pour une capture, qui n'est dans aucune des
+ * deux.
+ */
+function openedPath(opened: OpenedVisual | null): string | null {
+    return opened?.kind === 'tmdb' ? opened.backdrop.file_path : null;
+}
+
+/**
+ * Retient l'URL d'objet de la capture ouverte, et rend au navigateur celle
+ * qu'elle remplace : une capture remplacée, fermée ou envoyée ne garde pas
+ * son image en mémoire.
+ */
+function holdCaptureUrl(
+    held: RefObject<string | null>,
+    next: string | null,
+): void {
+    if (held.current !== null && held.current !== next) {
+        URL.revokeObjectURL(held.current);
+    }
+
+    held.current = next;
+}
+
+/**
+ * L'écran quitté : la préparation en cours devient périmée — son résultat
+ * n'ouvrira rien —, et l'URL d'objet de la capture ouverte est rendue.
+ */
+function abandonCapture(
+    sequence: RefObject<number>,
+    held: RefObject<string | null>,
+): void {
+    sequence.current += 1;
+    holdCaptureUrl(held, null);
+}
+
+/**
+ * Vrai pour un champ où un collage de texte a un sens : champ de saisie
+ * textuel, zone de texte, contenu éditable. Un collage de texte y suit
+ * toujours son cours, même quand le presse-papiers porte aussi une image.
+ */
+function isEditableTarget(target: EventTarget | null): boolean {
+    if (!(target instanceof HTMLElement)) {
+        return false;
+    }
+
+    if (target.isContentEditable || target instanceof HTMLTextAreaElement) {
+        return true;
+    }
+
+    return (
+        target instanceof HTMLInputElement &&
+        !['button', 'checkbox', 'file', 'radio', 'range', 'submit'].includes(
+            target.type,
+        )
+    );
+}
 
 /** L'avertissement de couverture demandé, pour quelle image. */
 type WarningRequest = {
@@ -196,6 +288,15 @@ type SequenceMask = 'in_play' | 'after_review';
  * - **Temps actif** (lot L20-17) : un battement de débit après chaque saisie
  *   (§ 10.1) ; le serveur n'ajoute que les écarts qui tiennent dans la
  *   fenêtre d'inactivité, et seulement tant que le film est en passe 1.
+ * - **Voie capture** (lot L20-33, D38 du 28/09), tant que le site la laisse
+ *   ouverte : une image choisie, ou collée n'importe où sur l'écran, est
+ *   préparée par le navigateur (`capture-encoder` : WebP à la largeur du
+ *   master, sous le plafond d'entrée — R-46), puis s'ouvre dans le MÊME
+ *   cadre, avec le même niveau et le même envoi, plus son minutage
+ *   obligatoire. Le serveur revalide tout et dérive le jeu lui-même. Une
+ *   capture n'est ni dans la grille ni dans la bande : les raccourcis de
+ *   voisinage n'y font rien, et après l'envoi le cadre se ferme, le focus
+ *   revenant à « Choisir une image ».
  */
 export default function AdminCatalogBank({
     movie,
@@ -210,7 +311,7 @@ export default function AdminCatalogBank({
     publication_preview,
     backdrops,
 }: Props) {
-    const { t } = useTranslations();
+    const { t, locale } = useTranslations();
     const { url } = usePage();
     const gridRef = useRef<BackdropGridHandle>(null);
     const bankRef = useRef<HTMLDivElement>(null);
@@ -235,6 +336,24 @@ export default function AdminCatalogBank({
     const submitRef = useRef<(() => void) | null>(null);
     const [announcement, setAnnouncement] = useState('');
 
+    // Voie capture : la préparation en cours et son rang — un résultat
+    // dépassé par une capture plus récente, un visuel ouvert entre-temps ou
+    // l'écran quitté est ignoré —, l'URL d'objet de la capture ouverte, le
+    // bouton où revient le focus, et le minutage saisi.
+    const [captureStatus, setCaptureStatus] = useState<CapturePickerStatus>({
+        kind: 'idle',
+    });
+    const captureSequenceRef = useRef(0);
+    const captureUrlRef = useRef<string | null>(null);
+    const captureButtonRef = useRef<HTMLButtonElement>(null);
+    const [timecode, setTimecode] = useState('');
+    // Le refus du minutage ne s'affiche qu'une fois le champ quitté rempli,
+    // ou l'envoi tenté : jamais pendant la frappe.
+    const [timecodeChecked, setTimecodeChecked] = useState(false);
+    const timecodeId = useId();
+    const timecodeHintId = `${timecodeId}-hint`;
+    const timecodeErrorId = `${timecodeId}-error`;
+
     // Gestes sur une image de la banque.
     const [gesture, setGesture] = useState<FrameGesture | null>(null);
     const [warningRequest, setWarningRequest] = useState<WarningRequest | null>(
@@ -244,6 +363,16 @@ export default function AdminCatalogBank({
     // Rechargements partiels.
     const [backdropsReloading, setBackdropsReloading] = useState(false);
     const [refreshFailed, setRefreshFailed] = useState(false);
+
+    // Ce qui retient l'envoi : un cadre hors plancher, le minutage d'une
+    // capture absent ou mal formé — le même prédicat pour le bouton et pour
+    // les raccourcis `1` à `5`, qui posteraient sinon un envoi refusé.
+    const cropViolation =
+        opened === null ? null : cropStateViolation(opened.state);
+    const timecodeMissing =
+        opened?.kind === 'capture' && parseTimecode(timecode) === null;
+    const canSend = cropViolation === null && !timecodeMissing;
+    const capturePreparing = captureStatus.kind === 'preparing';
 
     /*
      * Tant qu'une image est en traitement, la banque, le film et les
@@ -325,6 +454,12 @@ export default function AdminCatalogBank({
     }
 
     function openVisual(backdrop: AdminBackdrop, focusFrame = false): boolean {
+        // Pendant un envoi, le cadre ne change pas : la réponse de l'envoi
+        // fermerait ou remplacerait sinon un visuel ouvert entre-temps.
+        if (sending) {
+            return false;
+        }
+
         const state = openCrop(
             masterHeightFor(backdrop.width, backdrop.height),
             limits,
@@ -337,19 +472,177 @@ export default function AdminCatalogBank({
             return false;
         }
 
+        // Un visuel choisi l'emporte sur une capture : celle qui était
+        // ouverte rend son URL d'objet, celle qui se préparait est ignorée.
+        holdCaptureUrl(captureUrlRef, null);
+        captureSequenceRef.current += 1;
+        setCaptureStatus({ kind: 'idle' });
+
         // Chaque visuel ouvert repart sans niveau : aucun défaut pré-coché,
         // pas même celui du visuel précédent (§ 6.5).
         setLevel(null);
-        setOpened({ backdrop, state, focusFrame });
+        setOpened({ kind: 'tmdb', backdrop, state, focusFrame });
 
         return true;
     }
 
+    /**
+     * Ferme le cadre. Le focus revient d'où le visuel était venu : la grille
+     * pour un visuel TMDB, « Choisir une image » pour une capture.
+     */
     function closeVisual(): void {
+        const capture = opened?.kind === 'capture';
+
+        holdCaptureUrl(captureUrlRef, null);
         setOpened(null);
         setLevel(null);
-        gridRef.current?.focus();
+
+        if (capture) {
+            captureButtonRef.current?.focus();
+        } else {
+            gridRef.current?.focus();
+        }
     }
+
+    /** Le refus d'une capture que le navigateur n'a pas pu préparer. */
+    function captureRefusal(refusal: CaptureRefusal): string {
+        switch (refusal) {
+            case 'unreadable':
+                return t('admin.frame.capture.ui.unreadable');
+            case 'too_small':
+                return t('admin.frame.capture.ui.too_small', {
+                    width: formatInteger(FRAME_GEOMETRY.gameWidth, locale),
+                });
+            case 'too_heavy':
+                return t('admin.frame.capture.ui.too_heavy', {
+                    max: formatInteger(limits.frameUploadMaxKilobytes, locale),
+                });
+            case 'unsupported':
+                return t('admin.frame.capture.ui.unsupported');
+        }
+    }
+
+    /**
+     * Une capture choisie ou collée (§ 5.4) : préparée par le navigateur,
+     * puis ouverte dans le cadre, qui prend le focus, sans niveau ni
+     * minutage. Le cadre s'ouvre — et `crop_seconds` court — quand l'image
+     * est prête, jamais pendant sa préparation.
+     */
+    async function openCapture(file: Blob): Promise<void> {
+        captureSequenceRef.current += 1;
+
+        const sequence = captureSequenceRef.current;
+
+        setCaptureStatus({ kind: 'preparing' });
+
+        const result = await normalizeCapture(file, limits);
+
+        if (sequence !== captureSequenceRef.current) {
+            return;
+        }
+
+        const state =
+            result.status === 'ok'
+                ? openCrop(result.masterHeight, limits, performance.now())
+                : null;
+
+        if (result.status !== 'ok' || state === null) {
+            setCaptureStatus({
+                kind: 'failed',
+                message: captureRefusal(
+                    result.status === 'ok' ? 'too_small' : result.status,
+                ),
+            });
+
+            return;
+        }
+
+        const objectUrl = URL.createObjectURL(result.blob);
+
+        holdCaptureUrl(captureUrlRef, objectUrl);
+        setCaptureStatus({ kind: 'idle' });
+        setLevel(null);
+        setTimecode('');
+        setTimecodeChecked(false);
+        setOpened({
+            kind: 'capture',
+            key: `capture-${sequence}`,
+            blob: result.blob,
+            objectUrl,
+            state,
+            focusFrame: true,
+        });
+        setAnnouncement(t('admin.frame.capture.ui.opened'));
+    }
+
+    /**
+     * Après l'envoi d'une capture : le cadre se ferme et le focus revient à
+     * « Choisir une image », prêt pour la suivante. Aucun visuel ne s'ouvre
+     * de lui-même : l'enchaînement de la bande est propre aux visuels TMDB.
+     */
+    function captureSent(): void {
+        closeVisual();
+        setAnnouncement(t('admin.frame.capture.ui.sent'));
+    }
+
+    /*
+     * Coller une image n'importe où sur l'écran l'ouvre comme une capture —
+     * seulement si le presse-papiers porte une image, que la voie est
+     * affichée (écran large, ajout permis), qu'aucun envoi n'est en cours et
+     * qu'aucune boîte de dialogue n'est ouverte. Sinon, rien n'est retenu :
+     * le texte collé dans un champ suit son cours — y compris quand le
+     * presse-papiers porte AUSSI une image, comme une plage de tableur copiée,
+     * que Chromium livre avec son rendu en bitmap. L'Effect Event lit l'état
+     * du dernier rendu sans réabonner l'écouteur.
+     */
+    const handlePaste = useEffectEvent((event: ClipboardEvent): void => {
+        const button = captureButtonRef.current;
+
+        if (
+            !captureEnabled ||
+            !abilities.createFrame ||
+            sending ||
+            gesture !== null ||
+            publishing ||
+            button === null ||
+            button.getClientRects().length === 0
+        ) {
+            return;
+        }
+
+        if (
+            isEditableTarget(event.target) &&
+            (event.clipboardData?.types ?? []).includes('text/plain')
+        ) {
+            return;
+        }
+
+        const image = pickClipboardImage(
+            Array.from(event.clipboardData?.files ?? []),
+        );
+
+        if (image === null) {
+            return;
+        }
+
+        event.preventDefault();
+        void openCapture(image);
+    });
+
+    useEffect(() => {
+        const listener = (event: ClipboardEvent): void => handlePaste(event);
+
+        document.addEventListener('paste', listener);
+
+        return () => document.removeEventListener('paste', listener);
+    }, []);
+
+    // L'écran quitté : une préparation en cours devient périmée, et l'URL
+    // d'objet de la capture ouverte est rendue au navigateur.
+    useEffect(
+        () => () => abandonCapture(captureSequenceRef, captureUrlRef),
+        [],
+    );
 
     /**
      * Le visuel voisin de la bande dans le cadre (`Page précédente` /
@@ -362,9 +655,19 @@ export default function AdminCatalogBank({
         direction: StripDirection,
         focusFrame: boolean,
     ): AdminBackdrop | null {
+        // Une capture n'est pas dans la bande : aucun pas ne la quitte — ni
+        // raccourci, ni bouton, ni glissement (§ 6.3). La remplacer demande
+        // un geste explicite : un visuel choisi dans la grille ou la bande,
+        // ou « Abandonner la capture ».
+        if (opened?.kind === 'capture') {
+            setAnnouncement(t('admin.frame.capture.ui.strip_locked'));
+
+            return null;
+        }
+
         const neighbour = stripNeighbour(
             backdropItems,
-            opened?.backdrop.file_path ?? null,
+            openedPath(opened),
             direction,
         );
 
@@ -406,9 +709,10 @@ export default function AdminCatalogBank({
 
     /**
      * `1` à `5` depuis le cadre (§ 6.4) : le niveau est posé et annoncé, puis
-     * l'image part — sauf si le cadre viole le plancher, auquel cas le niveau
-     * reste choisi et l'envoi attend. Le niveau est rendu avant l'envoi
-     * (`flushSync`), pour que le formulaire le soumette.
+     * l'image part — sauf si le cadre viole le plancher, ou si une capture
+     * attend encore son minutage, auquel cas le niveau reste choisi et
+     * l'envoi attend. Le niveau est rendu avant l'envoi (`flushSync`), pour
+     * que le formulaire le soumette.
      */
     function classify(chosen: FrameLevel, send: boolean): void {
         const values = {
@@ -417,6 +721,18 @@ export default function AdminCatalogBank({
         };
 
         flushSync(() => setLevel(chosen));
+
+        // Un cadre admis, mais une capture sans minutage conforme : c'est lui
+        // que l'envoi attend, et son refus s'affiche sous le champ.
+        if (!send && cropViolation === null && timecodeMissing) {
+            setTimecodeChecked(true);
+            setAnnouncement(
+                t('admin.frame.capture.ui.timecode_pending', values),
+            );
+
+            return;
+        }
+
         setAnnouncement(
             t(
                 send
@@ -527,16 +843,20 @@ export default function AdminCatalogBank({
                 }
               : { status: warningRequest.status };
 
-    const cropViolation =
-        opened === null ? null : cropStateViolation(opened.state);
-
+    // Pendant la préparation d'une capture, qui va remplacer le cadre, aucun
+    // raccourci n'agit ; une capture ouverte n'a pas de voisin : `[`, `]` et
+    // Page préc./suiv. suivent alors leur cours.
     const handleCropperShortcut = useThroughputShortcuts(
-        { screen: 'cropper', canSend: cropViolation === null, busy: sending },
+        { screen: 'cropper', canSend, busy: sending || capturePreparing },
         {
             onClassify: classify,
-            onNeighbour: (direction) => {
-                stepVisual(direction, true);
-            },
+            ...(opened?.kind === 'capture'
+                ? {}
+                : {
+                      onNeighbour: (direction: StripDirection) => {
+                          stepVisual(direction, true);
+                      },
+                  }),
         },
     );
 
@@ -550,7 +870,11 @@ export default function AdminCatalogBank({
             <div className="flex w-full flex-col gap-6 p-4 md:p-6">
                 <AdminPageHeading
                     title={movie.title_original}
-                    description={t('admin.bank.description')}
+                    description={t(
+                        captureEnabled
+                            ? 'admin.bank.description'
+                            : 'admin.bank.description_tmdb_only',
+                    )}
                     actions={
                         <Button variant="outline" size="sm" asChild>
                             <Link href={catalogShow(movie.id)}>
@@ -616,9 +940,7 @@ export default function AdminCatalogBank({
                                 <BackdropsZone
                                     backdrops={backdrops}
                                     reloading={backdropsReloading}
-                                    openedPath={
-                                        opened?.backdrop.file_path ?? null
-                                    }
+                                    openedPath={openedPath(opened)}
                                     onOpen={openVisual}
                                     onRetry={reloadBackdrops}
                                     gridRef={gridRef}
@@ -644,6 +966,21 @@ export default function AdminCatalogBank({
                         </p>
 
                         <div className="hidden lg:block">
+                            {/* Le point d'entrée de la voie capture, hors
+                                du formulaire : la source brute n'est jamais
+                                sérialisée (§ 5.4). */}
+                            {abilities.createFrame && captureEnabled && (
+                                <CaptureSourcePicker
+                                    status={captureStatus}
+                                    disabled={sending}
+                                    onPick={(file) => {
+                                        void openCapture(file);
+                                    }}
+                                    buttonRef={captureButtonRef}
+                                    className="mb-3"
+                                />
+                            )}
+
                             {!abilities.createFrame ? (
                                 <Alert>
                                     <InfoIcon aria-hidden />
@@ -654,23 +991,36 @@ export default function AdminCatalogBank({
                             ) : opened === null ? (
                                 <AdminEmptyState
                                     icon={ImagePlusIcon}
-                                    title={t('admin.bank.cropper.empty')}
+                                    title={t(
+                                        captureEnabled
+                                            ? 'admin.bank.cropper.empty'
+                                            : 'admin.bank.cropper.empty_tmdb_only',
+                                    )}
                                 />
                             ) : (
                                 <Form
-                                    // Un formulaire vierge par visuel : les
-                                    // refus d'un envoi (doublon, dimensions)
-                                    // ne s'affichent jamais sous un autre.
-                                    key={opened.backdrop.file_path}
+                                    // Un formulaire vierge par visuel ou
+                                    // par capture : les refus d'un envoi
+                                    // (doublon, dimensions) ne
+                                    // s'affichent jamais sous un autre.
+                                    key={
+                                        opened.kind === 'tmdb'
+                                            ? opened.backdrop.file_path
+                                            : opened.key
+                                    }
                                     ref={(handle) => {
                                         submitRef.current =
                                             handle === null
                                                 ? null
                                                 : () => handle.submit();
                                     }}
-                                    {...FrameTmdbController.store.form(
-                                        movie.id,
-                                    )}
+                                    {...(opened.kind === 'tmdb'
+                                        ? FrameTmdbController.store.form(
+                                              movie.id,
+                                          )
+                                        : FrameCaptureController.store.form(
+                                              movie.id,
+                                          ))}
                                     noValidate
                                     options={{
                                         preserveScroll: true,
@@ -679,8 +1029,9 @@ export default function AdminCatalogBank({
                                     }}
                                     transform={(data) => ({
                                         ...data,
-                                        // Le niveau tenu par l'écran fait foi,
-                                        // posé à l'instant par un raccourci.
+                                        // Le niveau tenu par l'écran fait
+                                        // foi, posé à l'instant par un
+                                        // raccourci.
                                         ...(level === null
                                             ? {}
                                             : { frame_level: level }),
@@ -688,32 +1039,63 @@ export default function AdminCatalogBank({
                                             opened.state,
                                             performance.now(),
                                         ),
+                                        // Une capture part avec le seul
+                                        // fichier préparé par le
+                                        // navigateur (R-46) : sa
+                                        // présence fait de l'envoi un
+                                        // envoi multipart.
+                                        ...(opened.kind === 'capture'
+                                            ? {
+                                                  source_timecode:
+                                                      timecode.trim(),
+                                                  source: new File(
+                                                      [opened.blob],
+                                                      CAPTURE_FILE_NAME,
+                                                      {
+                                                          type: CAPTURE_MIME_TYPE,
+                                                      },
+                                                  ),
+                                              }
+                                            : {}),
                                     })}
                                     onStart={() => setSending(true)}
                                     onFinish={() => setSending(false)}
-                                    onSuccess={() =>
-                                        advanceAfterSend(
-                                            opened.backdrop.file_path,
-                                        )
-                                    }
+                                    onSuccess={() => {
+                                        if (opened.kind === 'tmdb') {
+                                            advanceAfterSend(
+                                                opened.backdrop.file_path,
+                                            );
+                                        } else {
+                                            captureSent();
+                                        }
+                                    }}
                                     onKeyDown={handleCropperShortcut}
                                     className="flex flex-col gap-3"
                                 >
                                     {({ processing, errors }) => {
                                         const blocked =
-                                            cropViolation !== null ||
-                                            level === null;
+                                            !canSend ||
+                                            level === null ||
+                                            capturePreparing;
+                                        const timecodeError =
+                                            timecodeChecked && timecodeMissing
+                                                ? t(
+                                                      'admin.frame.capture.ui.timecode_invalid',
+                                                  )
+                                                : errors.source_timecode;
 
                                         return (
                                             <>
-                                                <input
-                                                    type="hidden"
-                                                    name="tmdb_file_path"
-                                                    value={
-                                                        opened.backdrop
-                                                            .file_path
-                                                    }
-                                                />
+                                                {opened.kind === 'tmdb' && (
+                                                    <input
+                                                        type="hidden"
+                                                        name="tmdb_file_path"
+                                                        value={
+                                                            opened.backdrop
+                                                                .file_path
+                                                        }
+                                                    />
+                                                )}
                                                 <input
                                                     type="hidden"
                                                     name="crop_x"
@@ -741,8 +1123,18 @@ export default function AdminCatalogBank({
 
                                                 <FrameCropper
                                                     imageUrl={
-                                                        opened.backdrop
-                                                            .image_url
+                                                        opened.kind === 'tmdb'
+                                                            ? opened.backdrop
+                                                                  .image_url
+                                                            : opened.objectUrl
+                                                    }
+                                                    failedDescription={
+                                                        opened.kind ===
+                                                        'capture'
+                                                            ? t(
+                                                                  'admin.cropper.image_failed_capture',
+                                                              )
+                                                            : undefined
                                                     }
                                                     autoFocus={
                                                         opened.focusFrame
@@ -766,8 +1158,13 @@ export default function AdminCatalogBank({
                                                     disabled={processing}
                                                 />
 
+                                                {/* Le refus du
+                                                    minutage s'affiche
+                                                    sous son champ, pas
+                                                    ici. */}
                                                 <AdminInputError
                                                     message={
+                                                        errors.source ??
                                                         errors.tmdb_file_path ??
                                                         errors.crop ??
                                                         errors.crop_x ??
@@ -777,6 +1174,93 @@ export default function AdminCatalogBank({
                                                         errors.crop_seconds
                                                     }
                                                 />
+
+                                                {opened.kind === 'capture' && (
+                                                    <div className="flex flex-wrap items-start gap-x-4 gap-y-2">
+                                                        <Badge variant="secondary">
+                                                            {t(
+                                                                'admin.frame.capture.ui.source_label',
+                                                            )}
+                                                        </Badge>
+                                                        <div className="flex w-full max-w-xs flex-col gap-1.5">
+                                                            <Label
+                                                                htmlFor={
+                                                                    timecodeId
+                                                                }
+                                                            >
+                                                                {t(
+                                                                    'admin.frame.capture.ui.timecode_label',
+                                                                )}
+                                                            </Label>
+                                                            <Input
+                                                                id={timecodeId}
+                                                                name="source_timecode"
+                                                                value={timecode}
+                                                                onChange={(
+                                                                    event,
+                                                                ) =>
+                                                                    setTimecode(
+                                                                        event
+                                                                            .currentTarget
+                                                                            .value,
+                                                                    )
+                                                                }
+                                                                onBlur={() => {
+                                                                    if (
+                                                                        timecode.trim() !==
+                                                                        ''
+                                                                    ) {
+                                                                        setTimecodeChecked(
+                                                                            true,
+                                                                        );
+                                                                    }
+                                                                }}
+                                                                required
+                                                                // Aucun `inputMode="numeric"` : les
+                                                                // pavés numériques des tablettes n'ont
+                                                                // pas le « : » que le minutage exige.
+                                                                autoComplete="off"
+                                                                spellCheck={
+                                                                    false
+                                                                }
+                                                                aria-describedby={
+                                                                    timecodeError ===
+                                                                    undefined
+                                                                        ? timecodeHintId
+                                                                        : `${timecodeHintId} ${timecodeErrorId}`
+                                                                }
+                                                                aria-invalid={
+                                                                    timecodeError ===
+                                                                    undefined
+                                                                        ? undefined
+                                                                        : true
+                                                                }
+                                                                disabled={
+                                                                    processing
+                                                                }
+                                                                className="min-h-11"
+                                                            />
+                                                            <p
+                                                                id={
+                                                                    timecodeHintId
+                                                                }
+                                                                className="text-xs text-muted-foreground"
+                                                            >
+                                                                {t(
+                                                                    'admin.frame.capture.ui.timecode_hint',
+                                                                )}
+                                                            </p>
+                                                            <AdminInputError
+                                                                id={
+                                                                    timecodeErrorId
+                                                                }
+                                                                message={
+                                                                    timecodeError
+                                                                }
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                )}
 
                                                 <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-end">
                                                     <LevelPicker
@@ -819,6 +1303,17 @@ export default function AdminCatalogBank({
                                                                     ) {
                                                                         event.preventDefault();
                                                                     }
+
+                                                                    // Un envoi tenté sans
+                                                                    // minutage conforme
+                                                                    // montre son refus.
+                                                                    if (
+                                                                        timecodeMissing
+                                                                    ) {
+                                                                        setTimecodeChecked(
+                                                                            true,
+                                                                        );
+                                                                    }
                                                                 }}
                                                                 className="min-h-11 aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
                                                             >
@@ -847,9 +1342,14 @@ export default function AdminCatalogBank({
                                                                 <XIcon
                                                                     aria-hidden
                                                                 />
-                                                                {t(
-                                                                    'admin.bank.cropper.close',
-                                                                )}
+                                                                {opened.kind ===
+                                                                'capture'
+                                                                    ? t(
+                                                                          'admin.frame.capture.ui.discard',
+                                                                      )
+                                                                    : t(
+                                                                          'admin.bank.cropper.close',
+                                                                      )}
                                                             </Button>
                                                         </div>
                                                     </div>
@@ -880,10 +1380,7 @@ export default function AdminCatalogBank({
                                     <div className="mt-3">
                                         <BackdropStrip
                                             items={backdrops.items}
-                                            openedPath={
-                                                opened?.backdrop.file_path ??
-                                                null
-                                            }
+                                            openedPath={openedPath(opened)}
                                             disabled={sending}
                                             onOpen={(backdrop) => {
                                                 if (openVisual(backdrop)) {
@@ -957,6 +1454,7 @@ export default function AdminCatalogBank({
                             <FrameBankList
                                 frames={frames}
                                 movieId={movie.id}
+                                captureEnabled={captureEnabled}
                                 onGesture={openGesture}
                             />
                         </div>
@@ -1127,6 +1625,11 @@ function publishabilityKey(
 /**
  * Les visuels chargés : la grille, ou l'état qui la remplace — aucun visuel,
  * TMDB en panne, quota atteint, TMDB non configuré.
+ *
+ * Les visuels auxquels TMDB attache une langue ne sont jamais proposés
+ * (D39 du 28/09) : leur nombre s'affiche au-dessus de la grille, et, s'ils
+ * sont tous écartés, l'état vide le dit au lieu de prétendre que TMDB ne
+ * fournit rien.
  */
 function BackdropsZone({
     backdrops,
@@ -1143,7 +1646,14 @@ function BackdropsZone({
     onRetry: () => void;
     gridRef: RefObject<BackdropGridHandle | null>;
 }) {
-    const { t } = useTranslations();
+    const { t, tChoice, locale } = useTranslations();
+
+    const excluded =
+        backdrops.excluded > 0
+            ? tChoice('admin.bank.backdrops_excluded', backdrops.excluded, {
+                  count: formatInteger(backdrops.excluded, locale),
+              })
+            : null;
 
     if (reloading) {
         return (
@@ -1156,7 +1666,14 @@ function BackdropsZone({
 
     switch (backdrops.status) {
         case 'empty':
-            return <AdminEmptyState title={t('admin.bank.no_backdrops')} />;
+            return excluded === null ? (
+                <AdminEmptyState title={t('admin.bank.no_backdrops')} />
+            ) : (
+                <AdminEmptyState
+                    title={t('admin.bank.no_backdrops_all_text')}
+                    description={excluded}
+                />
+            );
         case 'not_configured':
             return (
                 <AdminErrorState title={t('admin.tmdb.error.not_configured')} />
@@ -1176,12 +1693,19 @@ function BackdropsZone({
             );
         case 'ready':
             return (
-                <BackdropGrid
-                    items={backdrops.items}
-                    openedPath={openedPath}
-                    onOpen={onOpen}
-                    handleRef={gridRef}
-                />
+                <>
+                    {excluded !== null && (
+                        <p className="text-sm text-muted-foreground">
+                            {excluded}
+                        </p>
+                    )}
+                    <BackdropGrid
+                        items={backdrops.items}
+                        openedPath={openedPath}
+                        onOpen={onOpen}
+                        handleRef={gridRef}
+                    />
+                </>
             );
     }
 }

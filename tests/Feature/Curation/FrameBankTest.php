@@ -40,7 +40,10 @@ use Tests\Support\Frames\FrameBank;
 /** Identifiant TMDB de la fixture `movie-987654-images`. */
 const FRAME_BANK_TMDB_ID = 987654;
 
-/** Les trois backdrops de la fixture, dans l'ordre de TMDB. */
+/**
+ * Les trois backdrops de la fixture, dans l'ordre de TMDB : deux sans langue
+ * — l'un vide, ramené à nul —, proposés ; un anglais, écarté (D39 du 28/09).
+ */
 const FRAME_BANK_BACKDROP_NEUTRAL = '/6a7b8c9d0e1f2a3b4c5d6e7f80912a3b.jpg';
 
 const FRAME_BANK_BACKDROP_EMPTY_LANGUAGE = '/7b8c9d0e1f2a3b4c5d6e7f80912a3b4c.jpg';
@@ -189,7 +192,7 @@ test('l\'éditeur rend le film, sa banque, ses plafonds et ses séquences par N 
             'frameCropMinWidthPx' => PlatformLimits::frameCropMinWidthPx(),
             'frameUploadMaxKilobytes' => PlatformLimits::frameUploadMaxKilobytes(),
         ])
-        ->where('captureEnabled', false)
+        ->where('captureEnabled', true)
         ->where('pollSeconds', Config::integer('catalog.curation.poll_seconds'))
         ->where('abilities.createFrame', true)
         ->has('sequencePreview', RoomSettingsBounds::MAX_FRAMES_PER_ROUND - RoomSettingsBounds::MIN_FRAMES_PER_ROUND + 1)
@@ -221,7 +224,26 @@ test('l\'éditeur rend le film, sa banque, ses plafonds et ses séquences par N 
         ->where('movie.coverage.levels.1.single_variant', false));
 });
 
-test('les visuels proposés sont les seuls backdrops, sans texte d\'abord', function (): void {
+test('fermer la voie capture le dit à l\'éditeur, qui ne propose alors ni envoi ni collage', function (): void {
+    // L'autre moitié de la double garde : le serveur refuse la route (voir
+    // FrameCaptureStoreTest), et l'écran, lui, ne propose plus le geste.
+    frameBankFake();
+    Config::set('catalog.curation.capture_enabled', false);
+
+    [$movie] = FrameBank::movieWith(frameBankMovie(), [1, 3, 5]);
+
+    frameBankOpen($movie)->assertOk()->assertInertia(fn (Assert $page) => $page
+        ->component('admin/catalog/bank')
+        ->where('captureEnabled', false));
+
+    expect(__('admin.frame.capture.disabled_notice'))->not->toBe('admin.frame.capture.disabled_notice')
+        ->and(__('admin.bank.description_tmdb_only'))->not->toContain('capture')
+        ->and(__('admin.bank.cropper.empty_tmdb_only'))->not->toContain('capture')
+        ->and(__('admin.bank.list.empty_tmdb_only'))->not->toContain('capture')
+        ->and(__('admin.frame.tmdb.with_text_no_capture'))->not->toContain('capture');
+});
+
+test('les visuels proposés sont les seuls backdrops sans texte, les autres comptés', function (): void {
     $english = '/0a0b0c0d0e0f0a0b0c0d0e0f0a0b0c0d.jpg';
     $neutral = '/1a1b1c1d1e1f1a1b1c1d1e1f1a1b1c1d.jpg';
     $french = '/2a2b2c2d2e2f2a2b2c2d2e2f2a2b2c2d.jpg';
@@ -234,8 +256,8 @@ test('les visuels proposés sont les seuls backdrops, sans texte d\'abord', func
         'backdrops' => [
             frameBankImage($english, 1920, 1080, 'en'),
             frameBankImage($neutral, 1920, 1080),
-            frameBankImage($french, 3840, 2160, 'fr'),
-            frameBankImage($empty, 1920, 1080, ''),
+            frameBankImage($french, 1920, 1080, 'fr'),
+            frameBankImage($empty, 3840, 2160, ''),
         ],
         'posters' => [frameBankImage($poster, 1000, 1500, 'fr')],
         'logos' => [frameBankImage($logo, 640, 200, 'ja')],
@@ -247,33 +269,83 @@ test('les visuels proposés sont les seuls backdrops, sans texte d\'abord', func
         ->missing('backdrops')
         ->loadDeferredProps(fn (Assert $reload) => $reload
             ->where('backdrops.status', FrameBankController::BACKDROPS_READY)
-            ->has('backdrops.items', 4)
-            // Sans texte d'abord, ordre de TMDB conservé dans chaque groupe.
+            // Seuls les visuels sans langue — nulle ou vide — sont proposés,
+            // dans l'ordre de TMDB (D39 du 28/09) : l'anglais et le français
+            // peuvent contenir du texte, et l'écran dit combien sont écartés.
+            ->has('backdrops.items', 2)
+            ->where('backdrops.excluded', 2)
             ->where('backdrops.items.0.file_path', $neutral)
             ->where('backdrops.items.1.file_path', $empty)
-            ->where('backdrops.items.2.file_path', $english)
-            ->where('backdrops.items.3.file_path', $french)
-            ->where('backdrops.items.0.language_neutral', true)
-            ->where('backdrops.items.1.language_neutral', true)
-            ->where('backdrops.items.2.language_neutral', false)
-            ->where('backdrops.items.3.language_neutral', false)
+            // Toujours vrai sur un visuel proposé : la marque ne part plus.
+            ->missing('backdrops.items.0.language_neutral')
             // Vignette et affichage chargés depuis le serveur d'images de TMDB.
             ->where('backdrops.items.0.thumb_url', 'https://image.tmdb.org/t/p/'.FrameBankController::THUMBNAIL_SIZE.$neutral)
             ->where('backdrops.items.0.image_url', 'https://image.tmdb.org/t/p/'.FrameBankController::DISPLAY_SIZE.$neutral)
-            ->where('backdrops.items.3.width', 3840)
-            ->where('backdrops.items.3.height', 2160)
-            // Ni affiche ni logo, jamais candidats à une image de jeu.
+            ->where('backdrops.items.1.width', 3840)
+            ->where('backdrops.items.1.height', 2160)
+            // Ni affiche ni logo, jamais candidats à une image de jeu ; ni
+            // visuel auquel TMDB attache une langue.
             ->where('backdrops.items', fn ($items): bool => collect($items)
                 ->pluck('file_path')
-                ->intersect([$poster, $logo])
+                ->intersect([$poster, $logo, $english, $french])
                 ->isEmpty())));
 
     // Un second affichage relit la liste en cache : TMDB n'est appelé qu'une
     // fois par identifiant, dans la fenêtre configurée.
     frameBankOpen($movie)->assertInertia(fn (Assert $page) => $page
-        ->loadDeferredProps(fn (Assert $reload) => $reload->has('backdrops.items', 4)));
+        ->loadDeferredProps(fn (Assert $reload) => $reload
+            ->has('backdrops.items', 2)
+            ->where('backdrops.excluded', 2)));
 
     Http::assertSentCount(1);
+
+    // Le compte se lit en français, au singulier comme au pluriel.
+    expect(trans_choice('admin.bank.backdrops_excluded', 1, ['count' => 1], 'fr'))->toStartWith('1 visuel écarté')
+        ->and(trans_choice('admin.bank.backdrops_excluded', 2, ['count' => 2], 'fr'))->toStartWith('2 visuels écartés');
+});
+
+test('un film dont tous les visuels portent du texte montre l\'état vide et le compte', function (): void {
+    frameBankFake([
+        'id' => FRAME_BANK_TMDB_ID,
+        'backdrops' => [
+            frameBankImage('/0c0b0c0d0e0f0a0b0c0d0e0f0a0b0c0d.jpg', 1920, 1080, 'en'),
+            frameBankImage('/1c1b1c1d1e1f1a1b1c1d1e1f1a1b1c1d.jpg', 1920, 1080, 'fr'),
+            frameBankImage('/2c2b2c2d2e2f2a2b2c2d2e2f2a2b2c2d.jpg', 3840, 2160, 'ja'),
+        ],
+        // Une affiche sans langue ne compense rien : jamais candidate.
+        'posters' => [frameBankImage('/3c3b3c3d3e3f3a3b3c3d3e3f3a3b3c3d.jpg', 1000, 1500)],
+        'logos' => [],
+    ]);
+
+    $movie = frameBankMovie();
+
+    // Tous écartés : l'état vide, jamais une grille vide, avec leur nombre —
+    // l'écran dit pourquoi rien n'est proposé au lieu de prétendre que TMDB
+    // ne fournit rien.
+    frameBankOpen($movie)->assertInertia(fn (Assert $page) => $page
+        ->loadDeferredProps(fn (Assert $reload) => $reload
+            ->where('backdrops.status', FrameBankController::BACKDROPS_EMPTY)
+            ->where('backdrops.excluded', 3)
+            ->where('backdrops.items', [])));
+
+    expect(frameBankText('admin.bank.no_backdrops_all_text'))->not->toBe('admin.bank.no_backdrops_all_text')
+        ->and(frameBankText('admin.bank.no_backdrops_all_text'))->not->toBe(frameBankText('admin.bank.no_backdrops'));
+
+    // Un film que TMDB ne dote d'aucun backdrop, lui, n'a rien d'écarté.
+    Http::fake([
+        '*themoviedb.org/3/movie/'.(FRAME_BANK_TMDB_ID + 1).'/images*' => Http::response([
+            'id' => FRAME_BANK_TMDB_ID + 1,
+            'backdrops' => [],
+            'posters' => [],
+            'logos' => [],
+        ]),
+    ]);
+
+    frameBankOpen(Movie::factory()->create(['tmdb_id' => FRAME_BANK_TMDB_ID + 1]))->assertInertia(fn (Assert $page) => $page
+        ->loadDeferredProps(fn (Assert $reload) => $reload
+            ->where('backdrops.status', FrameBankController::BACKDROPS_EMPTY)
+            ->where('backdrops.excluded', 0)
+            ->where('backdrops.items', [])));
 });
 
 test('un visuel trop étroit ou en portrait est proposé désactivé avec son motif', function (): void {
@@ -357,6 +429,7 @@ test('une panne de TMDB donne un état traduit et un bouton réessayer', functio
     $response->assertInertia(fn (Assert $page) => $page
         ->loadDeferredProps(fn (Assert $reload) => $reload
             ->where('backdrops.status', FrameBankController::BACKDROPS_FAILED)
+            ->where('backdrops.excluded', 0)
             ->where('backdrops.items', [])));
 
     // L'état se lit en français, et « Réessayer » a son libellé.
@@ -370,7 +443,8 @@ test('une panne de TMDB donne un état traduit et un bouton réessayer', functio
     $response->assertInertia(fn (Assert $page) => $page
         ->loadDeferredProps(fn (Assert $reload) => $reload
             ->where('backdrops.status', FrameBankController::BACKDROPS_READY)
-            ->has('backdrops.items', 3)));
+            ->has('backdrops.items', 2)
+            ->where('backdrops.excluded', 1)));
 });
 
 test('un 429 à l\'ouverture de l\'éditeur donne un message traduit et Réessayer', function (): void {
@@ -460,20 +534,25 @@ test('un visuel déjà utilisé porte les niveaux des frames qui en proviennent'
 
     // Une image dépubliée, elle, provient toujours de son visuel.
     $factory->level(FrameLevel::Level2)->withFiles()->create([
-        'tmdb_file_path' => FRAME_BANK_BACKDROP_ENGLISH,
+        'tmdb_file_path' => FRAME_BANK_BACKDROP_EMPTY_LANGUAGE,
         'availability' => ContentAvailability::Unpublished,
         'availability_changed_at' => now(),
         'first_published_at' => now()->subDay(),
     ]);
 
+    // Une image tirée d'un visuel auquel TMDB attache une langue, ajoutée
+    // avant qu'il ne soit écarté (D39 du 28/09), reste dans la banque ; son
+    // visuel, lui, n'est plus proposé, et ses niveaux ne le font pas revenir.
+    $factory->level(FrameLevel::Level4)->create(['tmdb_file_path' => FRAME_BANK_BACKDROP_ENGLISH]);
+
     frameBankOpen($movie)->assertInertia(fn (Assert $page) => $page
         ->loadDeferredProps(fn (Assert $reload) => $reload
+            ->has('backdrops.items', 2)
+            ->where('backdrops.excluded', 1)
             ->where('backdrops.items.0.file_path', FRAME_BANK_BACKDROP_NEUTRAL)
             ->where('backdrops.items.0.used_levels', [1, 3])
             ->where('backdrops.items.1.file_path', FRAME_BANK_BACKDROP_EMPTY_LANGUAGE)
-            ->where('backdrops.items.1.used_levels', [])
-            ->where('backdrops.items.2.file_path', FRAME_BANK_BACKDROP_ENGLISH)
-            ->where('backdrops.items.2.used_levels', [2])));
+            ->where('backdrops.items.1.used_levels', [2])));
 });
 
 test('les séquences par N suivent FrameLevelCoverage et signalent le repli', function (): void {

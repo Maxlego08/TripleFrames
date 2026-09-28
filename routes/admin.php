@@ -257,10 +257,13 @@ Route::middleware(['auth', 'verified', 'role:curator', 'admin.2fa', 'admin.local
                 ->middleware(['can:create,'.Frame::class.',movie', 'throttle:admin-frame'])
                 ->name('catalog.frames.tmdb.store');
 
-            // Voie capture (§ 5.4, ligne 14) : au jalon 1, la route existe pour
-            // REFUSER — 403 motivé par `admin.frame.capture.disabled`, rendu
-            // par la garde avant toute résolution de requête. La branche qui
-            // accepte un fichier arrive avec le lot L20-33.
+            // Voie capture (§ 5.4, ligne 14 ; L20-33, D38 du 28/09) : ouverte
+            // par défaut, même seuil que l'ajout TMDB — la source normalisée
+            // par le navigateur, son minutage et le cadre, en multipart. Même
+            // limiteur : chaque ajout distribue un job Imagick. Fermée par une
+            // valeur explicitement fausse de `capture_enabled`, la garde répond
+            // 403 motivé par `admin.frame.capture.disabled`, avant toute
+            // résolution de requête.
             Route::post('catalog/{movie}/frames/capture', [FrameCaptureController::class, 'store'])
                 ->middleware(['can:createFromCapture,'.Frame::class.',movie', 'throttle:admin-frame'])
                 ->name('catalog.frames.capture.store');

@@ -11,7 +11,8 @@
  * fonctions sur ses événements.
  *
  * La liste reçue est TOUJOURS la liste de la grille (`AdminBackdropSet.items`,
- * ordre fixé par le serveur : sans texte d'abord, ordre TMDB ensuite). Le
+ * ordre fixé par le serveur : celui de TMDB, visuels pouvant contenir du
+ * texte déjà écartés, D39 du 28/09). Le
  * visuel ouvert peut ne pas être dans la bande — un visuel déjà utilisé,
  * rouvert depuis la grille pour une autre variante : sa place dans la grille
  * suffit à situer ses voisins.

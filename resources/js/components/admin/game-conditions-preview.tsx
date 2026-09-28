@@ -13,6 +13,8 @@ type Props = {
      */
     gameUrl: string | null;
     level: FrameLevel;
+    /** Variante dense de l'écran de revue, qui garde les deux largeurs. */
+    compact?: boolean;
     className?: string;
 };
 
@@ -31,7 +33,12 @@ type Props = {
  * Aucun portail n'est ouvert dans la portée sombre (C16 § 2.2) : un portail
  * se rendrait hors d'elle et perdrait ses tokens.
  */
-export function GameConditionsPreview({ gameUrl, level, className }: Props) {
+export function GameConditionsPreview({
+    gameUrl,
+    level,
+    compact = false,
+    className,
+}: Props) {
     const { t } = useTranslations();
     const format = usePage().props.frameFormat;
 
@@ -42,11 +49,17 @@ export function GameConditionsPreview({ gameUrl, level, className }: Props) {
     return (
         <GameThemeScope
             className={cn(
-                'flex flex-col gap-4 rounded-md p-4 lg:flex-row lg:items-start',
+                'flex flex-col rounded-md lg:flex-row lg:items-start',
+                compact ? 'gap-3 p-3 lg:justify-center' : 'gap-4 p-4',
                 className,
             )}
         >
-            <figure className="flex w-90 max-w-full shrink-0 flex-col gap-2">
+            <figure
+                className={cn(
+                    'flex max-w-full shrink-0 flex-col gap-2',
+                    compact ? 'w-64' : 'w-90',
+                )}
+            >
                 <GameFrame
                     src={gameUrl}
                     alt={alt}
@@ -60,7 +73,12 @@ export function GameConditionsPreview({ gameUrl, level, className }: Props) {
                 </figcaption>
             </figure>
 
-            <figure className="flex min-w-0 flex-1 flex-col gap-2">
+            <figure
+                className={cn(
+                    'flex min-w-0 flex-1 flex-col gap-2',
+                    compact && 'lg:max-w-2xl',
+                )}
+            >
                 <GameFrame
                     src={gameUrl}
                     alt={alt}

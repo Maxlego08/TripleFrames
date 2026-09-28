@@ -193,11 +193,18 @@ type Gesture =
 
 type Props = {
     /**
-     * Le visuel affiché dans le cadre, à sa taille `w1280` : une URL du
-     * serveur d'images de TMDB en voie TMDB (§ 6.2), celle de l'aperçu
-     * `master` au re-recadrage.
+     * Le visuel affiché dans le cadre : une URL du serveur d'images de TMDB,
+     * à sa taille `w1280`, en voie TMDB (§ 6.2) ; l'URL d'objet de la
+     * capture préparée par le navigateur en voie capture (§ 5.4) ; celle de
+     * l'aperçu `master` au re-recadrage.
      */
     imageUrl: string;
+    /**
+     * Ce que dit l'échec d'affichage, quand ce n'est pas le serveur d'images
+     * de TMDB qui a failli — une capture locale, que seul un nouvel envoi
+     * rouvre. Texte DÉJÀ traduit.
+     */
+    failedDescription?: string;
     /**
      * Le cadre et de quoi le juger, tenu par l'éditeur : ouvert par
      * `openCrop()` au moment où le visuel s'ouvre dans le cadre, remplacé à
@@ -292,6 +299,7 @@ type Props = {
  */
 export function FrameCropper({
     imageUrl,
+    failedDescription,
     state,
     onCommand,
     disabled = false,
@@ -694,9 +702,10 @@ export function FrameCropper({
                         <div className="absolute inset-0 flex items-center justify-center p-4">
                             <AdminErrorState
                                 title={t('admin.cropper.image_failed')}
-                                description={t(
-                                    'admin.cropper.image_failed_description',
-                                )}
+                                description={
+                                    failedDescription ??
+                                    t('admin.cropper.image_failed_description')
+                                }
                                 retryLabel={t('admin.cropper.retry')}
                                 onRetry={() =>
                                     setAttempt((current) => current + 1)

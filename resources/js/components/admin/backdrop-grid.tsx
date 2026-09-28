@@ -34,9 +34,11 @@ function renderedColumns(list: HTMLElement | null): number {
 /**
  * La grille des visuels TMDB du film (spec 20 § 6.2 et § 6.4).
  *
- * - **Backdrops seuls**, sans texte d'abord, dans l'ordre que le serveur a
- *   fixé ; un visuel trop étroit ou en portrait reste proposé, **désactivé
- *   avec son motif** — le refus que l'ajout opposerait ;
+ * - **Backdrops seuls**, ceux auxquels TMDB n'attache aucune langue, dans
+ *   l'ordre que le serveur a fixé — ceux qui peuvent contenir du texte ne
+ *   lui parviennent pas (D39 du 28/09), et l'éditeur les compte au-dessus
+ *   de la grille ; un visuel trop étroit ou en portrait reste proposé,
+ *   **désactivé avec son motif** — le refus que l'ajout opposerait ;
  * - un visuel déjà utilisé porte le badge TEXTUEL des niveaux des images qui
  *   en proviennent (`admin.bank.backdrop_used`), jamais la seule couleur ;
  * - **un seul arrêt de tabulation** (tabindex itinérant) : les flèches
@@ -163,11 +165,6 @@ export function BackdropGrid({ items, openedPath, onOpen, handleRef }: Props) {
                                                 ),
                                             ),
                                         })}
-                                    </Badge>
-                                )}
-                                {!backdrop.language_neutral && (
-                                    <Badge variant="outline">
-                                        {t('admin.bank.backdrop_with_language')}
                                     </Badge>
                                 )}
                                 {backdrop.refusal !== null && (

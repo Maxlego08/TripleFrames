@@ -73,6 +73,12 @@
              tests, quel que soit le `.env` du poste. -->
         <env name="OPS_LOAD_CPU_COUNT" value="" force="true"/>
         <server name="OPS_LOAD_CPU_COUNT" value=""/>
+        <!-- Pas un secret, un interrupteur (spec 20 § 5.4, D38 du 28/09) : vidé
+             par la même paire pour que la suite joue la voie capture OUVERTE,
+             son défaut, quel que soit le `.env` du poste. Un test qui la veut
+             fermée le dit par `Config::set`. -->
+        <env name="CURATION_CAPTURE_ENABLED" value="" force="true"/>
+        <server name="CURATION_CAPTURE_ENABLED" value=""/>
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
         <env name="NIGHTWATCH_ENABLED" value="false"/>

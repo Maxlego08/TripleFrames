@@ -349,8 +349,9 @@ test('les méthodes J1 des policies suivent la table du § 2.9, seuil et état c
         ->and(Gate::forUser($privileged['curateur'])->allows('create', FrameReview::class))->toBeTrue()
         ->and(Gate::forUser($privileged['administrateur'])->allows('create', FrameReview::class))->toBeTrue();
 
-    // La voie capture : refus MOTIVÉ tant qu'elle est fermée, quel que soit
-    // le rôle, puis le seuil d'ajout une fois ouverte.
+    // La voie capture : ouverte par défaut (D38 du 28/09), refus MOTIVÉ
+    // quand un site la ferme, quel que soit le rôle ; ouverte, le seuil
+    // d'ajout.
     $draft = Movie::factory()->create();
     $suspended = Movie::factory()->suspended()->create();
 

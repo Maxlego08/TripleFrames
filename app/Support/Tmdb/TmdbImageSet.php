@@ -13,10 +13,11 @@ namespace App\Support\Tmdb;
  * `App\Support\Curation\ExclusionGrid`, versionnée, et se tranche sur l'image
  * réelle par un humain : la reproduire ici en dupliquerait la version.
  *
- * Aucune requête n'est faite avec un paramètre `language` : TMDB filtrerait
- * alors les visuels par langue et déciderait à la place du curateur. Le tri
- * entre visuels avec et sans texte se lit sur
- * {@see TmdbImage::isLanguageNeutral()}.
+ * Aucune requête n'est faite avec un paramètre `language`, et aucun visuel
+ * n'est retiré ici : TMDB filtrerait alors les visuels par langue sans que
+ * personne sache combien il en a retenu. Les backdrops auxquels TMDB attache
+ * une langue sont écartés en aval (D39 du 28/09), là où ils se comptent et où
+ * leur ajout se refuse, sur {@see TmdbImage::isLanguageNeutral()}.
  */
 final readonly class TmdbImageSet
 {
