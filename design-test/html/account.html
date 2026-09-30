@@ -1,0 +1,456 @@
+<!doctype html>
+<html lang="fr" data-appearance="system">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <meta
+            name="description"
+            content="Gérez votre profil, la sécurité et l’apparence de votre compte TripleFrames."
+        />
+        <title>Mon compte — TripleFrames</title>
+        <link rel="icon" href="../svg/brand-logo.svg" type="image/svg+xml" />
+        <link rel="stylesheet" href="../css/account.css" />
+            <link rel="stylesheet" href="../css/global-header.css" />
+    </head>
+    <body data-authenticated="true">
+        <a class="skip-link" href="#main-content">Aller au contenu</a>
+
+        <header class="global-header">
+    <div class="global-header__inner">
+        <a class="global-header__brand" href="index.html" aria-label="TripleFrames, accueil">
+            <img class="global-header__brand-logo" src="../svg/brand-logo.svg" alt="" width="44" height="36" />
+            <span class="global-header__brand-name">TripleFrames</span>
+        </a>
+
+        <nav class="global-header__account-nav global-header__account-nav--guest" aria-label="Compte">
+            <a class="global-header__nav-link" href="login.html">Connexion</a>
+            <a class="global-header__nav-pill" href="register.html">S’inscrire</a>
+        </nav>
+
+        <nav class="global-header__account-nav global-header__account-nav--member" aria-label="Compte connecté">
+            <a class="global-header__account-button" href="account.html">
+                <span class="global-header__account-avatar" aria-hidden="true">MC</span>
+                <span>Mon compte</span>
+            </a>
+            <a class="global-header__logout" href="login.html">
+                <img src="../svg/icons/logout.svg" alt="" />
+                <span>Déconnexion</span>
+            </a>
+        </nav>
+    </div>
+</header>
+
+        <main class="account-page" id="main-content">
+            <header class="account-page__heading">
+                <h1>Mon compte</h1>
+                <p>Gérez vos informations, votre sécurité et vos préférences.</p>
+            </header>
+
+            <div class="account-settings">
+                <nav class="account-settings__nav" role="tablist" aria-label="Réglages du compte">
+                    <button
+                        class="account-settings__tab account-settings__tab--active"
+                        id="account-tab-profile"
+                        type="button"
+                        role="tab"
+                        aria-selected="true"
+                        aria-controls="account-panel-profile"
+                        data-account-tab="profile"
+                    >
+                        <img class="account-icon" src="../svg/icons/user.svg" alt="" />
+                        <span>Profil</span>
+                    </button>
+                    <button
+                        class="account-settings__tab"
+                        id="account-tab-security"
+                        type="button"
+                        role="tab"
+                        aria-selected="false"
+                        aria-controls="account-panel-security"
+                        tabindex="-1"
+                        data-account-tab="security"
+                    >
+                        <img class="account-icon" src="../svg/icons/shield.svg" alt="" />
+                        <span>Sécurité</span>
+                    </button>
+                    <button
+                        class="account-settings__tab"
+                        id="account-tab-appearance"
+                        type="button"
+                        role="tab"
+                        aria-selected="false"
+                        aria-controls="account-panel-appearance"
+                        tabindex="-1"
+                        data-account-tab="appearance"
+                    >
+                        <img class="account-icon" src="../svg/icons/palette.svg" alt="" />
+                        <span>Apparence</span>
+                    </button>
+                </nav>
+
+                <div class="account-settings__content">
+                    <section
+                        class="account-panel"
+                        id="account-panel-profile"
+                        role="tabpanel"
+                        aria-labelledby="account-tab-profile"
+                        tabindex="0"
+                        data-account-panel="profile"
+                    >
+                        <div class="account-panel__heading">
+                            <h2>Profil</h2>
+                            <p>Modifiez votre nom et votre adresse e-mail.</p>
+                        </div>
+
+                        <div class="profile-summary">
+                            <span class="profile-summary__avatar" data-account-initials>CM</span>
+                            <div class="profile-summary__identity">
+                                <div class="profile-summary__title-row">
+                                    <strong data-account-full-name>Camille Martin</strong>
+                                    <span class="status-pill status-pill--success" data-email-verified>
+                                        <img class="account-icon" src="../svg/icons/check.svg" alt="" />
+                                        Vérifiée
+                                    </span>
+                                </div>
+                                <span data-account-email>camille@exemple.fr</span>
+                            </div>
+                        </div>
+
+                        <form class="account-form" id="profile-form" novalidate>
+                            <div class="account-field">
+                                <label for="account-name">Nom</label>
+                                <input
+                                    id="account-name"
+                                    name="name"
+                                    type="text"
+                                    value="Camille Martin"
+                                    autocomplete="name"
+                                    required
+                                    aria-describedby="account-name-error"
+                                />
+                                <p class="account-field__error" id="account-name-error"></p>
+                            </div>
+
+                            <div class="account-field">
+                                <label for="account-email">Adresse e-mail</label>
+                                <input
+                                    id="account-email"
+                                    name="email"
+                                    type="email"
+                                    value="camille@exemple.fr"
+                                    autocomplete="username"
+                                    required
+                                    aria-describedby="account-email-error"
+                                />
+                                <p class="account-field__error" id="account-email-error"></p>
+                            </div>
+
+                            <div class="verification-notice" data-email-verification hidden>
+                                <div>
+                                    <strong>Adresse e-mail non vérifiée</strong>
+                                    <p>Vérifiez votre boîte mail avant d’accéder aux réglages de sécurité.</p>
+                                </div>
+                                <button class="text-button" type="button" data-resend-verification>
+                                    Renvoyer l’e-mail
+                                </button>
+                            </div>
+
+                            <div class="account-form__actions">
+                                <button class="account-button account-button--primary" type="submit">
+                                    Enregistrer
+                                </button>
+                                <p class="account-form__saved" role="status" data-profile-saved></p>
+                            </div>
+                        </form>
+                    </section>
+
+                    <section
+                        class="account-panel"
+                        id="account-panel-security"
+                        role="tabpanel"
+                        aria-labelledby="account-tab-security"
+                        tabindex="0"
+                        data-account-panel="security"
+                        hidden
+                    >
+                        <div class="account-panel__heading">
+                            <h2>Sécurité</h2>
+                            <p>Protégez votre compte avec plusieurs méthodes de connexion.</p>
+                        </div>
+
+                        <section class="settings-section" aria-labelledby="password-heading">
+                            <div class="settings-section__heading">
+                                <div>
+                                    <h3 id="password-heading">Modifier le mot de passe</h3>
+                                    <p>Utilisez un mot de passe long et unique.</p>
+                                </div>
+                            </div>
+
+                            <form class="account-form" id="password-form" novalidate>
+                                <div class="account-field">
+                                    <label for="current-password">Mot de passe actuel</label>
+                                    <div class="account-field__password">
+                                        <input
+                                            id="current-password"
+                                            name="current_password"
+                                            type="password"
+                                            autocomplete="current-password"
+                                            aria-describedby="current-password-error"
+                                        />
+                                        <button
+                                            class="account-field__toggle"
+                                            type="button"
+                                            aria-label="Afficher le mot de passe actuel"
+                                            data-password-toggle="current-password"
+                                        >
+                                            <img class="account-icon" src="../svg/icons/eye.svg" alt="" />
+                                        </button>
+                                    </div>
+                                    <p class="account-field__error" id="current-password-error"></p>
+                                </div>
+
+                                <div class="account-form__columns">
+                                    <div class="account-field">
+                                        <label for="new-password">Nouveau mot de passe</label>
+                                        <div class="account-field__password">
+                                            <input
+                                                id="new-password"
+                                                name="password"
+                                                type="password"
+                                                autocomplete="new-password"
+                                                minlength="8"
+                                                aria-describedby="new-password-help new-password-error"
+                                            />
+                                            <button
+                                                class="account-field__toggle"
+                                                type="button"
+                                                aria-label="Afficher le nouveau mot de passe"
+                                                data-password-toggle="new-password"
+                                            >
+                                                <img class="account-icon" src="../svg/icons/eye.svg" alt="" />
+                                            </button>
+                                        </div>
+                                        <p class="account-field__help" id="new-password-help">Au moins 8 caractères.</p>
+                                        <p class="account-field__error" id="new-password-error"></p>
+                                    </div>
+
+                                    <div class="account-field">
+                                        <label for="password-confirmation">Confirmer le mot de passe</label>
+                                        <div class="account-field__password">
+                                            <input
+                                                id="password-confirmation"
+                                                name="password_confirmation"
+                                                type="password"
+                                                autocomplete="new-password"
+                                                aria-describedby="password-confirmation-error"
+                                            />
+                                            <button
+                                                class="account-field__toggle"
+                                                type="button"
+                                                aria-label="Afficher la confirmation du mot de passe"
+                                                data-password-toggle="password-confirmation"
+                                            >
+                                                <img class="account-icon" src="../svg/icons/eye.svg" alt="" />
+                                            </button>
+                                        </div>
+                                        <p class="account-field__error" id="password-confirmation-error"></p>
+                                    </div>
+                                </div>
+
+                                <div class="account-form__actions">
+                                    <button class="account-button account-button--primary" type="submit">
+                                        Enregistrer le mot de passe
+                                    </button>
+                                </div>
+                            </form>
+                        </section>
+
+                        <section class="settings-section" aria-labelledby="two-factor-heading">
+                            <div class="settings-section__heading settings-section__heading--action">
+                                <div>
+                                    <div class="settings-section__title-row">
+                                        <h3 id="two-factor-heading">Authentification à deux facteurs</h3>
+                                        <span class="status-pill" data-two-factor-status>Inactive</span>
+                                    </div>
+                                    <p>Ajoutez un code temporaire à votre connexion.</p>
+                                </div>
+                                <button class="account-button account-button--secondary" type="button" data-two-factor-enable>
+                                    Activer la 2FA
+                                </button>
+                                <button class="account-button account-button--danger" type="button" data-two-factor-disable hidden>
+                                    Désactiver
+                                </button>
+                            </div>
+
+                            <div class="recovery-codes" data-recovery-section hidden>
+                                <div class="recovery-codes__actions">
+                                    <button class="text-button" type="button" data-recovery-toggle>Afficher les codes de récupération</button>
+                                    <button class="text-button" type="button" data-recovery-regenerate>
+                                        <img class="account-icon" src="../svg/icons/refresh.svg" alt="" />
+                                        Régénérer les codes
+                                    </button>
+                                </div>
+                                <div class="recovery-codes__list" data-recovery-list hidden></div>
+                            </div>
+                        </section>
+
+                        <section class="settings-section" aria-labelledby="passkeys-heading">
+                            <div class="settings-section__heading settings-section__heading--action">
+                                <div>
+                                    <h3 id="passkeys-heading">Passkeys</h3>
+                                    <p>Connectez-vous sans mot de passe avec vos appareils.</p>
+                                </div>
+                                <button class="account-button account-button--secondary" type="button" data-passkey-add>
+                                    <img class="account-icon" src="../svg/icons/passkey.svg" alt="" />
+                                    Ajouter une passkey
+                                </button>
+                            </div>
+
+                            <form class="passkey-form" data-passkey-form hidden>
+                                <div class="account-field">
+                                    <label for="passkey-name">Nom de la passkey</label>
+                                    <input id="passkey-name" name="passkey_name" type="text" placeholder="Ex. PC personnel" maxlength="40" />
+                                </div>
+                                <div class="passkey-form__actions">
+                                    <button class="account-button account-button--primary account-button--compact" type="submit">Enregistrer</button>
+                                    <button class="text-button" type="button" data-passkey-cancel>Annuler</button>
+                                </div>
+                            </form>
+
+                            <div class="passkey-list" data-passkey-list>
+                                <article class="passkey-item" data-passkey-item>
+                                    <span class="passkey-item__icon"><img class="account-icon" src="../svg/icons/passkey.svg" alt="" /></span>
+                                    <div class="passkey-item__content">
+                                        <strong class="passkey-item__name">Windows Hello</strong>
+                                        <span>Ajoutée aujourd’hui · utilisée il y a 2 minutes</span>
+                                    </div>
+                                    <button class="icon-button icon-button--danger" type="button" aria-label="Supprimer la passkey Windows Hello" data-passkey-remove>
+                                        <img class="account-icon" src="../svg/icons/trash.svg" alt="" />
+                                    </button>
+                                </article>
+                            </div>
+                        </section>
+                    </section>
+
+                    <section
+                        class="account-panel"
+                        id="account-panel-appearance"
+                        role="tabpanel"
+                        aria-labelledby="account-tab-appearance"
+                        tabindex="0"
+                        data-account-panel="appearance"
+                        hidden
+                    >
+                        <div class="account-panel__heading">
+                            <h2>Apparence</h2>
+                            <p>Choisissez le thème utilisé sur votre compte.</p>
+                        </div>
+
+                        <fieldset class="appearance-picker">
+                            <legend class="appearance-picker__legend">Thème de l’interface</legend>
+
+                            <label class="appearance-option">
+                                <input type="radio" name="appearance" value="light" />
+                                <span class="appearance-option__visual">
+                                    <img class="appearance-option__icon" src="../svg/icons/sun.svg" alt="" />
+                                    <strong>Clair</strong>
+                                    <span>Une interface lumineuse.</span>
+                                </span>
+                            </label>
+
+                            <label class="appearance-option">
+                                <input type="radio" name="appearance" value="dark" />
+                                <span class="appearance-option__visual">
+                                    <img class="appearance-option__icon" src="../svg/icons/moon.svg" alt="" />
+                                    <strong>Sombre</strong>
+                                    <span>Une interface adaptée aux pièces sombres.</span>
+                                </span>
+                            </label>
+
+                            <label class="appearance-option">
+                                <input type="radio" name="appearance" value="system" checked />
+                                <span class="appearance-option__visual">
+                                    <img class="appearance-option__icon" src="../svg/icons/monitor.svg" alt="" />
+                                    <strong>Système</strong>
+                                    <span>Suit les réglages de votre appareil.</span>
+                                </span>
+                            </label>
+                        </fieldset>
+
+                        <p class="appearance-picker__status" role="status" data-appearance-status>Le thème système est actif.</p>
+                    </section>
+                </div>
+            </div>
+        </main>
+
+        <footer class="account-footer">
+            <div class="account-footer__inner">
+                <p><strong>TripleFrames</strong> — Le cinéma se joue à plusieurs.</p>
+                <nav aria-label="Informations légales">
+                    <a href="how-to-play.html">Comment jouer</a>
+                    <a href="terms.html">Conditions</a>
+                    <a href="privacy.html">Confidentialité</a>
+                </nav>
+            </div>
+        </footer>
+
+        <dialog class="account-dialog" id="two-factor-dialog" aria-labelledby="two-factor-dialog-title">
+            <form class="account-dialog__surface" method="dialog" data-two-factor-form>
+                <button class="account-dialog__close" type="button" aria-label="Fermer" data-dialog-close="two-factor-dialog">
+                    <img class="account-icon" src="../svg/icons/close.svg" alt="" />
+                </button>
+                <div class="account-dialog__heading">
+                    <h2 id="two-factor-dialog-title">Activer la 2FA</h2>
+                    <p>Scannez le QR code, puis saisissez le code à 6 chiffres.</p>
+                </div>
+                <div class="two-factor-setup">
+                    <img class="two-factor-setup__qr" src="../svg/icons/qr-code.svg" alt="QR code de démonstration" />
+                    <div class="two-factor-setup__content">
+                        <span>Clé de configuration</span>
+                        <code>TRPL-FRMS-2048</code>
+                        <div class="account-field">
+                            <label for="two-factor-code">Code d’authentification</label>
+                            <input id="two-factor-code" name="two_factor_code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" aria-describedby="two-factor-code-error" />
+                            <p class="account-field__error" id="two-factor-code-error"></p>
+                        </div>
+                    </div>
+                </div>
+                <div class="account-dialog__actions">
+                    <button class="text-button" type="button" data-dialog-close="two-factor-dialog">Annuler</button>
+                    <button class="account-button account-button--primary" type="submit">Confirmer</button>
+                </div>
+            </form>
+        </dialog>
+
+        <dialog class="account-dialog" id="passkey-remove-dialog" aria-labelledby="passkey-remove-title">
+            <div class="account-dialog__surface account-dialog__surface--compact">
+                <div class="account-dialog__heading">
+                    <h2 id="passkey-remove-title">Supprimer cette passkey ?</h2>
+                    <p>Vous devrez utiliser une autre méthode de connexion sur cet appareil.</p>
+                </div>
+                <div class="account-dialog__actions">
+                    <button class="text-button" type="button" data-dialog-close="passkey-remove-dialog">Annuler</button>
+                    <button class="account-button account-button--danger" type="button" data-passkey-confirm-remove>Supprimer</button>
+                </div>
+            </div>
+        </dialog>
+
+        <div class="toast" id="account-toast" role="status" aria-live="polite"></div>
+
+        <template id="passkey-item-template">
+            <article class="passkey-item" data-passkey-item>
+                <span class="passkey-item__icon"><img class="account-icon" src="../svg/icons/passkey.svg" alt="" /></span>
+                <div class="passkey-item__content">
+                    <strong class="passkey-item__name"></strong>
+                    <span>Ajoutée à l’instant · jamais utilisée</span>
+                </div>
+                <button class="icon-button icon-button--danger" type="button" data-passkey-remove>
+                    <img class="account-icon" src="../svg/icons/trash.svg" alt="" />
+                </button>
+            </article>
+        </template>
+
+        <script src="../js/account.js"></script>
+            <script src="../js/global-header.js"></script>
+    </body>
+</html>

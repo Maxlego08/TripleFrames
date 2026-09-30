@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 52">
+    <title>TripleFrames</title>
+    <style>
+        .frame {
+            stroke: oklch(0.27 0.08 292);
+            stroke-width: 3;
+            stroke-linejoin: round;
+        }
+
+        .frame--back {
+            fill: oklch(0.81 0.13 195);
+        }
+
+        .frame--middle {
+            fill: oklch(0.7 0.2 25);
+        }
+
+        .frame--front {
+            fill: oklch(0.88 0.16 89);
+        }
+
+        .play {
+            fill: oklch(0.98 0.03 91);
+            stroke: oklch(0.27 0.08 292);
+            stroke-width: 2.25;
+            stroke-linejoin: round;
+        }
+    </style>
+    <rect class="frame frame--back" x="5.5" y="6" width="43" height="33" rx="7" transform="rotate(-7 27 22.5)" />
+    <rect class="frame frame--middle" x="15.5" y="12" width="43" height="33" rx="7" transform="rotate(7 37 28.5)" />
+    <rect class="frame frame--front" x="10.5" y="8.5" width="43" height="33" rx="7" />
+    <path class="play" d="M28 17.5 40 25 28 32.5Z" />
+</svg>

@@ -1,0 +1,56 @@
+{
+    "adult": false,
+    "backdrop_path": null,
+    "belongs_to_collection": null,
+    "budget": 0,
+    "genres": [{ "id": 16, "name": "Animation" }],
+    "homepage": "",
+    "id": 987654,
+    "imdb_id": "tt0000000",
+    "original_language": "ja",
+    "original_title": "ガラスの果樹園",
+    "overview": "Oeuvre fictive de fixture, relue avec une classification restrictive.",
+    "popularity": 12.0,
+    "poster_path": null,
+    "production_companies": [],
+    "production_countries": [{ "iso_3166_1": "JP", "name": "Japan" }],
+    "release_date": "1998-07-18",
+    "revenue": 0,
+    "runtime": 104,
+    "spoken_languages": [
+        { "english_name": "Japanese", "iso_639_1": "ja", "name": "日本語" }
+    ],
+    "status": "Released",
+    "tagline": "",
+    "title": "The Glass Orchard",
+    "video": false,
+    "vote_average": 7.8,
+    "vote_count": 2410,
+    "release_dates": {
+        "results": [
+            {
+                "iso_3166_1": "FR",
+                "release_dates": [
+                    {
+                        "certification": "-12",
+                        "descriptors": [],
+                        "iso_639_1": "",
+                        "note": "Classement d'origine",
+                        "release_date": "1999-02-10T00:00:00.000Z",
+                        "type": 3
+                    },
+                    {
+                        "certification": "-18",
+                        "descriptors": [],
+                        "iso_639_1": "",
+                        "note": "Reclassement apres signalement",
+                        "release_date": "2026-01-20T00:00:00.000Z",
+                        "type": 5
+                    }
+                ]
+            }
+        ]
+    },
+    "translations": { "translations": [] },
+    "alternative_titles": { "titles": [] }
+}

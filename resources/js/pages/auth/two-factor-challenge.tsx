@@ -9,34 +9,36 @@ import {
     InputOTPGroup,
     InputOTPSlot,
 } from '@/components/ui/input-otp';
+import { useTranslations } from '@/hooks/use-translations';
 import { OTP_MAX_LENGTH } from '@/hooks/use-two-factor-auth';
 import { store } from '@/routes/two-factor/login';
+import type { AuthLayoutKeys } from '@/types';
 
 export default function TwoFactorChallenge() {
     const [showRecoveryInput, setShowRecoveryInput] = useState<boolean>(false);
     const [code, setCode] = useState<string>('');
+    const { t } = useTranslations();
 
-    const authConfigContent = useMemo<{
-        title: string;
-        description: string;
-        toggleText: string;
-    }>(() => {
+    // Le titre part vers `AuthLayout` en **clé** : les props de gabarit sont
+    // partagées, et seul le gabarit sait dans quelle langue les rendre.
+    const authConfigContent = useMemo<
+        Required<AuthLayoutKeys> & { toggleText: string }
+    >(() => {
         if (showRecoveryInput) {
             return {
-                title: 'Recovery code',
+                title: 'account.two_factor.challenge.recovery.heading',
                 description:
-                    'Please confirm access to your account by entering one of your emergency recovery codes.',
-                toggleText: 'login using an authentication code',
+                    'account.two_factor.challenge.recovery.description',
+                toggleText: t('account.two_factor.challenge.recovery.toggle'),
             };
         }
 
         return {
-            title: 'Authentication code',
-            description:
-                'Enter the authentication code provided by your authenticator application.',
-            toggleText: 'login using a recovery code',
+            title: 'account.two_factor.challenge.code.heading',
+            description: 'account.two_factor.challenge.code.description',
+            toggleText: t('account.two_factor.challenge.code.toggle'),
         };
-    }, [showRecoveryInput]);
+    }, [showRecoveryInput, t]);
 
     setLayoutProps({
         title: authConfigContent.title,
@@ -51,7 +53,7 @@ export default function TwoFactorChallenge() {
 
     return (
         <>
-            <Head title="Two-factor authentication" />
+            <Head title={t('account.two_factor.challenge.title')} />
 
             <div className="space-y-6">
                 <Form
@@ -67,7 +69,9 @@ export default function TwoFactorChallenge() {
                                     <Input
                                         name="recovery_code"
                                         type="text"
-                                        placeholder="Enter recovery code"
+                                        placeholder={t(
+                                            'account.two_factor.challenge.recovery.placeholder',
+                                        )}
                                         autoFocus={showRecoveryInput}
                                         required
                                     />
@@ -109,11 +113,15 @@ export default function TwoFactorChallenge() {
                                 className="w-full"
                                 disabled={processing}
                             >
-                                Continue
+                                {t('account.two_factor.challenge.submit')}
                             </Button>
 
                             <div className="text-center text-sm text-muted-foreground">
-                                <span>or you can </span>
+                                <span>
+                                    {t(
+                                        'account.two_factor.challenge.toggle_prefix',
+                                    )}{' '}
+                                </span>
                                 <button
                                     type="button"
                                     className="cursor-pointer text-foreground underline decoration-neutral-300 underline-offset-4 transition-colors duration-300 ease-out hover:decoration-current! dark:decoration-neutral-500"

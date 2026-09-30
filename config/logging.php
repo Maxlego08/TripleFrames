@@ -1,5 +1,8 @@
 <?php
 
+use App\Support\Ops\RedactPersonalData;
+use App\Support\Ops\RedactPersonalDataTap;
+use Monolog\Formatter\JsonFormatter;
 use Monolog\Handler\NullHandler;
 use Monolog\Handler\StreamHandler;
 use Monolog\Handler\SyslogUdpHandler;
@@ -58,19 +61,40 @@ return [
             'ignore_exceptions' => false,
         ],
 
+        // Canaux de l'application (spec 100 § 10.9) : `single` sur le poste,
+        // `daily` en production (14 jours). Tous passent par
+        // `RedactPersonalData`, qui retire du contexte la liste close des
+        // données personnelles ; `stack` hérite des processeurs de ses canaux.
         'single' => [
             'driver' => 'single',
             'path' => storage_path('logs/laravel.log'),
             'level' => env('LOG_LEVEL', 'debug'),
             'replace_placeholders' => true,
+            'tap' => [RedactPersonalDataTap::class],
         ],
 
         'daily' => [
             'driver' => 'daily',
             'path' => storage_path('logs/laravel.log'),
             'level' => env('LOG_LEVEL', 'debug'),
-            'max_files' => env('LOG_DAILY_DAYS', 14),
+            'max_files' => (int) env('LOG_DAILY_DAYS', 14),
             'replace_placeholders' => true,
+            'tap' => [RedactPersonalDataTap::class],
+        ],
+
+        // Canal `game` (spec 100 § 10.9) : lignes JSON, 14 jours, même
+        // processeur. La spec 60 choisit les événements journalisés — sans
+        // pseudo, `room_code`, `player_token` ni IP — et le critère 1 du test
+        // de charge se mesure sur ce canal (retard réel de chaque diffusion
+        // de frontière). Un fichier par jour, sur le poste comme en
+        // production.
+        'game' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/game.log'),
+            'level' => env('LOG_LEVEL', 'debug'),
+            'max_files' => (int) env('LOG_DAILY_DAYS', 14),
+            'formatter' => JsonFormatter::class,
+            'tap' => [RedactPersonalDataTap::class],
         ],
 
         'monthly' => [
@@ -110,7 +134,7 @@ return [
                 'stream' => 'php://stderr',
             ],
             'formatter' => env('LOG_STDERR_FORMATTER'),
-            'processors' => [PsrLogMessageProcessor::class],
+            'processors' => [RedactPersonalData::class, PsrLogMessageProcessor::class],
         ],
 
         'syslog' => [

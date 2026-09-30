@@ -1,0 +1,121 @@
+# Liste d'amorçage TMDB — la voie d'exception, lot par lot
+# =========================================================
+#
+# Ce fichier est un COLLAGE, pas du code. Il s'importe depuis le back-office,
+# écran « Import du catalogue », carte « Liste d'amorçage » (spec 20 § 3.5) :
+#
+#   - « Prévisualiser le lot suivant » montre le sort de chaque identifiant du
+#     prochain lot — titre original, année, motifs d'exception, refus de
+#     contenu — SANS RIEN IMPORTER : c'est le geste normal avant chaque lot ;
+#   - « Importer la liste d'amorçage » ouvre UN collage portant les
+#     `catalog.import.paste_max_ids` premiers identifiants encore absents du
+#     catalogue, dans l'ordre de ce fichier. Le collage fini, un nouveau clic
+#     importe le lot suivant : chaque clic reprend au premier identifiant
+#     manquant, films retirés comptés comme présents.
+#
+# Un seul collage est ouvert à la fois : le bouton reste inactif tant qu'un
+# collage — celui de cette liste ou un autre — est en file ou en cours.
+#
+# La console reste un outil d'exploitation, jamais le chemin du curateur :
+#
+#     php artisan catalog:import-ids --file=database/data/tmdb-seed-list.txt --dry-run -v
+#
+# Lancée à la main hors `local` et `testing`, une commande d'import qui écrit
+# prend d'abord un instantané bloquant (`backup:snapshot`, règle 12).
+#
+# Il entre par la VOIE D'EXCEPTION (§ 9.2, décision 11) : le filtre de goût —
+# 500 votes, langue originale dans {fr, en, ja}, sortie depuis 1970 — est
+# ignoré entièrement, et chaque film entré par ici est marqué
+# `is_import_exception` avec ses motifs, comptables en back-office.
+#
+# Le filtre de CONTENU, lui, s'applique à l'identique : `adult`, FR -18,
+# US NC-17 et US X sont refusés par cette voie exactement comme par le
+# balayage (décision 12). Aucune ligne de ce fichier ne le contourne.
+#
+# Format accepté : un identifiant par ligne, plusieurs par ligne séparés par
+# des espaces ou des virgules, une URL `https://www.themoviedb.org/movie/<id>-<slug>`,
+# un commentaire après `#`. Les doublons sont retirés au premier passage et
+# l'ordre du collage est conservé.
+#
+# ---------------------------------------------------------------------------
+# VÉRIFIER AVANT D'AJOUTER UNE LIGNE, et ce n'est pas une formalité
+# ---------------------------------------------------------------------------
+#
+# Un identifiant TMDB erroné n'échoue pas : il importe SILENCIEUSEMENT un autre
+# film, avec ses titres, ses alias et ses clés de réponse. Rien dans la chaîne
+# ne le rattrape, et le défaut ne se voit qu'en manche, le jour où le blindtest
+# affiche l'image d'un film et attend le titre d'un autre.
+#
+# Le geste sûr, pour chaque ligne :
+#   1. ouvrir la fiche sur themoviedb.org et copier l'URL entière — pas l'id nu ;
+#   2. « Prévisualiser le lot suivant » avant tout import, et relire le titre
+#      original et l'année de chaque ligne ;
+#   3. après import, relire la file de curation : c'est là que le titre
+#      apparaît, et c'est le dernier filet.
+#
+# Un identifiant refusé (filtre de contenu) ou inconnu de TMDB n'entre jamais
+# au catalogue : il reste compté parmi les identifiants restants et revient en
+# tête de chaque lot. Retirez-le de ce fichier.
+#
+# C'est pourquoi ce fichier est livré avec ses SECTIONS et sans identifiants :
+# la liste est du contenu de curation, elle se constitue une fiche à la fois,
+# et une ligne inventée coûte plus cher qu'une ligne manquante.
+#
+# ---------------------------------------------------------------------------
+# Sections attendues, et pourquoi chacune existe (décision 11)
+# ---------------------------------------------------------------------------
+
+# --- 1. Canon Disney antérieur à 1970 — la première section, et la plus urgente
+# La borne 1970 ampute l'âge d'or Disney en entier, de Blanche-Neige (1937) au
+# Livre de la jungle (1967) : c'est-à-dire la moitié « dessins animés » annoncée
+# dans le nom même du produit. Motif attendu : exception_for_release_year.
+# Cible : ~25 films.
+
+
+# --- 2. Classiques antérieurs à 1970, hors Disney
+# Le Bon la Brute et le Truand, 2001, Psychose, Casablanca, Metropolis.
+# Motif attendu : exception_for_release_year.
+# Cible : ~25 films.
+
+
+# --- 3. Corpus coréen
+# Un film coréen qui franchit 500 votes est par construction un classique ; le
+# filtre de langue l'écarte pourtant. Motif attendu : exception_for_language.
+# Cible : ~15 films.
+
+
+# --- 4. Corpus espagnol et hispanophone
+# Motif attendu : exception_for_language. Cible : ~15 films.
+
+
+# --- 5. Corpus italien
+# Motif attendu : exception_for_language. Cible : ~15 films.
+
+
+# --- 6. Corpus allemand
+# Motif attendu : exception_for_language. Cible : ~10 films.
+
+
+# --- 7. Corpus scandinave
+# Motif attendu : exception_for_language. Cible : ~10 films.
+
+
+# --- 8. Corpus chinois, cantonais et taïwanais
+# Motif attendu : exception_for_language. Cible : ~15 films.
+
+
+# --- 9. Corpus hindi, persan, portugais et autres
+# Motif attendu : exception_for_language. Cible : ~15 films.
+
+
+# --- 10. Productions hollywoodiennes en langue exotique
+# Limite connue de la métadonnée, à signaler pour ne pas déboguer un filtre qui
+# fonctionne : `original_language` trahit sur Apocalypto et La Passion du Christ.
+# Motif attendu : exception_for_language, sur un film pourtant américain.
+# Cible : ~5 films.
+
+
+# --- 11. Films de calibre blindtest sous le seuil de notoriété
+# La queue 100-500 votes contient des films reconnus à coup sûr dans un corpus
+# non anglophone. Motif attendu : exception_for_vote_count.
+# Cible : ~25 films.

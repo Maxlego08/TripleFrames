@@ -1,0 +1,155 @@
+{
+    "adult": false,
+    "backdrop_path": "/1f0a7c3d5e9b2a4c6d8e0f1a3b5c7d9e.jpg",
+    "belongs_to_collection": {
+        "id": 445566,
+        "name": "Quintane Saga Collection",
+        "poster_path": "/5e4f6a7b8c9d0e1f2a3b4c5d6e7f8091.jpg",
+        "backdrop_path": null
+    },
+    "budget": 0,
+    "genres": [
+        { "id": 16, "name": "Animation" },
+        { "id": 18, "name": "Drama" }
+    ],
+    "homepage": "",
+    "id": 987654,
+    "imdb_id": "tt0000000",
+    "original_language": "ja",
+    "original_title": "ガラスの果樹園",
+    "overview": "Oeuvre fictive de fixture, sans rapport avec un film existant.",
+    "popularity": 12.345,
+    "poster_path": "/2b1c3d4e5f6a7b8c9d0e1f2a3b4c5d6e.jpg",
+    "production_companies": [
+        {
+            "id": 7711,
+            "logo_path": null,
+            "name": "Atelier Kaze",
+            "origin_country": "JP"
+        },
+        {
+            "id": 7712,
+            "logo_path": null,
+            "name": "Studio Quintane",
+            "origin_country": "FR"
+        }
+    ],
+    "production_countries": [{ "iso_3166_1": "JP", "name": "Japan" }],
+    "release_date": "1998-07-18",
+    "revenue": 0,
+    "runtime": 104,
+    "spoken_languages": [
+        { "english_name": "Japanese", "iso_639_1": "ja", "name": "日本語" }
+    ],
+    "status": "Released",
+    "tagline": "",
+    "title": "The Glass Orchard",
+    "video": false,
+    "vote_average": 7.8,
+    "vote_count": 2410,
+    "release_dates": {
+        "results": [
+            {
+                "iso_3166_1": "FR",
+                "release_dates": [
+                    {
+                        "certification": "-16",
+                        "descriptors": [],
+                        "iso_639_1": "",
+                        "note": "Classement d'origine",
+                        "release_date": "1999-02-10T00:00:00.000Z",
+                        "type": 3
+                    },
+                    {
+                        "certification": "-12",
+                        "descriptors": [],
+                        "iso_639_1": "",
+                        "note": "Reclassement",
+                        "release_date": "2014-05-21T00:00:00.000Z",
+                        "type": 5
+                    }
+                ]
+            },
+            {
+                "iso_3166_1": "US",
+                "release_dates": [
+                    {
+                        "certification": "PG-13",
+                        "descriptors": [],
+                        "iso_639_1": "",
+                        "note": "",
+                        "release_date": "1999-09-03T00:00:00.000Z",
+                        "type": 3
+                    }
+                ]
+            },
+            {
+                "iso_3166_1": "JP",
+                "release_dates": [
+                    {
+                        "certification": "",
+                        "descriptors": [],
+                        "iso_639_1": "",
+                        "note": "",
+                        "release_date": "1998-07-18T00:00:00.000Z",
+                        "type": 3
+                    }
+                ]
+            }
+        ]
+    },
+    "translations": {
+        "translations": [
+            {
+                "iso_3166_1": "US",
+                "iso_639_1": "en",
+                "name": "English",
+                "english_name": "English",
+                "data": {
+                    "homepage": "",
+                    "overview": "Fictional fixture work.",
+                    "runtime": 104,
+                    "tagline": "",
+                    "title": "The Glass Orchard"
+                }
+            },
+            {
+                "iso_3166_1": "FR",
+                "iso_639_1": "fr",
+                "name": "Français",
+                "english_name": "French",
+                "data": {
+                    "homepage": "",
+                    "overview": "Oeuvre fictive de fixture.",
+                    "runtime": 104,
+                    "tagline": "",
+                    "title": "Le Verger de verre"
+                }
+            },
+            {
+                "iso_3166_1": "DE",
+                "iso_639_1": "de",
+                "name": "Deutsch",
+                "english_name": "German",
+                "data": {
+                    "homepage": "",
+                    "overview": "",
+                    "runtime": 104,
+                    "tagline": "",
+                    "title": ""
+                }
+            }
+        ]
+    },
+    "alternative_titles": {
+        "titles": [
+            {
+                "iso_3166_1": "JP",
+                "title": "Garasu no Kajuen",
+                "type": "Romaji"
+            },
+            { "iso_3166_1": "FR", "title": "Le Verger", "type": "short title" },
+            { "iso_3166_1": "US", "title": "", "type": "working title" }
+        ]
+    }
+}

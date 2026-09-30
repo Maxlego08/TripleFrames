@@ -11,6 +11,11 @@
         <testsuite name="Feature">
             <directory>tests/Feature</directory>
         </testsuite>
+        <!-- Groupe `locks-timing` (contrat C18) : deux connexions MySQL réelles et
+             Redis. Exclue de `composer test`, jouée par le job CI `mysql-redis`. -->
+        <testsuite name="Concurrency">
+            <directory>tests/Concurrency</directory>
+        </testsuite>
     </testsuites>
     <source>
         <include>
@@ -18,6 +23,12 @@
         </include>
     </source>
     <php>
+        <!-- Le poste de développement tourne à `memory_limit=128M` et les tests
+             d'architecture indexent tout `app/` : sans ce relèvement, la suite
+             tombe en épuisement mémoire au lieu d'échouer sur une assertion, et
+             le mode de défaillance devient illisible. Même geste que le
+             relèvement de mémoire déjà passé à PHPStan par `composer types:check`. -->
+        <ini name="memory_limit" value="512M"/>
         <env name="APP_ENV" value="testing"/>
         <env name="APP_MAINTENANCE_DRIVER" value="file"/>
         <env name="BCRYPT_ROUNDS" value="4"/>
@@ -29,6 +40,45 @@
         <env name="MAIL_MAILER" value="array"/>
         <env name="QUEUE_CONNECTION" value="sync"/>
         <env name="SESSION_DRIVER" value="array"/>
+        <!-- Le processus de test ne porte JAMAIS la clé TMDB. Une neutralisation
+             fichier par fichier serait une discipline, pas une propriété du
+             harnais : un test qui oublierait Http::preventStrayRequests() partirait
+             en appel réel et authentifié depuis le poste du développeur, et il
+             passerait en local pour échouer en CI. La CI sans clé devient ici
+             l'état par défaut partout. -->
+        <!-- Chaque identifiant externe est vidé par une PAIRE de lignes (spec
+             100 § 2.3) : une variable exportée dans le shell du développeur
+             arrive à la fois dans l'environnement du processus et dans $_SERVER.
+             - `<env force="true">` écrase getenv() et $_ENV ; sans `force`,
+               PHPUnit laisse en place la valeur déjà exportée.
+             - `<server>` écrase $_SERVER, que phpdotenv — donc env() et toute la
+               configuration Laravel — lit EN PREMIER. Sans cette ligne, la vraie
+               clé du shell l'emporte malgré `force`.
+             Jamais sur DB_*, CACHE_STORE, QUEUE_CONNECTION ni REDIS_*, que le job
+             `mysql-redis` surcharge par son environnement. -->
+        <env name="TMDB_API_KEY" value="" force="true"/>
+        <server name="TMDB_API_KEY" value=""/>
+        <env name="TMDB_API_READ_ACCESS_TOKEN" value="" force="true"/>
+        <server name="TMDB_API_READ_ACCESS_TOKEN" value=""/>
+        <env name="MAIL_PASSWORD" value="" force="true"/>
+        <server name="MAIL_PASSWORD" value=""/>
+        <env name="AWS_SECRET_ACCESS_KEY" value="" force="true"/>
+        <server name="AWS_SECRET_ACCESS_KEY" value=""/>
+        <env name="REVERB_APP_SECRET" value="" force="true"/>
+        <server name="REVERB_APP_SECRET" value=""/>
+        <env name="OPS_PROBE_TOKEN" value="" force="true"/>
+        <server name="OPS_PROBE_TOKEN" value=""/>
+        <!-- Pas un secret, un relevé de machine (`nproc`) : vidé par la même
+             paire pour que la sonde `load` compte les vCPU simulés par les
+             tests, quel que soit le `.env` du poste. -->
+        <env name="OPS_LOAD_CPU_COUNT" value="" force="true"/>
+        <server name="OPS_LOAD_CPU_COUNT" value=""/>
+        <!-- Pas un secret, un interrupteur (spec 20 § 5.4, D38 du 28/09) : vidé
+             par la même paire pour que la suite joue la voie capture OUVERTE,
+             son défaut, quel que soit le `.env` du poste. Un test qui la veut
+             fermée le dit par `Config::set`. -->
+        <env name="CURATION_CAPTURE_ENABLED" value="" force="true"/>
+        <server name="CURATION_CAPTURE_ENABLED" value=""/>
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
         <env name="NIGHTWATCH_ENABLED" value="false"/>

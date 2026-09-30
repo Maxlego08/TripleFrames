@@ -42,6 +42,15 @@ return [
             'driver' => 'session',
             'provider' => 'users',
         ],
+
+        // Garde des invités sur les canaux de diffusion (spec 60 § 10.4,
+        // contrat C7 § 2.2) : `Auth::viaRequest('player-token', …)` dans
+        // `AppServiceProvider`, qui ne lit que le hash du `player_token`
+        // courant et rend un `SeatPrincipal`. Jamais la garde par défaut,
+        // jamais vue de Fortify, et `Player` n'est pas `Authenticatable`.
+        'player' => [
+            'driver' => 'player-token',
+        ],
     ],
 
     /*

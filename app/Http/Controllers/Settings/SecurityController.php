@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Settings;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Settings\PasswordUpdateRequest;
 use App\Http\Requests\Settings\TwoFactorAuthenticationRequest;
+use App\Support\Identity\AccountSwitches;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Validation\Rules\Password;
 use Inertia\Inertia;
@@ -18,10 +19,15 @@ class SecurityController extends Controller
      */
     public function edit(TwoFactorAuthenticationRequest $request): Response
     {
+        // Les passkeys se gèrent seulement si Fortify les active ET si
+        // l'interrupteur de compte les ouvre (spec 40 § 8.2) : fermées en
+        // production au jalon 1, leurs routes y répondent 404.
+        $canManagePasskeys = Features::canManagePasskeys() && AccountSwitches::passkeysEnabled();
+
         $props = [
             'canManageTwoFactor' => Features::canManageTwoFactorAuthentication(),
-            'canManagePasskeys' => Features::canManagePasskeys(),
-            'passkeys' => Features::canManagePasskeys()
+            'canManagePasskeys' => $canManagePasskeys,
+            'passkeys' => $canManagePasskeys
                 ? $request->user()
                     ->passkeys()
                     ->select(['id', 'name', 'credential', 'created_at', 'last_used_at'])

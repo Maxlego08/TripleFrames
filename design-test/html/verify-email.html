@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="fr">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <meta name="description" content="Vérifie ton adresse e-mail TripleFrames." />
+        <title>Vérification de l’adresse e-mail — TripleFrames</title>
+        <link rel="icon" href="../svg/brand-logo.svg" type="image/svg+xml" />
+        <link rel="stylesheet" href="../css/auth.css" />
+        <link rel="stylesheet" href="../css/global-header.css" />
+    </head>
+    <body class="auth-page auth-page--compact" data-authenticated="true">
+        <a class="skip-link" href="#auth-content">Aller au contenu</a>
+
+        <header class="global-header">
+            <div class="global-header__inner">
+                <a class="global-header__brand" href="index.html" aria-label="TripleFrames, accueil">
+                    <img class="global-header__brand-logo" src="../svg/brand-logo.svg" alt="" width="44" height="36" />
+                    <span class="global-header__brand-name">TripleFrames</span>
+                </a>
+
+                <nav class="global-header__account-nav global-header__account-nav--guest" aria-label="Compte">
+                    <a class="global-header__nav-link" href="login.html">Connexion</a>
+                    <a class="global-header__nav-pill" href="register.html">S’inscrire</a>
+                </nav>
+
+                <nav class="global-header__account-nav global-header__account-nav--member" aria-label="Compte connecté">
+                    <a class="global-header__account-button" href="account.html">
+                        <span class="global-header__account-avatar" aria-hidden="true">MC</span>
+                        <span>Mon compte</span>
+                    </a>
+                    <a class="global-header__logout" href="login.html">
+                        <img src="../svg/icons/logout.svg" alt="" />
+                        <span>Déconnexion</span>
+                    </a>
+                </nav>
+            </div>
+        </header>
+
+        <main class="auth-stage" id="auth-content">
+            <section class="auth-ticket" aria-labelledby="verify-email-title">
+                <div class="auth-ticket__form-panel auth-ticket__form-panel--centered">
+                    <div class="auth-state-icon" aria-hidden="true">
+                        <img src="../svg/icons/mail.svg" alt="" />
+                    </div>
+
+                    <div class="auth-heading auth-heading--centered">
+                        <p class="auth-heading__step">Un e-mail t’attend</p>
+                        <h2 id="verify-email-title">Vérification de l’adresse e-mail</h2>
+                        <p>Vérifie ton adresse en cliquant sur le lien que nous venons de t’envoyer.</p>
+                    </div>
+
+                    <div class="auth-alert auth-alert--success" id="verify-email-status" role="status" hidden>
+                        Un nouveau lien de vérification a été envoyé à l’adresse fournie lors de ton inscription.
+                    </div>
+
+                    <form class="auth-form auth-form--compact" id="verify-email-form" data-auth-form="verify-email" action="/email/verification-notification" method="post">
+                        <button class="button button--primary" type="submit">
+                            <span>Renvoyer l’e-mail de vérification</span>
+                            <img class="icon" src="../svg/icons/refresh.svg" alt="" aria-hidden="true" />
+                        </button>
+                    </form>
+
+                    <a class="auth-return auth-return--link" href="login.html">Se déconnecter</a>
+                </div>
+            </section>
+        </main>
+
+        <footer class="auth-footer">
+            <p>© TripleFrames</p>
+            <nav aria-label="Informations légales">
+                <a href="terms.html">Conditions</a>
+                <a href="privacy.html">Confidentialité</a>
+            </nav>
+        </footer>
+
+        <div class="toast" id="auth-toast" role="status" aria-live="polite"></div>
+        <script src="../js/auth.js"></script>
+        <script src="../js/global-header.js"></script>
+    </body>
+</html>

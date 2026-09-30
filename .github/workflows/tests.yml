@@ -13,6 +13,15 @@ jobs:
   ci:
     runs-on: ubuntu-latest
 
+    # Une PR poussée trois fois ne consomme qu'une exécution ; `main` n'est
+    # jamais annulée, parce qu'elle alimente la construction des artefacts.
+    # Hors PR, chaque exécution a donc SON groupe (`run_id`) : GitHub ne garde
+    # qu'une exécution en attente par groupe et annule celle qui attendait
+    # quand une troisième arrive, même sans `cancel-in-progress`.
+    concurrency:
+      group: tests-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -22,7 +31,10 @@ jobs:
       - name: Setup PHP
         uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
         with:
-          php-version: '8.3'
+          php-version: '8.4'
+          # `ext-imagick` est une dépendance applicative déclarée dans composer.json :
+          # le réencodage des images de jeu et les fixtures du catalogue en dépendent.
+          extensions: imagick
           tools: composer:v2
           coverage: none
 
@@ -36,3 +48,199 @@ jobs:
 
       - name: Run CI Checks
         run: composer ci:check
+
+  # Chaque commit de `main` vert devient un candidat au déploiement (spec 100
+  # § 2.5 et § 11.1) : un commit sur la branche `deploy`, que le serveur TIRE
+  # en avance rapide avec une clé de lecture seule. Les assets sont construits
+  # ici, jamais sur le VPS, qui les volerait en CPU à ses voisins.
+  #
+  # Deux jobs, pour que le jeton d'écriture ne côtoie jamais du code tiers :
+  # `build` exécute les dépendances (greffon composer, `package:discover`,
+  # greffons Vite, Babel, Tailwind, Wayfinder), mais en lecture seule et sans
+  # identifiant persisté ; `artifacts` détient le jeton d'écriture, mais
+  # n'exécute que git et les actions de première partie. Une dépendance
+  # compromise au build n'atteint ainsi que `public/build`, jamais la branche
+  # `deploy` que le serveur tire et migre (écart E11-8).
+  build:
+    needs: ci
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
+        with:
+          php-version: '8.4'
+          # Même version et mêmes extensions que le job `ci` (R-40).
+          extensions: imagick
+          tools: composer:v2
+          coverage: none
+
+      - name: Setup Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22'
+
+      # `.env` de l'exécuteur seulement : il n'entre jamais dans l'artefact. Il
+      # précède l'installation, dont le `package:discover` démarre
+      # l'application : sans `APP_ENV`, elle se croirait en production et
+      # refuserait une racine `frames` vide. Le build ne fige aucune valeur
+      # dépendant de l'hôte (Echo se configure à l'exécution par la prop
+      # `realtime`) : l'artefact vaut pour tout environnement et se construit
+      # sans connaître `<DOMAINE>`.
+      - name: Prepare Environment
+        run: cp .env.example .env
+
+      # La construction a besoin de PHP : le greffon Wayfinder de Vite appelle
+      # `php artisan wayfinder:generate`, et `resources/js/{actions,routes,
+      # wayfinder}` ne sont pas suivis par git. Depuis le verrou, sans les
+      # dépendances de développement.
+      - name: Install PHP Dependencies
+        run: |
+          composer install --no-dev --prefer-dist --no-interaction
+          php artisan key:generate
+
+      # `npm ci`, jamais `npm install` : un artefact se construit depuis le verrou.
+      - name: Install Node Dependencies
+        run: npm ci
+
+      - name: Build Assets
+        run: npm run build
+
+      # `public/build` seul, sans fichier caché. Conservé un jour : il ne sert
+      # qu'au job suivant de la même exécution ; au-delà, une relance rejoue
+      # l'exécution entière.
+      - name: Upload Build
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: public-build
+          path: public/build
+          if-no-files-found: error
+          include-hidden-files: false
+          retention-days: 1
+
+  artifacts:
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    # Seul job du dépôt autorisé à écrire, avec le seul jeton automatique : il
+    # pousse la branche `deploy`, et aucun autre secret n'entre ici (§ 7.1).
+    # Il n'installe ni n'exécute aucune dépendance du projet.
+    permissions:
+      contents: write
+
+    # Deux constructions ne se croisent jamais sur la branche `deploy`, et
+    # aucune n'est annulée : chacune part d'un commit `deploy` publié.
+    concurrency:
+      group: deploy-artifacts
+      cancel-in-progress: false
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Seul checkout du dépôt qui garde l'identifiant : la poussée de la
+          # branche `deploy` en a besoin (ZeroSecretTest l'exempte, lui seul).
+          persist-credentials: true
+
+      # Empreinte vérifiée à la réception (échec par défaut en cas d'écart).
+      - name: Download Build
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: public-build
+          path: public/build
+
+      # `public/build` est servi depuis la racine du document : un fichier que
+      # PHP-FPM exécuterait, ou un fichier caché (`.user.ini`), n'y part
+      # jamais, quel que soit le code qui l'a produit au build.
+      - name: Verify Build Contents
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          refused="$(find public/build \( -iname '*.php' -o -iname '*.php[0-9]' -o -iname '*.phtml' -o -iname '*.pht' -o -iname '*.phps' -o -iname '*.phar' -o -name '.*' \) -print)"
+
+          if [ -n "$refused" ]; then
+            echo "Fichiers refusés dans public/build :" >&2
+            echo "$refused" >&2
+            exit 1
+          fi
+
+      # Arbre publié = arbre du commit source, plus `public/build` ajouté de
+      # force (il est ignoré par .gitignore), sans `vendor`, `node_modules` ni
+      # `.env` : un index temporaire part du commit source, et rien d'autre du
+      # répertoire de travail n'y entre. `.github/` en est retiré : le serveur
+      # n'en a pas l'usage, et le jeton automatique ne peut ni créer ni modifier
+      # un fichier de workflow (aucune permission `workflows` ne lui est
+      # accordable), ce qui ferait refuser la poussée à chaque workflow modifié.
+      # Parent = commit `deploy` précédent : historique linéaire, JAMAIS de
+      # `push --force`, pour que Plesk Git tire toujours en avance rapide.
+      # Seule la pointe de `main` publie : le groupe de concurrence sérialise
+      # les constructions sans les ordonner (celle d'un commit plus ancien, au
+      # job `ci` plus lent, pourrait passer après une plus récente), et une
+      # relance tardive ne doit pas ramener `deploy` à une source dépassée.
+      - name: Publish Deploy Commit
+        shell: bash
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+          GIT_AUTHOR_NAME: github-actions[bot]
+          GIT_AUTHOR_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+          GIT_COMMITTER_NAME: github-actions[bot]
+          GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+        run: |
+          set -euo pipefail
+
+          main_tip="$(git ls-remote --exit-code origin refs/heads/main | cut -f1)"
+
+          if [ "$main_tip" != "$SOURCE_SHA" ]; then
+            echo "main a avancé jusqu'à $main_tip : c'est l'exécution de ce commit-là qui publiera."
+            exit 0
+          fi
+
+          export GIT_INDEX_FILE="$RUNNER_TEMP/deploy.index"
+          git read-tree "$SOURCE_SHA"
+          git rm -r --cached --quiet --ignore-unmatch -- .github
+          git add --force -- public/build
+          git ls-files --error-unmatch -- public/build/manifest.json > /dev/null
+          tree="$(git write-tree)"
+          unset GIT_INDEX_FILE
+
+          parent_args=()
+          status=0
+          git ls-remote --exit-code origin refs/heads/deploy > /dev/null || status=$?
+
+          case "$status" in
+            0)
+              git fetch --no-tags --depth=1 origin +refs/heads/deploy:refs/remotes/origin/deploy
+              parent="$(git rev-parse refs/remotes/origin/deploy)"
+
+              if [ "$(git rev-parse "$parent^{tree}")" = "$tree" ]; then
+                echo "Arbre identique au commit deploy $parent : rien à publier."
+                exit 0
+              fi
+
+              parent_args=(-p "$parent")
+              ;;
+            2)
+              echo "Branche deploy absente : premier artefact, sans parent."
+              ;;
+            *)
+              echo "Lecture de la branche deploy impossible (code $status)." >&2
+              exit "$status"
+              ;;
+          esac
+
+          commit="$(git commit-tree "$tree" "${parent_args[@]}" -m "deploy: $SOURCE_SHA")"
+          git push origin "$commit:refs/heads/deploy"
+          echo "Publié : deploy $commit, source $SOURCE_SHA."

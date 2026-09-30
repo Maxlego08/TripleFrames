@@ -1,5 +1,6 @@
 import { useHttp } from '@inertiajs/react';
 import { useCallback, useState } from 'react';
+import { useTranslations } from '@/hooks/use-translations';
 import { qrCode, recoveryCodes, secretKey } from '@/routes/two-factor';
 
 export type UseTwoFactorAuthReturn = {
@@ -21,6 +22,7 @@ export const OTP_MAX_LENGTH = 6;
 
 export const useTwoFactorAuth = (): UseTwoFactorAuthReturn => {
     const { submit } = useHttp();
+    const { t } = useTranslations();
 
     const [qrCodeSvg, setQrCodeSvg] = useState<string | null>(null);
     const [manualSetupKey, setManualSetupKey] = useState<string | null>(null);
@@ -55,10 +57,13 @@ export const useTwoFactorAuth = (): UseTwoFactorAuthReturn => {
 
             setQrCodeSvg(svg);
         } catch {
-            setErrors((prev) => [...prev, 'Failed to fetch QR code']);
+            setErrors((prev) => [
+                ...prev,
+                t('account.two_factor.errors.qr_code'),
+            ]);
             setQrCodeSvg(null);
         }
-    }, [submit]);
+    }, [submit, t]);
 
     const fetchSetupKey = useCallback(async (): Promise<void> => {
         try {
@@ -68,10 +73,13 @@ export const useTwoFactorAuth = (): UseTwoFactorAuthReturn => {
 
             setManualSetupKey(key);
         } catch {
-            setErrors((prev) => [...prev, 'Failed to fetch a setup key']);
+            setErrors((prev) => [
+                ...prev,
+                t('account.two_factor.errors.setup_key'),
+            ]);
             setManualSetupKey(null);
         }
-    }, [submit]);
+    }, [submit, t]);
 
     const fetchRecoveryCodes = useCallback(async (): Promise<void> => {
         try {
@@ -79,10 +87,13 @@ export const useTwoFactorAuth = (): UseTwoFactorAuthReturn => {
             const codes = (await submit(recoveryCodes())) as string[];
             setRecoveryCodesList(codes);
         } catch {
-            setErrors((prev) => [...prev, 'Failed to fetch recovery codes']);
+            setErrors((prev) => [
+                ...prev,
+                t('account.two_factor.errors.recovery_codes'),
+            ]);
             setRecoveryCodesList([]);
         }
-    }, [submit]);
+    }, [submit, t]);
 
     const fetchSetupData = useCallback(async (): Promise<void> => {
         try {

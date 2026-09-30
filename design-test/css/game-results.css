@@ -1,0 +1,721 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  min-width: 20rem;
+  background: oklch(30% 0.11 295deg);
+}
+
+body {
+  margin: 0;
+  color: oklch(27% 0.08 292deg);
+  font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+}
+
+button {
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+a {
+  color: inherit;
+}
+
+.icon {
+  display: block;
+  width: 1.15rem;
+  height: 1.15rem;
+}
+
+.skip-link {
+  position: fixed;
+  z-index: 100;
+  top: 0.75rem;
+  left: 0.75rem;
+  border: 0.125rem solid oklch(27% 0.08 292deg);
+  border-radius: 0.65rem;
+  padding: 0.65rem 0.9rem;
+  background: oklch(88% 0.16 89deg);
+  font-weight: 900;
+  translate: 0 -200%;
+}
+.skip-link:focus {
+  translate: 0;
+}
+
+.results-page {
+  min-height: 100svh;
+  overflow: hidden;
+  background: repeating-linear-gradient(90deg, oklch(40% 0.15 295deg) 0 5.5rem, oklch(44% 0.15 295deg) 5.5rem 9rem, oklch(34% 0.14 295deg) 9rem 13rem);
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  border: 0.125rem solid oklch(27% 0.08 292deg);
+  border-radius: 999px;
+  padding: 0.38rem 0.8rem 0.38rem 0.48rem;
+  background: oklch(98% 0.03 91deg);
+  box-shadow: 0.22rem 0.22rem 0 oklch(16% 0.04 290deg);
+  gap: 0.6rem;
+  text-decoration: none;
+}
+.brand__logo {
+  display: block;
+  width: 2.35rem;
+  height: auto;
+}
+.brand__name {
+  font-family: "Arial Rounded MT Bold", "Trebuchet MS", sans-serif;
+  font-size: 1.25rem;
+  font-weight: 900;
+  letter-spacing: -0.04em;
+}
+.brand:focus-visible {
+  outline: 0.1875rem solid oklch(81% 0.13 195deg);
+  outline-offset: 0.1875rem;
+}
+
+.results {
+  position: relative;
+  display: grid;
+  width: min(100% - 2rem, 105rem);
+  height: 100svh;
+  min-height: 0;
+  margin-inline: auto;
+  grid-template-columns: minmax(34rem, 1fr) minmax(31rem, 43rem);
+  gap: clamp(1.5rem, 3vw, 3.5rem);
+  padding-block: 1rem;
+}
+.results__brand {
+  position: fixed;
+  z-index: 30;
+  top: 1rem;
+  left: 1.25rem;
+}
+.results__celebration {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  align-content: center;
+  justify-items: center;
+  grid-template-rows: auto minmax(20rem, 1fr) auto;
+  padding-top: 3.6rem;
+}
+.results__heading {
+  position: relative;
+  z-index: 2;
+  text-align: center;
+}
+.results__heading h1 {
+  margin: 0;
+  color: oklch(98% 0.03 91deg);
+  font-family: "Arial Rounded MT Bold", "Trebuchet MS", sans-serif;
+  font-size: clamp(3rem, 4.1vw, 4.8rem);
+  font-weight: 900;
+  letter-spacing: -0.045em;
+  line-height: 0.95;
+  text-shadow: 0 0.22rem 0 oklch(16% 0.04 290deg);
+}
+.results__heading p {
+  display: inline-block;
+  margin: 0.85rem 0 0;
+  border: 0.125rem solid oklch(27% 0.08 292deg);
+  border-radius: 999px;
+  padding: 0.35rem 1rem;
+  background: oklch(16% 0.04 290deg / 0.62);
+  color: oklch(88% 0.16 89deg);
+  font-size: clamp(1rem, 1.35vw, 1.35rem);
+  font-weight: 900;
+}
+
+.podium {
+  display: grid;
+  width: min(100%, 42rem);
+  height: min(48vh, 31rem);
+  min-height: 22rem;
+  align-items: end;
+  align-self: center;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: clamp(0.55rem, 1.4vw, 1.4rem);
+  padding: 2.5rem 0 0.35rem;
+}
+.podium__player {
+  display: grid;
+  min-width: 0;
+  align-items: end;
+  grid-template-rows: auto auto;
+  text-align: center;
+}
+.podium__player--first {
+  z-index: 2;
+  order: 2;
+}
+.podium__player--second {
+  order: 1;
+}
+.podium__player--third {
+  order: 3;
+}
+.podium__identity {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 0.45rem;
+  margin-bottom: 0.8rem;
+}
+.podium__crown {
+  position: absolute;
+  top: -2.45rem;
+  width: 2.6rem;
+  height: 2.6rem;
+  filter: drop-shadow(0 0.15rem 0 oklch(27% 0.08 292deg));
+  animation: crown-bob 1.8s ease-in-out infinite;
+}
+.podium__rank {
+  color: oklch(98% 0.03 91deg);
+  font-family: "Arial Rounded MT Bold", "Trebuchet MS", sans-serif;
+  font-size: 1.15rem;
+  font-weight: 900;
+  text-shadow: 0 0.12rem 0 oklch(16% 0.04 290deg);
+}
+.podium__player--first .podium__rank {
+  color: oklch(88% 0.16 89deg);
+  font-size: 1.35rem;
+}
+.podium__player--first .player-avatar {
+  width: clamp(5.3rem, 6vw, 6.5rem);
+}
+.podium__name {
+  width: min(100%, 8.5rem);
+  overflow: hidden;
+  border: 0.15rem solid oklch(27% 0.08 292deg);
+  border-radius: 999px;
+  padding: 0.24rem 0.65rem;
+  background: oklch(98% 0.03 91deg);
+  box-shadow: 0.15rem 0.15rem 0 oklch(27% 0.08 292deg);
+  font-family: "Arial Rounded MT Bold", "Trebuchet MS", sans-serif;
+  font-size: 0.95rem;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.podium__player--first .podium__name {
+  background: oklch(88% 0.16 89deg);
+  font-size: 1.05rem;
+}
+.podium__step {
+  display: grid;
+  min-height: 9rem;
+  align-content: start;
+  justify-items: center;
+  border: 0.1875rem solid oklch(27% 0.08 292deg);
+  border-radius: 1rem 1rem 0.2rem 0.2rem;
+  padding: 1.15rem 0.5rem 0.5rem;
+  background: oklch(70% 0.2 25deg);
+  box-shadow: 0 0.55rem 0 oklch(16% 0.04 290deg);
+}
+.podium__player--first .podium__step {
+  min-height: 16rem;
+  border-radius: 1.35rem 1.35rem 0.2rem 0.2rem;
+  padding-top: 1.45rem;
+  background: oklch(88% 0.16 89deg);
+}
+.podium__player--second .podium__step {
+  min-height: 12.5rem;
+  background: oklch(90% 0.045 220deg);
+}
+.podium__score {
+  font-family: "Arial Rounded MT Bold", "Trebuchet MS", sans-serif;
+  font-size: clamp(1.4rem, 2vw, 2rem);
+  font-weight: 900;
+  line-height: 1;
+}
+.podium__unit {
+  margin-top: 0.25rem;
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
+.player-avatar {
+  position: relative;
+  display: block;
+  width: clamp(4.3rem, 5vw, 5.2rem);
+  aspect-ratio: 1.04/1;
+  border: 0.15rem solid oklch(27% 0.08 292deg);
+  border-radius: 48% 48% 42% 42%;
+  background: oklch(70% 0.2 25deg);
+  box-shadow: 0 0.28rem 0 oklch(27% 0.08 292deg);
+}
+.player-avatar::before, .player-avatar::after {
+  position: absolute;
+  top: 37%;
+  width: 8%;
+  aspect-ratio: 0.72;
+  border-radius: 50%;
+  background: oklch(27% 0.08 292deg);
+  content: "";
+}
+.player-avatar::before {
+  left: 29%;
+}
+.player-avatar::after {
+  right: 29%;
+}
+.player-avatar__mouth {
+  position: absolute;
+  bottom: 20%;
+  left: 50%;
+  width: 28%;
+  height: 16%;
+  border-bottom: 0.14rem solid oklch(27% 0.08 292deg);
+  border-radius: 50%;
+  translate: -50% 0;
+}
+.player-avatar--pink {
+  background: oklch(76% 0.16 345deg);
+}
+.player-avatar--yellow {
+  background: oklch(88% 0.16 89deg);
+}
+.player-avatar--cyan {
+  background: oklch(81% 0.13 195deg);
+}
+.player-avatar--green {
+  background: oklch(76% 0.17 145deg);
+}
+.player-avatar--lavender {
+  background: oklch(86% 0.08 296deg);
+}
+.player-avatar--coral {
+  background: oklch(70% 0.2 25deg);
+}
+
+.current-result {
+  display: none;
+}
+
+.ranking {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  grid-template-rows: auto minmax(0, 1fr);
+  border: 0.1875rem solid oklch(27% 0.08 292deg);
+  border-radius: 1.6rem;
+  margin: 0;
+  padding: clamp(1rem, 1.8vw, 1.5rem);
+  background: oklch(16% 0.04 290deg / 0.78);
+  box-shadow: 0.45rem 0.45rem 0 oklch(16% 0.04 290deg);
+}
+.ranking__heading {
+  display: flex;
+  align-items: center;
+  color: oklch(98% 0.03 91deg);
+  gap: 0.7rem;
+  margin-bottom: 0.85rem;
+}
+.ranking__heading .icon {
+  width: 1.5rem;
+  height: 1.5rem;
+  filter: drop-shadow(0.1rem 0.1rem 0 oklch(16% 0.04 290deg));
+}
+.ranking__heading h2 {
+  margin: 0;
+  font-family: "Arial Rounded MT Bold", "Trebuchet MS", sans-serif;
+  font-size: clamp(1.7rem, 2vw, 2.2rem);
+  font-weight: 900;
+  letter-spacing: -0.035em;
+}
+.ranking__list {
+  display: grid;
+  min-height: 0;
+  grid-template-rows: repeat(9, minmax(0, 1fr));
+  gap: clamp(0.38rem, 0.75vh, 0.6rem);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ranking__item {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  align-items: center;
+  grid-template-columns: 2.25rem 2.85rem minmax(0, 1fr) auto;
+  border: 0.15rem solid oklch(27% 0.08 292deg);
+  border-radius: 0.85rem;
+  padding: 0.32rem 0.65rem 0.32rem 0.45rem;
+  background: oklch(98% 0.03 91deg);
+  box-shadow: 0.18rem 0.18rem 0 oklch(16% 0.04 290deg);
+  gap: 0.65rem;
+}
+.ranking__item--current {
+  border-left-width: 0.45rem;
+  border-left-color: oklch(81% 0.13 195deg);
+  background: oklch(88% 0.16 89deg);
+}
+.ranking__position {
+  color: oklch(47% 0.04 295deg);
+  font-family: "Arial Rounded MT Bold", "Trebuchet MS", sans-serif;
+  font-size: 1.15rem;
+  font-weight: 900;
+  text-align: center;
+}
+.ranking__item--current .ranking__position {
+  color: oklch(27% 0.08 292deg);
+}
+.ranking .player-avatar {
+  width: 2.65rem;
+  box-shadow: none;
+}
+.ranking__identity {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.55rem;
+}
+.ranking__name {
+  overflow: hidden;
+  font-family: "Arial Rounded MT Bold", "Trebuchet MS", sans-serif;
+  font-size: 1rem;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ranking__you {
+  border: 0.1rem solid oklch(27% 0.08 292deg);
+  border-radius: 999px;
+  padding: 0.08rem 0.38rem;
+  background: oklch(81% 0.13 195deg);
+  font-size: 0.58rem;
+  font-weight: 900;
+}
+.ranking__score {
+  border: 0.125rem solid oklch(27% 0.08 292deg);
+  border-radius: 999px;
+  padding: 0.24rem 0.7rem;
+  background: oklch(90% 0.045 220deg);
+  font-size: 0.9rem;
+  font-weight: 900;
+  white-space: nowrap;
+}
+.ranking__item--current .ranking__score {
+  background: oklch(98% 0.03 91deg);
+}
+
+.results-actions {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+}
+.results-actions--desktop {
+  margin-top: 1.3rem;
+}
+.results-actions--mobile {
+  display: none;
+}
+
+.results-button {
+  display: inline-flex;
+  min-height: 3.7rem;
+  align-items: center;
+  justify-content: center;
+  border: 0.1875rem solid oklch(27% 0.08 292deg);
+  border-radius: 1rem;
+  padding: 0.75rem 1.25rem;
+  box-shadow: 0.3rem 0.3rem 0 oklch(27% 0.08 292deg);
+  font-family: "Arial Rounded MT Bold", "Trebuchet MS", sans-serif;
+  font-size: 1rem;
+  font-weight: 900;
+  gap: 0.65rem;
+  text-decoration: none;
+  transition: background-color 120ms ease, box-shadow 120ms ease;
+}
+.results-button--primary {
+  background: oklch(70% 0.2 25deg);
+}
+.results-button--secondary {
+  background: oklch(98% 0.03 91deg);
+}
+.results-button:hover {
+  box-shadow: 0.42rem 0.42rem 0 oklch(27% 0.08 292deg);
+}
+.results-button:active {
+  box-shadow: 0.12rem 0.12rem 0 oklch(27% 0.08 292deg);
+}
+.results-button:focus-visible {
+  outline: 0.1875rem solid oklch(81% 0.13 195deg);
+  outline-offset: 0.1875rem;
+}
+
+@keyframes crown-bob {
+  0%, 100% {
+    rotate: -4deg;
+    translate: 0 0;
+  }
+  50% {
+    rotate: 4deg;
+    translate: 0 -0.2rem;
+  }
+}
+@media (max-width: 55rem) {
+  .results-page {
+    overflow: auto;
+  }
+  .results {
+    display: block;
+    width: min(100% - 1.25rem, 42rem);
+    height: auto;
+    min-height: 100svh;
+    padding: 5rem 0 7.5rem;
+  }
+  .results__brand {
+    position: absolute;
+    top: 0.7rem;
+    left: 0;
+  }
+  .results__celebration {
+    display: block;
+    padding: 0;
+  }
+  .results__heading h1 {
+    font-size: clamp(2.3rem, 9vw, 3.4rem);
+  }
+  .podium {
+    height: 24rem;
+    min-height: 0;
+    margin-top: 1.3rem;
+    padding-top: 2.25rem;
+  }
+  .podium__player--first .podium__step {
+    min-height: 12.5rem;
+  }
+  .podium__player--second .podium__step {
+    min-height: 9.5rem;
+  }
+  .podium__step {
+    min-height: 7.2rem;
+  }
+  .current-result {
+    display: grid;
+    align-items: center;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    border: 0.1875rem solid oklch(27% 0.08 292deg);
+    border-radius: 1rem;
+    margin: 1.2rem 0;
+    padding: 0.65rem 0.8rem;
+    background: oklch(88% 0.16 89deg);
+    box-shadow: 0.25rem 0.25rem 0 oklch(16% 0.04 290deg);
+    gap: 0.7rem;
+  }
+  .current-result__position {
+    display: grid;
+    width: 2.8rem;
+    aspect-ratio: 1;
+    border: 0.125rem solid oklch(27% 0.08 292deg);
+    border-radius: 50%;
+    background: oklch(81% 0.13 195deg);
+    font-family: "Arial Rounded MT Bold", "Trebuchet MS", sans-serif;
+    font-weight: 900;
+    place-items: center;
+  }
+  .current-result__copy {
+    min-width: 0;
+  }
+  .current-result__copy small,
+  .current-result__copy strong {
+    display: block;
+  }
+  .current-result__copy small {
+    font-size: 0.68rem;
+    font-weight: 900;
+  }
+  .current-result__copy strong {
+    overflow: hidden;
+    font-family: "Arial Rounded MT Bold", "Trebuchet MS", sans-serif;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .current-result__score {
+    border: 0.125rem solid oklch(27% 0.08 292deg);
+    border-radius: 999px;
+    padding: 0.25rem 0.65rem;
+    background: oklch(98% 0.03 91deg);
+    font-weight: 900;
+    white-space: nowrap;
+  }
+  .ranking {
+    min-height: 43rem;
+    padding: 1rem;
+  }
+  .ranking__heading {
+    justify-content: center;
+  }
+  .ranking__list {
+    grid-template-rows: none;
+  }
+  .ranking__item {
+    min-height: 3.7rem;
+  }
+  .results-actions--desktop {
+    display: none;
+  }
+  .results-actions--mobile {
+    position: fixed;
+    z-index: 40;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    border-top: 0.1875rem solid oklch(27% 0.08 292deg);
+    padding: 0.7rem max(0.75rem, env(safe-area-inset-right)) max(0.7rem, env(safe-area-inset-bottom)) max(0.75rem, env(safe-area-inset-left));
+    background: oklch(12% 0.04 292deg / 0.96);
+    gap: 0.65rem;
+  }
+  .results-button {
+    min-width: 0;
+    min-height: 3.3rem;
+    padding: 0.55rem 0.7rem;
+    font-size: 0.88rem;
+  }
+}
+@media (max-width: 35rem) {
+  .results {
+    width: min(100% - 1rem, 31rem);
+  }
+  .brand {
+    gap: 0.42rem;
+  }
+  .brand__logo {
+    width: 1.9rem;
+  }
+  .brand__name {
+    font-size: 1rem;
+  }
+  .results__brand {
+    padding: 0.3rem 0.62rem 0.3rem 0.38rem;
+  }
+  .results__heading p {
+    margin-top: 0.65rem;
+    font-size: 0.85rem;
+  }
+  .podium {
+    height: 20rem;
+    gap: 0.3rem;
+    padding-top: 2rem;
+  }
+  .podium__identity {
+    gap: 0.3rem;
+    margin-bottom: 0.5rem;
+  }
+  .podium__rank {
+    font-size: 0.78rem;
+  }
+  .podium__player--first .podium__rank {
+    font-size: 0.9rem;
+  }
+  .podium .player-avatar, .podium__player--first .player-avatar {
+    width: clamp(3.55rem, 16vw, 4.5rem);
+  }
+  .podium__name, .podium__player--first .podium__name {
+    width: 88%;
+    padding: 0.18rem 0.3rem;
+    font-size: 0.72rem;
+  }
+  .podium__player--first .podium__step {
+    min-height: 10.5rem;
+  }
+  .podium__player--second .podium__step {
+    min-height: 8rem;
+  }
+  .podium__step {
+    min-height: 6.2rem;
+    padding-top: 0.8rem;
+  }
+  .podium__score {
+    font-size: clamp(1rem, 5vw, 1.35rem);
+  }
+  .podium__crown {
+    top: -1.85rem;
+    width: 2rem;
+    height: 2rem;
+  }
+  .ranking__item {
+    grid-template-columns: 1.8rem 2.4rem minmax(0, 1fr) auto;
+    padding-right: 0.45rem;
+    gap: 0.4rem;
+  }
+  .ranking .player-avatar {
+    width: 2.2rem;
+  }
+  .ranking__name {
+    font-size: 0.84rem;
+  }
+  .ranking__you {
+    display: none;
+  }
+  .ranking__score {
+    padding: 0.2rem 0.45rem;
+    font-size: 0.74rem;
+  }
+}
+@media (max-width: 23rem) {
+  .brand__name {
+    display: none;
+  }
+  .results__brand {
+    padding: 0.3rem;
+  }
+  .results-actions--mobile {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-height: 45rem) and (min-width: 55.01rem) {
+  .results {
+    padding-block: 0.6rem;
+  }
+  .results__celebration {
+    padding-top: 2.7rem;
+  }
+  .results__heading h1 {
+    font-size: 2.7rem;
+  }
+  .results__heading p {
+    margin-top: 0.45rem;
+    font-size: 0.9rem;
+  }
+  .podium {
+    height: 20.5rem;
+    min-height: 0;
+  }
+  .podium__player--first .podium__step {
+    min-height: 11rem;
+  }
+  .podium__player--second .podium__step {
+    min-height: 8.5rem;
+  }
+  .podium__step {
+    min-height: 6.5rem;
+  }
+  .results-actions--desktop {
+    margin-top: 0.65rem;
+  }
+  .results-button {
+    min-height: 3.2rem;
+    padding-block: 0.55rem;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

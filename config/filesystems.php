@@ -47,6 +47,38 @@ return [
             'report' => false,
         ],
 
+        /*
+        |--------------------------------------------------------------------------
+        | Images de jeu — disque privé, hors du chemin de déploiement
+        |--------------------------------------------------------------------------
+        |
+        | `'serve' => false` : la route native de `FilesystemServiceProvider`
+        | n'est PAS enregistrée pour ce disque. Le service passe exclusivement par
+        | une route applicative dédiée, qui applique le prédicat de signature en
+        | trois parties — `Frame::isServable()`, la garde temporelle du palier et
+        | l'appartenance du demandeur à la manche. Un chemin de fichier ne quitte
+        | jamais le serveur, et `storage:link` ne lie JAMAIS ce disque.
+        |
+        | Deux préfixes, deux noms aléatoires indépendants : `game/` (dérivé servi,
+        | 1280 px et 150 Ko) et `master/` (source de re-cadrage, jamais servie).
+        | Voir `App\Support\Frames\FrameStoragePrefix`.
+        |
+        | `FRAMES_DISK_ROOT` laissée vide vaut `storage/app/frames`, et c'est un
+        | chemin ABSOLU : une racine relative se résoudrait contre le répertoire
+        | courant du processus, or celui de php-fpm n'est pas celui d'artisan.
+        | En production, la racine se pose hors du répertoire de déploiement.
+        |
+        */
+
+        'frames' => [
+            'driver' => 'local',
+            'root' => ((string) env('FRAMES_DISK_ROOT', '')) ?: storage_path('app/frames'),
+            'serve' => false,
+            'visibility' => 'private',
+            'throw' => true,
+            'report' => false,
+        ],
+
         's3' => [
             'driver' => 's3',
             'key' => env('AWS_ACCESS_KEY_ID'),

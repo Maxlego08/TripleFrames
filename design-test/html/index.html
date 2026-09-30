@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="fr">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <meta
+            name="description"
+            content="TripleFrames, le blindtest cinéma à jouer entre amis."
+        />
+        <title>TripleFrames — Devine le film</title>
+        <link rel="icon" href="../svg/brand-logo.svg" type="image/svg+xml" />
+        <link rel="stylesheet" href="../css/styles.css" />
+            <link rel="stylesheet" href="../css/global-header.css" />
+    </head>
+    <body>
+        <a class="skip-link" href="#main-content">Aller au contenu</a>
+
+        <header class="global-header">
+    <div class="global-header__inner">
+        <a class="global-header__brand" href="index.html" aria-label="TripleFrames, accueil">
+            <img class="global-header__brand-logo" src="../svg/brand-logo.svg" alt="" width="44" height="36" />
+            <span class="global-header__brand-name">TripleFrames</span>
+        </a>
+
+        <nav class="global-header__account-nav global-header__account-nav--guest" aria-label="Compte">
+            <a class="global-header__nav-link" href="login.html">Connexion</a>
+            <a class="global-header__nav-pill" href="register.html">S’inscrire</a>
+        </nav>
+
+        <nav class="global-header__account-nav global-header__account-nav--member" aria-label="Compte connecté">
+            <a class="global-header__account-button" href="account.html">
+                <span class="global-header__account-avatar" aria-hidden="true">MC</span>
+                <span>Mon compte</span>
+            </a>
+            <a class="global-header__logout" href="login.html">
+                <img src="../svg/icons/logout.svg" alt="" />
+                <span>Déconnexion</span>
+            </a>
+        </nav>
+    </div>
+</header>
+
+        <main id="main-content">
+            <section class="home-stage" aria-labelledby="hero-title">
+                <div class="hero">
+                    <div class="hero__content">
+                        <img class="hero__logo" src="../svg/brand-logo.svg" alt="" width="184" height="150" />
+
+                        <div class="hero__text">
+                            <h1 id="hero-title">Trois images.<br />Un film à trouver.</h1>
+                            <p class="hero__description">
+                                Devine le titre avant tes amis. Plus tu trouves tôt,
+                                plus tu marques de points.
+                            </p>
+                        </div>
+                    </div>
+
+                    <form class="join-card" id="join-form" novalidate>
+                        <div class="join-card__heading">
+                            <h2>Rejoins la partie</h2>
+                        </div>
+                        <p class="join-card__mobile-intro">
+                            Devine le film avant tes amis et marque un maximum de points.
+                        </p>
+
+                        <div class="form-field">
+                            <label for="nickname">Ton pseudo</label>
+                            <input
+                                id="nickname"
+                                name="nickname"
+                                type="text"
+                                autocomplete="nickname"
+                                maxlength="24"
+                                placeholder="Ex. Marty McFly"
+                                aria-describedby="nickname-error"
+                            />
+                            <p class="form-field__error" id="nickname-error"></p>
+                        </div>
+
+                        <div class="form-field">
+                            <label for="room-code">Code de la partie</label>
+                            <input
+                                id="room-code"
+                                name="room-code"
+                                class="form-field__input form-field__input--code"
+                                type="text"
+                                inputmode="text"
+                                autocomplete="off"
+                                autocapitalize="characters"
+                                spellcheck="false"
+                                maxlength="8"
+                                placeholder="ABCD"
+                                aria-describedby="code-help room-code-error"
+                            />
+                            <p class="form-field__help" id="code-help">
+                                Le code est affiché sur l’écran de l’hôte.
+                            </p>
+                            <p class="form-field__error" id="room-code-error"></p>
+                        </div>
+
+                        <button class="button button--primary" type="submit">
+                            <span>Rejoindre la partie</span>
+                            <span class="button__icon" aria-hidden="true"><img class="icon" src="../svg/icons/spark.svg" alt="" /></span>
+                        </button>
+                    </form>
+                </div>
+
+                <div class="create-game">
+                    <div class="create-game__copy">
+                        <p><strong>Pas encore de code ?</strong> Lance ton propre salon.</p>
+                    </div>
+                    <button class="button button--secondary" id="create-game" type="button">
+                        Créer une partie
+                    </button>
+                </div>
+            </section>
+        </main>
+
+        <footer class="site-footer">
+            <div class="site-footer__inner">
+                <p><strong>TripleFrames</strong> — Le cinéma se joue à plusieurs.</p>
+                <nav aria-label="Informations légales">
+                    <a href="how-to-play.html">Comment jouer</a>
+                    <a href="terms.html">Conditions</a>
+                    <a href="privacy.html">Confidentialité</a>
+                </nav>
+                <p class="site-footer__note">Prototype de direction artistique</p>
+            </div>
+        </footer>
+
+        <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+        <script src="../js/script.js"></script>
+            <script src="../js/global-header.js"></script>
+    </body>
+</html>

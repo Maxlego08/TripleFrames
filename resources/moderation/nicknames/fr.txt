@@ -1,0 +1,97 @@
+# Liste noire de pseudos, français (fr) : spec 40 § 5.7, lue par App\Support\Identity\NicknameBlocklist.
+# UTF-8, LF, une entrée par ligne ; « # » en début de ligne : commentaire. Ne jamais citer une entrée ailleurs que dans ce fichier.
+# source: https://github.com/LDNOOBW/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words, fichier « fr » du commit 5faf2ba42d7b1c0977169ec3611df25a3c08eb13
+# archive: https://github.com/LDNOOBW/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words/archive/5faf2ba42d7b1c0977169ec3611df25a3c08eb13.zip (SHA-256 9c7034edfc59112da529745df7e16ba2ad8d7ff03b74f2b5e4b921bee453dc54)
+# original: fichier « fr » de l'archive, 91 entrées (SHA-256 79763a705e08256b393952852bb63aa903f4485e0ef02f70735f5e50efff213c)
+# license: CC BY 4.0, Creative Commons Attribution 4.0 International (https://creativecommons.org/licenses/by/4.0/) ; revérifiée au téléchargement : fichier LICENSE de l'archive (SHA-256 55bfbc1759943f7d19acfc68e35644b7fbe10cd8d39ab3551ce5ecff5dda9979) et README du dépôt
+# attribution: « List of Dirty, Naughty, Obscene, and Otherwise Bad Words » (liste française), © 2012–2020 Shutterstock, Inc., sous licence CC BY 4.0 ; fourni en l'état, sans garantie ; modifié (voir « changes »)
+# retrieved: 2026-09-25
+# changes: 2026-09-25 : en-tête ajouté ; 3 entrées retirées, parce qu'elles n'offensent pas prises seules et refusent des pseudos courants : « bourré » et « bourrée » (Bourreau), « péter » (Peter, Peter Pan, Peter Parker) ; aucune entrée ajoutée ; les autres sont reprises telles quelles, dans l'ordre d'origine
+baiser
+bander
+bigornette
+bite
+bitte
+bloblos
+bordel
+brackmard
+branlage
+branler
+branlette
+branleur
+branleuse
+brouter le cresson
+caca
+chatte
+chiasse
+chier
+chiottes
+clito
+clitoris
+con
+connard
+connasse
+conne
+couilles
+cramouille
+cul
+déconne
+déconner
+emmerdant
+emmerder
+emmerdeur
+emmerdeuse
+enculé
+enculée
+enculeur
+enculeurs
+enfoiré
+enfoirée
+étron
+fille de pute
+fils de pute
+folle
+foutre
+gerbe
+gerber
+gouine
+grande folle
+grogniasse
+gueule
+jouir
+la putain de ta mère
+MALPT
+ménage à trois
+merde
+merdeuse
+merdeux
+meuf
+nègre
+negro
+nique ta mère
+nique ta race
+palucher
+pédale
+pédé
+pipi
+pisser
+pouffiasse
+pousse-crotte
+putain
+pute
+ramoner
+sac à foutre
+sac à merde
+salaud
+salope
+suce
+tapette
+tanche
+teuch
+tringler
+trique
+troncher
+trou du cul
+turlute
+zigounette
+zizi

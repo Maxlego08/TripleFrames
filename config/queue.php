@@ -68,7 +68,20 @@ return [
             'driver' => 'redis',
             'connection' => env('REDIS_QUEUE_CONNECTION', 'default'),
             'queue' => env('REDIS_QUEUE', 'default'),
-            'retry_after' => (int) env('REDIS_QUEUE_RETRY_AFTER', 90),
+            // Au-dessus de la plus longue exécution d'un job, `$timeout` propre
+            // au job compris : `RunCatalogImport::$timeout` = 900 s l'emporte
+            // sur le `--timeout` du worker dès que `pcntl` est présent. En
+            // deçà, le job réservé repasserait dans la file pendant qu'il
+            // s'exécute encore et serait délivré deux fois (un balayage
+            // d'import rejouerait un curseur consommé). Vaut pour `game` et
+            // `default`, qui partagent la connexion : les jobs de `game` sont
+            // en `--tries=1` et un job de frontière perdu relève de
+            // `game:reschedule`, jamais d'une redélivrance (spec 100 § 10.3).
+            'retry_after' => (int) env('REDIS_QUEUE_RETRY_AFTER', 960),
+            // Nul, jamais au-delà d'une seconde : un worker à vide sonde au
+            // rythme de son `--sleep`. Un BLPOP long retarderait d'autant la
+            // migration des jobs différés, donc la relève d'un job de frontière
+            // de palier (spec 60 § 19.5, spec 100 § 10.3).
             'block_for' => null,
             'after_commit' => false,
         ],

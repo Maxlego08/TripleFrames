@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="fr">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <meta name="description" content="Authentification à deux facteurs TripleFrames." />
+        <title>Authentification à deux facteurs — TripleFrames</title>
+        <link rel="icon" href="../svg/brand-logo.svg" type="image/svg+xml" />
+        <link rel="stylesheet" href="../css/auth.css" />
+        <link rel="stylesheet" href="../css/global-header.css" />
+    </head>
+    <body class="auth-page auth-page--compact">
+        <a class="skip-link" href="#auth-content">Aller au formulaire</a>
+
+        <header class="global-header">
+            <div class="global-header__inner">
+                <a class="global-header__brand" href="index.html" aria-label="TripleFrames, accueil">
+                    <img class="global-header__brand-logo" src="../svg/brand-logo.svg" alt="" width="44" height="36" />
+                    <span class="global-header__brand-name">TripleFrames</span>
+                </a>
+
+                <nav class="global-header__account-nav global-header__account-nav--guest" aria-label="Compte">
+                    <a class="global-header__nav-link" href="login.html">Connexion</a>
+                    <a class="global-header__nav-pill" href="register.html">S’inscrire</a>
+                </nav>
+
+                <nav class="global-header__account-nav global-header__account-nav--member" aria-label="Compte connecté">
+                    <a class="global-header__account-button" href="account.html">
+                        <span class="global-header__account-avatar" aria-hidden="true">MC</span>
+                        <span>Mon compte</span>
+                    </a>
+                    <a class="global-header__logout" href="login.html">
+                        <img src="../svg/icons/logout.svg" alt="" />
+                        <span>Déconnexion</span>
+                    </a>
+                </nav>
+            </div>
+        </header>
+
+        <main class="auth-stage" id="auth-content">
+            <section class="auth-ticket" aria-labelledby="two-factor-title">
+                <div class="auth-ticket__form-panel">
+                    <form class="auth-form auth-form--compact" id="two-factor-form" data-auth-form="two-factor" data-two-factor-mode="code" action="/two-factor-challenge" method="post" novalidate>
+                        <section class="auth-mode" data-two-factor-panel="code">
+                            <div class="auth-heading">
+                                <p class="auth-heading__step">Application d’authentification</p>
+                                <h2 id="two-factor-title">Code d’authentification</h2>
+                                <p>Saisis le code à six chiffres fourni par ton application.</p>
+                            </div>
+
+                            <fieldset class="auth-otp" aria-describedby="code-error">
+                                <legend class="auth-otp__legend">Code à six chiffres</legend>
+                                <div class="auth-otp__inputs">
+                                    <input class="auth-otp__input" type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" autocomplete="one-time-code" aria-label="Premier chiffre" data-otp-input />
+                                    <input class="auth-otp__input" type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" aria-label="Deuxième chiffre" data-otp-input />
+                                    <input class="auth-otp__input" type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" aria-label="Troisième chiffre" data-otp-input />
+                                    <input class="auth-otp__input" type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" aria-label="Quatrième chiffre" data-otp-input />
+                                    <input class="auth-otp__input" type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" aria-label="Cinquième chiffre" data-otp-input />
+                                    <input class="auth-otp__input" type="text" maxlength="1" inputmode="numeric" pattern="[0-9]" aria-label="Sixième chiffre" data-otp-input />
+                                </div>
+                                <input id="two-factor-code" name="code" type="hidden" />
+                                <p class="auth-field__error auth-otp__error" id="code-error"></p>
+                            </fieldset>
+
+                            <button class="button button--primary" type="submit">
+                                <span>Continuer</span>
+                                <img class="icon" src="../svg/icons/arrow-right.svg" alt="" aria-hidden="true" />
+                            </button>
+
+                            <p class="auth-return">
+                                Pas accès à ton application ?
+                                <button class="auth-text-button" type="button" data-two-factor-toggle="recovery">Utiliser un code de récupération</button>
+                            </p>
+                        </section>
+
+                        <section class="auth-mode" data-two-factor-panel="recovery" hidden>
+                            <div class="auth-heading">
+                                <p class="auth-heading__step">Solution de secours</p>
+                                <h2>Code de récupération</h2>
+                                <p>Saisis l’un des codes enregistrés lors de l’activation de la 2FA.</p>
+                            </div>
+
+                            <div class="auth-field">
+                                <label class="auth-field__label" for="recovery_code">Code de récupération</label>
+                                <input
+                                    class="auth-field__input auth-field__input--code"
+                                    id="recovery_code"
+                                    name="recovery_code"
+                                    type="text"
+                                    autocomplete="one-time-code"
+                                    placeholder="XXXX-XXXX-XXXX"
+                                    aria-describedby="recovery-code-error"
+                                />
+                                <p class="auth-field__error" id="recovery-code-error"></p>
+                            </div>
+
+                            <button class="button button--primary" type="submit">
+                                <span>Continuer</span>
+                                <img class="icon" src="../svg/icons/arrow-right.svg" alt="" aria-hidden="true" />
+                            </button>
+
+                            <p class="auth-return">
+                                Tu as ton téléphone ?
+                                <button class="auth-text-button" type="button" data-two-factor-toggle="code">Utiliser le code d’authentification</button>
+                            </p>
+                        </section>
+                    </form>
+                </div>
+            </section>
+        </main>
+
+        <footer class="auth-footer">
+            <p>© TripleFrames</p>
+            <nav aria-label="Informations légales">
+                <a href="terms.html">Conditions</a>
+                <a href="privacy.html">Confidentialité</a>
+            </nav>
+        </footer>
+
+        <div class="toast" id="auth-toast" role="status" aria-live="polite"></div>
+        <script src="../js/auth.js"></script>
+        <script src="../js/global-header.js"></script>
+    </body>
+</html>

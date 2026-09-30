@@ -1,24 +1,25 @@
 {
     "$schema": "https://getcomposer.org/schema.json",
-    "name": "laravel/react-starter-kit",
+    "name": "tripleframes/tripleframes",
     "type": "project",
-    "description": "The skeleton application for the Laravel framework.",
-    "keywords": [
-        "laravel",
-        "framework"
-    ],
-    "license": "MIT",
+    "description": "TripleFrames : blindtest de films et de dessins animés en salons privés, quelques images de la plus cryptique à la plus évidente, un titre à trouver avant les autres.",
+    "license": "proprietary",
     "require": {
-        "php": "^8.3",
+        "php": "^8.4",
+        "ext-imagick": "*",
         "inertiajs/inertia-laravel": "^3.0",
         "laravel/chisel": "^0.1.0",
         "laravel/fortify": "^1.37.2",
         "laravel/framework": "^13.17",
+        "laravel/reverb": "^1.12",
         "laravel/tinker": "^3.0",
-        "laravel/wayfinder": "^0.1.14"
+        "laravel/wayfinder": "^0.1.14",
+        "predis/predis": "^3.6",
+        "symfony/polyfill-intl-normalizer": "^1.42"
     },
     "require-dev": {
         "fakerphp/faker": "^1.24",
+        "fruitcake/laravel-debugbar": "^4.4",
         "larastan/larastan": "^3.9",
         "laravel/pail": "^1.2.5",
         "laravel/pao": "^1.0.6",
@@ -43,16 +44,18 @@
     },
     "scripts": {
         "setup": [
-            "composer install",
             "@php -r \"file_exists('.env') || copy('.env.example', '.env');\"",
+            "@php -r \"file_put_contents('.env', preg_replace('/^REVERB_APP_SECRET=[ \\t]*(?=\\r?$)/m', 'REVERB_APP_SECRET='.bin2hex(random_bytes(16)), (string) file_get_contents('.env'), 1));\"",
+            "composer install",
             "@php artisan key:generate",
+            "@php artisan tinker --execute=\"File::ensureDirectoryExists(config('filesystems.disks.frames.root')); if (! is_dir((string) config('filesystems.disks.frames.root')) || ! is_writable((string) config('filesystems.disks.frames.root'))) { throw new RuntimeException('FRAMES_DISK_ROOT introuvable ou non inscriptible : ['.config('filesystems.disks.frames.root').'].'); }\"",
             "@php artisan migrate --force",
             "npm install",
             "npm run build"
         ],
         "dev": [
             "Composer\\Config::disableProcessTimeout",
-            "npx concurrently -c \"#93c5fd,#c4b5fd,#fdba74\" \"php artisan serve\" \"php artisan queue:listen --tries=1\" \"npm run dev\" --names='server,queue,vite'"
+            "npx concurrently -c \"#93c5fd,#c4b5fd,#86efac,#fdba74\" \"php artisan serve\" \"php artisan queue:listen --queue=game,default --tries=1 --sleep=1 --timeout=900\" \"php artisan reverb:start\" \"npm run dev\" --names='server,queue,reverb,vite'"
         ],
         "lint": [
             "pint --parallel"
@@ -64,16 +67,22 @@
             "Composer\\Config::disableProcessTimeout",
             "npm run check",
             "npm run types:check",
+            "npm run test",
             "@test"
         ],
         "types:check": [
-            "phpstan analyse"
+            "phpstan analyse --memory-limit=1G"
         ],
         "test": [
+            "Composer\\Config::disableProcessTimeout",
             "@php artisan config:clear --ansi",
             "@lint:check",
             "@types:check",
-            "@php artisan test"
+            "@php artisan test --exclude-group=mysql --exclude-group=locks-timing"
+        ],
+        "test:mysql": [
+            "Composer\\Config::disableProcessTimeout",
+            "@php artisan test --group=mysql --group=locks-timing"
         ],
         "post-autoload-dump": [
             "Illuminate\\Foundation\\ComposerScripts::postAutoloadDump",
@@ -93,6 +102,12 @@
         "pre-package-uninstall": [
             "Illuminate\\Foundation\\ComposerScripts::prePackageUninstall"
         ]
+    },
+    "scripts-descriptions": {
+        "setup": "Poste neuf : .env copié de .env.example AVANT les dépendances (package:discover démarre l'application, qui sans APP_ENV se croit en production), REVERB_APP_SECRET né sur la machine, clé d'application, racine frames, migrations, build.",
+        "dev": "Serveur, écouteur des files game puis default sur la connexion par défaut (Redis joignable requis), Reverb et Vite (spec 100 § 2.4).",
+        "test": "Suite par défaut (SQLite) : Pint, PHPStan, puis Pest sans les groupes mysql et locks-timing.",
+        "test:mysql": "Groupes mysql et locks-timing contre une base MySQL de TEST : exporter DB_CONNECTION=mysql et DB_DATABASE=<base de test> (jamais la base de développement, que RefreshDatabase viderait)."
     },
     "extra": {
         "laravel": {

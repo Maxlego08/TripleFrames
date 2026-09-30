@@ -1,7 +1,6 @@
 import { Link } from '@inertiajs/react';
-import { BookOpen, FolderGit2, LayoutGrid } from 'lucide-react';
+import { LayoutGrid } from 'lucide-react';
 import AppLogo from '@/components/app-logo';
-import { NavFooter } from '@/components/nav-footer';
 import { NavMain } from '@/components/nav-main';
 import { NavUser } from '@/components/nav-user';
 import {
@@ -13,31 +12,32 @@ import {
     SidebarMenuButton,
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
+import { useTranslations } from '@/hooks/use-translations';
 import { dashboard } from '@/routes';
 import type { NavItem } from '@/types';
 
-const mainNavItems: NavItem[] = [
-    {
-        title: 'Dashboard',
-        href: dashboard(),
-        icon: LayoutGrid,
-    },
-];
-
-const footerNavItems: NavItem[] = [
-    {
-        title: 'Repository',
-        href: 'https://github.com/laravel/react-starter-kit',
-        icon: FolderGit2,
-    },
-    {
-        title: 'Documentation',
-        href: 'https://laravel.com/docs/starter-kits#react',
-        icon: BookOpen,
-    },
-];
-
+/**
+ * Barre latérale du starter, gardée au jalon 1 pour `dashboard` et
+ * `settings/*` (spec 90 § 2.5 : dette assumée, soldée au jalon 2 par 40).
+ *
+ * Son pied ne porte plus les deux liens du starter (dépôt du kit,
+ * documentation Laravel), retirés avec leurs clés (spec 90 § 6.6) : les liens
+ * légaux et l'attribution TMDB vivent dans le pied de page joueur que monte
+ * `AppLayout`, sous le contenu.
+ */
 export function AppSidebar() {
+    const { t } = useTranslations();
+
+    // Les listes de navigation vivent dans le rendu, pas au niveau module :
+    // un libellé calculé à l'import resterait figé dans la langue du bundle.
+    const mainNavItems: NavItem[] = [
+        {
+            title: t('common.nav.dashboard'),
+            href: dashboard(),
+            icon: LayoutGrid,
+        },
+    ];
+
     return (
         <Sidebar collapsible="icon" variant="inset">
             <SidebarHeader>
@@ -57,7 +57,6 @@ export function AppSidebar() {
             </SidebarContent>
 
             <SidebarFooter>
-                <NavFooter items={footerNavItems} className="mt-auto" />
                 <NavUser />
             </SidebarFooter>
         </Sidebar>

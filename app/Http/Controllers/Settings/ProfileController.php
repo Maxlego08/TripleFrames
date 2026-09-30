@@ -3,15 +3,22 @@
 namespace App\Http\Controllers\Settings;
 
 use App\Http\Controllers\Controller;
-use App\Http\Requests\Settings\ProfileDeleteRequest;
 use App\Http\Requests\Settings\ProfileUpdateRequest;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
 use Inertia\Inertia;
 use Inertia\Response;
 
+/**
+ * Profil du compte.
+ *
+ * Aucune méthode `destroy()` au jalon 1 (spec 40 § 8.3) : la suppression
+ * dure du starter détruisait `user_consent` par cascade, contournait la règle
+ * du dernier administrateur et vidait `frame_review.reviewer_id`. La
+ * suppression d'un compte est une anonymisation (10 § 5.5), sujet du jalon 2,
+ * qui recréera la route et son action.
+ */
 class ProfileController extends Controller
 {
     /**
@@ -41,22 +48,5 @@ class ProfileController extends Controller
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Profile updated.')]);
 
         return to_route('profile.edit');
-    }
-
-    /**
-     * Delete the user's profile.
-     */
-    public function destroy(ProfileDeleteRequest $request): RedirectResponse
-    {
-        $user = $request->user();
-
-        Auth::logout();
-
-        $user->delete();
-
-        $request->session()->invalidate();
-        $request->session()->regenerateToken();
-
-        return redirect('/');
     }
 }

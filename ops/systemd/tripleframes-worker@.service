@@ -1,0 +1,64 @@
+# TripleFrames — worker d'une file, unité gabarit (spec 100 § 10.4).
+#
+# Deux instances, jamais Horizon : « game » (cadencement des manches) et
+# « default » (images, e-mails, import, purge). Un seul processus « game » au
+# jalon 1 : en ajouter un est un changement du socle, signalé au porteur.
+#
+# Gabarit versionné, recopié UNE fois par root (ops/mise-en-service.md, étape 4) :
+#
+#   install -d -o root -g root -m 0755 /etc/tripleframes
+#   install -o root -g root -m 0644 "ops/systemd/tripleframes-worker@.service" \
+#       "/etc/systemd/system/tripleframes-worker@.service"
+#   for i in game default; do
+#       install -o root -g root -m 0644 "ops/systemd/worker-${i}.env" \
+#           "/etc/tripleframes/worker-${i}.env"
+#       install -D -o root -g root -m 0644 \
+#           "ops/systemd/tripleframes-worker@${i}.service.d/limits.conf" \
+#           "/etc/systemd/system/tripleframes-worker@${i}.service.d/limits.conf"
+#   done
+#   systemctl daemon-reload
+#   systemctl enable tripleframes-worker@game tripleframes-worker@default
+#
+# Démarrage (systemctl start) à l'étape 5 seulement, après « optimize » : un
+# worker lancé plus tôt tournerait sans vendor/ ni configuration en cache.
+#
+# Arguments de chaque instance : /etc/tripleframes/worker-<instance>.env
+# (ops/systemd/worker-*.env). Plafonds de cgroup : drop-in limits.conf de chaque
+# instance (ops/systemd/tripleframes-worker@*.service.d/). Aucun secret ici :
+# le worker lit le .env de l'application dans son répertoire de travail.
+#
+# Syntaxe systemd : un commentaire n'est lu qu'en DÉBUT de ligne (vérifié par
+# tests/Feature/Deploy/OpsTemplatesTest.php).
+
+[Unit]
+Description=TripleFrames - worker de la file %i
+# Ordre seulement : une unité MySQL absente de la machine est ignorée.
+After=network-online.target tripleframes-redis.service mysql.service mysqld.service mariadb.service
+Wants=network-online.target tripleframes-redis.service
+# Jamais d'abandon après une rafale d'échecs : RestartSec borne déjà la cadence,
+# et les sondes worker-game et worker-default alertent si la file ne tourne plus.
+StartLimitIntervalSec=0
+
+[Service]
+# À AJUSTER AU RELEVÉ : utilisateur système de l'abonnement Plesk et son groupe
+# (id <utilisateur>, d'ordinaire psacln). Jamais root.
+User=__TF_SUBSCRIPTION_USER__
+Group=__TF_SUBSCRIPTION_GROUP__
+# À AJUSTER AU RELEVÉ : chemin absolu de déploiement de Plesk Git.
+WorkingDirectory=__TF_DEPLOY_PATH__
+EnvironmentFile=/etc/tripleframes/worker-%i.env
+# PHP de l'abonnement par chemin absolu, jamais un php du système. PHP_ARGS
+# (vide admis) règle le memory_limit du PHP CLI ; WORKER_ARGS porte les options
+# de queue:work de l'instance.
+ExecStart=/opt/plesk/php/8.4/bin/php $PHP_ARGS artisan queue:work redis --queue=%i $WORKER_ARGS
+Restart=always
+RestartSec=2
+Nice=5
+# Journaux (storage/logs) et fichiers écrits par le processus : illisibles des
+# autres comptes. Sans cette ligne, systemd applique 0022 (fichiers en 0644).
+UMask=0027
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

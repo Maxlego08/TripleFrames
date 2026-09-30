@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="fr">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <meta name="description" content="Salle d’attente d’une partie TripleFrames." />
+        <title>Salle d’attente — TripleFrames</title>
+        <link rel="icon" href="../svg/brand-logo.svg" type="image/svg+xml" />
+        <link rel="stylesheet" href="../css/waiting-room.css" />
+    </head>
+    <body class="waiting-page">
+        <a class="skip-link" href="#waiting-content">Aller à la salle</a>
+
+        <main class="waiting-room" id="waiting-content">
+            <a class="brand waiting-room__brand" href="index.html" aria-label="TripleFrames, retour à l’accueil">
+                <img class="brand__logo" src="../svg/brand-logo.svg" alt="" width="44" height="36" />
+                <span class="brand__name">TripleFrames</span>
+            </a>
+
+            <p class="waiting-room__count" id="player-count">0 / 12 joueurs</p>
+
+            <section class="room-code" aria-labelledby="room-code-title">
+                <button class="room-code__action" id="copy-code" type="button">
+                    <span class="room-code__action-icon" aria-hidden="true">
+                        <img class="icon" src="../svg/icons/copy.svg" alt="" />
+                    </span>
+                    <span>Copier</span>
+                </button>
+
+                <div class="room-code__display">
+                    <p id="room-code-title">Code de la partie</p>
+                    <output id="room-code" aria-live="polite">****</output>
+                </div>
+
+                <button class="room-code__action" id="toggle-code" type="button" aria-pressed="false">
+                    <span class="room-code__action-icon" aria-hidden="true">
+                        <img class="icon" src="../svg/icons/eye.svg" alt="" />
+                    </span>
+                    <span id="toggle-code-label">Afficher</span>
+                </button>
+            </section>
+
+            <section class="cinema-room" aria-label="Salle de cinéma">
+                <div class="cinema-room__scene">
+                    <div class="cinema-room__screen" aria-hidden="true">
+                        <div class="cinema-room__screen-content">
+                            <img src="../svg/brand-logo.svg" alt="" width="72" height="59" />
+                            <strong>TripleFrames</strong>
+                            <span>La séance va commencer</span>
+                        </div>
+                    </div>
+                    <div class="cinema-room__tiers" aria-hidden="true">
+                        <span class="cinema-room__tier cinema-room__tier--back"></span>
+                        <span class="cinema-room__tier cinema-room__tier--mobile-middle-one"></span>
+                        <span class="cinema-room__tier cinema-room__tier--mobile-middle-two"></span>
+                        <span class="cinema-room__tier cinema-room__tier--front"></span>
+                    </div>
+
+                    <div class="cinema-room__seats" id="seat-list" aria-live="polite"></div>
+                </div>
+            </section>
+
+            <div class="lobby-actions">
+                <button class="button button--quiet" id="leave-game" type="button">
+                    <img class="icon" src="../svg/icons/arrow-left.svg" alt="" aria-hidden="true" />
+                    <span>Quitter</span>
+                </button>
+                <button class="button button--start" id="start-game" type="button">
+                    <span>Lancer la partie</span>
+                    <img class="icon" src="../svg/icons/play.svg" alt="" aria-hidden="true" />
+                </button>
+                <button class="button button--settings" id="open-settings" type="button">
+                    <img class="icon" src="../svg/icons/settings.svg" alt="" aria-hidden="true" />
+                    <span>Configurer</span>
+                </button>
+            </div>
+        </main>
+
+        <dialog class="settings-dialog" id="settings-dialog">
+            <div class="settings-dialog__card">
+                <button class="settings-dialog__close" id="close-settings" type="button" aria-label="Fermer">
+                    <img class="icon" src="../svg/icons/close.svg" alt="" />
+                </button>
+                <span class="settings-dialog__icon" aria-hidden="true">
+                    <img class="icon" src="../svg/icons/settings.svg" alt="" />
+                </span>
+                <h2>Configuration de la partie</h2>
+                <p>TODO — Les options de la partie seront ajoutées ici.</p>
+                <button class="button button--start" id="confirm-settings" type="button">Compris</button>
+            </div>
+        </dialog>
+
+        <div class="toast" id="waiting-toast" role="status" aria-live="polite"></div>
+        <script src="../js/waiting-room.js"></script>
+    </body>
+</html>

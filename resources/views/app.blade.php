@@ -1,8 +1,20 @@
 <!DOCTYPE html>
-<html lang="{{ str_replace('_', '-', app()->getLocale()) }}" @class(['dark' => ($appearance ?? 'system') == 'dark'])>
+<html lang="{{ str_replace('_', '-', app()->getLocale()) }}" @class(['dark' => ($appearance ?? 'system') == 'dark']) @if($appearanceForced ?? false) data-appearance-forced="{{ $appearance }}" @endif>
     <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
+
+        {{-- `data-appearance-forced` ci-dessus est posé par `ForceGameAppearance`
+             (alias `game.appearance`), et par lui seul : moitié serveur du
+             forçage sombre des pages `game/*` (spec 90 § 2.2), il partage
+             `appearance = dark` et `appearanceForced`. Depuis D8 du 23/09, le
+             back-office n'a plus de forçage : il suit la préférence du visiteur.
+             L'attribut dit au boot client que la page force son apparence, pour
+             qu'`initializeTheme()` n'aille pas reposer la préférence stockée
+             par-dessus ; `useForcedAppearance('dark')`, appelé par `GameLayout`,
+             en prend le relais sur une navigation Inertia. Aucun SSR en v1
+             (`config/inertia.php`). Le sélecteur d'apparence du site n'est pas
+             concerné : la valeur du cookie continue d'arriver par `$appearance`. --}}
 
         {{-- Inline script to detect system dark mode preference and apply it immediately --}}
         <script>
@@ -39,7 +51,7 @@
         @viteReactRefresh
         @vite(['resources/css/app.css', 'resources/js/app.tsx', "resources/js/pages/{$page['component']}.tsx"])
         <x-inertia::head>
-            <title>{{ config('app.name', 'Laravel') }}</title>
+            <title>{{ config('app.name', 'TripleFrames') }}</title>
         </x-inertia::head>
     </head>
     <body class="font-sans antialiased">

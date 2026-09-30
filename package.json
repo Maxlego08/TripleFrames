@@ -1,13 +1,16 @@
 {
     "$schema": "https://www.schemastore.org/package.json",
     "private": true,
+    "license": "UNLICENSED",
     "type": "module",
     "scripts": {
         "build": "vp build",
         "build:ssr": "vp build && vp build --ssr",
         "dev": "vp dev",
-        "check": "vp check",
-        "check:fix": "vp check --fix",
+        "check": "vp check && node scripts/check-theme-tokens.mjs",
+        "check:fix": "vp check --fix && node scripts/check-theme-tokens.mjs",
+        "check:theme": "node scripts/check-theme-tokens.mjs",
+        "test": "vp test run",
         "types:check": "tsc --noEmit"
     },
     "dependencies": {
@@ -33,10 +36,14 @@
         "@vitejs/plugin-react": "^6.1.1",
         "class-variance-authority": "^0.7.1",
         "clsx": "^2.1.1",
+        "cn": "^0.4.0",
         "concurrently": "^10.0.3",
         "input-otp": "^1.4.2",
+        "laravel-echo": "^2.5.0",
         "laravel-vite-plugin": "^3.0.0",
         "lucide-react": "^0.475.0",
+        "pusher-js": "^8.6.0",
+        "radix-ui": "^1.6.7",
         "react": "^19.2.0",
         "react-dom": "^19.2.0",
         "sonner": "^2.0.0",

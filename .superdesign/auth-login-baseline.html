@@ -1,0 +1,181 @@
+<!DOCTYPE html><html lang="fr"><head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Connexion à ton compte TripleFrames.">
+    <title>Connexion — TripleFrames</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://code.iconify.design/iconify-icon/1.0.7/iconify-icon.min.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'ink': 'oklch(0.27 0.08 292)',
+                        'violet': 'oklch(0.4 0.15 295)',
+                        'violet-dark': 'oklch(0.3 0.11 295)',
+                        'paper': 'oklch(0.98 0.03 91)',
+                        'white': 'oklch(1 0 0)',
+                        'coral': 'oklch(0.7 0.2 25)',
+                        'coral-dark': 'oklch(0.58 0.19 24)',
+                        'cyan': 'oklch(0.81 0.13 195)',
+                        'yellow': 'oklch(0.88 0.16 89)',
+                        'lavender': 'oklch(0.86 0.08 296)',
+                        'muted': 'oklch(0.47 0.04 295)',
+                        'error': 'oklch(0.47 0.17 20)',
+                        'brown': 'oklch(0.45 0.07 75)',
+                        'night': 'oklch(0.16 0.04 290)'
+                    },
+                    fontFamily: {
+                        'display': ['"Arial Rounded MT Bold"', '"Trebuchet MS"', 'sans-serif'],
+                        'body': ['"Trebuchet MS"', '"Segoe UI"', 'sans-serif']
+                    },
+                    borderWidth: {
+                        'line': '0.1875rem'
+                    },
+                    borderRadius: {
+                        'small': '0.65rem',
+                        'medium': '0.85rem',
+                        'large': '1.5rem'
+                    },
+                    boxShadow: {
+                        'hard-small': '0.2rem 0.2rem 0 oklch(0.27 0.08 292)',
+                        'hard-medium': '0.28rem 0.28rem 0 oklch(0.27 0.08 292)',
+                        'hard-large': '0.85rem 0.85rem 0 oklch(0.16 0.04 290), -0.75rem -0.65rem 0 oklch(0.88 0.16 89)',
+                        'focus': '0 0 0 0.1875rem oklch(0.81 0.13 195)',
+                        'input-focus': '0.22rem 0.22rem 0 oklch(0.81 0.13 195)',
+                        'provider-hover': '0 0.22rem 0 oklch(0.27 0.08 292)'
+                    },
+                    backgroundImage: {
+                        'curtain': 'repeating-linear-gradient(90deg, oklch(0.4 0.15 295) 0 5.5rem, oklch(0.46 0.16 296) 5.5rem 9rem, oklch(0.3 0.11 295) 9rem 13rem)',
+                        'brand-panel': 'linear-gradient(145deg, oklch(1 0 0 / 0.08), transparent 42%), oklch(0.3 0.11 295)'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .skip-link:focus {
+            transform: translateY(0);
+        }
+        .focus-ring:focus-visible {
+            outline: 0.1875rem solid oklch(0.81 0.13 195);
+            outline-offset: 0.1875rem;
+        }
+        input::placeholder {
+            color: oklch(0.47 0.04 295);
+            opacity: 0.8;
+        }
+    </style>
+</head>
+<body class="bg-violet-dark m-0 text-ink font-body min-h-[100dvh] flex flex-col">
+    <a class="skip-link fixed z-20 top-3 left-3 -translate-y-[200%] border-[0.125rem] border-ink rounded-small py-[0.65rem] px-[0.9rem] bg-yellow font-extrabold transition-transform" href="#auth-content" data-sd-id="1">Aller au formulaire</a>
+
+    <header class="relative z-20 flex-none border-b-line border-ink bg-paper text-ink h-[5.125rem] md:h-[5rem]" data-sd-id="2">
+        <div class="w-[min(100%-2rem,76rem)] md:w-[min(100%-2.5rem,76rem)] h-full mx-auto flex items-center justify-between gap-4 md:gap-2" data-sd-id="3">
+            <a class="flex min-w-0 items-center gap-[0.65rem] md:gap-[0.45rem] text-ink no-underline focus-ring" href="#" aria-label="TripleFrames, accueil" data-sd-id="4">
+                <img class="w-[2.45rem] md:w-[2.05rem] h-auto flex-none" src="https://vgbujcuwptvheqijyjbe.supabase.co/storage/v1/object/public/hmac-uploads/projects/710e23fa-b801-40cf-b0be-a28fc414ec96/brand-assets/design-test-html-brand-logo.svg/brand-logo.svg" alt="" width="44" height="36" data-sd-id="5">
+                <span class="font-display font-black text-[clamp(1.05rem,2vw,1.4rem)] md:text-[0.95rem] tracking-[-0.04em] overflow-hidden text-ellipsis whitespace-nowrap" data-sd-id="6">TripleFrames</span>
+            </a>
+
+            <nav class="flex-none flex items-center gap-[0.45rem] md:gap-[0.3rem]" aria-label="Compte" data-sd-id="7">
+                <a class="min-h-[2.75rem] md:min-h-[2.4rem] rounded-full text-ink text-[0.9rem] md:text-[0.74rem] font-black no-underline py-[0.6rem] px-[0.75rem] md:py-[0.42rem] md:px-[0.55rem] hover:underline hover:underline-offset-[0.2rem] focus-ring" href="#" data-sd-id="8">Connexion</a>
+                <a class="min-h-[2.75rem] md:min-h-[2.4rem] rounded-full text-ink text-[0.9rem] md:text-[0.74rem] font-black no-underline py-[0.55rem] px-4 md:py-[0.42rem] md:px-[0.55rem] border-[0.125rem] border-ink bg-yellow shadow-[0.1875rem_0.1875rem_0_oklch(0.27_0.08_292)] transition-all hover:-translate-x-[0.1rem] hover:-translate-y-[0.1rem] hover:shadow-[0.28rem_0.28rem_0_oklch(0.27_0.08_292)] focus-ring" href="#" data-sd-id="9">S’inscrire</a>
+            </nav>
+        </div>
+    </header>
+
+    <div class="flex-1 relative bg-curtain" data-sd-id="10">
+        <div class="fixed z-0 inset-x-0 top-[5.125rem] h-[1.1rem] bg-gradient-to-b from-[oklch(0.16_0.04_290/0.28)] to-transparent pointer-events-none" data-sd-id="11"></div>
+        
+        <main class="relative z-10 grid place-items-center min-h-[calc(100dvh-5.125rem-2.8rem)] md:min-h-[calc(100dvh-7.55rem)] p-[clamp(1.25rem,3vh,2.25rem)_1rem] md:p-[2rem_1rem] lg:py-[1rem]" id="auth-content" data-sd-id="12">
+            <section class="relative grid overflow-hidden w-[min(100%,69rem)] md:max-w-[38rem] grid-cols-[minmax(18rem,0.78fr)_minmax(32rem,1.22fr)] md:grid-cols-1 border-line border-ink rounded-[1.65rem] md:rounded-[1.2rem] bg-paper shadow-[0.85rem_0.85rem_0_oklch(0.16_0.04_290),-0.75rem_-0.65rem_0_oklch(0.88_0.16_89)] md:shadow-[0.45rem_0.5rem_0_oklch(0.16_0.04_290)]" aria-labelledby="login-title" data-sd-id="13">
+                <div class="absolute top-1/2 left-[calc(36.5%-0.65rem)] w-[1.3rem] h-[2.6rem] border-line border-ink border-l-0 rounded-[0_1.5rem_1.5rem_0] bg-violet -translate-y-1/2 md:hidden" data-sd-id="14"></div>
+
+                <aside class="relative flex min-w-0 flex-col justify-center p-[clamp(2rem,4vw,3.6rem)] md:p-[1.7rem_2rem] lg:py-[2rem] bg-brand-panel text-paper" data-sd-id="15">
+                    <div class="absolute inset-[1rem_0_1rem_auto] border-r-[0.16rem] border-dashed border-[oklch(0.98_0.03_91/0.48)] md:hidden" data-sd-id="16"></div>
+                    
+                    <img class="block w-[6.75rem] h-auto mb-[0.85rem] drop-shadow-[0.28rem_0.28rem_0_oklch(0.27_0.08_292)] md:absolute md:top-[1.85rem] md:right-[2.25rem] md:scale-75 md:origin-top-right" src="https://vgbujcuwptvheqijyjbe.supabase.co/storage/v1/object/public/hmac-uploads/projects/710e23fa-b801-40cf-b0be-a28fc414ec96/brand-assets/design-test-html-brand-logo.svg/brand-logo.svg" alt="" width="108" height="88" data-sd-id="17">
+                    <p class="self-start m-0 border-[0.125rem] border-paper rounded-full py-[0.35rem] px-[0.65rem] bg-violet text-[0.76rem] font-black" data-sd-id="18">Ton espace joueur</p>
+                    <h1 class="max-w-[11ch] md:max-w-[18ch] sm:max-w-[12ch] m-[0.85rem_0_0.8rem] sm:mb-[0.5rem] font-display text-[clamp(2.1rem,3.6vw,3.35rem)] md:text-[2.35rem] sm:text-[2rem] leading-[0.98] tracking-[-0.055em]" data-sd-id="19">Reprends la partie là où tu l’as laissée.</h1>
+                    <p class="max-w-[28rem] sm:max-w-[22rem] m-0 text-[1rem] sm:text-[0.88rem] leading-[1.5]" data-sd-id="20">
+                        Retrouve tes statistiques, tes salons et tes meilleurs scores.
+                    </p>
+                    <ul class="grid m-[1.5rem_0_0] p-0 gap-[0.65rem] list-none md:hidden" data-sd-id="21">
+                        <li class="flex items-center gap-[0.55rem] text-[0.9rem] font-bold" data-sd-id="22"><span class="grid w-[1.5rem] h-[1.5rem] flex-none border-[0.125rem] border-ink rounded-full bg-cyan text-ink place-items-center" aria-hidden="true" data-sd-id="23"><iconify-icon icon="lucide:check" class="text-sm"></iconify-icon></span> Historique des parties</li>
+                        <li class="flex items-center gap-[0.55rem] text-[0.9rem] font-bold" data-sd-id="24"><span class="grid w-[1.5rem] h-[1.5rem] flex-none border-[0.125rem] border-ink rounded-full bg-cyan text-ink place-items-center" aria-hidden="true" data-sd-id="25"><iconify-icon icon="lucide:check" class="text-sm"></iconify-icon></span> Réglages sauvegardés</li>
+                        <li class="flex items-center gap-[0.55rem] text-[0.9rem] font-bold" data-sd-id="26"><span class="grid w-[1.5rem] h-[1.5rem] flex-none border-[0.125rem] border-ink rounded-full bg-cyan text-ink place-items-center" aria-hidden="true" data-sd-id="27"><iconify-icon icon="lucide:check" class="text-sm"></iconify-icon></span> Passkey sans mot de passe</li>
+                    </ul>
+                </aside>
+
+                <div class="flex min-w-0 flex-col justify-center p-[clamp(1.75rem,3.5vw,3.25rem)] md:p-[2rem] lg:py-[1.5rem] bg-paper" data-sd-id="28">
+                    <div class="mb-[1.2rem] lg:mb-[0.8rem]" data-sd-id="29">
+                        <p class="inline-block m-[0_0_0.55rem] border-[0.125rem] border-ink rounded-full py-[0.3rem] px-[0.65rem] bg-lavender text-[0.74rem] font-black" data-sd-id="30">Entrée des joueurs</p>
+                        <h2 class="m-0 font-display text-[clamp(2rem,4vw,2.85rem)] sm:text-[2rem] lg:text-[2.25rem] leading-[1] tracking-[-0.05em]" id="login-title" data-sd-id="31">Bon retour !</h2>
+                        <p class="m-[0.55rem_0_0] text-muted text-[0.92rem]" data-sd-id="32">Connecte-toi pour retrouver ton profil.</p>
+                    </div>
+
+                    <form class="grid gap-[0.95rem] lg:gap-[0.7rem]" id="login-form" action="#" method="post" novalidate="" data-sd-id="33">
+                        <div class="grid min-w-0 gap-[0.35rem]" data-sd-id="34">
+                            <label class="text-[0.82rem] font-black" for="email" data-sd-id="35">Adresse e-mail</label>
+                            <input class="w-full min-h-[3.15rem] border-line border-ink rounded-medium py-[0.7rem] px-[0.85rem] outline-none bg-white text-ink text-[0.92rem] font-bold transition-all focus:border-violet focus:shadow-input-focus" id="email" name="email" type="email" autocomplete="email" inputmode="email" placeholder="toi@exemple.fr" aria-describedby="email-error" required="" data-sd-id="36">
+                            <p class="min-h-[0.9rem] m-0 text-error text-[0.72rem] font-extrabold hidden" id="email-error" data-sd-id="37"></p>
+                        </div>
+
+                        <div class="grid min-w-0 gap-[0.35rem]" data-sd-id="38">
+                            <div class="flex items-baseline justify-between gap-[1rem] text-[0.82rem] font-black" data-sd-id="39">
+                                <label for="password" data-sd-id="40">Mot de passe</label>
+                                <a class="text-muted text-[0.74rem] font-bold no-underline focus-ring rounded-sm" href="#" data-sd-id="41">Mot de passe oublié ?</a>
+                            </div>
+                            <div class="relative" data-sd-id="42">
+                                <input class="w-full min-h-[3.15rem] border-line border-ink rounded-medium py-[0.7rem] pr-[5.2rem] pl-[0.85rem] outline-none bg-white text-ink text-[0.92rem] font-bold transition-all focus:border-violet focus:shadow-input-focus" id="password" name="password" type="password" autocomplete="current-password" placeholder="Ton mot de passe" aria-describedby="password-error" required="" data-sd-id="43">
+                                <button class="absolute top-1/2 right-[0.7rem] -translate-y-1/2 border-0 p-[0.3rem] bg-transparent text-violet text-[0.72rem] font-black underline cursor-pointer focus-ring rounded-[0.25rem]" type="button" aria-label="Afficher le mot de passe" data-password-toggle="password" data-sd-id="44">
+                                    Afficher
+                                </button>
+                            </div>
+                            <p class="min-h-[0.9rem] m-0 text-error text-[0.72rem] font-extrabold hidden" id="password-error" data-sd-id="45"></p>
+                        </div>
+
+                        <label class="grid grid-cols-[auto_1fr] items-start gap-[0.55rem] text-[0.78rem] leading-[1.35] cursor-pointer group relative" data-sd-id="46">
+                            <input class="peer absolute opacity-0 pointer-events-none" name="remember" type="checkbox" value="1" data-sd-id="47">
+                            <span class="grid w-[1.25rem] h-[1.25rem] border-[0.125rem] border-ink rounded-[0.28rem] bg-white place-items-center peer-checked:bg-cyan peer-checked:after:content-['✓'] peer-checked:after:text-[0.82rem] peer-checked:after:font-black peer-focus-visible:outline peer-focus-visible:outline-[0.1875rem] peer-focus-visible:outline-cyan peer-focus-visible:outline-offset-[0.1875rem]" aria-hidden="true" data-sd-id="48"></span>
+                            <span data-sd-id="49">Se souvenir de moi</span>
+                        </label>
+
+                        <button class="inline-flex min-h-[3.25rem] w-full items-center justify-center gap-[0.65rem] border-line border-ink rounded-medium py-[0.75rem] px-[1.15rem] bg-coral text-ink font-black no-underline cursor-pointer transition-all shadow-hard-medium hover:-translate-x-[0.1rem] hover:-translate-y-[0.1rem] hover:shadow-[0.4rem_0.4rem_0_oklch(0.27_0.08_292)] active:translate-x-[0.16rem] active:translate-y-[0.16rem] active:shadow-[0.1rem_0.1rem_0_oklch(0.27_0.08_292)] focus-ring" type="button" data-sd-id="50">
+                            <span data-sd-id="51">Se connecter</span>
+                            <iconify-icon icon="lucide:sparkles" class="text-base" aria-hidden="true"></iconify-icon>
+                        </button>
+                    </form>
+
+                    <div class="grid grid-cols-[1fr_auto_1fr] items-center gap-[0.65rem] m-[1.15rem_0_0.85rem] lg:m-[0.75rem_0_0.65rem] text-muted text-[0.72rem] font-bold before:h-[0.125rem] before:bg-lavender before:content-[''] after:h-[0.125rem] after:bg-lavender after:content-['']" data-sd-id="52">
+                        <span data-sd-id="53">ou entre directement</span>
+                    </div>
+
+                    <div class="grid grid-cols-3 sm:grid-cols-1 gap-[0.65rem]" aria-label="Autres méthodes de connexion" data-sd-id="54">
+                        <button class="inline-flex min-w-0 min-h-[2.85rem] sm:justify-start items-center justify-center gap-[0.45rem] border-[0.125rem] border-ink rounded-small py-[0.55rem] px-[0.7rem] sm:px-[1rem] bg-cyan text-ink text-[0.78rem] font-black cursor-pointer transition-all hover:-translate-y-[0.12rem] hover:shadow-provider-hover focus-ring" type="button" data-provider="Passkey" data-sd-id="55">
+                            <span class="grid w-[1.35rem] h-[1.35rem] flex-none border-[0.1rem] border-ink rounded-full text-[0.72rem] place-items-center bg-white" aria-hidden="true" data-sd-id="56"><iconify-icon icon="lucide:key" class="text-[0.9rem]"></iconify-icon></span>
+                            <span data-sd-id="57">Passkey</span>
+                        </button>
+                        <button class="inline-flex min-w-0 min-h-[2.85rem] sm:justify-start items-center justify-center gap-[0.45rem] border-[0.125rem] border-ink rounded-small py-[0.55rem] px-[0.7rem] sm:px-[1rem] bg-white text-ink text-[0.78rem] font-black cursor-pointer transition-all hover:-translate-y-[0.12rem] hover:shadow-provider-hover focus-ring" type="button" data-provider="Google" data-sd-id="58">
+                            <span class="grid w-[1.35rem] h-[1.35rem] flex-none border-[0.1rem] border-ink rounded-full text-[0.72rem] place-items-center" aria-hidden="true" data-sd-id="59"><iconify-icon icon="lucide:chrome" class="text-[0.9rem]"></iconify-icon></span>
+                            <span data-sd-id="60">Google</span>
+                        </button>
+                        <button class="inline-flex min-w-0 min-h-[2.85rem] sm:justify-start items-center justify-center gap-[0.45rem] border-[0.125rem] border-ink rounded-small py-[0.55rem] px-[0.7rem] sm:px-[1rem] bg-lavender text-ink text-[0.78rem] font-black cursor-pointer transition-all hover:-translate-y-[0.12rem] hover:shadow-provider-hover focus-ring" type="button" data-provider="Discord" data-sd-id="61">
+                            <span class="grid w-[1.35rem] h-[1.35rem] flex-none border-[0.1rem] border-ink rounded-full text-[0.72rem] place-items-center bg-white" aria-hidden="true" data-sd-id="62"><iconify-icon icon="lucide:gamepad-2" class="text-[0.9rem]"></iconify-icon></span>
+                            <span data-sd-id="63">Discord</span>
+                        </button>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <footer class="relative z-20 flex min-h-[2.8rem] sm:flex-wrap items-center justify-center gap-8 sm:gap-[0.4rem_1.25rem] border-t-line border-ink p-[0.6rem_1rem] bg-yellow text-[0.72rem]" data-sd-id="64">
+        <p class="m-0 font-black" data-sd-id="65">© TripleFrames</p>
+        <nav class="flex gap-4" aria-label="Informations légales" data-sd-id="66">
+            <a class="no-underline hover:underline focus-ring rounded-sm" href="#" data-sd-id="67">Conditions</a>
+            <a class="no-underline hover:underline focus-ring rounded-sm" href="#" data-sd-id="68">Confidentialité</a>
+        </nav>
+    </footer>
+
+</body></html>

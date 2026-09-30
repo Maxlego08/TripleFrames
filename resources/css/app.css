@@ -7,7 +7,14 @@
 
 @custom-variant dark (&:is(.dark *));
 
-@theme {
+/*
+ * `inline` : les utilitaires lisent `var(--background)` et les autres tokens
+ * sources directement, au lieu d'une copie `--color-*` résolue une fois pour
+ * toutes sur `:root`. Sans lui, la classe `dark` posée sur un sous-arbre
+ * (`GameThemeScope`, spec 90 § 2.2 et § 9.1) redéfinirait les tokens sources
+ * sans qu'aucun utilitaire du sous-arbre ne les suive.
+ */
+@theme inline {
     --font-sans:
         'Instrument Sans', ui-sans-serif, system-ui, sans-serif,
         'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
@@ -41,9 +48,25 @@
     --color-destructive: var(--destructive);
     --color-destructive-foreground: var(--destructive-foreground);
 
+    /*
+     * Badge « a trouvé » (spec 90 § 9.1, contrat C16 § 2.10). Jamais la seule
+     * marque d'un statut : le badge porte aussi une icône et un texte.
+     */
+    --color-success: var(--success);
+    --color-success-foreground: var(--success-foreground);
+
     --color-border: var(--border);
     --color-input: var(--input);
     --color-ring: var(--ring);
+
+    /*
+     * Ratio de la frame servable (D5 du 23/09, contrat C9) : produit
+     * l'utilitaire `aspect-frame`, seul ratio du cadre de jeu (`GameFrame`) et
+     * de l'aperçu admin, jamais un style en ligne. Reflet de
+     * `FrameGeometry::ASPECT_WIDTH` / `ASPECT_HEIGHT`, vérifié par
+     * `FrameGeometryTest`.
+     */
+    --aspect-frame: 16 / 9;
 
     --color-chart-1: var(--chart-1);
     --color-chart-2: var(--chart-2);
@@ -78,6 +101,14 @@
     --accent-foreground: oklch(0.205 0 0);
     --destructive: oklch(0.577 0.245 27.325);
     --destructive-foreground: oklch(0.577 0.245 27.325);
+    /*
+     * Contrastes WCAG au moins égaux à ceux-ci, relus au lot L90-1 (spec 90
+     * § 8, seuil 4,5:1) : `--success-foreground` sur `--success` 5,4:1 ;
+     * `--success` sur `--background` 5,6:1 et sur `--muted` 5,1:1. Valeurs
+     * dans le gamut sRGB.
+     */
+    --success: oklch(0.5 0.13 150);
+    --success-foreground: oklch(0.985 0 0);
     --border: oklch(0.922 0 0);
     --input: oklch(0.922 0 0);
     --ring: oklch(0.87 0 0);
@@ -114,6 +145,14 @@
     --accent-foreground: oklch(0.985 0 0);
     --destructive: oklch(0.396 0.141 25.723);
     --destructive-foreground: oklch(0.637 0.237 25.331);
+    /*
+     * Contrastes WCAG au moins égaux à ceux-ci, relus au lot L90-1 (spec 90
+     * § 8, seuil 4,5:1) : `--success-foreground` sur `--success` 9,5:1 ;
+     * `--success` sur `--background` 9,5:1 et sur `--muted` 7,2:1. Valeurs
+     * dans le gamut sRGB.
+     */
+    --success: oklch(0.75 0.17 150);
+    --success-foreground: oklch(0.145 0 0);
     --border: oklch(0.269 0 0);
     --input: oklch(0.269 0 0);
     --ring: oklch(0.439 0 0);

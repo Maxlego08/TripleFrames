@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="fr">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <meta name="description" content="Partie en cours sur TripleFrames." />
+        <title>Partie en cours — TripleFrames</title>
+        <link rel="icon" href="../svg/brand-logo.svg" type="image/svg+xml" />
+        <link rel="stylesheet" href="../css/game.css" />
+    </head>
+    <body class="game-page">
+        <a class="skip-link" href="#game-content">Aller au jeu</a>
+
+        <main class="game" id="game-content">
+            <header class="game__topbar">
+                <a class="brand game__brand" href="index.html" aria-label="TripleFrames, retour à l’accueil">
+                    <img class="brand__logo" src="../svg/brand-logo.svg" alt="" width="44" height="36" />
+                    <span class="brand__name">TripleFrames</span>
+                </a>
+
+                <button class="pause-button" id="pause-game" type="button" aria-pressed="false">
+                    <span class="pause-button__icon" aria-hidden="true">
+                        <img class="icon" src="../svg/icons/pause.svg" alt="" />
+                    </span>
+                    <span class="pause-button__label">Pause</span>
+                </button>
+            </header>
+
+            <section class="game-screen" aria-label="Écran de jeu">
+                <div class="game-screen__frame">
+                    <div class="game-screen__status">
+                        <span>Manche 2</span>
+                        <span id="movie-frame-status">Image 1 / 3</span>
+                    </div>
+
+                    <div class="game-screen__content">
+                        <div class="game-screen__picture">
+                            <img
+                                id="movie-frame"
+                                src="../movie/movie-1.webp"
+                                alt="Premier indice visuel du film"
+                            />
+                        </div>
+                        <p class="game-screen__cooldown game-screen__cooldown--green" id="round-cooldown">
+                            <span>Quel est ce film&nbsp;?</span>
+                        </p>
+                    </div>
+
+                    <div class="game-screen__timer" id="round-timer-badge" aria-label="30 secondes restantes">
+                        <img class="icon" src="../svg/icons/clock.svg" alt="" aria-hidden="true" />
+                        <strong data-round-timer>30</strong>
+                    </div>
+                </div>
+            </section>
+
+            <section class="player-strip" id="player-strip" aria-label="Scores des joueurs"></section>
+
+            <p class="current-score" id="current-score" aria-live="polite"></p>
+
+            <form class="answer-form" id="answer-form" novalidate>
+                <div class="answer-form__field">
+                    <label class="sr-only" for="answer">Votre réponse</label>
+                    <input
+                        class="answer-form__input"
+                        id="answer"
+                        name="answer"
+                        type="text"
+                        maxlength="80"
+                        autocomplete="off"
+                        placeholder="Écrivez le titre du film…"
+                        aria-describedby="answer-error"
+                    />
+                    <span class="answer-form__error" id="answer-error" aria-live="polite"></span>
+                </div>
+                <button class="answer-form__submit" type="submit">
+                    <span>Valider</span>
+                    <img class="icon" src="../svg/icons/arrow-right.svg" alt="" aria-hidden="true" />
+                </button>
+            </form>
+        </main>
+
+        <div class="pause-overlay" id="pause-overlay" hidden>
+            <section class="pause-overlay__card" role="dialog" aria-modal="true" aria-labelledby="pause-title">
+                <span class="pause-overlay__icon" aria-hidden="true">
+                    <img class="icon" src="../svg/icons/pause.svg" alt="" />
+                </span>
+                <h1 id="pause-title">Partie en pause</h1>
+                <p>Le chrono est arrêté. Reprenez quand tout le monde est prêt.</p>
+                <button class="pause-overlay__resume" id="resume-game" type="button">Reprendre la partie</button>
+            </section>
+        </div>
+
+        <div class="toast" id="game-toast" role="status" aria-live="polite"></div>
+        <script src="../js/game.js"></script>
+    </body>
+</html>

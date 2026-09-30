@@ -1,0 +1,587 @@
+{
+    "description": "Cas partagés du plancher de recadrage (contrat C9, spec 20 § 5.1 et § 5.2). Verdicts écrits à la main depuis les formules de la spec, jamais recalculés par le code testé. Lus par CropRectangleTest (FrameGeometry, Pest) et par frame-geometry.test.ts (miroir client, Vitest) : les deux côtés rendent les mêmes verdicts sur les mêmes cadres. Chaque cas porte ses propres bornes, indépendantes de la configuration. Rectangles en pixels du master (1920 de large).",
+    "violations": [
+        {
+            "rule": "aspect",
+            "label": "largeur hors pas de 16",
+            "masterHeight": 1080,
+            "limits": {
+                "frameCropMaxWidthPercent": 80,
+                "frameCropMinWidthPx": 640
+            },
+            "crop": { "x": 0, "y": 0, "width": 1530, "height": 860 },
+            "expected": "aspect"
+        },
+        {
+            "rule": "aspect",
+            "label": "hauteur d'un pixel de trop",
+            "masterHeight": 1080,
+            "limits": {
+                "frameCropMaxWidthPercent": 80,
+                "frameCropMinWidthPx": 640
+            },
+            "crop": { "x": 192, "y": 108, "width": 1536, "height": 865 },
+            "expected": "aspect"
+        },
+        {
+            "rule": "aspect",
+            "label": "hauteur d'un pixel de moins",
+            "masterHeight": 1080,
+            "limits": {
+                "frameCropMaxWidthPercent": 80,
+                "frameCropMinWidthPx": 640
+            },
+            "crop": { "x": 192, "y": 108, "width": 1536, "height": 863 },
+            "expected": "aspect"
+        },
+        {
+            "rule": "aspect",
+            "label": "cadre 4:3",
+            "masterHeight": 1080,
+            "limits": {
+                "frameCropMaxWidthPercent": 80,
+                "frameCropMinWidthPx": 640
+            },
+            "crop": { "x": 0, "y": 0, "width": 960, "height": 720 },
+            "expected": "aspect"
+        },
+        {
+            "rule": "aspect",
+            "label": "le ratio est jugé avant le plancher",
+            "masterHeight": 1080,
+            "limits": {
+                "frameCropMaxWidthPercent": 80,
+                "frameCropMinWidthPx": 640
+            },
+            "crop": { "x": 0, "y": 0, "width": 1920, "height": 1081 },
+            "expected": "aspect"
+        },
+        {
+            "rule": "aspect",
+            "label": "16:9 exact au plus grand cadre",
+            "masterHeight": 1080,
+            "limits": {
+                "frameCropMaxWidthPercent": 80,
+                "frameCropMinWidthPx": 640
+            },
+            "crop": { "x": 192, "y": 108, "width": 1536, "height": 864 },
+            "expected": null
+        },
+        {
+            "rule": "aspect",
+            "label": "16:9 exact au premier pas au-dessus du minimum",
+            "masterHeight": 1080,
+            "limits": {
+                "frameCropMaxWidthPercent": 80,
+                "frameCropMinWidthPx": 640
+            },
+            "crop": { "x": 0, "y": 0, "width": 656, "height": 369 },
+            "expected": null
+        },
+        {
+            "rule": "width_cap",
+            "label": "80 % sur 16:9, plus grand cadre admis",
+            "masterHeight": 1080,
+            "limits": {
+                "frameCropMaxWidthPercent": 80,
+                "frameCropMinWidthPx": 640
+            },
+            "crop": { "x": 192, "y": 108, "width": 1536, "height": 864 },
+            "expected": null
+        },
+        {
+            "rule": "width_cap",
+            "label": "80 % sur 16:9, un pas de trop",
+            "masterHeight": 1080,
+            "limits": {
+                "frameCropMaxWidthPercent": 80,
+                "frameCropMinWidthPx": 640
+            },
+            "crop": { "x": 184, "y": 103, "width": 1552, "height": 873 },
+            "expected": "too_wide"
+        },
+        {
+            "rule": "width_cap",
+            "label": "80 % sur 4:3, la largeur seule refuse",
+            "masterHeight": 1440,
+            "limits": {
+                "frameCropMaxWidthPercent": 80,
+                "frameCropMinWidthPx": 640
+            },
+            "crop": { "x": 184, "y": 283, "width": 1552, "height": 873 },
+            "expected": "too_wide"
+        },
+        {
+            "rule": "width_cap",
+            "label": "80 % sur 4:3, plus grand cadre admis",
+            "masterHeight": 1440,
+            "limits": {
+                "frameCropMaxWidthPercent": 80,
+                "frameCropMinWidthPx": 640
+            },
+            "crop": { "x": 192, "y": 288, "width": 1536, "height": 864 },
+            "expected": null
+        },
+        {
+            "rule": "width_cap",
+            "label": "backdrop brut pleine largeur",
+            "masterHeight": 1080,
+            "limits": {
+                "frameCropMaxWidthPercent": 80,
+                "frameCropMinWidthPx": 640
+            },
+            "crop": { "x": 0, "y": 0, "width": 1920, "height": 1080 },
+            "expected": "too_wide"
+        },
+        {
+            "rule": "width_cap",
+            "label": "le plancher est jugé avant le débordement",
+            "masterHeight": 1080,
+            "limits": {
+                "frameCropMaxWidthPercent": 80,
+                "frameCropMinWidthPx": 640
+            },
+            "crop": { "x": 1000, "y": 0, "width": 1552, "height": 873 },
+            "expected": "too_wide"
+        },
+        {
+            "rule": "width_cap",
+            "label": "70 %, plus grand cadre admis",
+            "masterHeight": 1080,
+            "limits": {
+                "frameCropMaxWidthPercent": 70,
+                "frameCropMinWidthPx": 640
+            },
+            "crop": { "x": 288, "y": 162, "width": 1344, "height": 756 },
+            "expected": null
+        },
+        {
+            "rule": "width_cap",
+            "label": "70 %, un pas de trop",
+            "masterHeight": 1080,
+            "limits": {
+                "frameCropMaxWidthPercent": 70,
+                "frameCropMinWidthPx": 640
+            },
+            "crop": { "x": 280, "y": 157, "width": 1360, "height": 765 },
+            "expected": "too_wide"
+        },
+        {
+            "rule": "width_cap",
+            "label": "90 %, plus grand cadre admis",
+            "masterHeight": 1080,
+            "limits": {
+                "frameCropMaxWidthPercent": 90,
+                "frameCropMinWidthPx": 640
+            },
+            "crop": { "x": 96, "y": 54, "width": 1728, "height": 972 },
+            "expected": null
+        },
+        {
+            "rule": "width_cap",
+            "label": "90 %, un pas de trop",
+            "masterHeight": 1080,
+            "limits": {
+                "frameCropMaxWidthPercent": 90,
+                "frameCropMinWidthPx": 640
+            },
+            "crop": { "x": 88, "y": 49, "width": 1744, "height": 981 },
+            "expected": "too_wide"
+        },
+        {
+            "rule": "height_cap",
+            "label": "2,39:1, plus grand cadre admis",
+            "masterHeight": 803,
+            "limits": {
+                "frameCropMaxWidthPercent": 80,
+                "frameCropMinWidthPx": 640
+            },
+            "crop": { "x": 392, "y": 82, "width": 1136, "height": 639 },
+            "expected": null
+        },
+        {
+            "rule": "height_cap",
+            "label": "2,39:1, un pas trop haut malgré une largeur admise",
+            "masterHeight": 803,
+            "limits": {
+                "frameCropMaxWidthPercent": 80,
+                "frameCropMinWidthPx": 640
+            },
+            "crop": { "x": 384, "y": 77, "width": 1152, "height": 648 },
+            "expected": "too_wide"
+        },
+        {
+            "rule": "height_cap",
+            "label": "2:1, plus grand cadre admis",
+            "masterHeight": 960,
+            "limits": {
+                "frameCropMaxWidthPercent": 80,
+                "frameCropMinWidthPx": 640
+            },
+            "crop": { "x": 280, "y": 97, "width": 1360, "height": 765 },
+            "expected": null
+        },
+        {
+            "rule": "height_cap",
+            "label": "2:1, un pas trop haut malgré une largeur admise",
+            "masterHeight": 960,
+            "limits": {
+                "frameCropMaxWidthPercent": 80,
+                "frameCropMinWidthPx": 640
+            },
+            "crop": { "x": 272, "y": 93, "width": 1376, "height": 774 },
+            "expected": "too_wide"
+        },
+        {
+            "rule": "height_cap",
+            "label": "1,85:1, plus grand cadre admis",
+            "masterHeight": 1038,
+            "limits": {
+                "frameCropMaxWidthPercent": 80,
+                "frameCropMinWidthPx": 640
+            },
+            "crop": { "x": 224, "y": 105, "width": 1472, "height": 828 },
+            "expected": null
+        },
+        {
+            "rule": "height_cap",
+            "label": "1,85:1, un pas trop haut malgré une largeur admise",
+            "masterHeight": 1038,
+            "limits": {
+                "frameCropMaxWidthPercent": 80,
+                "frameCropMinWidthPx": 640
+            },
+            "crop": { "x": 216, "y": 100, "width": 1488, "height": 837 },
+            "expected": "too_wide"
+        },
+        {
+            "rule": "min_width",
+            "label": "640, largeur minimale admise",
+            "masterHeight": 1080,
+            "limits": {
+                "frameCropMaxWidthPercent": 80,
+                "frameCropMinWidthPx": 640
+            },
+            "crop": { "x": 0, "y": 0, "width": 640, "height": 360 },
+            "expected": null
+        },
+        {
+            "rule": "min_width",
+            "label": "640, un pas sous le minimum",
+            "masterHeight": 1080,
+            "limits": {
+                "frameCropMaxWidthPercent": 80,
+                "frameCropMinWidthPx": 640
+            },
+            "crop": { "x": 0, "y": 0, "width": 624, "height": 351 },
+            "expected": "too_narrow"
+        },
+        {
+            "rule": "min_width",
+            "label": "800, un pas sous le minimum",
+            "masterHeight": 1080,
+            "limits": {
+                "frameCropMaxWidthPercent": 80,
+                "frameCropMinWidthPx": 800
+            },
+            "crop": { "x": 0, "y": 0, "width": 784, "height": 441 },
+            "expected": "too_narrow"
+        },
+        {
+            "rule": "min_width",
+            "label": "800, largeur minimale admise",
+            "masterHeight": 1080,
+            "limits": {
+                "frameCropMaxWidthPercent": 80,
+                "frameCropMinWidthPx": 800
+            },
+            "crop": { "x": 0, "y": 0, "width": 800, "height": 450 },
+            "expected": null
+        },
+        {
+            "rule": "min_width",
+            "label": "320, largeur minimale admise",
+            "masterHeight": 1080,
+            "limits": {
+                "frameCropMaxWidthPercent": 80,
+                "frameCropMinWidthPx": 320
+            },
+            "crop": { "x": 0, "y": 0, "width": 320, "height": 180 },
+            "expected": null
+        },
+        {
+            "rule": "min_width",
+            "label": "320, un pas sous le minimum",
+            "masterHeight": 1080,
+            "limits": {
+                "frameCropMaxWidthPercent": 80,
+                "frameCropMinWidthPx": 320
+            },
+            "crop": { "x": 0, "y": 0, "width": 304, "height": 171 },
+            "expected": "too_narrow"
+        },
+        {
+            "rule": "min_width",
+            "label": "cadre vide",
+            "masterHeight": 1080,
+            "limits": {
+                "frameCropMaxWidthPercent": 80,
+                "frameCropMinWidthPx": 640
+            },
+            "crop": { "x": 0, "y": 0, "width": 0, "height": 0 },
+            "expected": "too_narrow"
+        },
+        {
+            "rule": "min_width",
+            "label": "la largeur minimale est jugée avant le débordement",
+            "masterHeight": 1080,
+            "limits": {
+                "frameCropMaxWidthPercent": 80,
+                "frameCropMinWidthPx": 640
+            },
+            "crop": { "x": -5, "y": 0, "width": 624, "height": 351 },
+            "expected": "too_narrow"
+        },
+        {
+            "rule": "bounds",
+            "label": "déborde à gauche",
+            "masterHeight": 1080,
+            "limits": {
+                "frameCropMaxWidthPercent": 80,
+                "frameCropMinWidthPx": 640
+            },
+            "crop": { "x": -1, "y": 108, "width": 1536, "height": 864 },
+            "expected": "out_of_bounds"
+        },
+        {
+            "rule": "bounds",
+            "label": "déborde en haut",
+            "masterHeight": 1080,
+            "limits": {
+                "frameCropMaxWidthPercent": 80,
+                "frameCropMinWidthPx": 640
+            },
+            "crop": { "x": 192, "y": -1, "width": 1536, "height": 864 },
+            "expected": "out_of_bounds"
+        },
+        {
+            "rule": "bounds",
+            "label": "déborde à droite d'un pixel",
+            "masterHeight": 1080,
+            "limits": {
+                "frameCropMaxWidthPercent": 80,
+                "frameCropMinWidthPx": 640
+            },
+            "crop": { "x": 385, "y": 108, "width": 1536, "height": 864 },
+            "expected": "out_of_bounds"
+        },
+        {
+            "rule": "bounds",
+            "label": "touche le bord droit",
+            "masterHeight": 1080,
+            "limits": {
+                "frameCropMaxWidthPercent": 80,
+                "frameCropMinWidthPx": 640
+            },
+            "crop": { "x": 384, "y": 108, "width": 1536, "height": 864 },
+            "expected": null
+        },
+        {
+            "rule": "bounds",
+            "label": "déborde en bas d'un pixel",
+            "masterHeight": 1080,
+            "limits": {
+                "frameCropMaxWidthPercent": 80,
+                "frameCropMinWidthPx": 640
+            },
+            "crop": { "x": 192, "y": 217, "width": 1536, "height": 864 },
+            "expected": "out_of_bounds"
+        },
+        {
+            "rule": "bounds",
+            "label": "touche le bord bas",
+            "masterHeight": 1080,
+            "limits": {
+                "frameCropMaxWidthPercent": 80,
+                "frameCropMinWidthPx": 640
+            },
+            "crop": { "x": 192, "y": 216, "width": 1536, "height": 864 },
+            "expected": null
+        },
+        {
+            "rule": "bounds",
+            "label": "2,39:1, déborde en bas",
+            "masterHeight": 803,
+            "limits": {
+                "frameCropMaxWidthPercent": 80,
+                "frameCropMinWidthPx": 640
+            },
+            "crop": { "x": 0, "y": 200, "width": 1136, "height": 639 },
+            "expected": "out_of_bounds"
+        },
+        {
+            "rule": "bounds",
+            "label": "2,39:1, touche le bord bas",
+            "masterHeight": 803,
+            "limits": {
+                "frameCropMaxWidthPercent": 80,
+                "frameCropMinWidthPx": 640
+            },
+            "crop": { "x": 0, "y": 164, "width": 1136, "height": 639 },
+            "expected": null
+        }
+    ],
+    "defaults": [
+        {
+            "label": "16:9 au défaut",
+            "masterHeight": 1080,
+            "limits": {
+                "frameCropMaxWidthPercent": 80,
+                "frameCropMinWidthPx": 640
+            },
+            "expected": { "x": 192, "y": 108, "width": 1536, "height": 864 }
+        },
+        {
+            "label": "4:3, la borne de largeur gouverne",
+            "masterHeight": 1440,
+            "limits": {
+                "frameCropMaxWidthPercent": 80,
+                "frameCropMinWidthPx": 640
+            },
+            "expected": { "x": 192, "y": 288, "width": 1536, "height": 864 }
+        },
+        {
+            "label": "2,39:1, la borne de hauteur gouverne",
+            "masterHeight": 803,
+            "limits": {
+                "frameCropMaxWidthPercent": 80,
+                "frameCropMinWidthPx": 640
+            },
+            "expected": { "x": 392, "y": 82, "width": 1136, "height": 639 }
+        },
+        {
+            "label": "2:1, la borne de hauteur gouverne",
+            "masterHeight": 960,
+            "limits": {
+                "frameCropMaxWidthPercent": 80,
+                "frameCropMinWidthPx": 640
+            },
+            "expected": { "x": 280, "y": 97, "width": 1360, "height": 765 }
+        },
+        {
+            "label": "1,85:1, la borne de hauteur gouverne",
+            "masterHeight": 1038,
+            "limits": {
+                "frameCropMaxWidthPercent": 80,
+                "frameCropMinWidthPx": 640
+            },
+            "expected": { "x": 224, "y": 105, "width": 1472, "height": 828 }
+        },
+        {
+            "label": "4:1, juste au-dessus du minimum",
+            "masterHeight": 480,
+            "limits": {
+                "frameCropMaxWidthPercent": 80,
+                "frameCropMinWidthPx": 640
+            },
+            "expected": { "x": 624, "y": 51, "width": 672, "height": 378 }
+        },
+        {
+            "label": "4:1 sous un minimum de 800 : aucun cadre admis",
+            "masterHeight": 480,
+            "limits": {
+                "frameCropMaxWidthPercent": 80,
+                "frameCropMinWidthPx": 800
+            },
+            "expected": null
+        },
+        {
+            "label": "5:1 : aucun cadre admis",
+            "masterHeight": 384,
+            "limits": {
+                "frameCropMaxWidthPercent": 80,
+                "frameCropMinWidthPx": 640
+            },
+            "expected": null
+        },
+        {
+            "label": "70 % sur 16:9",
+            "masterHeight": 1080,
+            "limits": {
+                "frameCropMaxWidthPercent": 70,
+                "frameCropMinWidthPx": 640
+            },
+            "expected": { "x": 288, "y": 162, "width": 1344, "height": 756 }
+        },
+        {
+            "label": "83 % sur 16:9, plafond du calibrage",
+            "masterHeight": 1080,
+            "limits": {
+                "frameCropMaxWidthPercent": 83,
+                "frameCropMinWidthPx": 640
+            },
+            "expected": { "x": 168, "y": 94, "width": 1584, "height": 891 }
+        },
+        {
+            "label": "90 % sur 16:9, minimum de 1280",
+            "masterHeight": 1080,
+            "limits": {
+                "frameCropMaxWidthPercent": 90,
+                "frameCropMinWidthPx": 1280
+            },
+            "expected": { "x": 96, "y": 54, "width": 1728, "height": 972 }
+        }
+    ],
+    "masterHeights": [
+        {
+            "label": "1920 × 1080",
+            "source": { "width": 1920, "height": 1080 },
+            "expected": 1080
+        },
+        {
+            "label": "3840 × 2160",
+            "source": { "width": 3840, "height": 2160 },
+            "expected": 1080
+        },
+        {
+            "label": "1280 × 720",
+            "source": { "width": 1280, "height": 720 },
+            "expected": 1080
+        },
+        {
+            "label": "1920 × 803, scope",
+            "source": { "width": 1920, "height": 803 },
+            "expected": 803
+        },
+        {
+            "label": "2048 × 858, scope DCI",
+            "source": { "width": 2048, "height": 858 },
+            "expected": 804
+        },
+        {
+            "label": "1998 × 1080, flat",
+            "source": { "width": 1998, "height": 1080 },
+            "expected": 1038
+        },
+        {
+            "label": "1440 × 1080, 4:3",
+            "source": { "width": 1440, "height": 1080 },
+            "expected": 1440
+        },
+        {
+            "label": "3000 × 600, 5:1",
+            "source": { "width": 3000, "height": 600 },
+            "expected": 384
+        },
+        {
+            "label": "1000 × 501, arrondi au plus proche",
+            "source": { "width": 1000, "height": 501 },
+            "expected": 962
+        },
+        {
+            "label": "1280 × 721, demi arrondi vers le haut",
+            "source": { "width": 1280, "height": 721 },
+            "expected": 1082
+        }
+    ]
+}
