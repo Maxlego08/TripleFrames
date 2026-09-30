@@ -2,12 +2,15 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Enums\AdminActionType;
 use App\Enums\ImportRunKind;
 use App\Http\Controllers\Controller;
 use App\Jobs\Catalog\RunCatalogImport;
+use App\Models\User;
 use App\Support\Admin\ImportLauncher;
 use App\Support\Admin\SeedList;
 use App\Support\Tmdb\TmdbClient;
+use App\ValueObjects\Admin\AdminActionDetails;
 use App\ValueObjects\Catalog\ImportFilter;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -61,10 +64,15 @@ class ImportSeedListController extends Controller
             return back();
         }
 
+        /** @var User $actor */
+        $actor = $request->user();
+
         $run = ImportLauncher::openExclusively(
             ImportRunKind::Paste,
             ImportFilter::default(),
-            $request->user()?->id,
+            $actor,
+            AdminActionType::ImportSeedListStarted,
+            AdminActionDetails::importIds($batch),
         );
 
         if ($run === null) {

@@ -4,6 +4,7 @@ import {
     ArchiveIcon,
     EyeOffIcon,
     ExternalLinkIcon,
+    HistoryIcon,
     ImageOffIcon,
     ImagesIcon,
     ShieldCheckIcon,
@@ -75,6 +76,7 @@ import {
 import { dashboard as adminDashboard } from '@/routes/admin';
 import { bank, index as catalogIndex } from '@/routes/admin/catalog';
 import { show as runShow } from '@/routes/admin/import';
+import { index as journalIndex } from '@/routes/admin/journal';
 import type {
     AdminAnswerKeyRow,
     AdminGroupCandidate,
@@ -278,6 +280,18 @@ export default function AdminCatalogShow({
                                     <Link href={bank(movie.id)}>
                                         <ImagesIcon aria-hidden />
                                         {t('admin.movie.curate')}
+                                    </Link>
+                                </Button>
+                            )}
+                            {abilities.viewJournal && (
+                                <Button variant="outline" size="sm" asChild>
+                                    <Link
+                                        href={journalIndex({
+                                            query: { movie: movie.id },
+                                        })}
+                                    >
+                                        <HistoryIcon aria-hidden />
+                                        {t('admin.journal.history')}
                                     </Link>
                                 </Button>
                             )}

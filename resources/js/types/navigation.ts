@@ -49,4 +49,10 @@ export type AdminNavItem = {
     minRole?: UserRole;
     /** Défaut : `'prefix'`, pour qu'une fiche film allume l'entrée « catalogue ». */
     match?: 'exact' | 'prefix';
+    /**
+     * Défaut : `true`. `false` pour un écran dont chaque visite est une
+     * lecture sensible journalisée (D41 du 30/09) : le serveur ignore un
+     * préchargement, et un clic servi par son cache n'écrirait rien.
+     */
+    prefetch?: boolean;
 };

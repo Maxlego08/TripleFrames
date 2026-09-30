@@ -51,6 +51,8 @@ return [
         'administration' => 'Administration',
         'users' => 'Comptes',
         'access' => 'Accès',
+        // Le journal d'administration (ligne 41, D41 du 30/09).
+        'journal' => 'Journal',
         'back_to_site' => 'Retour au site',
         'role' => [
             'curator' => 'Curateur',
@@ -76,6 +78,10 @@ return [
         'open_account' => 'Ouvrir la fiche du compte :name',
         'change_role_of' => 'Changer le rôle de :name',
         'correct_real_name_of' => 'Corriger le nom réel de :name',
+        // Journal d'administration (ligne 41, D41 du 30/09).
+        'journal_filters_form' => 'Filtres du journal d’administration',
+        'journal_open_subject' => 'Ouvrir :subject',
+        'journal_open_actor' => 'Ouvrir la fiche du compte de :name',
         // Coquille mobile de `admin-sidebar.tsx` : titre et description
         // accessibles de SA feuille, jamais le « Sidebar » anglais figé de
         // `ui/sidebar` (spec 20 § 13.4, 90 § 2.5).
@@ -382,6 +388,25 @@ return [
             'takedown_decided' => 'Demande de retrait décidée',
             'site_closed' => 'Site fermé',
             'site_reopened' => 'Site rouvert',
+            'movie_title_saved' => 'Titre corrigé',
+            'movie_title_removed' => 'Titre retiré',
+            'movie_alias_added' => 'Alias ajouté',
+            'movie_alias_removed' => 'Alias retiré',
+            'movie_grouped' => 'Film regroupé',
+            'movie_ungrouped' => 'Film retiré de son groupe',
+            'frame_added' => 'Image ajoutée',
+            'frame_recropped' => 'Image recadrée',
+            'frame_processing_retried' => 'Traitement de l’image relancé',
+            'frame_level_changed' => 'Niveau de l’image changé',
+            'frame_reviewed' => 'Image revue',
+            'import_discover_started' => 'Balayage TMDB lancé',
+            'import_paste_started' => 'Collage d’identifiants lancé',
+            'import_seed_list_started' => 'Lot de la liste d’amorçage lancé',
+            'import_resumed' => 'Balayage repris',
+            'accounts_directory_viewed' => 'Annuaire des comptes consulté',
+            'accounts_access_viewed' => 'Écran des accès consulté',
+            'user_looked_up' => 'Compte recherché par adresse',
+            'user_viewed' => 'Fiche du compte consultée',
         ],
         'admin_action_subject' => [
             'movie' => 'Film',
@@ -390,6 +415,8 @@ return [
             'player' => 'Joueur',
             'takedown_request' => 'Demande de retrait',
             'site' => 'Site',
+            'import_run' => 'Balayage d’import',
+            'accounts' => 'Comptes',
         ],
     ],
 
@@ -2343,6 +2370,113 @@ return [
     | `:max` étant le plafond d’un envoi en Ko — le même message couvre un
     | fichier que le serveur a refusé avant toute validation.
     */
+    /*
+    | Journal d’administration (`admin/journal/index`, spec 20 § 2.2, ligne 41 ;
+    | D41 du 30/09) — administrateur seul, en lecture seule. Chaque ligne
+    | nomme son auteur par le nom réel qu’il a signé à l’instant du geste.
+    | `details.*` : les champs du complément `admin_action.details`, un par
+    | clé des constructeurs d’`AdminActionDetails` ; une clé inconnue
+    | s’affiche brute.
+    */
+    'journal' => [
+        'title' => 'Journal',
+        'heading' => 'Journal d’administration',
+        'description' => 'Qui a fait quoi dans le back-office, du plus récent au plus ancien : chaque geste de curation, d’import et d’accès, et chaque consultation de l’annuaire, d’une fiche de compte ou de l’écran des accès. Aucune ligne ne se modifie ni ne se supprime depuis cet écran.',
+        'results' => ':total ligne(s) au filtre courant',
+        'history' => 'Historique',
+
+        'filters' => [
+            'heading' => 'Filtres',
+            'actor' => 'Auteur',
+            'action' => 'Action',
+            'from' => 'Du',
+            'to' => 'Au',
+            'period_hint' => 'Bornes incluses, jour entier.',
+            'subject_type' => 'Type de sujet',
+            'subject_id' => 'Numéro du sujet',
+            'subject_id_hint' => 'Le numéro affiché dans l’adresse de la fiche : exige un type de sujet.',
+            'submit' => 'Filtrer',
+            'reset' => 'Tout effacer',
+        ],
+
+        'actor' => [
+            'system' => 'Système (seuil de signalement)',
+            'console' => 'Geste hors back-office, sur le serveur',
+        ],
+
+        'subject' => [
+            'filtered' => 'Historique de : :subject',
+            'numbered' => ':type n° :id',
+            'labelled' => ':type n° :id — :label',
+            'unknown' => 'Aucun sujet de ce type ne porte ce numéro : le journal filtré est vide ou ne vise qu’un sujet disparu.',
+            'clear' => 'Voir tout le journal',
+            'with_frames' => 'Les gestes sur ses images sont compris.',
+        ],
+
+        'list' => [
+            'heading' => 'Lignes du journal',
+        ],
+
+        'column' => [
+            'created_at' => 'Date',
+            'actor' => 'Auteur',
+            'action' => 'Action',
+            'subject' => 'Sujet',
+            'details' => 'Détails',
+        ],
+
+        'line' => [
+            'reason' => 'Motif',
+            'roles' => 'Rôle',
+            'reports' => 'Signalements',
+            'retention' => 'Conservation',
+            'no_details' => 'Aucun complément',
+        ],
+
+        'retention' => [
+            'permanent' => 'Permanente',
+            'rolling_12m' => '12 mois glissants',
+        ],
+
+        'details' => [
+            'locale' => 'Langue',
+            'before' => 'Avant',
+            'before_origin' => 'Origine de l’ancien titre',
+            'after' => 'Après',
+            'title' => 'Titre',
+            'alias_id' => 'Alias n°',
+            'alias' => 'Alias',
+            'origin' => 'Origine',
+            'outcome' => 'Issue',
+            'group_id' => 'Groupe n°',
+            'label' => 'Libellé du groupe',
+            'group_label' => 'Libellé du groupe',
+            'with_movie_id' => 'Avec le film n°',
+            'dissolved' => 'Groupe dissous',
+            'source_kind' => 'Voie',
+            'frame_level' => 'Niveau',
+            'failure' => 'Échec effacé',
+            'from' => 'De',
+            'to' => 'Vers',
+            'review_id' => 'Revue n°',
+            'decision' => 'Décision',
+            'grid_version' => 'Version de la grille',
+            'pages' => 'Pages TMDB',
+            'tmdb_ids' => 'Identifiants TMDB',
+        ],
+
+        'empty' => [
+            'heading' => 'Aucune ligne',
+            'filtered' => 'Aucune ligne ne correspond à ces filtres. Effacez-les pour revoir tout le journal.',
+            'no_lines' => 'Le journal est vide : aucun geste n’a encore été consigné.',
+        ],
+
+        'error' => [
+            'heading' => 'Filtres refusés',
+            'description' => 'Le journal affiché n’est PAS filtré : corrigez les filtres signalés, puis filtrez de nouveau.',
+        ],
+    ],
+
     'validation' => [
         'search' => 'recherche',
         'availability' => 'disponibilité',
@@ -2391,6 +2525,16 @@ return [
         'group_leave' => 'retrait du groupe',
         'group_label' => 'libellé du groupe',
         'group_note' => 'note',
+        // Filtres du journal d'administration (ligne 41, D41 du 30/09).
+        'journal_actor' => 'auteur',
+        'journal_action' => 'action',
+        'journal_from' => 'début de période',
+        'journal_to' => 'fin de période',
+        'journal_subject_type' => 'type de sujet',
+        'journal_subject_id_field' => 'numéro du sujet',
+        'journal_subject_id' => 'Un numéro de sujet exige un type de sujet qui en porte un : film, image, compte, joueur, demande de retrait ou balayage d’import.',
+        'journal_movie_field' => 'film',
+        'journal_movie' => 'L’historique d’un film remplace le filtre de sujet : retirez le type et le numéro du sujet, ou le film.',
         'frame_source' => [
             'dimensions' => 'Ce visuel est en portrait, fait moins de :width pixels de large, ou ne laisse place à aucun cadre admis : il ne peut pas donner une image de jeu. Choisissez un autre visuel du film.',
             'max' => 'Cette capture dépasse :max Ko, le poids maximal d’un envoi : aucune image n’a été créée. Rouvrez-la depuis l’écran, qui la prépare sous ce poids avant de l’envoyer.',

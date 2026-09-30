@@ -3,10 +3,14 @@
 use App\Enums\AdminActionRetention;
 use App\Enums\AdminActionSubject;
 use App\Enums\AdminActionType;
+use App\Enums\ContentOrigin;
+use App\Enums\FrameLevel;
 use App\Enums\UserRole;
 use App\Models\AdminAction;
 use App\Models\User;
 use App\Support\Admin\AdminJournal;
+use App\ValueObjects\Admin\AdminActionDetails;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 /*
@@ -25,10 +29,18 @@ use Illuminate\Support\Facades\DB;
 |
 */
 
-/** Un sujet plausible pour chaque action : un identifiant, sauf pour le site. */
+/** Un sujet plausible pour chaque action : un identifiant, sauf pour le site et l'ensemble des comptes. */
 function adminJournalSubjectId(AdminActionType $action): ?int
 {
     return $action->subject()->hasIdentifier() ? 4242 : null;
+}
+
+/** Un complément pour les cas qui en déclarent un (D41 du 30/09), et eux seuls. */
+function adminJournalDetails(AdminActionType $action): ?AdminActionDetails
+{
+    return $action->hasDetails()
+        ? AdminActionDetails::levelChanged(FrameLevel::Level1, FrameLevel::Level2)
+        : null;
 }
 
 /** Les rôles de `role.changed`, et eux seuls. */
@@ -57,6 +69,7 @@ function adminJournalRawLine(AdminActionType $action, array $overrides = []): Ad
     $line->reason = $action->requiresReason() ? 'Motif du geste.' : null;
     $line->role_before = $before;
     $line->role_after = $after;
+    $line->details = adminJournalDetails($action);
 
     foreach ($overrides as $column => $value) {
         $line->setAttribute($column, $value);
@@ -65,8 +78,8 @@ function adminJournalRawLine(AdminActionType $action, array $overrides = []): Ad
     return $line;
 }
 
-test('la liste fermée compte exactement vingt-deux cas', function (): void {
-    expect(AdminActionType::cases())->toHaveCount(22)
+test('la liste fermée compte exactement quarante et un cas', function (): void {
+    expect(AdminActionType::cases())->toHaveCount(41)
         ->and(array_map(static fn (AdminActionType $case): string => $case->value, AdminActionType::cases()))
         ->toEqualCanonicalizing([
             'role.changed',
@@ -91,6 +104,27 @@ test('la liste fermée compte exactement vingt-deux cas', function (): void {
             'takedown.decided',
             'site.closed',
             'site.reopened',
+            // D41 du 30/09 : gestes du back-office.
+            'movie.title_saved',
+            'movie.title_removed',
+            'movie.alias_added',
+            'movie.alias_removed',
+            'movie.grouped',
+            'movie.ungrouped',
+            'frame.added',
+            'frame.recropped',
+            'frame.processing_retried',
+            'frame.level_changed',
+            'frame.reviewed',
+            'import.discover_started',
+            'import.paste_started',
+            'import.seed_list_started',
+            'import.resumed',
+            // D41 du 30/09 : lectures sensibles.
+            'accounts.directory_viewed',
+            'accounts.access_viewed',
+            'user.looked_up',
+            'user.viewed',
         ]);
 
     // `action` reste un `string(40)` : aucun cas ne dépasse la colonne, et
@@ -99,15 +133,44 @@ test('la liste fermée compte exactement vingt-deux cas', function (): void {
         expect(strlen($case->value))->toBeLessThanOrEqual(40);
     }
 
-    expect(AdminActionSubject::cases())->toHaveCount(6);
+    expect(AdminActionSubject::cases())->toHaveCount(8)
+        ->and(AdminActionSubject::ImportRun->value)->toBe('import_run')
+        ->and(AdminActionSubject::Accounts->value)->toBe('accounts');
+
+    // `subject_type` reste un `string(20)`.
+    foreach (AdminActionSubject::cases() as $subject) {
+        expect(strlen($subject->value))->toBeLessThanOrEqual(20);
+    }
+
+    // Quatre lectures sensibles, et elles seules ne sont pas des gestes.
+    expect(array_values(array_filter(
+        AdminActionType::cases(),
+        static fn (AdminActionType $case): bool => $case->isRead(),
+    )))->toBe([
+        AdminActionType::AccountsDirectoryViewed,
+        AdminActionType::AccountsAccessViewed,
+        AdminActionType::UserLookedUp,
+        AdminActionType::UserViewed,
+    ]);
+
+    // Aucun cas nouveau n'exige de motif ni n'admet la console ou le système.
+    foreach (AdminActionType::cases() as $case) {
+        if ($case->hasDetails() || $case->isRead()) {
+            expect($case->requiresReason())->toBeFalse($case->value)
+                ->and($case->allowsConsoleActor())->toBeFalse($case->value)
+                ->and($case->isAutomatic())->toBeFalse($case->value);
+        }
+    }
 });
 
-test('tout sujet movie, frame, takedown_request ou site est permanent', function (): void {
+test('tout sujet movie, frame, takedown_request, site, import_run ou accounts est permanent', function (): void {
     $permanentSubjects = [
         AdminActionSubject::Movie,
         AdminActionSubject::Frame,
         AdminActionSubject::TakedownRequest,
         AdminActionSubject::Site,
+        AdminActionSubject::ImportRun,
+        AdminActionSubject::Accounts,
     ];
 
     foreach (AdminActionType::cases() as $case) {
@@ -118,7 +181,9 @@ test('tout sujet movie, frame, takedown_request ou site est permanent', function
 
     // Aucun cas de la liste ne tombe en `rolling_12m` (`10` § 8.3) —
     // `user.real_name_changed` compris, malgré son sujet `user` (EN20-3).
-    expect(AdminActionType::UserRealNameChanged->subject())->toBe(AdminActionSubject::User);
+    expect(AdminActionType::UserRealNameChanged->subject())->toBe(AdminActionSubject::User)
+        ->and(AdminActionType::UserViewed->subject())->toBe(AdminActionSubject::User)
+        ->and(AdminActionType::UserLookedUp->subject())->toBe(AdminActionSubject::User);
 
     foreach (AdminActionType::cases() as $case) {
         expect($case->retentionClass())->toBe(AdminActionRetention::Permanent, $case->value);
@@ -306,6 +371,8 @@ test('subject_type est dérivé de l\'action', function (): void {
     foreach (AdminActionType::cases() as $case) {
         if ($case->isAutomatic()) {
             $line = DB::transaction(fn (): AdminAction => $journal->recordAutomatic($case, 4242, 2));
+        } elseif ($case->isRead()) {
+            $line = $journal->recordRead($admin, $case, adminJournalSubjectId($case));
         } else {
             [$before, $after] = adminJournalRoles($case);
 
@@ -316,6 +383,7 @@ test('subject_type est dérivé de l\'action', function (): void {
                 $case->requiresReason() ? 'Motif du geste.' : null,
                 roleBefore: $before,
                 roleAfter: $after,
+                details: adminJournalDetails($case),
             ));
         }
 
@@ -329,7 +397,18 @@ test('subject_type est dérivé de l\'action', function (): void {
     expect($forced->fresh()?->subject_type)->toBe(AdminActionSubject::Movie);
 });
 
-test('subject_id est nul si et seulement si le sujet est site', function (): void {
+test('subject_id est nul si et seulement si le sujet n\'a pas d\'identifiant, site ou accounts', function (): void {
+    expect(array_values(array_filter(
+        AdminActionSubject::cases(),
+        static fn (AdminActionSubject $subject): bool => ! $subject->hasIdentifier(),
+    )))->toBe([AdminActionSubject::Site, AdminActionSubject::Accounts]);
+
+    expect(fn () => adminJournalRawLine(AdminActionType::AccountsDirectoryViewed, ['subject_id' => 4242])->save())
+        ->toThrow(LogicException::class);
+
+    expect(fn () => adminJournalRawLine(AdminActionType::UserViewed, ['subject_id' => null])->save())
+        ->toThrow(LogicException::class);
+
     expect(fn () => adminJournalRawLine(AdminActionType::MoviePublished, ['subject_id' => null])->save())
         ->toThrow(LogicException::class);
 
@@ -391,6 +470,19 @@ test('AdminJournal refuse d\'écrire hors transaction', function (): void {
             ->toThrow(LogicException::class, 'hors transaction');
 
         expect(AdminAction::query()->count())->toBe(0);
+
+        // Une lecture sensible n'a pas de transaction : elle s'écrit sans.
+        // Son auteur est créé ici même — celui du test a disparu avec la
+        // transaction englobante —, et tout est effacé aussitôt, pour ne rien
+        // laisser aux tests suivants.
+        $reader = User::factory()->admin()->create();
+        $read = $journal->recordRead($reader, AdminActionType::UserViewed, 4242);
+
+        expect($read->exists)->toBeTrue()
+            ->and($connection->transactionLevel())->toBe(0);
+
+        $read->delete();
+        $reader->delete();
     } finally {
         for ($i = 0; $i < $level; $i++) {
             $connection->beginTransaction();
@@ -434,4 +526,85 @@ test('chaque cas a sa clé admin.enum.admin_action', function (): void {
             static fn (AdminActionSubject $subject): string => $subject->value,
             AdminActionSubject::cases(),
         ));
+});
+
+test('une lecture ne s\'écrit que par recordRead, un geste jamais par elle', function (): void {
+    $journal = app(AdminJournal::class);
+    $admin = User::factory()->admin()->create();
+
+    foreach (AdminActionType::cases() as $case) {
+        if ($case->isRead()) {
+            expect(fn () => DB::transaction(fn () => $journal->record($admin, $case, adminJournalSubjectId($case))))
+                ->toThrow(LogicException::class, 'recordRead');
+
+            $line = $journal->recordRead($admin, $case, adminJournalSubjectId($case));
+
+            expect($line->fresh()?->actor_name)->toBe($admin->real_name)
+                ->and($line->actor_id)->toBe($admin->id)
+                ->and($line->retention_class)->toBe(AdminActionRetention::Permanent)
+                ->and($line->reason)->toBeNull()
+                ->and($line->details)->toBeNull();
+
+            continue;
+        }
+
+        expect(fn () => $journal->recordRead($admin, $case, adminJournalSubjectId($case)))
+            ->toThrow(LogicException::class, 'record()');
+    }
+
+    expect(AdminAction::query()->count())->toBe(4);
+});
+
+test('details est exigé des seuls cas qui en déclarent, et borné', function (): void {
+    $journal = app(AdminJournal::class);
+    $admin = User::factory()->admin()->create();
+
+    // Absent là où il est dû, présent là où il ne l'est pas : refusé.
+    expect(fn () => DB::transaction(fn () => $journal->record($admin, AdminActionType::FrameLevelChanged, 4242)))
+        ->toThrow(LogicException::class, 'details');
+
+    expect(fn () => DB::transaction(fn () => $journal->record(
+        $admin,
+        AdminActionType::MoviePublished,
+        4242,
+        details: AdminActionDetails::levelChanged(FrameLevel::Level1, FrameLevel::Level2),
+    )))->toThrow(LogicException::class, 'details');
+
+    // Au-delà de la borne : refusé.
+    expect(fn () => DB::transaction(fn () => $journal->record(
+        $admin,
+        AdminActionType::MovieTitleRemoved,
+        4242,
+        details: AdminActionDetails::titleRemoved('fr', str_repeat('a', AdminActionDetails::MAX_BYTES)),
+    )))->toThrow(LogicException::class, (string) AdminActionDetails::MAX_BYTES);
+
+    expect(AdminAction::query()->count())->toBe(0);
+
+    // Écrit puis relu à l'identique, en valeur typée.
+    $line = DB::transaction(fn (): AdminAction => $journal->record(
+        $admin,
+        AdminActionType::MovieTitleSaved,
+        4242,
+        details: AdminActionDetails::titleSaved('fr', 'Ancien titre', ContentOrigin::Tmdb, 'Nouveau titre'),
+    ));
+
+    expect($line->fresh()?->details?->values)->toBe([
+        'locale' => 'fr',
+        'before' => 'Ancien titre',
+        'before_origin' => 'tmdb',
+        'after' => 'Nouveau titre',
+    ]);
+});
+
+test('une visite compte, un rechargement partiel ou un préchargement non', function (): void {
+    expect(AdminJournal::countsAsVisit(Request::create('/admin/users')))->toBeTrue();
+
+    $partial = Request::create('/admin/users');
+    $partial->headers->set('X-Inertia-Partial-Component', 'admin/users/index');
+
+    $prefetch = Request::create('/admin/users');
+    $prefetch->headers->set('Purpose', 'prefetch');
+
+    expect(AdminJournal::countsAsVisit($partial))->toBeFalse()
+        ->and(AdminJournal::countsAsVisit($prefetch))->toBeFalse();
 });

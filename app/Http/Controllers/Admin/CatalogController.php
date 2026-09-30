@@ -12,6 +12,7 @@ use App\Enums\Locale;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\CatalogIndexRequest;
 use App\Http\Requests\Admin\MovieTitleUpdateRequest;
+use App\Models\AdminAction;
 use App\Models\Alias;
 use App\Models\AnswerKey;
 use App\Models\Frame;
@@ -188,6 +189,9 @@ class CatalogController extends Controller
                 'publish' => Gate::allows('publish', $movie),
                 'unpublish' => Gate::allows('unpublish', $movie),
                 'verifyContent' => Gate::allows('verifyContent', $movie),
+                // Le lien « Historique » vers le journal filtré sur ce film
+                // (ligne 41, D41 du 30/09) : administrateur seul.
+                'viewJournal' => Gate::allows('viewAny', AdminAction::class),
             ],
             // La cadence du battement de débit (§ 10.1) : la fiche est une
             // page du film, où le temps actif se mesure.

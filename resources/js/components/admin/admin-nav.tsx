@@ -75,7 +75,7 @@ export function AdminNav({ items, role, label }: Props) {
                                 >
                                     <Link
                                         href={item.href}
-                                        prefetch
+                                        prefetch={item.prefetch ?? true}
                                         aria-current={
                                             isActive ? 'page' : undefined
                                         }

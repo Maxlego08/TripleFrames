@@ -6,21 +6,31 @@ use App\Models\AdminAction;
 use App\Support\Admin\AdminJournal;
 
 /**
- * Liste FERMÉE des gestes engageants consignés au journal d'administration :
- * cast de `admin_action.action` (spec 10 § 8.3, contrat C14).
+ * Liste FERMÉE des gestes consignés au journal d'administration : cast de
+ * `admin_action.action` (spec 10 § 8.3, contrat C14).
  *
- * **Vingt-deux cas** : les vingt et un du jalon 1, dont six entrés le 23/09
- * (`movie.published`, `frame.unpublished`, `frame.grid_unpublished`,
- * `frame.unsuspended`, `site.closed`, `site.reopened`), plus
- * `user.real_name_changed`, inscrit le 28/09 avec l'écran de gestion des accès
- * (EN20-3) — tous sans migration : `action` reste un `string(40)`. `10`
+ * **Quarante et un cas.** Les vingt-deux gestes engageants du jalon 1 — les
+ * vingt et un du contrat C14, dont six entrés le 23/09 (`movie.published`,
+ * `frame.unpublished`, `frame.grid_unpublished`, `frame.unsuspended`,
+ * `site.closed`, `site.reopened`), plus `user.real_name_changed` (28/09,
+ * EN20-3) — et dix-neuf cas entrés par **D41 du 30/09**, qui étend le journal
+ * à TOUTE écriture du back-office et aux lectures sensibles :
+ *
+ * - quinze gestes de curation et d'import jusque-là tracés par une seule
+ *   colonne d'auteur, ou pas du tout (titres, alias, groupes, ajout, recadrage,
+ *   relance, niveau et revue d'une image, lancement et reprise d'un import) ;
+ * - quatre LECTURES SENSIBLES ({@see self::isRead()}) — l'annuaire, la fiche
+ *   d'un compte, l'écran des accès et sa recherche par adresse —, écrites par
+ *   la seule porte {@see AdminJournal::recordRead()}, sans transaction.
+ *
+ * Tous sans migration de colonne : `action` reste un `string(40)`. `10`
  * possède la liste ; un cas nouveau s'y demande en exigence, jamais par un
  * ajout direct ici.
  *
  * Le jalon de chaque GESTE appartient aux specs qui l'écrivent (`20`, `40`,
  * `100`) : un cas présent ici n'est pas un geste livré. Tous passent par
- * l'écrivain unique {@see AdminJournal}, dans la transaction de l'état que la
- * ligne justifie.
+ * l'écrivain unique {@see AdminJournal} ; un geste s'écrit dans la
+ * transaction de l'état que la ligne justifie.
  */
 enum AdminActionType: string
 {
@@ -74,14 +84,76 @@ enum AdminActionType: string
 
     case SiteReopened = 'site.reopened';
 
+    // --- D41 du 30/09 : gestes du back-office jusque-là sans ligne ---------
+
+    /** Titre affichable créé ou corrigé dans une locale (`details` : avant, après). */
+    case MovieTitleSaved = 'movie.title_saved';
+
+    /** Titre `curator` retiré — suppression physique, `details` en garde le texte. */
+    case MovieTitleRemoved = 'movie.title_removed';
+
+    case MovieAliasAdded = 'movie.alias_added';
+
+    /** Alias retiré — suppression physique, `details` en garde le texte. */
+    case MovieAliasRemoved = 'movie.alias_removed';
+
+    /** Le film entre dans un groupe « même œuvre », créé ou existant. */
+    case MovieGrouped = 'movie.grouped';
+
+    /** Le film sort de son groupe, ou le groupe dissous l'en fait sortir. */
+    case MovieUngrouped = 'movie.ungrouped';
+
+    case FrameAdded = 'frame.added';
+
+    /** Rectangle réécrit en place (`details` : avant, après). */
+    case FrameRecropped = 'frame.recropped';
+
+    case FrameProcessingRetried = 'frame.processing_retried';
+
+    /** Niveau réécrit en place (`details` : de, vers). */
+    case FrameLevelChanged = 'frame.level_changed';
+
+    /**
+     * Revue d'image passante ou rejetée. La preuve reste `frame_review`, en
+     * ajout seul : la ligne n'en est que l'index dans le journal unifié
+     * (`details.review_id`).
+     */
+    case FrameReviewed = 'frame.reviewed';
+
+    case ImportDiscoverStarted = 'import.discover_started';
+
+    /** Collage manuel ; `details` porte les identifiants collés, stockés nulle part ailleurs. */
+    case ImportPasteStarted = 'import.paste_started';
+
+    /** Lot de la liste d'amorçage, que `run_kind = paste` confond avec un collage. */
+    case ImportSeedListStarted = 'import.seed_list_started';
+
+    case ImportResumed = 'import.resumed';
+
+    // --- D41 du 30/09 : lectures sensibles ----------------------------------
+
+    /** L'annuaire des comptes, adresses de tous les comptes comprises. */
+    case AccountsDirectoryViewed = 'accounts.directory_viewed';
+
+    /** L'écran des accès, sans recherche ou sur une recherche sans résultat. */
+    case AccountsAccessViewed = 'accounts.access_viewed';
+
+    /** L'écran des accès dont la recherche par adresse exacte a trouvé ce compte. */
+    case UserLookedUp = 'user.looked_up';
+
+    /** La fiche d'un compte. */
+    case UserViewed = 'user.viewed';
+
     /** Préfixe des libellés du back-office, un par cas. */
     public const string LABEL_PREFIX = 'admin.enum.admin_action.';
 
     /**
      * Classe de conservation, écrite à l'insertion depuis l'action elle-même.
      * Permanent : tout geste dont le sujet est un film, une image, une demande
-     * de retrait ou le site, plus `role.changed`, `user.real_name_changed` et
-     * les cinq gestes de masquage. Une trace ne peut jamais être plus courte
+     * de retrait, le site, un balayage d'import ou l'ensemble des comptes, plus
+     * `role.changed`, `user.real_name_changed`, les cinq gestes de masquage et
+     * les deux lectures sensibles qui visent un compte (D41 du 30/09 : tout
+     * cas nouveau est permanent). Une trace ne peut jamais être plus courte
      * que l'état qu'elle justifie — et aucun cas de la liste ne tombe en
      * `rolling_12m`.
      */
@@ -95,6 +167,8 @@ enum AdminActionType: string
             self::NicknameMasked,
             self::NicknameUnmasked,
             self::NicknameBanned,
+            self::UserLookedUp,
+            self::UserViewed,
         ], true);
 
         if ($alwaysPermanent) {
@@ -105,7 +179,9 @@ enum AdminActionType: string
             AdminActionSubject::Movie,
             AdminActionSubject::Frame,
             AdminActionSubject::TakedownRequest,
-            AdminActionSubject::Site => AdminActionRetention::Permanent,
+            AdminActionSubject::Site,
+            AdminActionSubject::ImportRun,
+            AdminActionSubject::Accounts => AdminActionRetention::Permanent,
             AdminActionSubject::User,
             AdminActionSubject::Player => AdminActionRetention::Rolling12m,
         };
@@ -125,23 +201,87 @@ enum AdminActionType: string
             self::MovieContentVerified,
             self::MovieSuspended,
             self::MovieUnsuspended,
-            self::MovieWithdrawn => AdminActionSubject::Movie,
+            self::MovieWithdrawn,
+            self::MovieTitleSaved,
+            self::MovieTitleRemoved,
+            self::MovieAliasAdded,
+            self::MovieAliasRemoved,
+            self::MovieGrouped,
+            self::MovieUngrouped => AdminActionSubject::Movie,
             self::FrameUnpublished,
             self::FrameGridUnpublished,
             self::FrameSuspended,
             self::FrameUnsuspended,
-            self::FrameWithdrawn => AdminActionSubject::Frame,
+            self::FrameWithdrawn,
+            self::FrameAdded,
+            self::FrameRecropped,
+            self::FrameProcessingRetried,
+            self::FrameLevelChanged,
+            self::FrameReviewed => AdminActionSubject::Frame,
             self::RoleChanged,
             self::UserRealNameChanged,
             self::AvatarHidden,
-            self::AvatarUnhidden => AdminActionSubject::User,
+            self::AvatarUnhidden,
+            self::UserLookedUp,
+            self::UserViewed => AdminActionSubject::User,
             self::NicknameMasked,
             self::NicknameUnmasked,
             self::NicknameBanned => AdminActionSubject::Player,
             self::TakedownDecided => AdminActionSubject::TakedownRequest,
             self::SiteClosed,
             self::SiteReopened => AdminActionSubject::Site,
+            self::ImportDiscoverStarted,
+            self::ImportPasteStarted,
+            self::ImportSeedListStarted,
+            self::ImportResumed => AdminActionSubject::ImportRun,
+            self::AccountsDirectoryViewed,
+            self::AccountsAccessViewed => AdminActionSubject::Accounts,
         };
+    }
+
+    /**
+     * Vrai pour les quatre LECTURES SENSIBLES (D41 du 30/09) : une consultation
+     * d'écran qui montre des données personnelles, et non un geste. Elles
+     * n'ont pas de transaction et s'écrivent par la seule porte
+     * {@see AdminJournal::recordRead()}, qui refuse tout autre cas — et
+     * {@see AdminJournal::record()} les refuse : une lecture ne se fait jamais
+     * passer pour un geste, ni l'inverse.
+     */
+    public function isRead(): bool
+    {
+        return in_array($this, [
+            self::AccountsDirectoryViewed,
+            self::AccountsAccessViewed,
+            self::UserLookedUp,
+            self::UserViewed,
+        ], true);
+    }
+
+    /**
+     * Vrai pour les cas qui portent `admin_action.details` (D41 du 30/09) —
+     * obligatoire pour eux, NULL pour tous les autres. Ce sont les gestes qui
+     * détruisent ou écrasent en place l'information qu'ils changent, ou dont
+     * l'entrée n'est stockée nulle part ailleurs.
+     */
+    public function hasDetails(): bool
+    {
+        return in_array($this, [
+            self::MovieTitleSaved,
+            self::MovieTitleRemoved,
+            self::MovieAliasAdded,
+            self::MovieAliasRemoved,
+            self::MovieGrouped,
+            self::MovieUngrouped,
+            self::FrameAdded,
+            self::FrameRecropped,
+            self::FrameProcessingRetried,
+            self::FrameLevelChanged,
+            self::FrameReviewed,
+            self::ImportDiscoverStarted,
+            self::ImportPasteStarted,
+            self::ImportSeedListStarted,
+            self::ImportResumed,
+        ], true);
     }
 
     /** Vrai pour les deux seuls gestes déclenchés par un seuil et non par une personne : `actor_id` NULL et `actor_name` = 'system'. */

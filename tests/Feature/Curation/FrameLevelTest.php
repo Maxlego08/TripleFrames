@@ -1,6 +1,7 @@
 <?php
 
 use App\Actions\Curation\ChangeFrameLevel;
+use App\Enums\AdminActionSubject;
 use App\Enums\AdminActionType;
 use App\Enums\ContentAvailability;
 use App\Enums\FrameLevel;
@@ -167,8 +168,15 @@ test('changer le niveau d\'une frame non publiée ne touche pas sa disponibilit�
 
     expect($frame->frame_level)->toBe(FrameLevel::Level2)
         ->and($frame->availability)->toBe($availability)
-        ->and($frame->availability_changed_at?->toIso8601String())->toBe($changedAt)
-        ->and(AdminAction::query()->count())->toBe(0);
+        ->and($frame->availability_changed_at?->toIso8601String())->toBe($changedAt);
+
+    // Une seule ligne : le changement de niveau (D41 du 30/09) ; aucune
+    // sortie du jeu, la frame n'y était pas.
+    $line = AdminAction::query()->sole();
+
+    expect($line->action)->toBe(AdminActionType::FrameLevelChanged)
+        ->and($line->subject_id)->toBe($frame->id)
+        ->and($line->details?->values)->toBe(['from' => 3, 'to' => 2]);
 
     // La projection est recalculée dans la transaction du geste.
     expect(FrameBank::projection($movie)->recomputed_at->greaterThan($recomputedAt))->toBeTrue();
@@ -198,7 +206,12 @@ test('le motif écrit par le serveur est un texte et jamais une clé de traducti
     app(ChangeFrameLevel::class)->handle($viaAction, $curator, FrameLevel::Level4);
 
     foreach ([$viaScreen, $viaAction] as $frame) {
-        $reason = AdminAction::query()->where('subject_id', $frame->id)->sole()->reason;
+        $reason = AdminAction::query()
+            ->where('subject_type', AdminActionSubject::Frame->value)
+            ->where('subject_id', $frame->id)
+            ->where('action', AdminActionType::FrameUnpublished->value)
+            ->sole()
+            ->reason;
 
         expect($reason)->toBe($text)
             ->and($reason)->not->toContain('admin.frame');

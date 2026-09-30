@@ -3,6 +3,7 @@
 use App\Enums\ContentFlag;
 use App\Enums\FrameLevel;
 use App\Enums\Locale;
+use App\Models\AdminAction;
 use App\Models\Alias;
 use App\Models\Frame;
 use App\Models\FrameReview;
@@ -605,6 +606,16 @@ function adminRoutesMatrix(): array
             parameters: fn (): array => adminRoutesAccountGestureParameters(User::factory()->curator()->create()),
             payload: fn (): array => ['real_name' => 'Nom Corrigé Matrice'],
             redirect: fn (array $parameters): string => route('admin.users.show', $parameters),
+        ),
+
+        // Ligne 41 — le journal d'administration (D41 du 30/09) :
+        // administrateur seul, le curateur reçoit 403 à la garde.
+        'admin.journal.index' => adminRoutesRow(
+            row: 41,
+            method: 'GET',
+            guards: ['can:viewAny,'.AdminAction::class],
+            curator: 403,
+            admin: 200,
         ),
     ];
 }

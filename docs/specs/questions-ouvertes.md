@@ -1,6 +1,6 @@
 # Journal des décisions — TripleFrames
 
-Ce document était un questionnaire. Il ne l'est plus : les dix-neuf décisions qu'il appelait ont été prises le **22/09/2026**, et il devient le **registre** où l'on relira, dans six mois, ce qui a été décidé, quand, et surtout **ce qu'on a accepté de payer pour chaque décision**. Il ne demande plus rien. Le **23/09/2026**, les trente-sept décisions de la session de préparation des specs du jalon 1 s'y sont ajoutées, consignées de la même façon, dont trois (D35 à D37) posées après la consolidation du budget du jalon 1 — amendé le 23/09. Le **28/09/2026**, trois décisions du porteur (D38 à D40) s'y ajoutent, dans la section « Décisions du 28/09/2026 » — amendé le 28/09.
+Ce document était un questionnaire. Il ne l'est plus : les dix-neuf décisions qu'il appelait ont été prises le **22/09/2026**, et il devient le **registre** où l'on relira, dans six mois, ce qui a été décidé, quand, et surtout **ce qu'on a accepté de payer pour chaque décision**. Il ne demande plus rien. Le **23/09/2026**, les trente-sept décisions de la session de préparation des specs du jalon 1 s'y sont ajoutées, consignées de la même façon, dont trois (D35 à D37) posées après la consolidation du budget du jalon 1 — amendé le 23/09. Le **28/09/2026**, trois décisions du porteur (D38 à D40) s'y ajoutent, dans la section « Décisions du 28/09/2026 » — amendé le 28/09. Le **30/09/2026**, une décision du porteur (D41) s'y ajoute, dans la section « Décisions du 30/09/2026 » — amendé le 30/09.
 
 **Une seule chose reste ouverte du questionnaire : le nom de domaine de production (décision 5).** Tant qu'il n'est pas acheté, toutes les specs écrivent le symbole `<DOMAINE>` et aucun compte de production ni aucune passkey n'est créé. D1 du 23/09 place son achat avant la semaine 4 du jalon 1. La session du 23/09 laisse en outre, sans rouvrir le questionnaire, trois questions délibérément ouvertes pour la section J2 de `40` et deux écarts signalés au porteur (R-46, R-47), listés à la fin de la section « Décisions du 23/09/2026 — jalon 1 » — amendé le 23/09. R-46 est confirmé par D38 du 28/09 — amendé le 28/09.
 
@@ -383,6 +383,29 @@ Le 28/09/2026, pendant l'implémentation des lots du jalon 1 de `20`, le porteur
 
 - **Licéité de l'acte de capture** (décision 7) : la liste fermée des sources autorisées reste due par le conseil ; D38 n'en tranche rien.
 - **Écarts de livraison du lot L20-33** signalés au porteur, sans décision attendue d'avance : `20`, « Ce que cette spec ne décide pas », lignes EL33-1 à EL33-5 (textes du minutage, envoi multipart sans `forceFormData`, conseil « envoyez une capture » du refus D39, tier froid des captures dès le J1, documents `ops/` à réaligner).
+
+---
+
+## Décisions du 30/09/2026
+
+Le 30/09/2026, le porteur a demandé de savoir **qui fait quoi** au back-office : le journal `admin_action` ne consignait que les gestes « engageants », si bien que corriger un titre, retirer un alias, regrouper deux films, recadrer, relancer, changer le niveau ou revoir une image, et lancer un import, ne laissaient au mieux qu'une colonne d'auteur, souvent rien. Une décision, même convention que pour le 23/09 et le 28/09 : elle se cite « D41 du 30/09 », jamais « décision 41 », prime sur toute phrase contraire du corpus, et chaque passage réécrit en conséquence porte la mention « amendé le 30/09 ».
+
+| # | Décision | Réponse retenue | Écart | Inscrite dans |
+|---|---|---|---|---|
+| D41 | Journal de toute l'activité du back-office | **Étendre `admin_action`**, sans table nouvelle ni canal de log fichier : un cas nouveau par geste non tracé. **Périmètre** : toute écriture du back-office (`routes/admin.php`, `POST`/`PUT`/`PATCH`/`DELETE` qui change un état) et les **lectures sensibles**, écrans qui montrent des données personnelles (annuaire, fiche d'un compte, écran des accès) ; **exclus**, avec leur motif écrit dans `20` § 2.7 : le battement d'édition, les lectures ordinaires du catalogue et les `POST` qui ne changent rien (aperçu à blanc d'un collage, recherche). **Dix-neuf cas nouveaux** (quinze gestes, quatre lectures), **41 au total**, deux sujets nouveaux (`import_run`, `accounts`), une colonne additive `admin_action.details` ; **rétention permanente** pour tous les cas nouveaux (classe `permanent` existante). **Écran « Journal »** `/admin/journal`, **administrateur seul** : liste paginée de tout le journal, filtres acteur, type d'action, période et sujet, entrée dans le groupe « Administration », lien « Historique » depuis la fiche d'un film et celle d'un compte | **oui** — renverse la règle « seul un geste engageant est consigné » (`20` § 2.7 point 9, `10` § 4.2 et § 8.3 : publication d'une image, titres, alias et groupes expressément sans ligne) | `10` § 8.3, § 4.2, § 5.5, § 11 ; `20` § 2.2, § 2.7, § 2.8, § 2.10 ; `CLAUDE.md` § 5 |
+
+### D41. Toute l'activité du back-office va-t-elle au journal ? — **oui, `admin_action` étendu, lectures sensibles comprises, rétention permanente** (renverse la règle du geste engageant)
+
+**Motif du porteur.** Savoir qui fait quoi au back-office, curateurs compris : `admin_action` existait, mais toutes les actions n'y étaient pas.
+
+**Conséquence assumée.** Le journal n'est plus la liste des seuls gestes qui engagent le projet : c'est le registre de **tout** ce qu'un compte privilégié change au back-office, plus ce qu'il y consulte de personnel. Les gestes qui détruisent ou écrasent en place ce qu'ils changent (titre et alias supprimés, titre, niveau et rectangle réécrits, groupe dissous) et les identifiants d'un collage, stockés nulle part ailleurs, gardent leur contenu dans `admin_action.details` (`10` § 8.3). La preuve opposable d'une image publiée reste sa ligne `frame_review` : `frame.reviewed` n'en est que l'index dans le journal unifié. Une lecture n'a pas de transaction ; elle s'écrit par une porte dédiée, une ligne par visite complète, jamais sur un rechargement partiel ni sur un préchargement (`20` § 2.7).
+
+**Ce qu'on accepte de payer.** Un journal plus volumineux (quelques milliers de lignes de consultation par an) et **permanent** : une ligne `user.viewed` ou `user.looked_up` garde l'identifiant d'un compte, joueur compris, au-delà des douze mois glissants de ce compte. Elle ne contient ni adresse, ni pseudo, ni saisie de recherche (`10` § 5.5 et § 11) ; la page de confidentialité du J2 devra nommer ces consultations (`90`, point ouvert EL19-4 de `20`).
+
+### Laissé ouvert le 30/09
+
+- **Gestes J2 encore à livrer** (clore un balayage, resynchronisation, thèmes, quasi-justes, suspension, retrait, modération…) : D41 les fait entrer au journal **par principe** ; chacun demande son cas à `10` dans le lot qui le livre, au lieu de la phrase « sans ligne `admin_action` » que portaient § 3.8 et § 9.6 de `20`.
+- **Index `(action, created_at)`** : à ne demander à `10` que si le filtre « type d'action + période » de l'écran « Journal » se révèle lent ; les filtres acteur et sujet sont déjà servis par les index existants.
 
 ---
 

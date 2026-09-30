@@ -23,6 +23,7 @@ use App\Http\Controllers\Admin\ImportPreviewController;
 use App\Http\Controllers\Admin\ImportResumeController;
 use App\Http\Controllers\Admin\ImportSearchController;
 use App\Http\Controllers\Admin\ImportSeedListController;
+use App\Http\Controllers\Admin\JournalController;
 use App\Http\Controllers\Admin\MovieAliasController;
 use App\Http\Controllers\Admin\MovieContentVerifiedController;
 use App\Http\Controllers\Admin\MovieGroupController;
@@ -32,6 +33,7 @@ use App\Http\Controllers\Admin\MovieUnpublishController;
 use App\Http\Controllers\Admin\ThroughputController;
 use App\Http\Controllers\Admin\TwoFactorRequiredController;
 use App\Http\Controllers\Admin\UserDirectoryController;
+use App\Models\AdminAction;
 use App\Models\Frame;
 use App\Models\FrameReview;
 use App\Models\ImportRun;
@@ -85,8 +87,9 @@ use Illuminate\Support\Facades\Route;
 |
 | **Une seconde porte, `role:admin`**, garde en plus le seul sous-groupe des
 | écrans de l'administrateur (annuaire des comptes et gestion des accès,
-| § 2.8) : prioritaire sur `SubstituteBindings` comme la première, elle rend à
-| un curateur le même 403 sur un identifiant réel ou inconnu.
+| § 2.8 ; journal d'administration, ligne 41) : prioritaire sur
+| `SubstituteBindings` comme la première, elle rend à un curateur le même 403
+| sur un identifiant réel ou inconnu.
 |
 | **Toute route ajoutée ici prend sa ligne dans `tests/Datasets/AdminRoutes.php`**,
 | la matrice des capacités de la spec 20 § 2.2 : `AuthorizationMatrixTest`
@@ -388,5 +391,13 @@ Route::middleware(['auth', 'verified', 'role:curator', 'admin.2fa', 'admin.local
             Route::patch('access/{user}/real-name', [AccessController::class, 'updateRealName'])
                 ->middleware(['can:updateRealName,user', 'throttle:admin-curation'])
                 ->name('access.real_name.update');
+
+            // Le journal d'administration (ligne 41, D41 du 30/09) : une
+            // lecture de tout `admin_action`, filtrable par acteur, action,
+            // période et sujet. Aucune route n'écrit ni ne supprime une ligne
+            // (ligne 37).
+            Route::get('journal', [JournalController::class, 'index'])
+                ->middleware('can:viewAny,'.AdminAction::class)
+                ->name('journal.index');
         });
     });

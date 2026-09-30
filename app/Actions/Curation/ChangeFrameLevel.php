@@ -11,6 +11,7 @@ use App\Models\Movie;
 use App\Models\User;
 use App\Support\Admin\AdminJournal;
 use App\Support\Catalog\MovieProjector;
+use App\ValueObjects\Admin\AdminActionDetails;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
@@ -41,8 +42,12 @@ use Throwable;
  * traitement ou en échec change de niveau librement : le niveau n'entre pas
  * dans son rendu.
  *
- * Le même niveau ne change rien : aucune écriture, et une image publiée reste
- * en jeu.
+ * Tout changement effectif écrit sa ligne `frame.level_changed` (D41 du
+ * 30/09), dont `details` garde l'ancien niveau écrasé en place — en plus de
+ * `frame.unpublished` quand l'image sort du jeu.
+ *
+ * Le même niveau ne change rien : aucune écriture, aucune ligne, et une image
+ * publiée reste en jeu.
  */
 final class ChangeFrameLevel
 {
@@ -89,6 +94,7 @@ final class ChangeFrameLevel
             }
 
             $wasPublished = $locked->availability === ContentAvailability::Published;
+            $from = $locked->frame_level;
 
             $attributes = ['frame_level' => $level];
 
@@ -98,6 +104,13 @@ final class ChangeFrameLevel
             }
 
             $locked->forceFill($attributes)->save();
+
+            $this->journal->record(
+                $curator,
+                AdminActionType::FrameLevelChanged,
+                $locked->id,
+                details: AdminActionDetails::levelChanged($from, $level),
+            );
 
             if ($wasPublished) {
                 $this->journal->record(

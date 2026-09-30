@@ -2,10 +2,13 @@
 
 namespace App\Actions\Curation;
 
+use App\Enums\AdminActionType;
 use App\Models\Alias;
 use App\Models\Movie;
 use App\Models\User;
+use App\Support\Admin\AdminJournal;
 use App\Support\Catalog\AnswerKeyProjector;
+use App\ValueObjects\Admin\AdminActionDetails;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
@@ -27,11 +30,16 @@ use Throwable;
  * par différence — la forme de l'alias disparaît d'`answer_key` sauf si un
  * titre ou un autre alias du film la porte encore —, avec le recompte
  * synchrone de leur ambiguïté.
+ *
+ * L'alias est relu sous le verrou du film : la ligne `movie.alias_removed`
+ * (D41 du 30/09) n'est écrite que s'il existait encore — un double envoi n'en
+ * écrit pas deux —, et `details` garde le texte supprimé physiquement.
  */
 final class DeleteAlias
 {
     public function __construct(
         private readonly AnswerKeyProjector $answerKeys,
+        private readonly AdminJournal $journal,
     ) {}
 
     /**
@@ -45,10 +53,21 @@ final class DeleteAlias
 
             Gate::forUser($curator)->authorize('curate', $locked);
 
-            Alias::query()
+            $row = Alias::query()
                 ->where('movie_id', $locked->id)
                 ->whereKey($alias->id)
-                ->delete();
+                ->first();
+
+            if ($row instanceof Alias) {
+                $this->journal->record(
+                    $curator,
+                    AdminActionType::MovieAliasRemoved,
+                    $locked->id,
+                    details: AdminActionDetails::aliasRemoved($row->id, $row->locale, $row->alias, $row->origin),
+                );
+
+                $row->delete();
+            }
 
             $this->answerKeys->project($locked);
         });

@@ -2,12 +2,15 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Enums\AdminActionType;
 use App\Enums\ImportRunKind;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\ImportDiscoverRequest;
 use App\Jobs\Catalog\RunCatalogImport;
+use App\Models\User;
 use App\Support\Admin\ImportLauncher;
 use App\Support\Tmdb\TmdbClient;
+use App\ValueObjects\Admin\AdminActionDetails;
 use Illuminate\Http\RedirectResponse;
 use Inertia\Inertia;
 
@@ -38,10 +41,15 @@ class ImportDiscoverController extends Controller
         // Vérification et insertion sous le MÊME verrou : `throttle:admin-import`
         // autorise douze envois par minute, donc n'empêche aucun envoi
         // simultané, et aucune contrainte d'unicité ne rattrape la course.
+        /** @var User $actor */
+        $actor = $request->user();
+
         $run = ImportLauncher::openExclusively(
             ImportRunKind::Discover,
             $request->filter(),
-            $request->user()?->id,
+            $actor,
+            AdminActionType::ImportDiscoverStarted,
+            AdminActionDetails::importPages($request->pages()),
         );
 
         if ($run === null) {

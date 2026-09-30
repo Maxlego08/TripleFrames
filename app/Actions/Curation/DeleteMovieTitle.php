@@ -2,13 +2,16 @@
 
 namespace App\Actions\Curation;
 
+use App\Enums\AdminActionType;
 use App\Enums\ContentOrigin;
 use App\Enums\Locale;
 use App\Models\Movie;
 use App\Models\MovieTitle;
 use App\Models\User;
+use App\Support\Admin\AdminJournal;
 use App\Support\Catalog\AnswerKeyProjector;
 use App\Support\Catalog\MovieProjector;
+use App\ValueObjects\Admin\AdminActionDetails;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
@@ -31,13 +34,15 @@ use Throwable;
  *
  * Une transaction, le film verrouillé : la ligne, le masque de couverture des
  * titres et les clés de réponse, reprojetées par différence avec le recompte
- * de leur ambiguïté.
+ * de leur ambiguïté — et la ligne `movie.title_removed` (D41 du 30/09), dont
+ * `details` garde le texte supprimé physiquement.
  */
 final class DeleteMovieTitle
 {
     public function __construct(
         private readonly MovieProjector $projector,
         private readonly AnswerKeyProjector $answerKeys,
+        private readonly AdminJournal $journal,
     ) {}
 
     /**
@@ -70,6 +75,13 @@ final class DeleteMovieTitle
             }
 
             $row->delete();
+
+            $this->journal->record(
+                $curator,
+                AdminActionType::MovieTitleRemoved,
+                $locked->id,
+                details: AdminActionDetails::titleRemoved($row->locale, $row->title),
+            );
 
             $this->projector->recompute($locked);
             $this->answerKeys->project($locked);

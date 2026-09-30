@@ -1,5 +1,8 @@
 import type {
     AdminAccountActionType,
+    AdminActionRetentionValue,
+    AdminActionSubjectValue,
+    AdminActionTypeValue,
     AdminAccountState,
     AdminCurationEntry,
     AdminCurationStatus,
@@ -267,4 +270,112 @@ export const ACCOUNT_ACTION_KEYS: Record<
     'user.real_name_changed': 'admin.enum.admin_action.user_real_name_changed',
     'avatar.hidden': 'admin.enum.admin_action.avatar_hidden',
     'avatar.unhidden': 'admin.enum.admin_action.avatar_unhidden',
+};
+
+/**
+ * Tous les cas du journal d'administration (écran « Journal », D41 du
+ * 30/09) : les mêmes feuilles `admin.enum.admin_action.*` que
+ * `AdminActionType::labelKey()`, points remplacés par `_`.
+ */
+export const ADMIN_ACTION_KEYS: Record<AdminActionTypeValue, TranslationKey> = {
+    'role.changed': 'admin.enum.admin_action.role_changed',
+    'user.real_name_changed': 'admin.enum.admin_action.user_real_name_changed',
+    'movie.published': 'admin.enum.admin_action.movie_published',
+    'movie.unpublished': 'admin.enum.admin_action.movie_unpublished',
+    'movie.republished': 'admin.enum.admin_action.movie_republished',
+    'movie.content_verified': 'admin.enum.admin_action.movie_content_verified',
+    'movie.suspended': 'admin.enum.admin_action.movie_suspended',
+    'movie.unsuspended': 'admin.enum.admin_action.movie_unsuspended',
+    'movie.withdrawn': 'admin.enum.admin_action.movie_withdrawn',
+    'frame.unpublished': 'admin.enum.admin_action.frame_unpublished',
+    'frame.grid_unpublished': 'admin.enum.admin_action.frame_grid_unpublished',
+    'frame.suspended': 'admin.enum.admin_action.frame_suspended',
+    'frame.unsuspended': 'admin.enum.admin_action.frame_unsuspended',
+    'frame.withdrawn': 'admin.enum.admin_action.frame_withdrawn',
+    'avatar.hidden': 'admin.enum.admin_action.avatar_hidden',
+    'avatar.unhidden': 'admin.enum.admin_action.avatar_unhidden',
+    'nickname.masked': 'admin.enum.admin_action.nickname_masked',
+    'nickname.unmasked': 'admin.enum.admin_action.nickname_unmasked',
+    'nickname.banned': 'admin.enum.admin_action.nickname_banned',
+    'takedown.decided': 'admin.enum.admin_action.takedown_decided',
+    'site.closed': 'admin.enum.admin_action.site_closed',
+    'site.reopened': 'admin.enum.admin_action.site_reopened',
+    'movie.title_saved': 'admin.enum.admin_action.movie_title_saved',
+    'movie.title_removed': 'admin.enum.admin_action.movie_title_removed',
+    'movie.alias_added': 'admin.enum.admin_action.movie_alias_added',
+    'movie.alias_removed': 'admin.enum.admin_action.movie_alias_removed',
+    'movie.grouped': 'admin.enum.admin_action.movie_grouped',
+    'movie.ungrouped': 'admin.enum.admin_action.movie_ungrouped',
+    'frame.added': 'admin.enum.admin_action.frame_added',
+    'frame.recropped': 'admin.enum.admin_action.frame_recropped',
+    'frame.processing_retried':
+        'admin.enum.admin_action.frame_processing_retried',
+    'frame.level_changed': 'admin.enum.admin_action.frame_level_changed',
+    'frame.reviewed': 'admin.enum.admin_action.frame_reviewed',
+    'import.discover_started':
+        'admin.enum.admin_action.import_discover_started',
+    'import.paste_started': 'admin.enum.admin_action.import_paste_started',
+    'import.seed_list_started':
+        'admin.enum.admin_action.import_seed_list_started',
+    'import.resumed': 'admin.enum.admin_action.import_resumed',
+    'accounts.directory_viewed':
+        'admin.enum.admin_action.accounts_directory_viewed',
+    'accounts.access_viewed': 'admin.enum.admin_action.accounts_access_viewed',
+    'user.looked_up': 'admin.enum.admin_action.user_looked_up',
+    'user.viewed': 'admin.enum.admin_action.user_viewed',
+};
+
+/** Les sujets du journal — `AdminActionSubject::labelKey()`. */
+export const ADMIN_ACTION_SUBJECT_KEYS: Record<
+    AdminActionSubjectValue,
+    TranslationKey
+> = {
+    movie: 'admin.enum.admin_action_subject.movie',
+    frame: 'admin.enum.admin_action_subject.frame',
+    user: 'admin.enum.admin_action_subject.user',
+    player: 'admin.enum.admin_action_subject.player',
+    takedown_request: 'admin.enum.admin_action_subject.takedown_request',
+    site: 'admin.enum.admin_action_subject.site',
+    import_run: 'admin.enum.admin_action_subject.import_run',
+    accounts: 'admin.enum.admin_action_subject.accounts',
+};
+
+/** Les deux classes de conservation d'une ligne du journal. */
+export const ADMIN_ACTION_RETENTION_KEYS: Record<
+    AdminActionRetentionValue,
+    TranslationKey
+> = {
+    permanent: 'admin.journal.retention.permanent',
+    rolling_12m: 'admin.journal.retention.rolling_12m',
+};
+
+/**
+ * Les champs du complément `admin_action.details` ; une clé que la table
+ * ignore s'affiche brute.
+ */
+export const JOURNAL_DETAIL_KEYS: Partial<Record<string, TranslationKey>> = {
+    locale: 'admin.journal.details.locale',
+    before: 'admin.journal.details.before',
+    before_origin: 'admin.journal.details.before_origin',
+    after: 'admin.journal.details.after',
+    title: 'admin.journal.details.title',
+    alias_id: 'admin.journal.details.alias_id',
+    alias: 'admin.journal.details.alias',
+    origin: 'admin.journal.details.origin',
+    outcome: 'admin.journal.details.outcome',
+    group_id: 'admin.journal.details.group_id',
+    label: 'admin.journal.details.label',
+    group_label: 'admin.journal.details.group_label',
+    with_movie_id: 'admin.journal.details.with_movie_id',
+    dissolved: 'admin.journal.details.dissolved',
+    source_kind: 'admin.journal.details.source_kind',
+    frame_level: 'admin.journal.details.frame_level',
+    failure: 'admin.journal.details.failure',
+    from: 'admin.journal.details.from',
+    to: 'admin.journal.details.to',
+    review_id: 'admin.journal.details.review_id',
+    decision: 'admin.journal.details.decision',
+    grid_version: 'admin.journal.details.grid_version',
+    pages: 'admin.journal.details.pages',
+    tmdb_ids: 'admin.journal.details.tmdb_ids',
 };

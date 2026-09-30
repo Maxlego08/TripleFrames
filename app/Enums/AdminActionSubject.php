@@ -7,9 +7,14 @@ namespace App\Enums;
  * ce n'est pas un `morphTo`, `admin_action.subject_id` n'a aucune clé
  * étrangère : cast de `admin_action.subject_type`.
  *
- * `site` (23/09) est le seul sujet SANS identifiant : `subject_id` est NULL si
- * et seulement si le sujet est le site — la fermeture et la réouverture
- * visent l'instance entière, pas une ligne.
+ * Deux sujets SANS identifiant : `site` (23/09) — la fermeture et la
+ * réouverture visent l'instance entière, pas une ligne — et `accounts`
+ * (D41 du 30/09), l'ensemble des comptes que montre une lecture sensible
+ * (annuaire, écran des accès). `subject_id` est NULL si et seulement si le
+ * sujet n'a pas d'identifiant ({@see self::hasIdentifier()}).
+ *
+ * `import_run` (D41 du 30/09) : le balayage d'import qu'un curateur a lancé
+ * ou repris depuis le back-office.
  */
 enum AdminActionSubject: string
 {
@@ -25,13 +30,17 @@ enum AdminActionSubject: string
 
     case Site = 'site';
 
+    case ImportRun = 'import_run';
+
+    case Accounts = 'accounts';
+
     /** Préfixe des libellés du back-office, un par cas. */
     public const string LABEL_PREFIX = 'admin.enum.admin_action_subject.';
 
-    /** Vrai pour le seul sujet qui ne désigne aucune ligne. */
+    /** Faux pour les deux sujets qui ne désignent aucune ligne : le site et l'ensemble des comptes. */
     public function hasIdentifier(): bool
     {
-        return $this !== self::Site;
+        return ! in_array($this, [self::Site, self::Accounts], true);
     }
 
     /** Clé du libellé au back-office. */

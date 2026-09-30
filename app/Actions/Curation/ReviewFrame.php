@@ -2,6 +2,7 @@
 
 namespace App\Actions\Curation;
 
+use App\Enums\AdminActionType;
 use App\Enums\ContentAvailability;
 use App\Enums\FrameProcessingState;
 use App\Enums\ReviewDecision;
@@ -9,10 +10,12 @@ use App\Models\Frame;
 use App\Models\FrameReview;
 use App\Models\Movie;
 use App\Models\User;
+use App\Support\Admin\AdminJournal;
 use App\Support\Catalog\MovieProjector;
 use App\Support\Curation\ExclusionGrid;
 use App\Support\Curation\ReviewList;
 use App\Support\Curation\ReviewQueue;
+use App\ValueObjects\Admin\AdminActionDetails;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
@@ -63,13 +66,17 @@ use Throwable;
  * inchangé ; sur une image en jeu, l'écran enchaîne sur la confirmation de
  * dépublication, geste distinct et attribué (§ 8.4).
  *
- * Aucune ligne `admin_action` : la publication d'une image est prouvée par sa
- * propre revue passante (§ 2.7, point 9).
+ * La publication d'une image est prouvée par sa propre revue passante (§ 2.7,
+ * point 9) : `frame_review` reste la SEULE preuve opposable. Depuis D41 du
+ * 30/09, toute revue, passante ou rejetée, écrit en plus sa ligne
+ * `frame.reviewed` dans la même transaction — un index dans le journal
+ * unifié, qui pointe la preuve (`details.review_id`) sans la dupliquer.
  */
 final class ReviewFrame
 {
     public function __construct(
         private readonly MovieProjector $projector,
+        private readonly AdminJournal $journal,
     ) {}
 
     /**
@@ -105,6 +112,13 @@ final class ReviewFrame
             $now = Date::now()->toImmutable()->startOfSecond();
 
             $review = $this->record($locked, $reviewer, $gridVersion, $decision, $answers, $now);
+
+            $this->journal->record(
+                $reviewer,
+                AdminActionType::FrameReviewed,
+                $locked->id,
+                details: AdminActionDetails::reviewed($review),
+            );
 
             if ($decision === ReviewDecision::Passed) {
                 $this->publish($locked, $movie, $review, $now);

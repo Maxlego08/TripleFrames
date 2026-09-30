@@ -2,12 +2,15 @@
 
 namespace App\Actions\Curation;
 
+use App\Enums\AdminActionType;
 use App\Enums\AnswerKeyKind;
 use App\Enums\ContentAvailability;
 use App\Models\AnswerKey;
 use App\Models\Movie;
 use App\Models\MovieGroup;
 use App\Models\User;
+use App\Support\Admin\AdminJournal;
+use App\ValueObjects\Admin\AdminActionDetails;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
@@ -55,9 +58,13 @@ use Throwable;
  * défait une décision « même œuvre » qu'un curateur a prise, et ce geste doit
  * être vu.
  *
- * Aucune ligne `admin_action` : ce n'est pas un geste engageant,
- * `movie_group.created_by_id` le trace. Aucune reprojection non plus : le
- * groupe n'entre ni dans `answer_key`, ni dans `movie_projection`.
+ * **Une ligne au journal par film dont le groupe change** (D41 du 30/09), dans
+ * la transaction : `movie.grouped` pour chaque film qui entre dans un groupe —
+ * les deux films d'un groupe qui naît —, `movie.ungrouped` pour le film retiré
+ * et pour le dernier film d'un groupe dissous. `details` garde le groupe, son
+ * libellé et le partenaire, que la suppression du groupe effacerait. L'issue
+ * `UNCHANGED` n'écrit rien. Aucune reprojection : le groupe n'entre ni dans
+ * `answer_key`, ni dans `movie_projection`.
  */
 final class SetMovieGroup
 {
@@ -119,6 +126,10 @@ final class SetMovieGroup
     /** La marque de troncature du libellé (§ 9.4). */
     private const string LABEL_ELLIPSIS = '…';
 
+    public function __construct(
+        private readonly AdminJournal $journal,
+    ) {}
+
     /**
      * Regroupe, rejoint ou retire ; rend l'issue (`CREATED`, `JOINED`,
      * `LEFT`, `UNCHANGED`). Un seul des trois gestes : `$withMovieId`,
@@ -172,10 +183,10 @@ final class SetMovieGroup
             }
 
             if ($groupId !== null) {
-                return $this->join($self, $groupId);
+                return $this->join($self, $groupId, $curator);
             }
 
-            return $this->leave($self);
+            return $this->leave($self, $curator);
         });
     }
 
@@ -340,8 +351,11 @@ final class SetMovieGroup
                 ->findOrFail($self->group_id ?? $other->group_id);
 
             $newcomer = $self->group_id === null ? $self : $other;
+            $partner = $newcomer === $self ? $other : $self;
             $newcomer->group_id = $group->id;
             $newcomer->save();
+
+            $this->recordGrouped($curator, $newcomer, self::JOINED, $group, $partner->id);
 
             return self::JOINED;
         }
@@ -357,6 +371,9 @@ final class SetMovieGroup
             $member->save();
         }
 
+        $this->recordGrouped($curator, $self, self::CREATED, $group, $other->id);
+        $this->recordGrouped($curator, $other, self::CREATED, $group, $self->id);
+
         return self::CREATED;
     }
 
@@ -365,7 +382,7 @@ final class SetMovieGroup
      *
      * @throws ValidationException
      */
-    private function join(Movie $self, int $groupId): string
+    private function join(Movie $self, int $groupId, User $curator): string
     {
         $group = MovieGroup::query()->lockForUpdate()->find($groupId);
 
@@ -387,6 +404,8 @@ final class SetMovieGroup
 
         $self->group_id = $group->id;
         $self->save();
+
+        $this->recordGrouped($curator, $self, self::JOINED, $group, null);
 
         return self::JOINED;
     }
@@ -460,7 +479,7 @@ final class SetMovieGroup
      * seule relecture qui voie un film entré dans le groupe entre-temps, un
      * rattachement verrouillant le groupe avant d'écrire.
      */
-    private function leave(Movie $self): string
+    private function leave(Movie $self, User $curator): string
     {
         $groupId = $self->group_id;
 
@@ -479,15 +498,37 @@ final class SetMovieGroup
             ->lockForUpdate()
             ->get();
 
-        if ($remaining->count() < self::MIN_MOVIES) {
+        $dissolved = $remaining->count() < self::MIN_MOVIES;
+        $details = AdminActionDetails::ungrouped($groupId, $group?->label, $dissolved);
+
+        $this->journal->record($curator, AdminActionType::MovieUngrouped, $self->id, details: $details);
+
+        if ($dissolved) {
             foreach ($remaining as $member) {
                 $member->group_id = null;
                 $member->save();
+
+                $this->journal->record($curator, AdminActionType::MovieUngrouped, $member->id, details: $details);
             }
 
             $group?->delete();
         }
 
         return self::LEFT;
+    }
+
+    /**
+     * La ligne `movie.grouped` d'un film qui vient d'entrer dans `$group`.
+     *
+     * @param  self::CREATED|self::JOINED  $outcome
+     */
+    private function recordGrouped(User $curator, Movie $movie, string $outcome, MovieGroup $group, ?int $withMovieId): void
+    {
+        $this->journal->record(
+            $curator,
+            AdminActionType::MovieGrouped,
+            $movie->id,
+            details: AdminActionDetails::grouped($outcome, $group->id, $group->label, $withMovieId),
+        );
     }
 }

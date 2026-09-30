@@ -1,6 +1,7 @@
 <?php
 
 use App\Actions\Curation\SetMovieGroup;
+use App\Enums\AdminActionType;
 use App\Enums\ContentAvailability;
 use App\Enums\ContentOrigin;
 use App\Enums\Locale;
@@ -203,9 +204,11 @@ test('regrouper deux films crée un groupe manuel et les y rattache', function (
             ->assertJsonPath('props.group_manual_candidate.candidate', null);
     }
 
-    // Pas un geste engageant : `created_by_id` le trace, aucune ligne au
-    // journal d'administration.
-    expect(AdminAction::query()->count())->toBe($journal);
+    // Une ligne `movie.grouped` par film dont le groupe a changé (D41 du
+    // 30/09) — deux par groupe né, une par film rattaché —, aucune pour un
+    // refus : 2 + 1 + 2 + 1.
+    expect(AdminAction::query()->count())->toBe($journal + 6)
+        ->and(AdminAction::query()->where('action', AdminActionType::MovieGrouped->value)->count())->toBe(6);
 });
 
 test('un groupe réduit à un film disparaît', function (): void {

@@ -292,9 +292,14 @@ it('ne lit que true ou false et traite toute autre valeur comme non déclarée',
             $code,
         ), $path)];
 
+        // La valeur d'un cas d'enum n'est pas une lecture de configuration :
+        // `AdminActionSubject::Accounts = 'accounts'` (D41 du 30/09) est un
+        // sujet du journal, et ses déclarations sont retirées avant le relevé.
+        $withoutEnumCases = (string) preg_replace('/^\s*case\s+\w+\s*=\s*[\'"][^\'"]*[\'"]\s*;/m', '', $code);
+
         $configReaders = [...$configReaders, ...array_fill(0, (int) preg_match_all(
             '/[\'"]accounts(?:\.(?:registration_open|passkeys_enabled))?[\'"]/',
-            $code,
+            $withoutEnumCases,
         ), $path)];
     }
 

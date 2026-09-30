@@ -3,6 +3,7 @@
 use App\Actions\Curation\ChangeFrameLevel;
 use App\Actions\Curation\ReviewFrame;
 use App\Actions\Curation\UnpublishFrame;
+use App\Enums\AdminActionType;
 use App\Enums\ContentAvailability;
 use App\Enums\FrameLevel;
 use App\Enums\FrameProcessingState;
@@ -153,10 +154,20 @@ test('une revue passante publie dans la même transaction et pointe published_re
         ->and($frame->review_grid_version)->toBe(ExclusionGrid::CURRENT_VERSION)
         ->and($frame->isServable())->toBeTrue();
 
-    // La projection du film, recalculée dans la transaction ; aucune ligne
-    // de journal : la revue passante EST la preuve de la publication.
-    expect(FrameBank::projection($movie)->level_3_variants)->toBe(1)
-        ->and(AdminAction::query()->count())->toBe(0);
+    // La projection du film, recalculée dans la transaction. La revue
+    // passante EST la preuve de la publication ; le journal n'en porte que
+    // l'index `frame.reviewed` (D41 du 30/09), qui la pointe.
+    expect(FrameBank::projection($movie)->level_3_variants)->toBe(1);
+
+    $line = AdminAction::query()->sole();
+
+    expect($line->action)->toBe(AdminActionType::FrameReviewed)
+        ->and($line->subject_id)->toBe($frame->id)
+        ->and($line->details?->values)->toBe([
+            'review_id' => $review->id,
+            'decision' => 'passed',
+            'grid_version' => ExclusionGrid::CURRENT_VERSION,
+        ]);
 
     // Une frame d'un film encore en brouillon se publie : c'est la passe 1.
     expect($movie->refresh()->availability)->toBe(ContentAvailability::Draft);

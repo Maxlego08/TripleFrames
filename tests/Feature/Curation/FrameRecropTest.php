@@ -1,6 +1,7 @@
 <?php
 
 use App\Actions\Curation\RecropFrame;
+use App\Enums\AdminActionSubject;
 use App\Enums\AdminActionType;
 use App\Enums\ContentAvailability;
 use App\Enums\FrameLevel;
@@ -207,7 +208,12 @@ test('recadrer une frame publiée la sort de published et écrit frame.unpublish
     // Un motif laissé vide : le serveur écrit le texte pré-rempli, jamais sa clé.
     frameRecropPatch($level3b, frameRecropPayload(['reason' => '']), $curator)->assertSessionHasNoErrors();
 
-    expect(AdminAction::query()->where('subject_id', $level3b->id)->sole()->reason)
+    expect(AdminAction::query()
+        ->where('subject_type', AdminActionSubject::Frame->value)
+        ->where('subject_id', $level3b->id)
+        ->where('action', AdminActionType::FrameUnpublished->value)
+        ->sole()
+        ->reason)
         ->toBe(frameRecropText('admin.frame.recrop.default_reason'));
 
     // Même transaction : une panne de la dernière écriture du geste — le

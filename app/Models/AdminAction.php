@@ -2,12 +2,14 @@
 
 namespace App\Models;
 
+use App\Casts\AdminActionDetailsCast;
 use App\Enums\AdminActionRetention;
 use App\Enums\AdminActionSubject;
 use App\Enums\AdminActionType;
 use App\Enums\UserRole;
 use App\Support\Admin\AdminJournal;
 use App\Support\Eloquent\AppendOnlyBuilder;
+use App\ValueObjects\Admin\AdminActionDetails;
 use Carbon\CarbonImmutable;
 use Database\Factories\AdminActionFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -50,7 +52,14 @@ use LogicException;
  * `morphTo`, et `subject_id` n'a aucune clé étrangère, la cible étant
  * polymorphe — elle n'est jamais détruite, donc la ligne ne pend jamais. C'est
  * cette colonne typée qui rend l'exemption de purge vérifiable par requête.
- * `subject_id` est NULL si et seulement si le sujet est le site.
+ * `subject_id` est NULL si et seulement si le sujet n'a pas d'identifiant :
+ * le site, ou l'ensemble des comptes d'une lecture sensible (D41 du 30/09).
+ *
+ * `details` (D41 du 30/09) : le complément typé
+ * ({@see AdminActionDetails}) des gestes qui détruisent ou écrasent ce qu'ils
+ * changent — obligatoire pour eux ({@see AdminActionType::hasDetails()}), NULL
+ * partout ailleurs, borné à {@see AdminActionDetails::MAX_BYTES} octets.
+ * Affiché seulement, jamais lu dans une clause `WHERE`.
  *
  * `role_before` et `role_after` sont typées et non JSON, parce que « quel rôle
  * portait cette personne à cet instant » est la seule requête d'audit qui doit
@@ -97,6 +106,7 @@ use LogicException;
  * @property int|null $reports_count
  * @property UserRole|null $role_before
  * @property UserRole|null $role_after
+ * @property AdminActionDetails|null $details
  * @property CarbonImmutable|null $created_at
  * @property-read User|null $actor
  * @property-read TakedownRequest|null $takedownRequest
@@ -145,6 +155,7 @@ class AdminAction extends Model
             'retention_class' => AdminActionRetention::class,
             'role_before' => UserRole::class,
             'role_after' => UserRole::class,
+            'details' => AdminActionDetailsCast::class,
         ];
     }
 
@@ -198,6 +209,7 @@ class AdminAction extends Model
             self::guardActor($action, $type);
             self::guardReason($action, $type);
             self::guardRoles($action, $type);
+            self::guardDetails($action, $type);
         });
 
         static::updating(function (self $action): void {
@@ -232,7 +244,10 @@ class AdminAction extends Model
         return $this->belongsTo(TakedownRequest::class, 'takedown_request_id');
     }
 
-    /** Invariant 2 : `subject_id` NULL si et seulement si le sujet est le site. */
+    /**
+     * Invariant 2 : `subject_id` NULL si et seulement si le sujet n'a pas
+     * d'identifiant — le site, ou l'ensemble des comptes (D41 du 30/09).
+     */
     private static function guardSubject(self $action, AdminActionType $type): void
     {
         $identified = $type->subject()->hasIdentifier();
@@ -240,8 +255,8 @@ class AdminAction extends Model
         if ($identified === ($action->subject_id === null)) {
             throw new LogicException(
                 'L\'action ['.$type->value.'] '.($identified
-                    ? 'exige un subject_id : seul le site est un sujet sans identifiant.'
-                    : 'vise le site entier : son subject_id doit rester nul.'),
+                    ? 'exige un subject_id : seuls le site et l\'ensemble des comptes sont des sujets sans identifiant.'
+                    : 'vise un sujet sans identifiant : son subject_id doit rester nul.'),
             );
         }
     }
@@ -354,6 +369,31 @@ class AdminAction extends Model
         if ($before !== null || $after !== null) {
             throw new LogicException(
                 'L\'action ['.$type->value.'] ne change aucun rôle : role_before et role_after restent nuls.',
+            );
+        }
+    }
+
+    /**
+     * Invariant 9 (D41 du 30/09) : `details` présent si et seulement si
+     * l'action en déclare ({@see AdminActionType::hasDetails()}), et jamais
+     * au-delà de {@see AdminActionDetails::MAX_BYTES} octets sérialisé — la
+     * ligne est permanente, elle ne devient jamais un dépôt de données.
+     */
+    private static function guardDetails(self $action, AdminActionType $type): void
+    {
+        $details = $action->details;
+
+        if ($type->hasDetails() !== ($details !== null)) {
+            throw new LogicException(
+                'L\'action ['.$type->value.'] '.($type->hasDetails()
+                    ? 'exige un complément details.'
+                    : 'ne porte aucun complément : details doit rester nul.'),
+            );
+        }
+
+        if ($details !== null && strlen($details->toJson()) > AdminActionDetails::MAX_BYTES) {
+            throw new LogicException(
+                'Le complément details de l\'action ['.$type->value.'] dépasse '.AdminActionDetails::MAX_BYTES.' octets.',
             );
         }
     }

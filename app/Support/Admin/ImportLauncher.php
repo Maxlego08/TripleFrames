@@ -2,14 +2,21 @@
 
 namespace App\Support\Admin;
 
+use App\Enums\AdminActionType;
 use App\Enums\ImportRunKind;
 use App\Enums\ImportRunStatus;
 use App\Models\ImportRun;
+use App\Models\User;
+use App\ValueObjects\Admin\AdminActionDetails;
 use App\ValueObjects\Catalog\ImportFilter;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
+use LogicException;
+use Throwable;
 
 /**
  * L'ouverture d'un balayage depuis le web, et rien d'autre.
@@ -28,11 +35,14 @@ use Illuminate\Support\Facades\Cache;
  * démarrage : le défaut du site peut changer après coup, la preuve qu'un
  * balayage a été élargi, non (§ 9.1).
  *
- * **Aucune ligne `admin_action` n'est écrite.** `App\Enums\AdminActionType` est
- * une liste FERMÉE possédée par la spec 10 et ne contient aucun cas d'import :
- * y ajouter `import.started` serait décider à la place du propriétaire du
- * schéma. La traçabilité de l'import est déjà portée par `import_run.actor_id`
- * et par `movie.import_run_id`, exactement le dispositif prévu au § 9.1.
+ * **Chaque lancement depuis le back-office écrit sa ligne au journal**
+ * (D41 du 30/09) — `import.discover_started`, `import.paste_started`,
+ * `import.seed_list_started`, `import.resumed` —, sujet `import_run`, DANS la
+ * transaction qui ouvre la ligne `import_run` ou relit celle qu'on reprend :
+ * jamais de ligne pour un lancement refusé. `details` garde ce que rien
+ * d'autre ne conserve : les identifiants d'un collage, le budget de pages.
+ * Les commandes `catalog:import*` n'entrent pas ici : elles ouvrent leur
+ * balayage elles-mêmes, et n'écrivent rien au journal.
  */
 final class ImportLauncher
 {
@@ -81,19 +91,78 @@ final class ImportLauncher
      *
      * Un verrou indisponible se lit comme un refus, pas comme une panne : un
      * second balayage est précisément ce qu'on refuse.
+     *
+     * La ligne `import_run` et la ligne du journal `$action` (un des trois
+     * cas de lancement, D41 du 30/09) s'écrivent dans UNE transaction, sous le
+     * verrou : un refus n'écrit ni l'une ni l'autre.
+     *
+     * @throws LogicException `$action` n'est pas un cas de lancement
      */
-    public static function openExclusively(ImportRunKind $kind, ImportFilter $filter, ?int $actorId): ?ImportRun
-    {
+    public static function openExclusively(
+        ImportRunKind $kind,
+        ImportFilter $filter,
+        User $actor,
+        AdminActionType $action,
+        AdminActionDetails $details,
+    ): ?ImportRun {
+        $opening = [
+            AdminActionType::ImportDiscoverStarted,
+            AdminActionType::ImportPasteStarted,
+            AdminActionType::ImportSeedListStarted,
+        ];
+
+        if (! in_array($action, $opening, true)) {
+            throw new LogicException('L\'action ['.$action->value.'] n\'ouvre pas un balayage.');
+        }
+
         try {
             return Cache::lock('catalog-import-open-'.$kind->value, 10)->block(
                 3,
                 static fn (): ?ImportRun => self::hasOpenRun($kind)
                     ? null
-                    : self::open($kind, $filter, $actorId),
+                    : DB::transaction(static function () use ($kind, $filter, $actor, $action, $details): ImportRun {
+                        $run = self::open($kind, $filter, $actor->id);
+
+                        app(AdminJournal::class)->record($actor, $action, $run->id, details: $details);
+
+                        return $run;
+                    }),
             );
         } catch (LockTimeoutException) {
             return null;
         }
+    }
+
+    /**
+     * Reprend un balayage `discover` suspendu : relu SOUS VERROU, sa garde et
+     * sa reprenabilité rejouées, puis la ligne `import.resumed` écrite dans la
+     * même transaction. Rend `false`, sans aucune écriture, si le balayage
+     * n'est plus reprenable — terminé ou repris entre l'affichage et le clic.
+     *
+     * Le job est distribué par l'appelant, après le commit.
+     *
+     * @throws Throwable
+     */
+    public static function resume(ImportRun $run, User $actor, int $pages): bool
+    {
+        return DB::transaction(static function () use ($run, $actor, $pages): bool {
+            $locked = ImportRun::query()->whereKey($run->id)->lockForUpdate()->firstOrFail();
+
+            Gate::forUser($actor)->authorize('update', $locked);
+
+            if (! AdminCatalogPresenter::isResumable($locked)) {
+                return false;
+            }
+
+            app(AdminJournal::class)->record(
+                $actor,
+                AdminActionType::ImportResumed,
+                $locked->id,
+                details: AdminActionDetails::importPages($pages),
+            );
+
+            return true;
+        });
     }
 
     /**

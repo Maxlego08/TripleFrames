@@ -7,12 +7,15 @@ use App\Enums\UserRole;
 use App\Models\AdminAction;
 use App\Models\TakedownRequest;
 use App\Models\User;
+use App\ValueObjects\Admin\AdminActionDetails;
+use Illuminate\Http\Request;
 use LogicException;
 
 /**
  * L'écrivain UNIQUE du journal `admin_action` (contrat C14, § 2.7 de `20`).
  *
- * Trois portes, une par nature d'auteur, et jamais un tableau d'attributs :
+ * Quatre portes, une par nature d'auteur ou de ligne, et jamais un tableau
+ * d'attributs :
  *
  * - {@see self::record()} — le geste d'une personne, signé de son NOM RÉEL
  *   (`users.real_name`, D12 du 23/09), figé ici, à l'instant du geste : une
@@ -20,7 +23,10 @@ use LogicException;
  * - {@see self::recordFromConsole()} — la ligne de commande, sous l'acteur
  *   réservé {@see AdminAction::CONSOLE_ACTOR} ;
  * - {@see self::recordAutomatic()} — un seuil de signalement, sous l'acteur
- *   réservé {@see AdminAction::SYSTEM_ACTOR} (gestes de `40`, jalon 2).
+ *   réservé {@see AdminAction::SYSTEM_ACTOR} (gestes de `40`, jalon 2) ;
+ * - {@see self::recordRead()} — une LECTURE SENSIBLE (D41 du 30/09), signée
+ *   comme un geste mais écrite hors transaction : une consultation n'a pas
+ *   d'état à justifier.
  *
  * `subject_type` et `retention_class` ne se passent jamais : la garde
  * `creating` de {@see AdminAction} les dérive de l'action, et c'est elle qui
@@ -28,7 +34,7 @@ use LogicException;
  * manquant, rôles incohérents, sujet mal identifié).
  *
  * **Dans la transaction de l'état qu'elle justifie, ou pas du tout** : toute
- * écriture hors transaction lève. Un film dépublié dont la ligne n'a pas été
+ * écriture d'un GESTE hors transaction lève. Un film dépublié dont la ligne n'a pas été
  * écrite — ou une ligne écrite pour un geste qui a échoué ensuite — est
  * exactement la preuve fausse qu'un audit ne rattrape plus.
  */
@@ -47,7 +53,14 @@ final class AdminJournal
         ?TakedownRequest $takedownRequest = null,
         ?UserRole $roleBefore = null,
         ?UserRole $roleAfter = null,
+        ?AdminActionDetails $details = null,
     ): AdminAction {
+        if ($action->isRead()) {
+            throw new LogicException(
+                'L\'action ['.$action->value.'] est une lecture sensible : elle s\'écrit par recordRead(), jamais comme un geste.',
+            );
+        }
+
         $this->assertInTransaction($action);
 
         return $this->write(
@@ -59,7 +72,66 @@ final class AdminJournal
             takedownRequestId: $takedownRequest?->id,
             roleBefore: $roleBefore,
             roleAfter: $roleAfter,
+            details: $details,
         );
+    }
+
+    /**
+     * Une LECTURE SENSIBLE (D41 du 30/09) : un écran du back-office qui montre
+     * des données personnelles — l'annuaire, la fiche d'un compte, l'écran des
+     * accès. Signée du nom réel comme un geste, mais **sans garde de
+     * transaction** : une consultation ne change aucun état, et il n'y a rien
+     * à annuler avec elle.
+     *
+     * Refuse tout cas qui n'est pas une lecture : un geste ne s'écrit jamais
+     * hors de sa transaction par cette porte.
+     *
+     * L'appelant ne l'invoque que pour une visite qui compte
+     * ({@see self::countsAsVisit()}).
+     */
+    public function recordRead(User $actor, AdminActionType $action, ?int $subjectId): AdminAction
+    {
+        if (! $action->isRead()) {
+            throw new LogicException(
+                'L\'action ['.$action->value.'] est un geste : elle s\'écrit par record(), dans la transaction de l\'état qu\'elle justifie.',
+            );
+        }
+
+        return $this->write(
+            actorId: $actor->id,
+            actorName: trim((string) $actor->real_name),
+            action: $action,
+            subjectId: $subjectId,
+            reason: null,
+            takedownRequestId: null,
+            roleBefore: null,
+            roleAfter: null,
+        );
+    }
+
+    /**
+     * Vrai si la requête est une VISITE qui mérite sa ligne de lecture
+     * (D41 du 30/09) — le seul endroit où cette règle est écrite :
+     *
+     * - un rechargement PARTIEL d'Inertia (`X-Inertia-Partial-Component`) ne
+     *   compte pas : la page est déjà affichée, et il n'en redemande qu'une
+     *   partie ;
+     * - un PRÉCHARGEMENT (`Purpose: prefetch`, posé par `@inertiajs/core`) ne
+     *   compte pas : un survol n'est pas une consultation. Les entrées de
+     *   navigation des écrans journalisés ne préchargent donc pas, sans quoi un
+     *   clic servi par le cache du préchargement n'écrirait rien.
+     *
+     * Toute autre requête compte : une visite complète, chaque envoi des
+     * filtres d'un écran compris. Un retour arrière servi par l'historique du
+     * navigateur n'atteint pas le serveur, et n'écrit rien.
+     */
+    public static function countsAsVisit(Request $request): bool
+    {
+        if ($request->headers->has('X-Inertia-Partial-Component')) {
+            return false;
+        }
+
+        return strtolower((string) $request->headers->get('Purpose')) !== 'prefetch';
     }
 
     /**
@@ -137,6 +209,7 @@ final class AdminJournal
         ?UserRole $roleBefore,
         ?UserRole $roleAfter,
         ?int $reportsCount = null,
+        ?AdminActionDetails $details = null,
     ): AdminAction {
         $line = new AdminAction;
         $line->actor_id = $actorId;
@@ -148,6 +221,7 @@ final class AdminJournal
         $line->role_before = $roleBefore;
         $line->role_after = $roleAfter;
         $line->reports_count = $reportsCount;
+        $line->details = $details;
         $line->save();
 
         return $line;

@@ -28,6 +28,7 @@ import { localeLabel, OAUTH_PROVIDER_KEYS } from '@/lib/admin-enum-keys';
 import { formatInteger, formatMoment } from '@/lib/admin-format';
 import { hasAtLeastRole } from '@/lib/roles';
 import { dashboard as adminDashboard } from '@/routes/admin';
+import { index as journalIndex } from '@/routes/admin/journal';
 import { index as usersIndex } from '@/routes/admin/users';
 import type {
     AdminAccountAbilities,
@@ -127,12 +128,32 @@ export default function AdminUsersShow({
                     title={account.name}
                     description={t('admin.account.description')}
                     actions={
-                        <Button variant="outline" size="sm" asChild>
-                            <Link href={usersIndex()}>
-                                <ArrowLeftIcon aria-hidden />
-                                {t('admin.account.back')}
-                            </Link>
-                        </Button>
+                        <>
+                            {/*
+                             * Le journal filtré sur ce compte (ligne 41, D41
+                             * du 30/09) : la fiche est déjà un écran de
+                             * l'administrateur seul, comme le journal.
+                             */}
+                            <Button variant="outline" size="sm" asChild>
+                                <Link
+                                    href={journalIndex({
+                                        query: {
+                                            subject_type: 'user',
+                                            subject_id: account.id,
+                                        },
+                                    })}
+                                >
+                                    <HistoryIcon aria-hidden />
+                                    {t('admin.journal.history')}
+                                </Link>
+                            </Button>
+                            <Button variant="outline" size="sm" asChild>
+                                <Link href={usersIndex()}>
+                                    <ArrowLeftIcon aria-hidden />
+                                    {t('admin.account.back')}
+                                </Link>
+                            </Button>
+                        </>
                     }
                 />
 

@@ -7,6 +7,7 @@ import {
     LayoutDashboard,
     ListChecks,
     ListOrdered,
+    ScrollText,
     ShieldCheck,
     Users,
 } from 'lucide-react';
@@ -43,6 +44,7 @@ import { index as accessIndex } from '@/routes/admin/access';
 import { index as catalogIndex } from '@/routes/admin/catalog';
 import { index as curationIndex } from '@/routes/admin/curation';
 import { index as importIndex } from '@/routes/admin/import';
+import { index as journalIndex } from '@/routes/admin/journal';
 import { index as reviewIndex } from '@/routes/admin/review';
 import { index as throughputIndex } from '@/routes/admin/throughput';
 import { index as usersIndex } from '@/routes/admin/users';
@@ -158,12 +160,23 @@ export function AdminSidebar() {
             href: usersIndex(),
             icon: Users,
             minRole: 'admin',
+            prefetch: false,
         },
         {
             title: t('admin.nav.access'),
             href: accessIndex(),
             icon: ShieldCheck,
             minRole: 'admin',
+            prefetch: false,
+        },
+        // Le journal d'administration (ligne 41, D41 du 30/09) : comme ses
+        // deux voisines, l'entrée ne précharge pas (spec 20 § 2.7 et § 2.10).
+        {
+            title: t('admin.nav.journal'),
+            href: journalIndex(),
+            icon: ScrollText,
+            minRole: 'admin',
+            prefetch: false,
         },
     ];
 

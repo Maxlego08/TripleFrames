@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Enums\AdminActionSubject;
+use App\Enums\AdminActionType;
 use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\UserDirectoryRequest;
@@ -13,6 +14,7 @@ use App\Models\LinkedAccount;
 use App\Models\User;
 use App\Support\Admin\AdminAccountPresenter;
 use App\Support\Admin\AdminCatalogPresenter;
+use App\Support\Admin\AdminJournal;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -38,17 +40,45 @@ use Inertia\Response;
  *
  * La recherche libre est un `LIKE` sans index, comme celle du catalogue :
  * assumé à l'échelle d'une table de comptes.
+ *
+ * **Deux lectures sensibles** (D41 du 30/09) : chaque visite de l'annuaire
+ * écrit `accounts.directory_viewed`, chaque visite d'une fiche `user.viewed`
+ * — une ligne par visite qui compte ({@see AdminJournal::countsAsVisit()}),
+ * jamais pour un rechargement partiel ni un préchargement. Ni la recherche
+ * libre ni les filtres ne sont recopiés : une adresse cherchée deviendrait une
+ * donnée personnelle permanente.
  */
 class UserDirectoryController extends Controller
 {
     /**
+     * Les gestes que l'historique d'une fiche montre — ceux que liste le type
+     * `AdminAccountActionType` côté écran. Les lectures sensibles visent aussi
+     * un compte, mais ne sont pas des gestes : elles vivent au journal.
+     *
+     * @var list<AdminActionType>
+     */
+    public const array HISTORY_ACTIONS = [
+        AdminActionType::RoleChanged,
+        AdminActionType::UserRealNameChanged,
+        AdminActionType::AvatarHidden,
+        AdminActionType::AvatarUnhidden,
+    ];
+
+    /**
      * L'annuaire, entièrement piloté par la query string.
      */
-    public function index(UserDirectoryRequest $request): Response
+    public function index(UserDirectoryRequest $request, AdminJournal $journal): Response
     {
+        /** @var User $actor */
+        $actor = $request->user();
+
         $users = $this->filtered($request)
             ->paginate(UserDirectoryRequest::PER_PAGE)
             ->withQueryString();
+
+        if (AdminJournal::countsAsVisit($request)) {
+            $journal->recordRead($actor, AdminActionType::AccountsDirectoryViewed, null);
+        }
 
         return Inertia::render('admin/users/index', [
             'users' => AdminCatalogPresenter::paginated(
@@ -68,7 +98,7 @@ class UserDirectoryController extends Controller
      * Un nombre de requêtes constant, indépendant de la longueur de
      * l'historique.
      */
-    public function show(Request $request, User $user): Response
+    public function show(Request $request, User $user, AdminJournal $journal): Response
     {
         /** @var User $actor */
         $actor = $request->user();
@@ -76,6 +106,7 @@ class UserDirectoryController extends Controller
         $history = AdminAction::query()
             ->where('subject_type', AdminActionSubject::User)
             ->where('subject_id', $user->id)
+            ->whereIn('action', self::HISTORY_ACTIONS)
             ->orderByDesc('id')
             ->get();
 
@@ -83,6 +114,11 @@ class UserDirectoryController extends Controller
 
         foreach ($history as $line) {
             $lines[] = AdminAccountPresenter::historyLine($line);
+        }
+
+        // Après la lecture de l'historique : la visite en cours n'y entre pas.
+        if (AdminJournal::countsAsVisit($request)) {
+            $journal->recordRead($actor, AdminActionType::UserViewed, $user->id);
         }
 
         return Inertia::render('admin/users/show', [
@@ -101,7 +137,12 @@ class UserDirectoryController extends Controller
             // compte qui en porte signe des pièces opposables.
             'traces' => [
                 'frame_reviews' => FrameReview::query()->where('reviewer_id', $user->id)->count(),
-                'admin_actions' => AdminAction::query()->where('actor_id', $user->id)->count(),
+                // Les gestes signés, jamais les consultations : une lecture
+                // n'est pas une preuve opposable.
+                'admin_actions' => AdminAction::query()
+                    ->where('actor_id', $user->id)
+                    ->whereNotIn('action', self::readActions())
+                    ->count(),
                 'import_runs' => ImportRun::query()->where('actor_id', $user->id)->count(),
             ],
             'history' => $lines,
@@ -113,6 +154,19 @@ class UserDirectoryController extends Controller
             ],
             'is_self' => $user->is($actor),
         ]);
+    }
+
+    /**
+     * Les cas de lecture sensible, exclus du compteur de preuves signées.
+     *
+     * @return list<AdminActionType>
+     */
+    private static function readActions(): array
+    {
+        return array_values(array_filter(
+            AdminActionType::cases(),
+            static fn (AdminActionType $action): bool => $action->isRead(),
+        ));
     }
 
     /**

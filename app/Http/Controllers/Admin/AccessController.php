@@ -13,6 +13,7 @@ use App\Http\Requests\Admin\RoleUpdateRequest;
 use App\Models\AdminAction;
 use App\Models\User;
 use App\Support\Admin\AdminAccountPresenter;
+use App\Support\Admin\AdminJournal;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
@@ -30,6 +31,13 @@ use Throwable;
  * `role_history` (`10` A15). Deux gestes, chacun sa route, sa garde et le
  * limiteur `admin-curation` : attribuer ou retirer un rôle
  * ({@see ChangeUserRole}), corriger un nom réel ({@see CorrectRealName}).
+ *
+ * **Une lecture sensible par visite** (D41 du 30/09) : `user.looked_up`, sujet
+ * le compte trouvé, quand la recherche par adresse exacte en trouve un ;
+ * `accounts.access_viewed` sinon — jamais les deux, jamais pour un
+ * rechargement partiel ni un préchargement
+ * ({@see AdminJournal::countsAsVisit()}). L'adresse cherchée n'est jamais
+ * recopiée au journal.
  *
  * **Deux administrateurs nominatifs avant l'ouverture** (`00` § Gouvernance) :
  * tant que le décompte est inférieur, l'écran le dit. C'est une condition du
@@ -60,7 +68,7 @@ class AccessController extends Controller
         AdminActionType::UserRealNameChanged,
     ];
 
-    public function index(AccessIndexRequest $request): Response
+    public function index(AccessIndexRequest $request, AdminJournal $journal): Response
     {
         /** @var User $actor */
         $actor = $request->user();
@@ -81,6 +89,18 @@ class AccessController extends Controller
 
         $admins = $privileged->filter(fn (User $user): bool => $user->role === UserRole::Admin)->count();
 
+        $candidate = $this->candidate($request, $actor);
+
+        if (AdminJournal::countsAsVisit($request)) {
+            $found = $candidate['account']['id'] ?? null;
+
+            if (is_int($found)) {
+                $journal->recordRead($actor, AdminActionType::UserLookedUp, $found);
+            } else {
+                $journal->recordRead($actor, AdminActionType::AccountsAccessViewed, null);
+            }
+        }
+
         return Inertia::render('admin/access/index', [
             'privileged' => $privileged
                 ->map(fn (User $user): array => $this->actionableRow($user, $actor))
@@ -99,7 +119,7 @@ class AccessController extends Controller
                 ->all(),
             'admins_count' => $admins,
             'second_admin_missing' => $admins < self::NOMINATIVE_ADMINS,
-            'candidate' => $this->candidate($request, $actor),
+            'candidate' => $candidate,
             'history' => $this->history(),
             'history_limit' => self::HISTORY_LIMIT,
         ]);

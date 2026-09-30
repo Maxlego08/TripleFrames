@@ -13,6 +13,7 @@ use App\Models\User;
 use App\Support\Admin\AdminJournal;
 use App\Support\Catalog\MovieProjector;
 use App\Support\Frames\CropRect;
+use App\ValueObjects\Admin\AdminActionDetails;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
@@ -51,6 +52,11 @@ use Throwable;
  * deux gestes concurrents sur les images d'un même film recalculent sa
  * projection l'un après l'autre, jamais sur un état que l'autre a déjà changé.
  * Le job part sur la file `default` **après le commit**.
+ *
+ * **Toujours une ligne `frame.recropped`** (D41 du 30/09), publiée ou non,
+ * dont `details` garde le rectangle écrasé en place ; le motif facultatif
+ * saisi y est recopié. `frame.unpublished` s'y ajoute quand l'image sort du
+ * jeu.
  *
  * Au jalon 1, le chemin est **paresseux** (C8 § 4.6) : une manche en cours qui
  * a tiré cette image la substitue à la frappe suivante ; rien n'est poussé.
@@ -112,6 +118,7 @@ final class RecropFrame
             }
 
             $wasPublished = $locked->availability === ContentAvailability::Published;
+            $before = CropRect::fromFrame($locked);
 
             $attributes = [
                 'crop_x' => $crop->x,
@@ -132,6 +139,14 @@ final class RecropFrame
             }
 
             $locked->forceFill($attributes)->save();
+
+            $this->journal->record(
+                $curator,
+                AdminActionType::FrameRecropped,
+                $locked->id,
+                $reason,
+                details: AdminActionDetails::recropped($before, $crop),
+            );
 
             if ($wasPublished) {
                 $this->journal->record(

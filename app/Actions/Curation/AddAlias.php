@@ -2,12 +2,15 @@
 
 namespace App\Actions\Curation;
 
+use App\Enums\AdminActionType;
 use App\Enums\ContentOrigin;
 use App\Enums\Locale;
 use App\Models\Alias;
 use App\Models\Movie;
 use App\Models\User;
+use App\Support\Admin\AdminJournal;
 use App\Support\Catalog\AnswerKeyProjector;
+use App\ValueObjects\Admin\AdminActionDetails;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
@@ -33,13 +36,15 @@ use Throwable;
  * (`unique(normalized, movie_id)`). L'écran avertit avant l'envoi quand la
  * forme est déjà acceptée pour ce film ; le serveur ne refuse pas.
  *
- * Une transaction, le film verrouillé : la ligne, puis les clés reprojetées
- * par différence avec le recompte synchrone de leur ambiguïté.
+ * Une transaction, le film verrouillé : la ligne, la ligne `movie.alias_added`
+ * du journal (D41 du 30/09), puis les clés reprojetées par différence avec le
+ * recompte synchrone de leur ambiguïté.
  */
 final class AddAlias
 {
     public function __construct(
         private readonly AnswerKeyProjector $answerKeys,
+        private readonly AdminJournal $journal,
     ) {}
 
     /**
@@ -62,6 +67,13 @@ final class AddAlias
             $alias->origin = ContentOrigin::Curator;
             $alias->created_by_id = $curator->id;
             $alias->save();
+
+            $this->journal->record(
+                $curator,
+                AdminActionType::MovieAliasAdded,
+                $locked->id,
+                details: AdminActionDetails::aliasAdded($alias->id, $alias->locale, $alias->alias),
+            );
 
             $this->answerKeys->project($locked);
 

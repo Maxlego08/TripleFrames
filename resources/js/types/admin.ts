@@ -768,6 +768,8 @@ export type AdminMovieAbilities = {
     publish: boolean;
     unpublish: boolean;
     verifyContent: boolean;
+    /** Le lien « Historique » vers le journal : administrateur seul. */
+    viewJournal: boolean;
 };
 
 export type AdminImportRunRow = {
@@ -1160,4 +1162,120 @@ export type AdminUserDirectoryCounts = {
 export type AdminAccessCandidate = {
     email: string;
     account: AdminActionableAccount | null;
+};
+
+/**
+ * Les cas du journal d'administration — miroir de la liste FERMÉE
+ * `App\Enums\AdminActionType` (quarante et un cas, D41 du 30/09).
+ */
+export type AdminActionTypeValue =
+    | 'role.changed'
+    | 'user.real_name_changed'
+    | 'movie.published'
+    | 'movie.unpublished'
+    | 'movie.republished'
+    | 'movie.content_verified'
+    | 'movie.suspended'
+    | 'movie.unsuspended'
+    | 'movie.withdrawn'
+    | 'frame.unpublished'
+    | 'frame.grid_unpublished'
+    | 'frame.suspended'
+    | 'frame.unsuspended'
+    | 'frame.withdrawn'
+    | 'avatar.hidden'
+    | 'avatar.unhidden'
+    | 'nickname.masked'
+    | 'nickname.unmasked'
+    | 'nickname.banned'
+    | 'takedown.decided'
+    | 'site.closed'
+    | 'site.reopened'
+    | 'movie.title_saved'
+    | 'movie.title_removed'
+    | 'movie.alias_added'
+    | 'movie.alias_removed'
+    | 'movie.grouped'
+    | 'movie.ungrouped'
+    | 'frame.added'
+    | 'frame.recropped'
+    | 'frame.processing_retried'
+    | 'frame.level_changed'
+    | 'frame.reviewed'
+    | 'import.discover_started'
+    | 'import.paste_started'
+    | 'import.seed_list_started'
+    | 'import.resumed'
+    | 'accounts.directory_viewed'
+    | 'accounts.access_viewed'
+    | 'user.looked_up'
+    | 'user.viewed';
+
+/** Les sujets du journal — miroir de `App\Enums\AdminActionSubject`. */
+export type AdminActionSubjectValue =
+    | 'movie'
+    | 'frame'
+    | 'user'
+    | 'player'
+    | 'takedown_request'
+    | 'site'
+    | 'import_run'
+    | 'accounts';
+
+/** Les deux classes de conservation — `App\Enums\AdminActionRetention`. */
+export type AdminActionRetentionValue = 'permanent' | 'rolling_12m';
+
+/**
+ * Le sujet d'une ligne du journal, ou celui du filtre courant. `label` est le
+ * libellé COURANT (titre original d'un film, pseudo d'un compte) ; `movie_id`
+ * mène à la fiche du film d'un film ou d'une image.
+ */
+export type AdminJournalSubject = {
+    type: AdminActionSubjectValue;
+    id: number | null;
+    label: string | null;
+    movie_id: number | null;
+    /** Faux si un sujet identifié n'existe pas en base. */
+    exists: boolean;
+};
+
+/** Une ligne de l'écran « Journal » (`AdminJournalPresenter::line()`). */
+export type AdminJournalLine = {
+    id: number;
+    action: AdminActionTypeValue;
+    /** Le compte de l'auteur, pour ouvrir sa fiche ; `null` pour `system` et `console`. */
+    actor_id: number | null;
+    /** Le nom réel SIGNÉ à l'instant du geste. */
+    actor_name: string;
+    subject: AdminJournalSubject;
+    reason: string | null;
+    role_before: UserRole | null;
+    role_after: UserRole | null;
+    reports_count: number | null;
+    /** Le complément `admin_action.details`, affiché brut, clé par clé. */
+    details: Record<string, unknown> | null;
+    retention_class: AdminActionRetentionValue;
+    created_at: string | null;
+};
+
+/** Les filtres de l'écran, miroir de `AdminJournalRequest::filters()`. */
+export type AdminJournalFilters = {
+    actor: string | null;
+    action: AdminActionTypeValue | null;
+    from: string | null;
+    to: string | null;
+    subject_type: AdminActionSubjectValue | null;
+    subject_id: number | null;
+    /** L'historique complet d'un film : ses lignes et celles de ses images. */
+    movie: number | null;
+};
+
+/** Les listes blanches de l'écran, relues du serveur. */
+export type AdminJournalOptions = {
+    /** Les auteurs identifiés, sous le dernier nom réel signé. */
+    actors: { value: string; label: string }[];
+    reserved_actors: ('system' | 'console')[];
+    actions: AdminActionTypeValue[];
+    subject_types: AdminActionSubjectValue[];
+    subject_types_with_id: AdminActionSubjectValue[];
 };

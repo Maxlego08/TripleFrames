@@ -2,11 +2,14 @@
 
 namespace App\Actions\Curation;
 
+use App\Enums\AdminActionType;
 use App\Enums\ContentAvailability;
 use App\Enums\FrameProcessingState;
 use App\Jobs\Curation\ProcessFrameImage;
 use App\Models\Frame;
 use App\Models\User;
+use App\Support\Admin\AdminJournal;
+use App\ValueObjects\Admin\AdminActionDetails;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\ValidationException;
@@ -27,11 +30,17 @@ use Throwable;
  * `admin.frame.retry.not_retryable`. Relus sous le verrou de la frame.
  *
  * Aucune disponibilité ne change — une image en échec n'est jamais en jeu, le
- * job ne réécrivant jamais une frame publiée —, donc ni ligne de journal ni
- * recalcul de projection. Le job part sur la file `default` après le commit.
+ * job ne réécrivant jamais une frame publiée —, donc aucun recalcul de
+ * projection. La relance écrit sa ligne `frame.processing_retried` (D41 du
+ * 30/09), dont `details` garde l'échec qu'elle efface. Le job part sur la file
+ * `default` après le commit.
  */
 final class RetryFrameProcessing
 {
+    public function __construct(
+        private readonly AdminJournal $journal,
+    ) {}
+
     /**
      * La clé du refus d'une relance, ou `null` si elle est permise.
      */
@@ -72,10 +81,19 @@ final class RetryFrameProcessing
                 throw ValidationException::withMessages(['frame' => __($refusal)]);
             }
 
+            $failure = $locked->processing_error;
+
             $locked->forceFill([
                 'processing_state' => FrameProcessingState::Pending,
                 'processing_error' => null,
             ])->save();
+
+            $this->journal->record(
+                $curator,
+                AdminActionType::FrameProcessingRetried,
+                $locked->id,
+                details: AdminActionDetails::processingRetried($failure),
+            );
 
             // `afterCommit` est posé par le job lui-même.
             ProcessFrameImage::dispatch($locked->id);

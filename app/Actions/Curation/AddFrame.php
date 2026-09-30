@@ -2,6 +2,7 @@
 
 namespace App\Actions\Curation;
 
+use App\Enums\AdminActionType;
 use App\Enums\ContentAvailability;
 use App\Enums\FrameLevel;
 use App\Enums\FrameProcessingState;
@@ -11,8 +12,10 @@ use App\Models\Frame;
 use App\Models\Movie;
 use App\Models\User;
 use App\Policies\FramePolicy;
+use App\Support\Admin\AdminJournal;
 use App\Support\Frames\CropRect;
 use App\Support\Frames\FrameStoragePrefix;
+use App\ValueObjects\Admin\AdminActionDetails;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Config;
@@ -59,11 +62,17 @@ use Throwable;
  * Imagick n'a lieu ici : le job part sur la file `default`, **après le
  * commit**.
  *
- * Aucune ligne `admin_action` : ajouter une image n'engage rien, et la trace
- * est `frame.uploaded_by_id` (§ 2.2, ligne 13).
+ * **Une ligne `frame.added`** (D41 du 30/09), dans la transaction, après
+ * l'insertion et avant la distribution du job : `details` garde la voie et le
+ * niveau au moment de l'ajout — le niveau change ensuite en place. La source
+ * déclarée, elle, reste sur la frame ; `frame.uploaded_by_id` aussi.
  */
 final class AddFrame
 {
+    public function __construct(
+        private readonly AdminJournal $journal,
+    ) {}
+
     /**
      * Crée une frame `draft` et `pending` depuis un visuel TMDB, et distribue
      * son traitement.
@@ -206,6 +215,13 @@ final class AddFrame
                     'uploaded_by_id' => $curator->id,
                     'crop_seconds' => self::cappedCropSeconds($cropSeconds),
                 ])->save();
+
+                $this->journal->record(
+                    $curator,
+                    AdminActionType::FrameAdded,
+                    $frame->id,
+                    details: AdminActionDetails::frameAdded($frame->source_kind, $level),
+                );
 
                 // Enregistré AVANT la distribution, donc exécuté avant elle au
                 // commit : une panne de la file après le commit ne fait jamais
