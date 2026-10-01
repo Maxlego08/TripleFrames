@@ -9,8 +9,8 @@ use App\Support\Draw\SeededPrf;
 | Graine et PRF à contextes nommés — spec 30 § 5, lot L30-4, contrat C3
 |--------------------------------------------------------------------------
 |
-| L'algorithme est NORMATIF (E10-40) : ses sorties sont figées ici par les huit
-| vecteurs de référence du § 5.4, calculés sur la graine
+| L'algorithme est NORMATIF (E10-40) : ses sorties sont figées ici par les dix
+| vecteurs de référence du § 5.4 (deux ajoutés par D44 du 01/10), calculés sur la graine
 | `000102…1e1f`. Une implémentation qui en diverge est fausse, même si elle
 | est « aussi aléatoire » : le tirage matérialisé, les leurres et l'ordre du
 | QCM de 70 en dépendent tous.
@@ -47,7 +47,8 @@ function seededPrfBlockZeroWords(string $seed, DrawContext $context): array
 it('les vecteurs de référence sont figés', function () {
     $prf = new SeededPrf(seededPrfReferenceSeed());
 
-    // Les cinq vecteurs du contrat C3, puis les trois figés par la spec 30.
+    // Les cinq vecteurs du contrat C3, les trois figés par la spec 30, puis les
+    // deux contextes d'affinité des leurres (D44 du 01/10).
     expect($prf->permutation(DrawContext::movies(), 10))->toBe([0, 6, 3, 8, 4, 1, 7, 2, 9, 5])
         ->and($prf->index(DrawContext::variant(1, 1), 3))->toBe(2)
         ->and($prf->index(DrawContext::substitute(2, 3), 2))->toBe(0)
@@ -55,7 +56,9 @@ it('les vecteurs de référence sont figés', function () {
         ->and($prf->index(DrawContext::workMember(1), 2))->toBe(1)
         ->and($prf->permutation(DrawContext::decoysOriginal(4), 5))->toBe([0, 1, 3, 4, 2])
         ->and($prf->permutation(DrawContext::qcmOrder(1, 'K7Q2M9XR4T6W'), 4))->toBe([2, 3, 0, 1])
-        ->and($prf->permutation(DrawContext::qcmOrder(1, 'P3N8D5HB2C9F'), 4))->toBe([1, 0, 3, 2]);
+        ->and($prf->permutation(DrawContext::qcmOrder(1, 'P3N8D5HB2C9F'), 4))->toBe([1, 0, 3, 2])
+        ->and($prf->permutation(DrawContext::decoysAffinity(4), 5))->toBe([2, 3, 1, 0, 4])
+        ->and($prf->permutation(DrawContext::decoysAffinityOriginal(4), 5))->toBe([4, 1, 0, 2, 3]);
 
     // Fonction pure : un second appel repart du bloc 0 de son contexte.
     expect($prf->permutation(DrawContext::movies(), 10))->toBe([0, 6, 3, 8, 4, 1, 7, 2, 9, 5])
@@ -213,7 +216,7 @@ it('generateSeed produit 64 caractères hexadécimaux', function () {
     expect(array_unique($seeds))->toHaveCount(count($seeds));
 });
 
-it('les sept contextes du registre produisent sept chaînes distinctes', function () {
+it('les neuf contextes du registre produisent neuf chaînes distinctes', function () {
     $contexts = [
         DrawContext::movies()->value,
         DrawContext::workMember(3)->value,
@@ -221,6 +224,8 @@ it('les sept contextes du registre produisent sept chaînes distinctes', functio
         DrawContext::substitute(3, 2)->value,
         DrawContext::decoys(3)->value,
         DrawContext::decoysOriginal(3)->value,
+        DrawContext::decoysAffinity(3)->value,
+        DrawContext::decoysAffinityOriginal(3)->value,
         DrawContext::qcmOrder(3, 'K7Q2M9XR4T6W')->value,
     ];
 
@@ -231,10 +236,12 @@ it('les sept contextes du registre produisent sept chaînes distinctes', functio
         'draw:substitute:3:2',
         'draw:decoys:3',
         'draw:decoys:3:original',
+        'draw:decoys:3:affinity',
+        'draw:decoys:3:affinity-original',
         'draw:qcm:3:K7Q2M9XR4T6W',
-    ])->and(array_unique($contexts))->toHaveCount(7);
+    ])->and(array_unique($contexts))->toHaveCount(9);
 
-    // Registre FERMÉ : constructeur privé, exactement sept fabriques, et le
+    // Registre FERMÉ : constructeur privé, exactement neuf fabriques, et le
     // contexte `tiebreak` retiré (contradiction n° 66) — aucune égalité de
     // score n'est tranchée par la graine.
     $class = new ReflectionClass(DrawContext::class);
@@ -247,7 +254,7 @@ it('les sept contextes du registre produisent sept chaînes distinctes', functio
     expect($class->isFinal())->toBeTrue()
         ->and($class->isReadOnly())->toBeTrue()
         ->and($class->getConstructor()?->isPrivate())->toBeTrue()
-        ->and($factories)->toBe(['decoys', 'decoysOriginal', 'movies', 'qcmOrder', 'substitute', 'variant', 'workMember'])
+        ->and($factories)->toBe(['decoys', 'decoysAffinity', 'decoysAffinityOriginal', 'decoysOriginal', 'movies', 'qcmOrder', 'substitute', 'variant', 'workMember'])
         ->and(array_filter($factories, static fn (string $name): bool => str_contains(strtolower($name), 'tiebreak')))->toBe([]);
 
     // La grammaire est injective sur les arguments : chaque couple distinct
@@ -258,6 +265,8 @@ it('les sept contextes du registre produisent sept chaînes distinctes', functio
         $all[] = DrawContext::workMember($sequence)->value;
         $all[] = DrawContext::decoys($sequence)->value;
         $all[] = DrawContext::decoysOriginal($sequence)->value;
+        $all[] = DrawContext::decoysAffinity($sequence)->value;
+        $all[] = DrawContext::decoysAffinityOriginal($sequence)->value;
         $all[] = DrawContext::qcmOrder($sequence, 'K7Q2M9XR4T6W')->value;
         $all[] = DrawContext::qcmOrder($sequence, 'P3N8D5HB2C9F')->value;
 
@@ -269,13 +278,13 @@ it('les sept contextes du registre produisent sept chaînes distinctes', functio
 
     expect(array_unique($all))->toHaveCount(count($all));
 
-    // Sept contextes, sept flux : la même graine rend des blocs distincts.
+    // Neuf contextes, neuf flux : la même graine rend des blocs distincts.
     $blocks = array_map(
         static fn (string $context): string => hash_hmac('sha256', $context.'#0', seededPrfReferenceSeed()),
         $contexts,
     );
 
-    expect(array_unique($blocks))->toHaveCount(7);
+    expect(array_unique($blocks))->toHaveCount(9);
 
     // Arguments gardés, jamais écrêtés.
     expect(fn () => DrawContext::workMember(0))->toThrow(InvalidArgumentException::class)
@@ -284,6 +293,8 @@ it('les sept contextes du registre produisent sept chaînes distinctes', functio
         ->and(fn () => DrawContext::substitute(1, -1))->toThrow(InvalidArgumentException::class)
         ->and(fn () => DrawContext::decoys(-3))->toThrow(InvalidArgumentException::class)
         ->and(fn () => DrawContext::decoysOriginal(0))->toThrow(InvalidArgumentException::class)
+        ->and(fn () => DrawContext::decoysAffinity(0))->toThrow(InvalidArgumentException::class)
+        ->and(fn () => DrawContext::decoysAffinityOriginal(-1))->toThrow(InvalidArgumentException::class)
         ->and(fn () => DrawContext::qcmOrder(0, 'K7Q2M9XR4T6W'))->toThrow(InvalidArgumentException::class)
         ->and(fn () => DrawContext::qcmOrder(1, ''))->toThrow(InvalidArgumentException::class);
 });

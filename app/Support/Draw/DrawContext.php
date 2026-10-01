@@ -15,7 +15,8 @@ use InvalidArgumentException;
  * qui empêche une sortie publique d'exposer le secret.
  *
  * **Aucune autre chaîne de contexte n'existe** : le constructeur est privé, et
- * les sept fabriques ci-dessous sont les seules entrées. Deux écarts aux
+ * les neuf fabriques ci-dessous sont les seules entrées (les deux contextes
+ * d'affinité des leurres ajoutés le 01/10, D44 du 01/10). Deux écarts aux
  * exemples de la spec 10 § 7.2, qui n'étaient que des exemples (E10-40,
  * E10-54) :
  *
@@ -91,6 +92,26 @@ final readonly class DrawContext
     public static function decoysOriginal(int $sequenceIndex): self
     {
         return new self('draw:decoys:'.self::sequence($sequenceIndex).':original');
+    }
+
+    /**
+     * `draw:decoys:{s}:affinity` — parcours des groupes d'affinité des leurres
+     * (même saga, puis thème studio, saga ou manuel, puis genre), au profil de
+     * titre du mode normal (spec 70, § 10.3 bis, D44 du 01/10).
+     */
+    public static function decoysAffinity(int $sequenceIndex): self
+    {
+        return new self('draw:decoys:'.self::sequence($sequenceIndex).':affinity');
+    }
+
+    /**
+     * `draw:decoys:{s}:affinity-original` — parcours des mêmes groupes
+     * d'affinité en mode dégradé, avant R3-R4 (spec 70, § 10.3 bis, D44 du
+     * 01/10).
+     */
+    public static function decoysAffinityOriginal(int $sequenceIndex): self
+    {
+        return new self('draw:decoys:'.self::sequence($sequenceIndex).':affinity-original');
     }
 
     /**

@@ -454,6 +454,24 @@ Le 01/10/2026, le porteur a demandé de pouvoir donner à chaque film ses thème
 - **Noms de genres TMDB** : non stockés ; un genre s'affiche par son identifiant et le libellé du thème qui le désigne (`20` § 9.6).
 - **Filtre « thème » sur la liste du catalogue admin** : livré en option de L20-28, retirable sans risque si le porteur le refuse.
 
+### D44. Les leurres du QCM sont-ils apparentés à la cible ? — **oui : même saga, puis studio ou saga ou manuel, puis genre, un seul groupe pour les trois leurres**
+
+**Motif du porteur.** « Pour les films d'un même thème ou d'une même saga, on affiche des films de ladite saga : pour Toy Story 3, le QCM ne propose que des Toy Story ; pareil pour un Star Wars, un Marvel. »
+
+**Ce que la décision arrête** (règle complète : `70` § 10.3 bis) :
+
+1. **Priorité** : saga (`movie.collection_id`) > thème studio, saga ou manuel > genre, puis l'échelle R1-R4 de D21 du 23/09, **inchangée**.
+2. **Ensemble** : tout le catalogue publié, comme le rang R2 (`forDecoys($round, $at)->withThemeIds([])->withFramesPerRound(null)`) ; non-répétition et exclusions de `forDecoys` conservées (cible, `movie_group`, manches démarrées).
+3. **Règle anti-fuite** (arrêtée à la rédaction) : un niveau d'affinité n'est retenu que s'il fournit **à lui seul** les trois leurres, pour que les quatre propositions appartiennent au même groupe nommé ; sinon « deux Toy Story et deux Pixar » placerait la cible dans la paire de la saga. Dans un niveau, les thèmes sont essayés du plus spécifique au plus large.
+4. **Mode dégradé** : mêmes groupes, au titre original, avant R3-R4.
+5. **Déterminisme** : deux contextes nommés ajoutés au registre fermé, `decoysAffinity(s)` et `decoysAffinityOriginal(s)`, vecteurs de référence figés (`30` § 5.3, § 5.4).
+
+**Conséquence assumée.** Le groupe commun des quatre propositions est visible avant la révélation ; il n'identifie pas la cible parmi elles (`30` § 11). Une décision : elle se cite « D44 du 01/10 », et chaque passage réécrit porte « — amendé le 01/10 (D44 du 01/10) ».
+
+| # | Décision | Réponse retenue | Écart | Inscrite dans |
+|---|---|---|---|---|
+| D44 | Leurres apparentés à la cible | **oui** : saga > studio, saga ou manuel > genre, un seul groupe pour les trois leurres, catalogue publié entier, puis R1-R4 inchangée ; mêmes groupes en mode dégradé | **oui** — la règle de D21 du 23/09 gagne un étage avant R1 et avant R3 ; deux contextes de plus au registre `DrawContext` | `70` § 10.3, § 10.3 bis, § 10.4, § 10.9, L70-7 ; `30` § 5.3, § 5.4, § 10.1, § 11, § 13.3 ; `10` § 7.2, § 7.8 ; `CLAUDE.md` § 2 |
+
 ---
 
 ## Seule question encore ouverte — le nom de domaine (décision 5)
