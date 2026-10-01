@@ -286,7 +286,7 @@ function replacementSettings(): RoomSettings
     return PoolFixtures::settings(roundsCount: RoomSettingsBounds::MIN_ROUNDS_COUNT);
 }
 
-it('une variante de substitution garde le même niveau et exclut la variante fautive', function () {
+it('une variante de substitution reste dans la plage du palier et exclut la variante fautive', function () {
     $room = Room::factory()->create();
     $game = substitutionGame($room);
 
@@ -343,17 +343,18 @@ it('une variante de substitution garde le même niveau et exclut la variante fau
             ->and(substitutionRun($tier, $k, $this->now, [$first, $second]))->toBeNull();
     }
 
-    // Le niveau est celui du palier MATÉRIALISÉ, jamais le niveau nominal de
-    // son rang : un palier 1 tiré en repli sur le niveau 3 se substitue au
-    // niveau 3.
+    // Un palier tiré en repli garde son niveau parmi les permis : un palier 1
+    // tiré sur le niveau 3, hors de sa plage, se substitue dans sa plage OU
+    // au niveau 3 (D45 du 01/10).
     $fallback = substitutionTier($game, $movie, 3, 1, $faultyLevel3);
 
     expect($fallback->frame_level)->toBe(FrameLevel::Level3)
-        ->and(FrameLevelCoverage::nominal(RoomSettingsBounds::DEFAULT_FRAMES_PER_ROUND)[0])
-        ->not->toBe(FrameLevel::Level3);
+        ->and(FrameLevelCoverage::bands(RoomSettingsBounds::DEFAULT_FRAMES_PER_ROUND)[0])
+        ->not->toContain(FrameLevel::Level3);
 
     foreach (range(0, 7) as $k) {
-        expect(substitutionRun($fallback, $k, $this->now))->toBe($otherLevel3);
+        expect(substitutionRun($fallback, $k, $this->now))
+            ->toBe(substitutionPick($k, 3, 1, [$faulty, $first, $second, $otherLevel3]));
     }
 
     // Un palier d'une autre manche est refusé.
@@ -365,15 +366,14 @@ it('une variante de substitution garde le même niveau et exclut la variante fau
     ))->toThrow(InvalidArgumentException::class);
 });
 
-it('sans variante de même niveau, la substitution rend null et jamais un autre niveau', function () {
+it('sans variante dans la plage du palier, la substitution rend null et jamais hors de la plage', function () {
     $room = Room::factory()->create();
     $game = substitutionGame($room);
 
-    // Une seule variante jouable au niveau 1 — celle du palier —, tous les
-    // autres niveaux abondants.
+    // Une seule variante jouable dans la plage 1-2 du palier 1 — celle du
+    // palier —, les niveaux hors de la plage abondants.
     $movie = PoolFixtures::movie([
         FrameLevel::Level1,
-        FrameLevel::Level2, FrameLevel::Level2,
         FrameLevel::Level3, FrameLevel::Level3,
         FrameLevel::Level4, FrameLevel::Level4,
         FrameLevel::Level5, FrameLevel::Level5, FrameLevel::Level5,
@@ -402,13 +402,73 @@ it('sans variante de même niveau, la substitution rend null et jamais un autre 
     }
 
     // Au niveau 5, deux autres variantes jouables : elles sortent, et les
-    // exclure toutes deux rend null, jamais un niveau voisin.
+    // exclure toutes deux rend null. Le niveau 4, dans la plage 4-5 du
+    // dernier palier, est déjà montré par le palier précédent : jamais
+    // proposé, l'ordre strict des niveaux tient.
     [$faultyLevel5, $firstLevel5, $secondLevel5] = substitutionFrameIds($movie, FrameLevel::Level5);
     $tierLevel5 = substitutionTier($game, $movie, 2, RoomSettingsBounds::DEFAULT_FRAMES_PER_ROUND, $faultyLevel5);
+
+    RoundTier::factory()
+        ->for(Round::query()->findOrFail($tierLevel5->round_id))
+        ->atTier(RoomSettingsBounds::DEFAULT_FRAMES_PER_ROUND - 1)
+        ->forFrame(Frame::query()->findOrFail(substitutionFrameIds($movie, FrameLevel::Level4)[0]))
+        ->create();
 
     foreach (range(0, 7) as $k) {
         expect(substitutionRun($tierLevel5, $k, $this->now))->toBeIn([$firstLevel5, $secondLevel5])
             ->and(substitutionRun($tierLevel5, $k, $this->now, [$firstLevel5, $secondLevel5]))->toBeNull();
+    }
+});
+
+it('la substitution du palier du milieu se borne aux niveaux de ses voisins, image servie comprise', function () {
+    $room = Room::factory()->create();
+    $game = substitutionGame($room);
+
+    // N = 3 : le palier 2 a pour plage 2-3-4 (D45 du 01/10).
+    $movie = PoolFixtures::movie([
+        FrameLevel::Level1, FrameLevel::Level1,
+        FrameLevel::Level2, FrameLevel::Level2,
+        FrameLevel::Level3, FrameLevel::Level3,
+        FrameLevel::Level4, FrameLevel::Level4,
+        FrameLevel::Level5,
+    ]);
+    $level1 = substitutionFrameIds($movie, FrameLevel::Level1);
+    $level2 = substitutionFrameIds($movie, FrameLevel::Level2);
+    [$faulty, $otherLevel3] = substitutionFrameIds($movie, FrameLevel::Level3);
+    $level4 = substitutionFrameIds($movie, FrameLevel::Level4);
+    [$level5] = substitutionFrameIds($movie, FrameLevel::Level5);
+
+    $neighbours = static function (RoundTier $middle, int $previous, int $next): void {
+        $round = Round::query()->findOrFail($middle->round_id);
+
+        foreach ([1 => $previous, 3 => $next] as $tierIndex => $frameId) {
+            RoundTier::factory()->for($round)->atTier($tierIndex)
+                ->forFrame(Frame::query()->findOrFail($frameId))->create();
+        }
+    };
+
+    // Voisins aux niveaux 1 et 5 : toute la plage 2-3-4 est permise.
+    $wide = substitutionTier($game, $movie, 1, 2, $faulty);
+    $neighbours($wide, $level1[0], $level5);
+
+    foreach (range(0, 7) as $k) {
+        expect(substitutionRun($wide, $k, $this->now))
+            ->toBe(substitutionPick($k, 1, 2, [...$level2, $otherLevel3, ...$level4]));
+    }
+
+    // Palier 1 tiré au niveau 1 mais SERVI au niveau 2, palier 3 au niveau 4 :
+    // seul le niveau 3 reste strictement entre eux.
+    $narrow = substitutionTier($game, $movie, 2, 2, $faulty);
+    $neighbours($narrow, $level1[0], $level4[0]);
+
+    RoundTier::query()
+        ->where('round_id', $narrow->round_id)
+        ->where('tier_index', 1)
+        ->update(['served_frame_id' => $level2[0]]);
+
+    foreach (range(0, 7) as $k) {
+        expect(substitutionRun($narrow, $k, $this->now))->toBe($otherLevel3)
+            ->and(substitutionRun($narrow, $k, $this->now, [$otherLevel3]))->toBeNull();
     }
 });
 

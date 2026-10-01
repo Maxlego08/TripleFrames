@@ -72,7 +72,9 @@ Le découpage par jalon est celui de la question Q30-4, retenue par défaut : ce
 
 ```php
 public static function nominal(int $framesPerRound): array;                   // list<FrameLevel>, croissant ; InvalidArgumentException hors bornes de N
-public static function select(int $framesPerRound, int $levelsMask): ?array;  // list<FrameLevel>|null ; null si le masque couvre moins de N niveaux
+public static function bands(int $framesPerRound): array;                     // list<list<FrameLevel>> : la plage de chaque palier (§ 2.1 bis)
+public static function sequences(int $framesPerRound, int $levelsMask): ?array; // list<list<FrameLevel>>|null : séquences admissibles (§ 2.2)
+public static function select(int $framesPerRound, int $levelsMask): ?array;  // list<FrameLevel>|null : séquence de référence ; null si le masque couvre moins de N niveaux
 public static function usesFallback(int $framesPerRound, int $levelsMask): bool;
 public static function maskOf(iterable $levels): int;                         // iterable<FrameLevel>
 public static function levelsIn(int $levelsMask): array;                      // list<FrameLevel>, croissant
@@ -82,41 +84,55 @@ public static function levelsIn(int $levelsMask): array;                      //
 
 Écrite une fois, en `match` explicite : `2 → [1, 5]`, `3 → [1, 3, 5]`, `4 → [1, 2, 4, 5]`, `5 → [1, 2, 3, 4, 5]` (`00` § Le jeu en une manche). C'est une **constante de règle de produit**, pas une valeur de jeu réglable : elle ne viole pas la règle 2, pas plus que la définition d'une décennie. Les bornes de `N` sont lues dans `RoomSettingsBounds::MIN_FRAMES_PER_ROUND` / `MAX_FRAMES_PER_ROUND`, les bits dans `FrameLevel::bit()`.
 
-### 2.2 Repli de niveau — l'algorithme
+### 2.1 bis Plages de niveaux par palier (D45 du 01/10)
 
-`00` § Le jeu en une manche dit « les `N` niveaux disponibles les plus proches de la répartition nominale, sans jamais dupliquer un niveau ». Formulation exécutable, déterministe, **sans graine** :
+Chaque palier pioche son image dans une **plage** de niveaux, écrite une fois dans `bands()` — amendé le 01/10 (D45 du 01/10) :
+
+| N | palier 1 | palier 2 | palier 3 | palier 4 | palier 5 |
+|---|---|---|---|---|---|
+| 2 | 1–2 | 4–5 | | | |
+| 3 | 1–2 | 2–4 | 4–5 | | |
+| 4 | 1 | 2–3 | 4 | 5 | |
+| 5 | 1 | 2 | 3 | 4 | 5 |
+
+Chaque plage contient le niveau nominal de son rang (§ 2.1). La répartition nominale reste la **référence** du coût de repli et de l'aperçu du back-office ; elle n'est plus la seule séquence jouée.
+
+### 2.2 Séquences admissibles et repli de niveau — l'algorithme
+
+Formulation exécutable, **sans graine** (le choix parmi les séquences appartient au tirage, § 6.3) — amendé le 01/10 (D45 du 01/10) :
 
 1. `A` = niveaux présents dans le masque, croissants. Si `|A| < N`, renvoyer `null`.
-2. Parcourir **en ordre lexicographique** les combinaisons `S ⊆ A` de taille `N`, triées croissantes (au plus `C(5, N) ≤ 10`).
-3. Coût `cost(S) = Σᵢ |S[i] − nominal(N)[i]|`, niveaux lus comme entiers.
-4. Renvoyer la **première** combinaison de coût minimal : une égalité se départage donc vers le niveau **le plus cryptique**.
-5. `tier_index = i` ⟺ `frame_level = S[i−1]` : le niveau le plus cryptique disponible est toujours au palier 1.
+2. Parcourir **en ordre lexicographique** les combinaisons `S ⊆ A` de taille `N`, triées croissantes (au plus `C(5, N) ≤ 10`) : les niveaux d'une séquence sont donc **strictement croissants**, jamais deux fois le même.
+3. **Séquences admissibles** (`sequences()`) : celles dont chaque `S[i]` appartient à `bands(N)[i−1]`. S'il n'y en a aucune, le film est en **repli de niveau** et la seule séquence admissible est `select()`.
+4. **Séquence de référence** (`select()`) : parmi les admissibles dans les plages s'il y en a, sinon parmi toutes les combinaisons, la **première** de coût minimal, `cost(S) = Σᵢ |S[i] − nominal(N)[i]|` : une égalité se départage vers le niveau **le plus cryptique**.
+5. `tier_index = i` ⟺ `frame_level` est le `i`-ème niveau de la séquence tirée.
 
-Pourquoi le plus cryptique à égalité : le palier le mieux payé doit rester le plus difficile ; départager vers le plus évident rendrait un film à banque maigre plus rentable qu'un film complet. Pourquoi aucune graine : le repli est une propriété de la banque du film, pas du tirage ; le rendre aléatoire ferait varier d'une partie à l'autre les niveaux montrés pour un même film, sans que le curateur puisse le prévoir.
+Pourquoi le plus cryptique à égalité : le palier le mieux payé doit rester le plus difficile ; départager vers le plus évident rendrait un film à banque maigre plus rentable qu'un film complet. Pourquoi un repli sans graine : il est une propriété de la banque du film ; le rendre aléatoire ferait varier d'une partie à l'autre les niveaux montrés pour un film qui n'a pas de quoi remplir ses plages, sans que le curateur puisse le prévoir.
 
 ### 2.3 Table de cas normative
 
-Elle sert aussi de jeu de données au test « select se replie sur les niveaux disponibles les plus proches sans doublon ».
+Elle sert aussi de jeu de données au test « select se replie sur les niveaux disponibles les plus proches sans doublon ». La colonne « repli » est `usesFallback()` — amendé le 01/10 (D45 du 01/10).
 
-| N | niveaux du masque | `select` | lecture |
-|---|---|---|---|
-| 3 | 1,2,3,4,5 | 1,3,5 | nominal |
-| 3 | 1,2,4,5 | **1,2,5** | égalité de coût 1 avec 1,4,5 ; le plus cryptique gagne |
-| 3 | 1,2,3,5 | 1,3,5 | nominal |
-| 3 | 2,3,4 | 2,3,4 | le palier 1 montre un niveau 2 |
-| 2 | 1,3,5 | 1,5 | nominal |
-| 2 | 1,2,3 | 1,3 | |
-| 2 | 2,3 | 2,3 | |
-| 4 | 1,2,3,4,5 | 1,2,4,5 | nominal |
-| 4 | 1,2,3,5 | 1,2,3,5 | un seul niveau de passe 2 suffit à N=4 |
-| 4 | 1,3,5 | `null` | passe 1 seule |
-| 5 | 1,2,3,4 | `null` | |
+| N | niveaux du masque | `select` | repli | lecture |
+|---|---|---|---|---|
+| 3 | 1,2,3,4,5 | 1,3,5 | non | nominal ; huit séquences admissibles, de 1,2,4 à 2,4,5 |
+| 3 | 1,2,4,5 | **1,2,5** | non | égalité de coût 1 avec 1,4,5 ; le plus cryptique gagne |
+| 3 | 1,2,3,5 | 1,3,5 | non | nominal |
+| 3 | 2,3,4 | 2,3,4 | non | le palier 1 montre un niveau 2, dans sa plage |
+| 2 | 1,3,5 | 1,5 | non | nominal |
+| 2 | 1,2,3 | 1,3 | **oui** | aucun niveau 4 ni 5 |
+| 2 | 2,3 | 2,3 | **oui** | |
+| 4 | 1,2,3,4,5 | 1,2,4,5 | non | nominal ; 1,3,4,5 aussi admissible |
+| 4 | 1,2,3,5 | 1,2,3,5 | **oui** | un seul niveau de passe 2 suffit à N=4, mais sans niveau 4 |
+| 4 | 1,3,5 | `null` | non | passe 1 seule |
+| 5 | 1,2,3,4 | `null` | non | |
 
 ### 2.4 Invariants
 
 - `select(N, m) !== null` ⟺ `popcount(m) ≥ N` ⟺ `MovieProjection::supportsFramesPerRound(N)` (`levels_count ≥ N`). **L'éligibilité n'est jamais stockée** (`10` § 4.3).
 - Monotonie : `select(N, m) !== null` ⇒ `select(N', m) !== null` pour tout `N' < N` dans les bornes.
 - `nominal(N) == select(N, 31)` pour tout `N` ; `nominal(MAX_FRAMES_PER_ROUND) == FrameLevel::cases()`.
+- `select(N, m) ∈ sequences(N, m)` ; `sequences(N, m) === null` ⟺ `select(N, m) === null` ; `usesFallback(N, m)` ⟺ jouable et aucune séquence dans les plages — amendé le 01/10 (D45 du 01/10).
 - Un masque hors `[0, maskOf(FrameLevel::cases())]` ou un `N` hors bornes lève `InvalidArgumentException`. **Jamais d'écrêtage silencieux** : un `N` invalide qui passerait pour un autre fausserait un tirage que la matérialisation existe pour rendre rejouable.
 
 ### 2.5 Publication, éligibilité, passe 1 / passe 2 et film devenu incomplet
@@ -124,8 +140,8 @@ Elle sert aussi de jeu de données au test « select se replie sur les niveaux d
 **Le masque 1-3-5 (`MovieProjection::publishableLevelsMask()`) n'entre pas dans `select` ni dans le vivier.** C'est une garde de **transition** vers `published`, posée par le geste de publication de `20`, jamais une condition de jeu (E10-23, n° 4 ; amendements A-26 et A-75 pour « couvrant 1, 3 et 5 **à sa publication** »). Conséquences :
 
 - **Passe 1 seule** (niveaux 1, 3, 5, donc `levels_count = 3`) : le film est jouable à `N` = 2 et 3, jamais à 4 ni 5. **Au J1, le vivier à `N` = 4 et 5 vaut 0** tant que la passe 2 n'a pas commencé : le preset Hardcore (`N` = 5) est grisé avec `N` jouable le plus proche = 3 (amendement A-12), et le solo Hardcore joue à `N` = 3 (D19 du 23/09, § 4.4).
-- **Passe 2** : un seul niveau 2 **ou** 4 ajouté rend le film jouable à `N` = 4 avec repli (table § 2.3, ligne `4 | 1,2,3,5`) ; les deux ensemble le rendent jouable à `N` = 5. Aucune règle de jeu n'en est affectée : la passe 2 élargit l'éligibilité, elle ne la conditionne pas (décision 10, `00` § Fonctionnalités v1).
-- **Film publié devenu incomplet** (dernière variante d'un niveau 1, 3 ou 5 dépubliée) : il **reste `published`**, reste au vivier pour tout `N ≤ levels_count`, et se joue avec repli de niveau ; **aucune dépublication automatique**. Pourquoi : dépublier sans geste humain ferait disparaître un film d'un lobby sans cause visible, et un curateur qui corrige une variante ne doit pas perdre le film entier. Le repli rend son palier 1 **plus facile** quand le niveau 1 manque (`2,3,4,5` à `N` = 3 → `2,3,5`) : c'est pourquoi `20` signale le film « incomplet » dès que `levels_mask & publishableLevelsMask() ≠ publishableLevelsMask()` (E10-23, `20` § 6.6), et montre le repli de chaque `N` par `usesFallback()` (contrat C1), seule chose que cette spec lui fournit. Les deux prédicats diffèrent et ne se substituent pas l'un à l'autre : un film `1,2,3,5` est en repli à `N` = 4 sans être incomplet ; un film `2,3,4,5` est incomplet sans être en repli à `N` = 4.
+- **Passe 2** : un seul niveau 2 **ou** 4 ajouté rend le film jouable à `N` = 4 (table § 2.3 : `1,2,3,5` en repli, faute de niveau 4 ; `1,3,4,5` dans les plages) ; les deux ensemble le rendent jouable à `N` = 5. Aucune règle de jeu n'en est affectée : la passe 2 élargit l'éligibilité, elle ne la conditionne pas (décision 10, `00` § Fonctionnalités v1).
+- **Film publié devenu incomplet** (dernière variante d'un niveau 1, 3 ou 5 dépubliée) : il **reste `published`**, reste au vivier pour tout `N ≤ levels_count`, et se joue avec repli de niveau ; **aucune dépublication automatique**. Pourquoi : dépublier sans geste humain ferait disparaître un film d'un lobby sans cause visible, et un curateur qui corrige une variante ne doit pas perdre le film entier. Un niveau 1 manquant rend son palier 1 **plus facile** (`2,3,4,5` à `N` = 3 → niveau 2 au palier 1, dans sa plage depuis D45 du 01/10) : c'est pourquoi `20` signale le film « incomplet » dès que `levels_mask & publishableLevelsMask() ≠ publishableLevelsMask()` (E10-23, `20` § 6.6), et montre le repli de chaque `N` par `usesFallback()` (contrat C1), seule chose que cette spec lui fournit. Les deux prédicats diffèrent et ne se substituent pas l'un à l'autre : un film `1,2,3,5` est en repli à `N` = 4 sans être incomplet ; un film `2,3,4,5` est incomplet sans être en repli à `N` = 3.
 
 ---
 
@@ -518,15 +534,19 @@ pour chaque p de perm, tant que |retenus| < K :
     s      = |retenus| + 1
     œuvre  = works[p]
     film   = |œuvre| = 1 ? œuvre[0] : œuvre[prf.index(DrawContext::workMember(s), |œuvre|)]
-    niveaux = FrameLevelCoverage::select(N, maskOf(niveaux des variantsByMovie[film]))
-    si niveaux = null : journaliser l'œuvre sautée ; continuer
-    paliers = pour i de 1 à N : DrawnTier(i, VariantChooser::choose(variantes de film au niveau niveaux[i−1],
-                                                                     memorySince, prf, DrawContext::variant(s, i)), niveaux[i−1])
+    séqs   = FrameLevelCoverage::sequences(N, maskOf(niveaux des variantsByMovie[film]))
+    si séqs = null : journaliser l'œuvre sautée ; continuer
+    pour i de 1 à N :
+        permis  = { séq[i−1] : séq ∈ séqs }
+        frame   = VariantChooser::choose(variantes de film aux niveaux permis, memorySince, prf, DrawContext::variant(s, i))
+        séqs    = { séq ∈ séqs : séq[i−1] = niveau(frame) }
+        paliers += DrawnTier(i, frame, niveau(frame))
     retenus += DrawnRound(s, s ≤ M ? s : null, film, paliers)
 si |retenus| < M : PoolTooSmallException(|retenus|, M)
 renvoyer DrawResult(retenus, poolSize = W, roundsCount = M)
 ```
 
+- **Les niveaux d'un palier** (D45 du 01/10 — amendé le 01/10) : le palier `i` choisit parmi les variantes de **tous** les niveaux qu'une séquence encore possible place en `i`, puis ne garde que les séquences qui passent par le niveau choisi. La préférence « non vue par le salon » porte donc sur toute la plage, et le niveau montré en découle ; les niveaux restent strictement croissants et chaque palier reste dans sa plage, sauf repli.
 - **Une œuvre à plusieurs membres** tire son film par `workMember(s)` : un groupe entier ne compte qu'une fois et un seul de ses films entre au tirage — c'est l'exclusion mutuelle de `movie_group`, obtenue par construction plutôt que par un rejet.
 - **Le masque est recalculé depuis les variantes chargées**, jamais lu dans `movie_projection` : si la projection est périmée (le vivier a compté le film, ses variantes réelles ne couvrent plus `N` niveaux), l'œuvre est **sautée** et le parcours continue. Le journal est émis sur le canal `game` (propriété de `100`) sous le libellé `draw.work_skipped`, avec `movie_id`, `N`, le masque projeté et le masque réel, **sans aucune donnée de joueur** (forme livrée — amendé le 28/09 (E71-2) : niveau `warning`, anomalie de données que `catalog:reproject` répare ; contexte exactement `movie_id`, `frames_per_round`, `projected_levels_mask`, `levels_mask`, ni titre ni donnée de joueur ; une œuvre à plusieurs membres dont le membre tiré a une projection périmée est sautée entière, sans essai d'un autre membre) ; c'est un effet de bord qui n'entre dans aucun calcul, donc qui ne rompt pas la pureté.
 - **`sequenceIndex = 1..K`** dans l'ordre retenu ; **`roundNumber = sequenceIndex` si `≤ M`, `null` pour la réserve** (E10-45).
@@ -564,7 +584,7 @@ Salon neuf, catalogue du J1 en passe 1 (60 films, aucun groupe), `N` = 3, `M` = 
 ```php
 final readonly class VariantChooser
 {
-    public function choose(array $candidates, ?CarbonImmutable $memorySince, SeededPrf $prf, DrawContext $context): ?int; // list<VariantCandidate> d'un (film, niveau)
+    public function choose(array $candidates, ?CarbonImmutable $memorySince, SeededPrf $prf, DrawContext $context): ?int; // list<VariantCandidate> d'un palier, niveaux de sa plage mêlés
     public function substitute(Round $round, RoundTier $tier, array $excludedFrameIds, CarbonImmutable $now): ?int;  // § 8
 }
 ```
@@ -575,7 +595,7 @@ Ordre de repli complet (`00` § Le jeu en une manche, `CLAUDE.md` § 2) : **non 
 2. S'il existe au moins une variante non vue, le **groupe d'égalité** est l'ensemble des non vues ; sinon, l'ensemble des variantes de `lastSeenAt` minimal.
 3. Le groupe est trié par `frameId`, puis on renvoie `groupe[prf.index(context, |groupe|)]`.
 
-**Garde** — amendé le 28/09 (E71-1) : `choose()` lève `InvalidArgumentException` pour des candidates de niveaux mêlés : un palier ne change jamais de niveau (§ 8.1), et `substitute()` passe par le même `choose()`.
+**Niveaux mêlés** — amendé le 01/10 (D45 du 01/10), remplace la garde d'E71-1 : `choose()` accepte des candidates de plusieurs niveaux, celles d'une plage ; c'est l'appelant (§ 6.3, § 8.1) qui borne les niveaux permis.
 
 **Aucun axe joueur** : tous les joueurs voient la même image, `seen_frame` ne porte aucune colonne de joueur, et stocker « vu par le joueur » coûterait jusqu'à 360 écritures par partie pour un simple départage (`10` § 7.9). Les deux commentaires qui parlent encore d'un « repli non vue par le joueur » (encadré) sont corrigés dans le lot L30-5 (n° 20).
 
@@ -600,21 +620,21 @@ La **règle de choix** appartient à cette spec ; la **détection**, l'**instant
 
 `VariantChooser::substitute($round, $tier, $excludedFrameIds, $now)` :
 
-- **candidats** : variantes du film `round.movie_id`, **au niveau `tier.frame_level` et à lui seul**, qui satisfont le prédicat unique de variante jouable, **dont le fichier est présent sur le disque `frames`** (exigence de `60`, contrat C8), moins `tier.frame_id` et moins `$excludedFrameIds` ;
+- **candidats** — amendé le 01/10 (D45 du 01/10) : variantes du film `round.movie_id`, **aux niveaux de la plage `bands(game.frames_per_round)[tier.tier_index − 1]`, plus `tier.frame_level`** (un palier tiré en repli garde son niveau), **strictement entre** le niveau du palier précédent et celui du palier suivant (le niveau de l'image **servie** quand le voisin a été substitué), qui satisfont le prédicat unique de variante jouable, **dont le fichier est présent sur le disque `frames`** (exigence de `60`, contrat C8), moins `tier.frame_id` et moins `$excludedFrameIds` ;
 - **mémoire** : `seen_frame` du salon `game.room_id` avec `memorySince = RoomMemoryWindow::since(room, $now)` ; **aucune mémoire en solo** ;
 - **choix** : la règle du § 7.1, contexte `DrawContext::substitute(round.sequence_index, tier.tier_index)` ;
-- **résultat** : un `frame.id` de même niveau, ou `null` — et `null` signifie que `60` annule la manche (`no_variant_available`).
+- **résultat** : un `frame.id` d'un niveau permis, ou `null` — et `null` signifie que `60` annule la manche (`no_variant_available`).
 
-Pourquoi **jamais un autre niveau** : le palier matérialisé porte une durée, une valeur en points et une place dans l'échelle de cryptivité ; servir un niveau 5 au palier 1 donnerait la réponse au palier le mieux payé, et changer `frame_level` rendrait faux le journal de la manche. Une substitution ne touche **aucune** colonne de temps ni de points (`10` § 7.4).
+Pourquoi **jamais hors de la plage ni hors de l'ordre** : le palier matérialisé porte une durée, une valeur en points et une place dans l'échelle de cryptivité ; servir un niveau 5 au palier 1 donnerait la réponse au palier le mieux payé. `round_tier.frame_level` reste le niveau **tiré** ; le niveau servi se lit sur `served_frame_id`. Une substitution ne touche **aucune** colonne de temps ni de points (`10` § 7.4).
 
-La présence sur disque est testée **par `substitute()` lui-même, avant le choix**, sur les seuls candidats de ce niveau (quelques appels `exists()` sur un chemin rare) : le résultat reste une fonction des entrées, et une variante au fichier manquant n'est jamais proposée.
+La présence sur disque est testée **par `substitute()` lui-même, avant le choix**, sur les seuls candidats des niveaux permis (quelques appels `exists()` sur un chemin rare) : le résultat reste une fonction des entrées, et une variante au fichier manquant n'est jamais proposée.
 
 **Forme livrée** — amendé le 28/09 (E72-2, E90-2) :
 
 - **« Fichier présent » = `Frame::hasGameFile()`** : `game_path` possédé par `FrameStoragePrefix::Game` (`owns()`, la garde même de `/f/`, partie 1 du prédicat de service de C8) **et** `exists()` sur le disque `frames`, une `FilesystemException` valant absence. Sans la garde de préfixe, une candidate au chemin hors de `game/` serait choisie puis refusée en 404 toute la manche. C'est le **même prédicat** que lit `60` à la frappe pour retenir la variante tirée (`Frame::isServable()` et `hasGameFile()`, livré par L60-5), et qui revérifie la candidate rendue par `substitute()` avant de l'écrire : une seule écriture de la présence.
-- **Ordre** : une requête de candidates (portée `Frame::servable()`, film, niveau du palier, exclusions, tri par `id`, jointure gauche `seen_frame` du salon quand il y en a un) → filtre de présence → liste vide : `null` **sans lire la mémoire** → `RoomMemoryWindow::since(room_id, $now)` → `choose()` dans `DrawContext::substitute(s, i)`, graine `SeededPrf::forGame($round->game)`.
+- **Ordre** : une requête des voisins du palier, puis une requête de candidates (portée `Frame::servable()`, film, niveaux permis, exclusions, tri par `id`, jointure gauche `seen_frame` du salon quand il y en a un) → filtre de présence → liste vide : `null` **sans lire la mémoire** → `RoomMemoryWindow::since(room_id, $now)` → `choose()` dans `DrawContext::substitute(s, i)`, graine `SeededPrf::forGame($round->game)`.
 - **Salon** lu sur `game.room_id` par `round->game`, déjà nécessaire pour la graine ; solo ⇔ `room_id` nul (même règle que `PoolScope::forGame`) : ni `seen_frame` ni `round` lus.
-- **`tier.frame_id` nul** (frame supprimée, `nullOnDelete`) : aucune exclusion pour elle, la substitution se fait au niveau dénormalisé `tier.frame_level`.
+- **`tier.frame_id` nul** (frame supprimée, `nullOnDelete`) : aucune exclusion pour elle, le niveau dénormalisé `tier.frame_level` reste permis.
 - **Garde** (ajout pur) : un palier d'une autre manche (`tier.round_id ≠ round.id`) lève `InvalidArgumentException`. `60` l'appelle **au moment de la frappe du `serve_token` du palier** — à l'ouverture du palier `i − 1`, ou à la programmation de la manche pour `i = 1` (contrat C8) ; si le fichier du candidat retourné disparaît entre le choix et la frappe, `60` rappelle la méthode en l'ajoutant à `$excludedFrameIds`, boucle bornée par le nombre de candidats. **Idempotence** : `served_frame_id` et `substitution_reason` sont écrits une seule fois par `60` ; un job de frappe rejoué ne recalcule rien.
 
 ### 8.2 Film de remplacement

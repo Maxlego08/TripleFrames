@@ -432,14 +432,14 @@ it('un rejeu à graine et entrées figées reproduit exactement films et variant
 
         $works = array_values($works);
         $target = min(RoomSettingsBounds::MIN_ROUNDS_COUNT + PlatformLimits::DEFAULT_DRAW_SUBSTITUTE_MARGIN, count($works));
-        $tierLevels = FrameLevelCoverage::select($framesPerRound, $fullMask);
+        $tierSequences = FrameLevelCoverage::sequences($framesPerRound, $fullMask);
 
         // Une réserve existe (K > M) : les contextes des manches de réserve
         // sont éprouvés aussi.
         expect($works)->toHaveCount(9)
             ->and($target)->toBeGreaterThan(RoomSettingsBounds::MIN_ROUNDS_COUNT)
-            ->and($tierLevels)->toHaveCount($framesPerRound);
-        assert($tierLevels !== null);
+            ->and($tierSequences)->not->toBeNull();
+        assert($tierSequences !== null);
 
         foreach (range(0, 5) as $k) {
             $result = gameDrawer()->drawFrom($oracleInput, gameDrawPrf($k));
@@ -467,23 +467,38 @@ it('un rejeu à graine et entrées figées reproduit exactement films et variant
                     $membersPicked[$movieId] = true;
                 }
 
-                // 4. Chaque palier `i` : `variant(s, i)` sur les variantes du
-                //    niveau `select(N, masque)[i − 1]`.
+                // 4. Chaque palier `i` : `variant(s, i)` sur les variantes de
+                //    tous les niveaux qu'une séquence encore possible place en
+                //    position `i` (D45 du 01/10).
+                $remaining = $tierSequences;
+
                 foreach (range(1, $framesPerRound) as $tierIndex) {
-                    $level = $tierLevels[$tierIndex - 1];
+                    $allowed = array_map(static fn (array $sequence): FrameLevel => $sequence[$tierIndex - 1], $remaining);
                     $tier = $round->tiers[$tierIndex - 1];
-                    $sameLevel = array_values(array_map(
+                    $inBand = array_values(array_filter(
+                        $fullBanks[$movieId],
+                        static fn (VariantCandidate $variant): bool => in_array($variant->frameLevel, $allowed, true),
+                    ));
+                    $picked = gameDrawSeedPick($prf, $sequenceIndex, $tierIndex, array_map(
                         static fn (VariantCandidate $variant): int => $variant->frameId,
-                        array_filter(
-                            $fullBanks[$movieId],
-                            static fn (VariantCandidate $variant): bool => $variant->frameLevel === $level,
-                        ),
+                        $inBand,
+                    ));
+                    $level = array_values(array_filter(
+                        $inBand,
+                        static fn (VariantCandidate $variant): bool => $variant->frameId === $picked,
+                    ))[0]->frameLevel;
+                    $remaining = array_values(array_filter(
+                        $remaining,
+                        static fn (array $sequence): bool => $sequence[$tierIndex - 1] === $level,
                     ));
 
-                    expect($sameLevel)->toHaveCount(2)
+                    expect($inBand)->toHaveCount(2 * count(array_unique(array_map(
+                        static fn (FrameLevel $allowedLevel): int => $allowedLevel->value,
+                        $allowed,
+                    ))))
                         ->and($tier->tierIndex)->toBe($tierIndex)
                         ->and($tier->frameLevel)->toBe($level)
-                        ->and($tier->frameId)->toBe(gameDrawSeedPick($prf, $sequenceIndex, $tierIndex, $sameLevel));
+                        ->and($tier->frameId)->toBe($picked);
                 }
             }
         }
@@ -585,19 +600,19 @@ it('tier_index suit les niveaux croissants de FrameLevelCoverage', function () {
         foreach ($result->rounds as $round) {
             $bank = $banks[$round->movieId];
             $mask = FrameLevelCoverage::maskOf(array_map(static fn (VariantCandidate $v): FrameLevel => $v->frameLevel, $bank));
-            $expected = FrameLevelCoverage::select($framesPerRound, $mask);
+            $admissible = FrameLevelCoverage::sequences($framesPerRound, $mask);
             $fallbacks += FrameLevelCoverage::usesFallback($framesPerRound, $mask) ? 1 : 0;
 
+            // Les niveaux tirés forment une séquence admissible : chaque palier
+            // dans sa plage, ou la séquence de repli (D45 du 01/10).
             expect(array_map(static fn (DrawnTier $tier): int => $tier->tierIndex, $round->tiers))
                 ->toBe(range(1, $framesPerRound))
-                ->and(array_map(static fn (DrawnTier $tier): FrameLevel => $tier->frameLevel, $round->tiers))
-                ->toBe($expected);
+                ->and($admissible)->toContain(array_map(static fn (DrawnTier $tier): FrameLevel => $tier->frameLevel, $round->tiers));
 
             $previous = 0;
 
             foreach ($round->tiers as $tier) {
-                // Le niveau le plus cryptique disponible au palier 1, puis
-                // strictement croissant.
+                // Des niveaux strictement croissants.
                 expect($tier->frameLevel->value)->toBeGreaterThan($previous);
                 $previous = $tier->frameLevel->value;
 
@@ -683,12 +698,13 @@ it('préférence de variante : non vue par le salon, puis vue la moins récemmen
         expect(array_keys($picked))->toEqualCanonicalizing([11, 14]);
     }
 
-    // Une liste vide rend null ; un palier ne mêle jamais deux niveaux.
+    // Une liste vide rend null ; les niveaux d'une plage se mêlent, et la
+    // préférence « non vue » porte sur toute la plage (D45 du 01/10).
     expect($chooser->choose([], $since, $prf, $contexts[0]))->toBeNull()
-        ->and(fn () => $chooser->choose([
-            new VariantCandidate(11, FrameLevel::Level1, null),
-            new VariantCandidate(12, FrameLevel::Level3, null),
-        ], $since, $prf, $contexts[0]))->toThrow(InvalidArgumentException::class);
+        ->and($chooser->choose([
+            new VariantCandidate(11, FrameLevel::Level1, $this->now->subDay()),
+            new VariantCandidate(12, FrameLevel::Level2, null),
+        ], $since, $prf, $contexts[0]))->toBe(12);
 
     // Par la base : la mémoire lue est celle DU salon, jamais d'un autre.
     platformLimitsConfigure(['draw_substitute_margin' => 0]);

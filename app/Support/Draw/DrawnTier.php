@@ -8,8 +8,9 @@ use App\Enums\FrameLevel;
  * Un palier tiré (spec 30 § 6.3, contrat C3) : la variante que la manche
  * montrera au palier `tierIndex`.
  *
- * `tierIndex = i` ⟺ `frameLevel = FrameLevelCoverage::select(N, masque)[i − 1]` :
- * le niveau le plus cryptique disponible est toujours au palier 1 (§ 2.2).
+ * `frameLevel` appartient à la plage `FrameLevelCoverage::bands(N)[i − 1]`
+ * (sauf repli de niveau) et croît strictement avec `tierIndex` (§ 2.2, D45 du
+ * 01/10).
  * Matérialisé en `round_tier` (`tier_index`, `frame_id`, `frame_level`) par la
  * spec 60 ; les instants et les points n'y sont pas, 60 et 80 les dérivent de
  * `settings_snapshot`.

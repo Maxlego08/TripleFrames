@@ -1168,9 +1168,10 @@ it('un salon créé sur le catalogue de démonstration peut lancer une partie de
         'BOUT EN BOUT — une manche porte un film hors du vivier.',
     );
 
-    // Chaque manche porte ses N paliers : niveau nominal, variante servable de
-    // son film, durée, décalage et valeur figés depuis les réglages (C6 § 5).
-    $levels = FrameLevelCoverage::nominal($settings->framesPerRound);
+    // Chaque manche porte ses N paliers : niveau dans la plage du palier
+    // (D45 du 01/10), variante servable de son film, durée, décalage et valeur
+    // figés depuis les réglages (C6 § 5).
+    $bands = FrameLevelCoverage::bands($settings->framesPerRound);
 
     foreach ($rounds as $round) {
         $this->assertSame(RoundStatus::Pending, $round->status);
@@ -1180,12 +1181,19 @@ it('un salon créé sur le catalogue de démonstration peut lancer une partie de
         $tiers = RoundTier::query()->where('round_id', $round->id)->orderBy('tier_index')->get();
 
         $this->assertSame(range(1, $settings->framesPerRound), $tiers->pluck('tier_index')->all());
-        $this->assertSame(
-            $levels,
-            $tiers->pluck('frame_level')->all(),
-            "BOUT EN BOUT — la manche {$round->sequence_index} ne sert pas les niveaux nominaux de N = "
-            ."{$settings->framesPerRound} : le catalogue de démonstration est tombé dans le repli de niveau.",
-        );
+        $previous = 0;
+
+        foreach ($tiers as $tier) {
+            $this->assertContains(
+                $tier->frame_level,
+                $bands[$tier->tier_index - 1],
+                "BOUT EN BOUT — la manche {$round->sequence_index} sert au palier {$tier->tier_index} un niveau hors "
+                ."de sa plage à N = {$settings->framesPerRound} : le catalogue de démonstration est tombé dans le "
+                .'repli de niveau.',
+            );
+            $this->assertGreaterThan($previous, $tier->frame_level->value);
+            $previous = $tier->frame_level->value;
+        }
 
         foreach ($tiers as $tier) {
             $frame = Frame::query()->findOrFail($tier->frame_id);

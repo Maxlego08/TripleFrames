@@ -37,11 +37,13 @@ use LogicException;
  *    `index(DrawContext::workMember(s), |œuvre|)` : l'exclusion mutuelle d'un
  *    `movie_group` est obtenue par construction, jamais par un rejet ;
  * 4. le masque est **recalculé depuis les variantes chargées**, jamais lu dans
- *    la projection : si `FrameLevelCoverage::select(N, masque)` rend `null`
+ *    la projection : si `FrameLevelCoverage::sequences(N, masque)` rend `null`
  *    (projection périmée), l'œuvre est **sautée**, journalisée
  *    (`draw.work_skipped`, canal `game`), et le parcours continue ;
- * 5. chaque palier `i` reçoit une variante du niveau `select(N, masque)[i − 1]`,
- *    choisie par {@see VariantChooser::choose()} dans `DrawContext::variant(s, i)` ;
+ * 5. chaque palier `i` reçoit une variante d'un niveau de sa plage, niveaux
+ *    strictement croissants (D45 du 01/10), choisie par
+ *    {@see VariantChooser::choose()} dans `DrawContext::variant(s, i)` parmi
+ *    les variantes de tous les niveaux encore possibles ;
  * 6. `sequenceIndex = 1..K` dans l'ordre retenu, `roundNumber = s` si `s ≤ M`,
  *    nul pour la réserve ; moins de `M` retenus lève {@see PoolTooSmallException}.
  *
@@ -131,9 +133,9 @@ final readonly class GameDrawer
                 static fn (VariantCandidate $variant): FrameLevel => $variant->frameLevel,
                 $variants,
             ));
-            $levels = FrameLevelCoverage::select($input->framesPerRound, $levelsMask);
+            $sequences = FrameLevelCoverage::sequences($input->framesPerRound, $levelsMask);
 
-            if ($levels === null) {
+            if ($sequences === null) {
                 self::logSkippedWork($candidate, $input->framesPerRound, $levelsMask);
 
                 continue;
@@ -143,7 +145,7 @@ final readonly class GameDrawer
                 sequenceIndex: $sequenceIndex,
                 roundNumber: $sequenceIndex <= $roundsCount ? $sequenceIndex : null,
                 movieId: $candidate->movieId,
-                tiers: $this->tiers($sequenceIndex, $levels, $variants, $input->memorySince, $prf),
+                tiers: $this->tiers($sequenceIndex, $sequences, $variants, $input->memorySince, $prf),
             );
         }
 
@@ -155,45 +157,75 @@ final readonly class GameDrawer
     }
 
     /**
-     * Les `N` paliers d'une manche, par niveau croissant : `tierIndex = i` ⟺
-     * `frameLevel = levels[i − 1]`.
+     * Les `N` paliers d'une manche, palier par palier (D45 du 01/10) : le
+     * palier `i` choisit parmi les variantes de **tous** les niveaux qu'une
+     * séquence encore possible place en position `i`, puis ne garde que les
+     * séquences qui passent par le niveau choisi. Les niveaux sont donc
+     * strictement croissants et chaque palier reste dans sa plage, sauf repli.
      *
-     * @param  list<FrameLevel>  $levels  `FrameLevelCoverage::select(N, masque)`.
+     * @param  non-empty-list<list<FrameLevel>>  $sequences  `FrameLevelCoverage::sequences(N, masque)`.
      * @param  list<VariantCandidate>  $variants  Toutes les variantes du film.
      * @return list<DrawnTier>
      */
     private function tiers(
         int $sequenceIndex,
-        array $levels,
+        array $sequences,
         array $variants,
         ?CarbonImmutable $memorySince,
         SeededPrf $prf,
     ): array {
         $tiers = [];
+        $framesPerRound = count($sequences[0]);
 
-        foreach ($levels as $offset => $level) {
+        for ($offset = 0; $offset < $framesPerRound; $offset++) {
             $tierIndex = $offset + 1;
 
+            $allowed = array_map(static fn (array $sequence): FrameLevel => $sequence[$offset], $sequences);
+
+            $candidates = array_values(array_filter(
+                $variants,
+                static fn (VariantCandidate $variant): bool => in_array($variant->frameLevel, $allowed, true),
+            ));
+
             $frameId = $this->variants->choose(
-                array_values(array_filter(
-                    $variants,
-                    static fn (VariantCandidate $variant): bool => $variant->frameLevel === $level,
-                )),
+                $candidates,
                 $memorySince,
                 $prf,
                 DrawContext::variant($sequenceIndex, $tierIndex),
             );
 
-            // `select` n'a rendu que des niveaux présents dans le masque des
+            // `sequences` n'a rendu que des niveaux présents dans le masque des
             // variantes chargées : chaque palier en a au moins une (§ 7.3).
             if ($frameId === null) {
                 throw new LogicException('GameDrawer : un niveau retenu par le masque n’a aucune variante.');
             }
 
+            $level = self::levelOf($candidates, $frameId);
+            $sequences = array_values(array_filter(
+                $sequences,
+                static fn (array $sequence): bool => $sequence[$offset] === $level,
+            ));
+
             $tiers[] = new DrawnTier($tierIndex, $frameId, $level);
         }
 
         return $tiers;
+    }
+
+    /**
+     * Le niveau de la variante retenue parmi les candidates.
+     *
+     * @param  list<VariantCandidate>  $candidates
+     */
+    private static function levelOf(array $candidates, int $frameId): FrameLevel
+    {
+        foreach ($candidates as $candidate) {
+            if ($candidate->frameId === $frameId) {
+                return $candidate->frameLevel;
+            }
+        }
+
+        throw new LogicException('GameDrawer : la variante retenue n’est pas parmi les candidates.');
     }
 
     /**

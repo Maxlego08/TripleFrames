@@ -603,13 +603,14 @@ test('les séquences par N suivent FrameLevelCoverage et signalent le repli', fu
             ->has("sequencePreview.{$position}.after_review.frames", count($afterReview ?? [])));
     }
 
-    // À N = 3 : en jeu, le repli joue 1, 2 et 5 ; après revue, la répartition
+    // À N = 3 : en jeu, la séquence de référence est 1, 2 et 5, dans les
+    // plages, donc sans repli (D45 du 01/10) ; après revue, la répartition
     // nominale 1, 3 et 5 revient, avec l'image en attente de revue.
     $position = 3 - RoomSettingsBounds::MIN_FRAMES_PER_ROUND;
 
     $response->assertInertia(fn (Assert $page) => $page
         ->where("sequencePreview.{$position}.in_play.levels", [1, 2, 5])
-        ->where("sequencePreview.{$position}.in_play.usesFallback", true)
+        ->where("sequencePreview.{$position}.in_play.usesFallback", false)
         ->where("sequencePreview.{$position}.in_play.frames.0", ['level' => 1, 'game_url' => frameBankGameUrl($published[0])])
         ->where("sequencePreview.{$position}.in_play.frames.1", ['level' => 2, 'game_url' => frameBankGameUrl($published[1])])
         ->where("sequencePreview.{$position}.in_play.frames.2", ['level' => 5, 'game_url' => frameBankGameUrl($published[3])])

@@ -93,7 +93,7 @@ export default function AdminLayout({
                     <AdminFooter />
                 </div>
             </SidebarProvider>
-            <Toaster />
+            <Toaster position="top-right" />
         </>
     );
 }

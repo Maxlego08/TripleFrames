@@ -41,11 +41,11 @@ use LogicException;
  *    est vrai **et** si son dérivé est présent ({@see Frame::hasGameFile()} :
  *    préfixe `game/` et fichier sur le disque `frames` — la même présence que
  *    les candidates de substitution, E72-2) ;
- * 2. sinon, {@see VariantChooser::substitute()} (contrat C3 : même
- *    `frame_level`, servable, fichier présent, PRF déterministe), avec
+ * 2. sinon, {@see VariantChooser::substitute()} (contrat C3 : plage du
+ *    palier, niveaux croissants, servable, fichier présent, PRF déterministe), avec
  *    `substitution_reason = frame_unavailable`, rappelée en excluant la
  *    candidate tant que son fichier manque — boucle bornée par le nombre de
- *    variantes du film à ce niveau ;
+ *    variantes du film dans cette plage ;
  * 3. sans candidate : `CancelRound(no_variant_available)`, **aucun jeton
  *    frappé** — la manche est annulée, remplacée ou la partie gelée
  *    (§ 15.2).
@@ -153,7 +153,7 @@ final readonly class MintTierServeToken
     }
 
     /**
-     * La variante de substitution du palier, même niveau, fichier présent —
+     * La variante de substitution du palier, même plage, fichier présent —
      * ou `null` : aucune ne reste.
      *
      * `substitute()` écarte déjà toute candidate au fichier absent ; la

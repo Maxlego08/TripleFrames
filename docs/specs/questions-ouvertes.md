@@ -472,6 +472,24 @@ Le 01/10/2026, le porteur a demandé de pouvoir donner à chaque film ses thème
 |---|---|---|---|---|
 | D44 | Leurres apparentés à la cible | **oui** : saga > studio, saga ou manuel > genre, un seul groupe pour les trois leurres, catalogue publié entier, puis R1-R4 inchangée ; mêmes groupes en mode dégradé | **oui** — la règle de D21 du 23/09 gagne un étage avant R1 et avant R3 ; deux contextes de plus au registre `DrawContext` | `70` § 10.3, § 10.3 bis, § 10.4, § 10.9, L70-7 ; `30` § 5.3, § 5.4, § 10.1, § 11, § 13.3 ; `10` § 7.2, § 7.8 ; `CLAUDE.md` § 2 |
 
+### D45. Comment les images d'une manche sont-elles choisies parmi les niveaux ? — **par plages de niveaux, une par palier**
+
+**Demande du porteur.** « Si l'utilisateur veut 2 images, on doit piocher dans les niveaux 1 et 2 pour la première, puis dans 4 et 5 pour la seconde ; 3 images : 1 et 2, puis 2, 3 et 4, puis 4 et 5 ; 4 images : 1, puis 2 et 3, puis 4, puis 5 ; 5 images : une image par niveau. »
+
+**Ce que la décision arrête** (règle complète : `30` § 2.1 bis, § 2.2, § 6.3, § 8.1) :
+
+1. **Plages** : N=2 → 1-2 | 4-5 ; N=3 → 1-2 | 2-4 | 4-5 ; N=4 → 1 | 2-3 | 4 | 5 ; N=5 → 1 | 2 | 3 | 4 | 5, écrites dans `FrameLevelCoverage::bands()`.
+2. **Dans une plage** : les variantes de tous ses niveaux sont mises ensemble, puis la règle habituelle s'applique (non vue par le salon, puis vue la moins récemment, puis la graine) ; le niveau montré en découle.
+3. **Chevauchement** (N=3) : niveaux **strictement croissants** d'un palier au suivant, jamais deux fois le même niveau.
+4. **Banque qui ne remplit pas ses plages** : le repli de niveau actuel est conservé (film jouable dès `levels_count ≥ N`, séquence déterministe `select()`) ; vivier et requête inchangés.
+5. **Substitution** : dans la plage du palier (plus son niveau tiré), strictement entre les niveaux de ses voisins, celui de l'image servie pour un voisin substitué.
+
+**Conséquence assumée.** Un même film ne montre plus les mêmes niveaux d'une partie à l'autre : à N=3, une banque complète admet huit séquences, de 1,2,4 à 2,4,5. Le palier 1 peut montrer un niveau 2 et le dernier palier un niveau 4 pour un film complet. L'aperçu du back-office montre la séquence de référence (la plus proche de la répartition nominale), pas toutes les séquences possibles. Une décision : elle se cite « D45 du 01/10 ».
+
+| # | Décision | Réponse retenue | Écart | Inscrite dans |
+|---|---|---|---|---|
+| D45 | Plages de niveaux par palier | **oui** : plages ci-dessus, variantes de la plage mêlées, niveaux strictement croissants, repli conservé, substitution dans la plage | **oui** — la répartition nominale devient une référence ; la garde « un seul niveau » d'E71-1 tombe | `30` § 2, § 6.3, § 7.1, § 8.1 ; `00` § Le jeu en une manche ; `10` § 15 ; `CLAUDE.md` § 2 |
+
 ---
 
 ## Seule question encore ouverte — le nom de domaine (décision 5)
