@@ -308,7 +308,7 @@ Interface **multilingue** (FR + EN en v1), langue choisie par joueur ; **code, t
 | Preset du site | `setting_preset` | Réglages fournis par le site, accessibles à tous, non modifiables. |
 | Configuration sauvegardée | `saved_config` | Réglages nommés appartenant à un compte, avec drapeau « par défaut ». |
 | Onglet Simple / Avancé | `simple` / `advanced` | Deux vues du même objet de réglages, jamais deux schémas. |
-| Bonne réponse enregistrée | `guess` | Ligne écrite **uniquement** quand la réponse est acceptée : score, palier et instantané de la règle figés au verrouillage. **Les tentatives fausses ne sont jamais stockées**, seulement comptées (`round_player.wrong_attempts`). |
+| Bonne réponse enregistrée | `guess` | Ligne écrite **uniquement** quand la réponse est acceptée : score, palier et instantané de la règle figés au verrouillage. Les tentatives fausses sont comptées (`round_player.wrong_attempts`) et, depuis D46 du 01/10, journalisées dans `wrong_answer` pour l'inspection admin (— amendé le 01/10). |
 | Bonne réponse | `answer` | Réponse validée par le serveur. |
 | Proposition (QCM) | `choice` | Une des 4 options, générée dans la langue du joueur. |
 | Révélation | `reveal` | Fin de manche : les images de la manche déjà servies, le titre dans la langue du joueur, le titre original s'il diffère et l'année (D14 du 23/09). *Amendé le 23/09.* |

@@ -1243,8 +1243,8 @@ export type AdminAccessCandidate = {
 
 /**
  * Les cas du journal d'administration — miroir de la liste FERMÉE
- * `App\Enums\AdminActionType` (quarante-sept cas : D41 du 30/09, D42 du 30/09,
- * D43 du 01/10).
+ * `App\Enums\AdminActionType` (cinquante et un cas : D41 du 30/09, D42 du
+ * 30/09, D43 du 01/10, D46 du 01/10).
  */
 export type AdminActionTypeValue =
     | 'role.changed'
@@ -1290,6 +1290,10 @@ export type AdminActionTypeValue =
     | 'accounts.access_viewed'
     | 'user.looked_up'
     | 'user.viewed'
+    | 'games.directory_viewed'
+    | 'game.viewed'
+    | 'players.directory_viewed'
+    | 'player.viewed'
     | 'theme.created'
     | 'theme.updated'
     | 'theme.published'
@@ -1305,7 +1309,10 @@ export type AdminActionSubjectValue =
     | 'site'
     | 'import_run'
     | 'accounts'
-    | 'theme';
+    | 'theme'
+    | 'game'
+    | 'games'
+    | 'players';
 
 /** Les deux classes de conservation — `App\Enums\AdminActionRetention`. */
 export type AdminActionRetentionValue = 'permanent' | 'rolling_12m';
@@ -1434,4 +1441,204 @@ export type AdminThemeAbilities = {
 export type AdminThemePublication = {
     min_works: number;
     frames_per_round: number;
+};
+
+/*
+ * --- Inspection des parties et des sièges (spec 20 § 12.2, D46 du 01/10) ---
+ *
+ * Miroir EXACT de `App\Support\Admin\GameInspectionPresenter`. Une manche
+ * non divulgable (`disclosed: false`) arrive sans film, sans paliers et sans
+ * participants : le serveur ne les a jamais chargés (règle 3).
+ */
+
+export type InspectionGameStatus =
+    | 'running'
+    | 'paused'
+    | 'completed'
+    | 'interrupted';
+
+export type InspectionGameMode = 'multiplayer' | 'solo';
+
+export type InspectionInputDifficulty = 'easy' | 'normal' | 'expert';
+
+export type InspectionRoundStatus =
+    | 'pending'
+    | 'running'
+    | 'revealing'
+    | 'completed'
+    | 'cancelled';
+
+export type InspectionInputState =
+    | 'open'
+    | 'text_exhausted'
+    | 'locked'
+    | 'qcm_wrong'
+    | 'attempts_exhausted'
+    | 'revealed'
+    | 'skipped';
+
+export type InspectionSeatStatus = 'playing' | 'left' | 'kicked';
+
+export type InspectionConnectionState = 'connected' | 'disconnected' | 'left';
+
+export type InspectionAnswerSource = 'text' | 'choice';
+
+export type InspectionMatchKind =
+    | 'title'
+    | 'alias'
+    | 'prefix'
+    | 'subtitle'
+    | 'choice';
+
+export type InspectionIncidentReason =
+    | 'frame_unavailable'
+    | 'no_variant_available'
+    | 'movie_withdrawn'
+    | 'choices_unavailable';
+
+/** L'identité d'un siège ; `nickname` nul = pseudo effacé à l'archivage. */
+export type InspectionPlayer = {
+    public_id: string;
+    nickname: string | null;
+    erased: boolean;
+    masked: boolean;
+    solo: boolean;
+    room_code: string | null;
+    user: { id: number; name: string } | null;
+    joined_at: string | null;
+    last_seen_at: string | null;
+};
+
+export type InspectionPlayerRow = InspectionPlayer & { games_count: number };
+
+export type InspectionGameRow = {
+    id: number;
+    mode: InspectionGameMode;
+    status: InspectionGameStatus;
+    input_difficulty: InspectionInputDifficulty;
+    frames_per_round: number;
+    rounds_count: number;
+    rounds_completed: number;
+    room_code: string | null;
+    participants_count: number;
+    started_at: string | null;
+    ended_at: string | null;
+};
+
+export type InspectionGameDetail = InspectionGameRow & {
+    paused_at: string | null;
+    terminal: boolean;
+    settings: {
+        round_duration: number;
+        tier_durations: number[];
+        tier_points: number[];
+        reveal_duration: number;
+        speed_bonus: boolean;
+        attempts_per_round: number;
+        max_answer_length: number;
+        capacity: number;
+        allow_late_join: boolean;
+    };
+    versions: { settings: number; scoring: number; validation: number };
+};
+
+export type InspectionLeaderboardLine = {
+    player: InspectionPlayer;
+    status: InspectionSeatStatus;
+    first_round_number: number | null;
+    rounds_played: number | null;
+    correct_answers: number | null;
+    final_score: number | null;
+    final_rank: number | null;
+};
+
+export type InspectionGuess = {
+    received_at: string | null;
+    answered_at_ms: number;
+    tier_index: number;
+    lock_rank: number;
+    source: InspectionAnswerSource;
+    match_kind: InspectionMatchKind;
+    answer_key_normalized: string;
+    submitted_normalized: string;
+    edit_distance: number;
+    prefix_was_ambiguous: boolean;
+    points_tier: number;
+    points_bonus: number;
+    points_total: number;
+};
+
+export type InspectionWrongAnswer = {
+    source: InspectionAnswerSource;
+    submitted_text: string;
+    submitted_normalized: string;
+    attempt_number: number | null;
+    received_at: string | null;
+    answered_at_ms: number;
+    tier_index: number | null;
+};
+
+export type InspectionParticipant = {
+    player_id: string | null;
+    nickname: string | null;
+    input_state: InspectionInputState;
+    wrong_attempts: number;
+    input_closed_at: string | null;
+    guess: InspectionGuess | null;
+    wrong_answers: InspectionWrongAnswer[];
+};
+
+export type InspectionTier = {
+    tier_index: number;
+    frame_level: number;
+    substitution_reason: InspectionIncidentReason | null;
+    starts_at_offset_ms: number;
+    duration_ms: number;
+    points: number;
+    served_at: string | null;
+};
+
+type InspectionRoundBase = {
+    sequence_index: number;
+    round_number: number | null;
+    status: InspectionRoundStatus;
+    started_at: string | null;
+    ended_at: string | null;
+    cancel_reason: InspectionIncidentReason | null;
+    disclosed: boolean;
+    movie: {
+        id: number;
+        title_original: string | null;
+        titles: Record<string, string>;
+    } | null;
+    found_count: number | null;
+    tiers: InspectionTier[];
+};
+
+export type InspectionRound = InspectionRoundBase & {
+    participants: InspectionParticipant[];
+};
+
+export type InspectionPlayerRound = InspectionRoundBase & {
+    participation: InspectionParticipant | null;
+};
+
+export type InspectionPlayerGame = {
+    game: InspectionGameRow;
+    status: InspectionSeatStatus;
+    final_score: number | null;
+    final_rank: number | null;
+    correct_answers: number | null;
+    rounds: InspectionPlayerRound[];
+};
+
+export type InspectionGameFilters = {
+    state: 'running' | 'ended';
+    mode: InspectionGameMode | null;
+    room: string | null;
+};
+
+export type InspectionPlayerFilters = {
+    q: string | null;
+    mode: 'room' | 'solo' | null;
 };

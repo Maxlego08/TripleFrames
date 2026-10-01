@@ -3,6 +3,7 @@ import {
     BookOpen,
     Clapperboard,
     DownloadCloud,
+    Gamepad2,
     Gauge,
     LayoutDashboard,
     ListChecks,
@@ -10,6 +11,7 @@ import {
     ScrollText,
     ShieldCheck,
     Tags,
+    UserRound,
     Users,
 } from 'lucide-react';
 import { useEffect, useRef } from 'react';
@@ -44,8 +46,10 @@ import {
 import { index as accessIndex } from '@/routes/admin/access';
 import { index as catalogIndex } from '@/routes/admin/catalog';
 import { index as curationIndex } from '@/routes/admin/curation';
+import { index as gamesIndex } from '@/routes/admin/games';
 import { index as importIndex } from '@/routes/admin/import';
 import { index as journalIndex } from '@/routes/admin/journal';
+import { index as playersIndex } from '@/routes/admin/players';
 import { index as reviewIndex } from '@/routes/admin/review';
 import { index as themesIndex } from '@/routes/admin/themes';
 import { index as throughputIndex } from '@/routes/admin/throughput';
@@ -184,6 +188,22 @@ export function AdminSidebar() {
             title: t('admin.nav.journal'),
             href: journalIndex(),
             icon: ScrollText,
+            minRole: 'admin',
+            prefetch: false,
+        },
+        // L'inspection des parties et des sièges (lignes 36 et 42, D46 du
+        // 01/10) : chaque visite est consignée, donc jamais préchargée.
+        {
+            title: t('admin.nav.games'),
+            href: gamesIndex(),
+            icon: Gamepad2,
+            minRole: 'admin',
+            prefetch: false,
+        },
+        {
+            title: t('admin.nav.players'),
+            href: playersIndex(),
+            icon: UserRound,
             minRole: 'admin',
             prefetch: false,
         },

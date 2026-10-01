@@ -185,6 +185,20 @@ enum AdminActionType: string
     /** La fiche d'un compte. */
     case UserViewed = 'user.viewed';
 
+    // --- D46 du 01/10 : inspection des parties et des sièges ---------------
+
+    /** La liste des parties, en cours ou terminées. */
+    case GamesDirectoryViewed = 'games.directory_viewed';
+
+    /** La fiche d'une partie : participants, réponses justes et fausses. */
+    case GameViewed = 'game.viewed';
+
+    /** L'annuaire des sièges, invités compris. */
+    case PlayersDirectoryViewed = 'players.directory_viewed';
+
+    /** La fiche d'un siège : ses parties et ses réponses. */
+    case PlayerViewed = 'player.viewed';
+
     /** Préfixe des libellés du back-office, un par cas. */
     public const string LABEL_PREFIX = 'admin.enum.admin_action.';
 
@@ -210,6 +224,7 @@ enum AdminActionType: string
             self::NicknameBanned,
             self::UserLookedUp,
             self::UserViewed,
+            self::PlayerViewed,
         ], true);
 
         if ($alwaysPermanent) {
@@ -223,7 +238,10 @@ enum AdminActionType: string
             AdminActionSubject::Site,
             AdminActionSubject::ImportRun,
             AdminActionSubject::Theme,
-            AdminActionSubject::Accounts => AdminActionRetention::Permanent,
+            AdminActionSubject::Accounts,
+            AdminActionSubject::Game,
+            AdminActionSubject::Games,
+            AdminActionSubject::Players => AdminActionRetention::Permanent,
             AdminActionSubject::User,
             AdminActionSubject::Player => AdminActionRetention::Rolling12m,
         };
@@ -270,7 +288,11 @@ enum AdminActionType: string
             self::UserViewed => AdminActionSubject::User,
             self::NicknameMasked,
             self::NicknameUnmasked,
-            self::NicknameBanned => AdminActionSubject::Player,
+            self::NicknameBanned,
+            self::PlayerViewed => AdminActionSubject::Player,
+            self::GamesDirectoryViewed => AdminActionSubject::Games,
+            self::GameViewed => AdminActionSubject::Game,
+            self::PlayersDirectoryViewed => AdminActionSubject::Players,
             self::TakedownDecided => AdminActionSubject::TakedownRequest,
             self::SiteClosed,
             self::SiteReopened => AdminActionSubject::Site,
@@ -302,6 +324,10 @@ enum AdminActionType: string
             self::AccountsAccessViewed,
             self::UserLookedUp,
             self::UserViewed,
+            self::GamesDirectoryViewed,
+            self::GameViewed,
+            self::PlayersDirectoryViewed,
+            self::PlayerViewed,
         ], true);
     }
 

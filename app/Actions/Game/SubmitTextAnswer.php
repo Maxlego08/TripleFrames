@@ -11,6 +11,7 @@ use App\Models\Player;
 use App\Models\Round;
 use App\Models\RoundPlayer;
 use App\Models\RoundTier;
+use App\Models\WrongAnswer;
 use App\Support\Answers\AcceptanceWindow;
 use App\Support\Answers\AnswerMatcher;
 use App\Support\Catalog\AnswerKeyNormalizer;
@@ -46,9 +47,10 @@ use LogicException;
  * - **S6 et S7** — {@see AnswerMatcher::match()} : les deux lectures K et O et
  *   toutes les distances, puis la précédence du verdict ;
  * - **S8a** — refus : une transaction, deux lectures inconditionnelles de
- *   l'état du QCM, **exactement une** instruction `UPDATE` de `round_player`,
- *   sa relecture verrouillante par clé primaire, et **aucune autre
- *   écriture** (J1) ;
+ *   l'état du QCM et de la fenêtre, **au plus une** instruction `UPDATE` de
+ *   `round_player` — aucune si la fenêtre s'est fermée entre-temps
+ *   (E107-5) —, sa relecture verrouillante par clé primaire, et **aucune
+ *   autre écriture** (J1) ;
  * - **S8b** — acceptation : la transaction de verrouillage {@see LockGuess}
  *   (§ 9), qui revérifie sous verrou la recevabilité et l'état de saisie,
  *   sans réévaluer le verdict, avec `answeredAtMs` =
@@ -134,13 +136,13 @@ final readonly class SubmitTextAnswer
         }
 
         // S8a — le refus, quelle qu'en soit la cause.
-        return self::refuse($seat, $game, $round, $roundPlayer, $receivedAt);
+        return self::refuse($seat, $game, $round, $roundPlayer, $receivedAt, $answer, $submittedNormalized);
     }
 
     /**
      * Le refus (§ 7.5) : dans une transaction, les deux lectures de l'état du
-     * QCM, l'instruction unique, puis sa relecture verrouillante par clé
-     * primaire.
+     * QCM, l'instruction unique si la fenêtre relue sur la manche verrouillée
+     * l'admet encore, puis sa relecture verrouillante par clé primaire.
      *
      * Les deux lectures se font DANS la transaction, jamais sur la manche
      * chargée en S3 : une soumission reçue avant `T_N` et traitée après le
@@ -158,6 +160,8 @@ final readonly class SubmitTextAnswer
         Round $round,
         RoundPlayer $roundPlayer,
         CarbonImmutable $receivedAt,
+        string $answer,
+        string $submittedNormalized,
     ): SubmissionVerdict {
         $cap = $game->settings_snapshot->attemptsPerRound;
 
@@ -166,16 +170,22 @@ final readonly class SubmitTextAnswer
         $choicesTierIndex = InputDifficulty::Normal->choicesOpenTierIndex($game->frames_per_round)
             ?? throw new LogicException('SubmitTextAnswer : la difficulté Normal ouvre toujours son QCM à un palier.');
 
-        return DB::transaction(static function () use ($seat, $game, $round, $roundPlayer, $receivedAt, $cap, $choicesTierIndex): SubmissionVerdict {
-            $firstDecoyId = Round::query()->whereKey($round->id)->sharedLock()->value('decoy_movie_id_1');
+        return DB::transaction(static function () use ($seat, $game, $round, $roundPlayer, $receivedAt, $answer, $submittedNormalized, $cap, $choicesTierIndex): SubmissionVerdict {
+            $sharedRound = Round::query()->whereKey($round->id)->sharedLock()->firstOrFail();
             $choicesTierServedAt = RoundTier::query()
                 ->where('round_id', $round->id)
                 ->where('tier_index', $choicesTierIndex)
                 ->value('served_at');
 
-            $exhaustedState = self::exhaustedState($game, $firstDecoyId !== null, $choicesTierServedAt !== null);
+            $exhaustedState = self::exhaustedState($game, $sharedRound->decoy_movie_id_1 !== null, $choicesTierServedAt !== null);
 
-            $touched = self::countWrongAttempt($roundPlayer, $cap, $exhaustedState, $receivedAt);
+            // La fenêtre relue sous le verrou partagé (E107-5) : une révélation
+            // validée entre S3 et cette transaction l'a fermée, les titres sont
+            // partis et la révélation l'emporte (§ 7.3) — rien n'est compté.
+            // La branche ne dépend que du temps, jamais de la proximité (L4).
+            $touched = AcceptanceWindow::admits($sharedRound, $game, $receivedAt)
+                ? self::countWrongAttempt($roundPlayer, $cap, $exhaustedState, $receivedAt)
+                : 0;
 
             // Relecture VERROUILLANTE, pour tout refus : en REPEATABLE READ
             // (InnoDB), la lecture de `served_at` ci-dessus a fixé l'instantané
@@ -186,11 +196,16 @@ final readonly class SubmitTextAnswer
             // tient déjà la ligne, et l'ordre `round` puis `round_player` reste.
             $reread = RoundPlayer::query()->whereKey($roundPlayer->id)->lockForUpdate()->firstOrFail();
 
-            // Fermeture concurrente (bonne réponse, plafond déjà atteint) : rien
-            // n'a été compté, et le nombre de requêtes est le même.
+            // Fermeture concurrente (bonne réponse, plafond déjà atteint,
+            // révélation) : rien n'a été compté.
             if ($touched === 0) {
                 return SubmissionVerdict::closed($reread->input_state);
             }
+
+            // Le journal des réponses fausses (D46 du 01/10, spec 10 § 7.6 bis) :
+            // une insertion pour TOUT refus compté, quelle que soit sa
+            // proximité (L4) ; jamais lue par le moteur.
+            self::journal($round, $seat, GuessSource::Text, $answer, $submittedNormalized, $reread->wrong_attempts, $receivedAt);
 
             // La fin anticipée se réévalue par 60 sur le COMPTEUR, jamais sur la
             // proximité ; après commit (`ShouldDispatchAfterCommit`).
@@ -203,6 +218,31 @@ final readonly class SubmitTextAnswer
                 $reread->input_state === RoundPlayerInputState::Open ? $cap - $reread->wrong_attempts : 0,
             );
         });
+    }
+
+    /**
+     * Une ligne `wrong_answer` (spec 10 § 7.6 bis, D46 du 01/10), dans la
+     * transaction du refus compté, texte comme clic.
+     */
+    public static function journal(
+        Round $round,
+        Player $seat,
+        GuessSource $source,
+        string $submitted,
+        string $submittedNormalized,
+        ?int $attemptNumber,
+        CarbonImmutable $receivedAt,
+    ): void {
+        $line = new WrongAnswer;
+        $line->round_id = $round->id;
+        $line->player_id = $seat->id;
+        $line->source = $source;
+        $line->submitted_text = $submitted;
+        $line->submitted_normalized = $submittedNormalized;
+        $line->attempt_number = $attemptNumber;
+        $line->received_at = $receivedAt;
+        $line->answered_at_ms = RoundClock::offsetMs($round, $receivedAt);
+        $line->save();
     }
 
     /**

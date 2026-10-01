@@ -1,0 +1,46 @@
+# TripleFrames — déploiement applicatif manuel par systemd.
+#
+# Cette unité enveloppe le hook déjà utilisé par Plesk Git. Elle est utile pour
+# relancer proprement les étapes applicatives depuis une session root après que
+# Plesk a déposé la branche deploy :
+#
+#   install -o root -g root -m 0644 ops/systemd/tripleframes-deploy.service \
+#       /etc/systemd/system/tripleframes-deploy.service
+#   systemctl daemon-reload
+#   systemctl start tripleframes-deploy.service
+#   journalctl -u tripleframes-deploy.service -n 200 --no-pager
+#
+# Remplacer les trois paramètres de l'unité avant l'installation. Ne pas
+# activer cette unité au démarrage : Type=oneshot et absence de section
+# [Install] sont volontaires. Plesk continue de tirer et déposer le code ; cette
+# unité ne fait aucun git pull.
+#
+# Aucun npm ne tourne sur le VPS. La branche deploy contient public/build,
+# construit par GitHub Actions avec la version Node verrouillée. Le serveur ne
+# reçoit donc ni Node ni node_modules et ne dépense pas le CPU des sites voisins
+# à reconstruire les assets.
+#
+# Aucun service Supervisor n'existe pour cette application. Les workers et
+# Reverb sont supervisés par systemd avec Restart=always. Le hook envoie
+# queue:restart et reverb:restart : les processus terminent proprement, puis
+# systemd les relève sur le nouveau code.
+
+[Unit]
+Description=TripleFrames - appliquer le déploiement Plesk
+After=network-online.target tripleframes-redis.service
+Wants=network-online.target tripleframes-redis.service
+
+[Service]
+Type=oneshot
+User=__TF_SUBSCRIPTION_USER__
+Group=__TF_SUBSCRIPTION_GROUP__
+WorkingDirectory=__TF_DEPLOY_PATH__
+ExecStartPre=/usr/bin/test -f __TF_DEPLOY_PATH__/public/build/manifest.json
+ExecStart=/usr/bin/bash __TF_DEPLOY_PATH__/ops/deploy/hook.sh
+TimeoutStartSec=2h
+UMask=0027
+NoNewPrivileges=true
+PrivateTmp=true
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=tripleframes-deploy

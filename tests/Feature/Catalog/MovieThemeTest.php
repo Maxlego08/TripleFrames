@@ -74,6 +74,56 @@ test('un curateur ajoute un thème non publié et le film y devient actif', func
         ->and($row?->is_active)->toBeTrue();
 });
 
+test('un curateur ajoute plusieurs thèmes au film en une seule requête', function (): void {
+    $movie = Movie::factory()->create();
+    $themes = Theme::factory()->count(3)->unpublished()->create(['rule_value' => null]);
+
+    $this->actingAs($this->curator)
+        ->from(route('admin.catalog.show', ['movie' => $movie->id]))
+        ->patch(route('admin.catalog.themes.update', ['movie' => $movie->id]), [
+            'theme_ids' => $themes->pluck('id')->all(),
+            'manual_state' => 'added',
+        ])
+        ->assertSessionHasNoErrors()
+        ->assertRedirect(route('admin.catalog.show', ['movie' => $movie->id]));
+
+    $rows = MovieTheme::query()
+        ->where('movie_id', $movie->id)
+        ->orderBy('theme_id')
+        ->get();
+
+    expect($rows)->toHaveCount(3)
+        ->and($rows->pluck('theme_id')->all())->toBe($themes->pluck('id')->sort()->values()->all())
+        ->and($rows->every(fn (MovieTheme $row): bool => $row->manual_state === ThemeMembershipState::Added))
+        ->toBeTrue()
+        ->and($rows->every(fn (MovieTheme $row): bool => $row->is_active && $row->assigned_by_id === $this->curator->id))
+        ->toBeTrue();
+});
+
+test('la sélection multiple est réservée à l’ajout et refuse les doublons', function (): void {
+    $movie = Movie::factory()->create();
+    $theme = Theme::factory()->create(['rule_value' => null]);
+    $route = route('admin.catalog.themes.update', ['movie' => $movie->id]);
+
+    $this->actingAs($this->curator)
+        ->from(route('admin.catalog.show', ['movie' => $movie->id]))
+        ->patch($route, [
+            'theme_ids' => [$theme->id],
+            'manual_state' => 'removed',
+        ])
+        ->assertSessionHasErrors('theme_ids');
+
+    $this->actingAs($this->curator)
+        ->from(route('admin.catalog.show', ['movie' => $movie->id]))
+        ->patch($route, [
+            'theme_ids' => [$theme->id, $theme->id],
+            'manual_state' => 'added',
+        ])
+        ->assertSessionHasErrors('theme_ids.1');
+
+    expect(MovieTheme::query()->count())->toBe(0);
+});
+
 test('un curateur retire un thème automatique et le film y devient inactif', function (): void {
     $theme = Theme::factory()->genre(16)->create();
     $movie = Movie::factory()->withGenre(16)->create();

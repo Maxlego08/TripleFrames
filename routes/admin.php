@@ -15,6 +15,7 @@ use App\Http\Controllers\Admin\FrameReviewController;
 use App\Http\Controllers\Admin\FrameReviewQueueController;
 use App\Http\Controllers\Admin\FrameTmdbController;
 use App\Http\Controllers\Admin\FrameUnpublishController;
+use App\Http\Controllers\Admin\GameInspectionController;
 use App\Http\Controllers\Admin\GuideController;
 use App\Http\Controllers\Admin\ImportController;
 use App\Http\Controllers\Admin\ImportDiscoverController;
@@ -32,6 +33,7 @@ use App\Http\Controllers\Admin\MoviePublishController;
 use App\Http\Controllers\Admin\MovieThemeController;
 use App\Http\Controllers\Admin\MovieTitleController;
 use App\Http\Controllers\Admin\MovieUnpublishController;
+use App\Http\Controllers\Admin\PlayerInspectionController;
 use App\Http\Controllers\Admin\ThemeController;
 use App\Http\Controllers\Admin\ThemePublishController;
 use App\Http\Controllers\Admin\ThroughputController;
@@ -40,8 +42,10 @@ use App\Http\Controllers\Admin\UserDirectoryController;
 use App\Models\AdminAction;
 use App\Models\Frame;
 use App\Models\FrameReview;
+use App\Models\Game;
 use App\Models\ImportRun;
 use App\Models\Movie;
+use App\Models\Player;
 use App\Models\Theme;
 use App\Models\User;
 use Illuminate\Support\Facades\Route;
@@ -439,5 +443,24 @@ Route::middleware(['auth', 'verified', 'role:curator', 'admin.2fa', 'admin.local
             Route::get('journal', [JournalController::class, 'index'])
                 ->middleware('can:viewAny,'.AdminAction::class)
                 ->name('journal.index');
+
+            // L'inspection des parties et des sièges (lignes 36 et 42, D46 du
+            // 01/10) : quatre lectures, chacune consignée. `{game}` est lié
+            // par `id`, `{player}` par `public_id`.
+            Route::get('games', [GameInspectionController::class, 'index'])
+                ->middleware('can:viewAny,'.Game::class)
+                ->name('games.index');
+
+            Route::get('games/{game}', [GameInspectionController::class, 'show'])
+                ->middleware('can:view,game')
+                ->name('games.show');
+
+            Route::get('players', [PlayerInspectionController::class, 'index'])
+                ->middleware('can:viewAny,'.Player::class)
+                ->name('players.index');
+
+            Route::get('players/{player}', [PlayerInspectionController::class, 'show'])
+                ->middleware('can:view,player')
+                ->name('players.show');
         });
     });

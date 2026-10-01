@@ -1,12 +1,16 @@
 import { Link } from '@inertiajs/react';
-import { MinusIcon, PlusIcon, Undo2Icon } from 'lucide-react';
+import {
+    MinusIcon,
+    PlusIcon,
+    SearchIcon,
+    Undo2Icon,
+    XIcon,
+} from 'lucide-react';
 import { useId, useState } from 'react';
 import MovieThemeController from '@/actions/App/Http/Controllers/Admin/MovieThemeController';
 import { AdminCardTitle } from '@/components/admin/admin-card-title';
 import { AdminEmptyState } from '@/components/admin/admin-empty-state';
 import { AdminFieldList } from '@/components/admin/admin-field-list';
-import type { AdminSelectOption } from '@/components/admin/admin-select';
-import { AdminSelect } from '@/components/admin/admin-select';
 import {
     ConfirmGestureDialog,
     useGestureFocus,
@@ -19,6 +23,7 @@ import {
     CardDescription,
     CardHeader,
 } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
     Table,
@@ -45,8 +50,8 @@ type ThemeGestureKind = 'add' | 'remove' | 'clear';
 
 type ThemeGesture = {
     kind: ThemeGestureKind;
-    themeId: number;
-    label: string;
+    themeIds: number[];
+    labels: string[];
 };
 
 /** L'exception envoyée par chaque geste : vide annule l'exception. */
@@ -130,6 +135,7 @@ export function MovieThemesPanel({
             .map((theme) => theme.theme_id),
     );
     const addable = availableThemes.filter((theme) => !activeIds.has(theme.id));
+    const dialogCopy = gesture === null ? null : themeGestureCopy(gesture, t);
 
     return (
         <div className="space-y-6">
@@ -166,12 +172,13 @@ export function MovieThemesPanel({
 
             {canCurate && (
                 <AddThemeCard
+                    key={addable.map((theme) => theme.id).join(':')}
                     themes={addable}
                     onAdd={(theme) =>
                         open({
                             kind: 'add',
-                            themeId: theme.id,
-                            label: theme.label,
+                            themeIds: theme.map((item) => item.id),
+                            labels: theme.map((item) => item.label),
                         })
                     }
                 />
@@ -186,20 +193,34 @@ export function MovieThemesPanel({
                 <ConfirmGestureDialog
                     open
                     form={MovieThemeController.update.form(movieId)}
-                    title={t(GESTURE_KEYS[gesture.kind].title)}
-                    description={t(GESTURE_KEYS[gesture.kind].description, {
-                        theme: gesture.label,
-                    })}
-                    submitLabel={t(GESTURE_KEYS[gesture.kind].submit)}
-                    errorFields={['theme_id', 'manual_state']}
+                    title={dialogCopy?.title ?? ''}
+                    description={dialogCopy?.description ?? ''}
+                    submitLabel={dialogCopy?.submitLabel ?? ''}
+                    errorFields={[
+                        'theme_id',
+                        'theme_ids',
+                        'theme_ids.0',
+                        'manual_state',
+                    ]}
                     onClose={close}
                     onReturnFocus={focus.restore}
                 >
-                    <input
-                        type="hidden"
-                        name="theme_id"
-                        value={gesture.themeId}
-                    />
+                    {gesture.themeIds.length === 1 ? (
+                        <input
+                            type="hidden"
+                            name="theme_id"
+                            value={gesture.themeIds[0]}
+                        />
+                    ) : (
+                        gesture.themeIds.map((themeId) => (
+                            <input
+                                key={themeId}
+                                type="hidden"
+                                name="theme_ids[]"
+                                value={themeId}
+                            />
+                        ))
+                    )}
                     <input
                         type="hidden"
                         name="manual_state"
@@ -209,6 +230,34 @@ export function MovieThemesPanel({
             )}
         </div>
     );
+}
+
+function themeGestureCopy(
+    gesture: ThemeGesture,
+    t: Translator['t'],
+): { title: string; description: string; submitLabel: string } {
+    if (gesture.kind === 'add' && gesture.themeIds.length > 1) {
+        const count = gesture.themeIds.length;
+
+        return {
+            title: t('admin.movie.themes.confirm.add_many.title'),
+            description: t('admin.movie.themes.confirm.add_many.description', {
+                count,
+                themes: gesture.labels.join(', '),
+            }),
+            submitLabel: t('admin.movie.themes.confirm.add_many.submit', {
+                count,
+            }),
+        };
+    }
+
+    const keys = GESTURE_KEYS[gesture.kind];
+
+    return {
+        title: t(keys.title),
+        description: t(keys.description, { theme: gesture.labels[0] ?? '' }),
+        submitLabel: t(keys.submit),
+    };
 }
 
 /** Le tableau des appartenances, gestes compris. */
@@ -348,8 +397,8 @@ function GestureButton({
             onClick={() =>
                 onGesture({
                     kind,
-                    themeId: theme.theme_id,
-                    label: theme.label,
+                    themeIds: [theme.theme_id],
+                    labels: [theme.label],
                 })
             }
             className="min-h-11"
@@ -373,33 +422,24 @@ function originText(theme: AdminMovieTheme, t: Translator['t']): string {
         : t('admin.movie.themes.origin.manual', { state });
 }
 
-/** « Ajouter un thème » : un thème choisi, puis la confirmation. */
+/** « Ajouter des thèmes » : les choix s'accumulent avant une confirmation. */
 function AddThemeCard({
     themes,
     onAdd,
 }: {
     themes: AdminAvailableTheme[];
-    onAdd: (theme: AdminAvailableTheme) => void;
+    onAdd: (themes: AdminAvailableTheme[]) => void;
 }) {
-    const { t } = useTranslations();
+    const { t, tChoice } = useTranslations();
     const selectId = useId();
-    const [selected, setSelected] = useState('');
-    const chosen = themes.find((theme) => String(theme.id) === selected);
-
-    const options: AdminSelectOption[] = [
-        { value: '', label: t('admin.movie.themes.picker.placeholder') },
-        ...themes.map((theme) => ({
-            value: String(theme.id),
-            label: t('admin.movie.themes.picker.option', {
-                label: theme.is_published
-                    ? theme.label
-                    : t('admin.movie.themes.picker.unpublished', {
-                          label: theme.label,
-                      }),
-                kind: t(THEME_KIND_KEYS[theme.kind]),
-            }),
-        })),
-    ];
+    const selectionId = useId();
+    const [selectedIds, setSelectedIds] = useState<number[]>([]);
+    const selectedThemes = themes.filter((theme) =>
+        selectedIds.includes(theme.id),
+    );
+    const remainingThemes = themes.filter(
+        (theme) => !selectedIds.includes(theme.id),
+    );
 
     return (
         <Card>
@@ -417,39 +457,295 @@ function AddThemeCard({
                         {t('admin.movie.themes.picker.empty')}
                     </p>
                 ) : (
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-                        <div className="flex flex-1 flex-col gap-1.5">
+                    <div className="space-y-4">
+                        <div className="flex flex-col gap-1.5">
                             <Label htmlFor={selectId}>
                                 {t('admin.movie.themes.picker.label')}
                             </Label>
-                            <AdminSelect
+                            <ThemeSearchPicker
                                 id={selectId}
-                                value={selected}
-                                onChange={(event) =>
-                                    setSelected(event.target.value)
+                                themes={remainingThemes}
+                                describedBy={selectionId}
+                                onChoose={(theme) =>
+                                    setSelectedIds([...selectedIds, theme.id])
                                 }
-                                options={options}
-                                className="min-h-11"
                             />
                         </div>
+
+                        <div
+                            id={selectionId}
+                            className="space-y-2 rounded-lg border bg-muted/20 p-3"
+                            aria-live="polite"
+                        >
+                            <p className="text-sm font-medium text-foreground">
+                                {t('admin.movie.themes.picker.selection')}
+                            </p>
+                            {selectedThemes.length === 0 ? (
+                                <p className="text-sm text-muted-foreground">
+                                    {t(
+                                        'admin.movie.themes.picker.selection_empty',
+                                    )}
+                                </p>
+                            ) : (
+                                <ul className="grid gap-2 sm:grid-cols-2">
+                                    {selectedThemes.map((theme) => (
+                                        <li
+                                            key={theme.id}
+                                            className="flex min-h-11 items-center gap-2 rounded-md border bg-background pl-3 shadow-xs"
+                                        >
+                                            <span className="min-w-0 flex-1">
+                                                <span className="block truncate text-sm font-medium text-foreground">
+                                                    {theme.label}
+                                                </span>
+                                                <span className="block text-xs text-muted-foreground">
+                                                    {t(
+                                                        THEME_KIND_KEYS[
+                                                            theme.kind
+                                                        ],
+                                                    )}
+                                                </span>
+                                            </span>
+                                            {!theme.is_published && (
+                                                <Badge variant="outline">
+                                                    {t(
+                                                        'admin.movie.themes.unpublished',
+                                                    )}
+                                                </Badge>
+                                            )}
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="icon"
+                                                aria-label={t(
+                                                    'admin.movie.themes.picker.remove',
+                                                    {
+                                                        theme: theme.label,
+                                                    },
+                                                )}
+                                                onClick={() =>
+                                                    setSelectedIds(
+                                                        selectedIds.filter(
+                                                            (id) =>
+                                                                id !== theme.id,
+                                                        ),
+                                                    )
+                                                }
+                                                className="min-h-11 min-w-11 shrink-0"
+                                            >
+                                                <XIcon aria-hidden />
+                                            </Button>
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+                        </div>
+
                         <Button
                             type="button"
-                            variant="outline"
-                            aria-disabled={chosen === undefined || undefined}
+                            disabled={selectedThemes.length === 0}
                             onClick={() => {
-                                if (chosen !== undefined) {
-                                    onAdd(chosen);
+                                if (selectedThemes.length > 0) {
+                                    onAdd(selectedThemes);
                                 }
                             }}
-                            className="min-h-11 aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+                            className="min-h-11 w-full sm:w-auto"
                         >
                             <PlusIcon aria-hidden />
-                            {t('admin.movie.themes.picker.submit')}
+                            {tChoice(
+                                'admin.movie.themes.picker.submit',
+                                selectedThemes.length,
+                                {
+                                    count: selectedThemes.length,
+                                },
+                            )}
                         </Button>
                     </div>
                 )}
             </CardContent>
         </Card>
+    );
+}
+
+function normalizeThemeSearch(value: string): string {
+    return value
+        .normalize('NFD')
+        .replace(/\p{M}/gu, '')
+        .toLocaleLowerCase('fr')
+        .trim();
+}
+
+/** Champ de recherche + liste d'options, utilisable à la souris et au clavier. */
+function ThemeSearchPicker({
+    id,
+    themes,
+    describedBy,
+    onChoose,
+}: {
+    id: string;
+    themes: AdminAvailableTheme[];
+    describedBy: string;
+    onChoose: (theme: AdminAvailableTheme) => void;
+}) {
+    const { t } = useTranslations();
+    const listboxId = `${id}-options`;
+    const [query, setQuery] = useState('');
+    const [open, setOpen] = useState(false);
+    const [activeIndex, setActiveIndex] = useState(0);
+    const normalizedQuery = normalizeThemeSearch(query);
+    const filteredThemes = themes.filter((theme) => {
+        if (normalizedQuery === '') {
+            return true;
+        }
+
+        const haystack = normalizeThemeSearch(
+            `${theme.label} ${t(THEME_KIND_KEYS[theme.kind])}`,
+        );
+
+        return haystack.includes(normalizedQuery);
+    });
+    const boundedActiveIndex = Math.min(
+        activeIndex,
+        Math.max(filteredThemes.length - 1, 0),
+    );
+    const activeTheme = filteredThemes[boundedActiveIndex];
+
+    function choose(theme: AdminAvailableTheme): void {
+        onChoose(theme);
+        setQuery('');
+        setActiveIndex(0);
+        setOpen(themes.length > 1);
+    }
+
+    return (
+        <div
+            className="relative"
+            onBlur={(event) => {
+                if (
+                    !(event.relatedTarget instanceof Node) ||
+                    !event.currentTarget.contains(event.relatedTarget)
+                ) {
+                    setOpen(false);
+                }
+            }}
+        >
+            <SearchIcon
+                aria-hidden
+                className="pointer-events-none absolute top-3.5 left-3 z-10 size-4 text-muted-foreground"
+            />
+            <Input
+                id={id}
+                type="search"
+                role="combobox"
+                autoComplete="off"
+                value={query}
+                disabled={themes.length === 0}
+                placeholder={t(
+                    themes.length === 0
+                        ? 'admin.movie.themes.picker.all_selected'
+                        : 'admin.movie.themes.picker.placeholder',
+                )}
+                aria-autocomplete="list"
+                aria-expanded={open && themes.length > 0}
+                aria-controls={listboxId}
+                aria-activedescendant={
+                    open && activeTheme !== undefined
+                        ? `${listboxId}-${activeTheme.id}`
+                        : undefined
+                }
+                aria-describedby={describedBy}
+                onFocus={() => setOpen(themes.length > 0)}
+                onChange={(event) => {
+                    setQuery(event.target.value);
+                    setActiveIndex(0);
+                    setOpen(true);
+                }}
+                onKeyDown={(event) => {
+                    if (event.key === 'ArrowDown') {
+                        event.preventDefault();
+                        setOpen(true);
+                        setActiveIndex((current) =>
+                            Math.min(
+                                current + 1,
+                                Math.max(filteredThemes.length - 1, 0),
+                            ),
+                        );
+                    } else if (event.key === 'ArrowUp') {
+                        event.preventDefault();
+                        setOpen(true);
+                        setActiveIndex((current) => Math.max(current - 1, 0));
+                    } else if (
+                        event.key === 'Enter' &&
+                        open &&
+                        activeTheme !== undefined
+                    ) {
+                        event.preventDefault();
+                        choose(activeTheme);
+                    } else if (event.key === 'Escape') {
+                        event.preventDefault();
+                        setOpen(false);
+                    }
+                }}
+                className="min-h-11 pr-3 pl-9"
+            />
+
+            {open && themes.length > 0 && (
+                <div
+                    id={listboxId}
+                    role="listbox"
+                    className="absolute z-30 mt-1 max-h-72 w-full overflow-y-auto rounded-md border bg-popover p-1 text-popover-foreground shadow-md"
+                >
+                    {filteredThemes.length === 0 ? (
+                        <p className="px-3 py-3 text-sm text-muted-foreground">
+                            {t('admin.movie.themes.picker.no_results')}
+                        </p>
+                    ) : (
+                        <ul role="presentation">
+                            {filteredThemes.map((theme, index) => (
+                                <li key={theme.id} role="presentation">
+                                    <button
+                                        id={`${listboxId}-${theme.id}`}
+                                        type="button"
+                                        role="option"
+                                        tabIndex={-1}
+                                        aria-selected={
+                                            index === boundedActiveIndex
+                                        }
+                                        onMouseDown={(event) =>
+                                            event.preventDefault()
+                                        }
+                                        onMouseEnter={() =>
+                                            setActiveIndex(index)
+                                        }
+                                        onClick={() => choose(theme)}
+                                        className="flex min-h-11 w-full items-center gap-3 rounded-sm px-3 py-2 text-left text-sm outline-none hover:bg-accent hover:text-accent-foreground aria-selected:bg-accent aria-selected:text-accent-foreground"
+                                    >
+                                        <span className="min-w-0 flex-1">
+                                            <span className="block truncate font-medium">
+                                                {theme.label}
+                                            </span>
+                                            <span className="block text-xs text-muted-foreground">
+                                                {t(THEME_KIND_KEYS[theme.kind])}
+                                            </span>
+                                        </span>
+                                        {!theme.is_published && (
+                                            <Badge variant="outline">
+                                                {t(
+                                                    'admin.movie.themes.unpublished',
+                                                )}
+                                            </Badge>
+                                        )}
+                                        <PlusIcon
+                                            aria-hidden
+                                            className="size-4 shrink-0"
+                                        />
+                                    </button>
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+                </div>
+            )}
+        </div>
     );
 }
 

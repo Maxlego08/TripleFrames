@@ -40,6 +40,7 @@ function opsTemplateFiles(): array
         'systemd/tripleframes-worker@game.service.d/limits.conf',
         'systemd/tripleframes-worker@default.service.d/limits.conf',
         'systemd/tripleframes-reverb.service',
+        'systemd/tripleframes-deploy.service',
         'systemd/worker-game.env',
         'systemd/worker-default.env',
         'nginx/additional-directives.conf',
@@ -335,6 +336,24 @@ it('lance chaque processus sous un utilisateur non privilégié, les processus P
         ->toBe(opsTemplatePhp().' $PHP_ARGS artisan queue:work redis --queue=%i $WORKER_ARGS')
         ->and(opsTemplateValue('systemd/tripleframes-worker@.service', 'EnvironmentFile'))
         ->toBe('/etc/tripleframes/worker-%i.env');
+});
+
+it('offre un service manuel de déploiement qui réutilise le hook sans reconstruire les assets sur le VPS', function (): void {
+    $unit = 'systemd/tripleframes-deploy.service';
+    $assignments = opsTemplateAssignments($unit);
+    $lines = opsTemplateLines($unit);
+
+    expect(opsTemplateValue($unit, 'Type'))->toBe('oneshot')
+        ->and(opsTemplateValue($unit, 'User'))->toBe(opsTemplateValue('systemd/tripleframes-worker@.service', 'User'))
+        ->and(opsTemplateValue($unit, 'Group'))->toBe(opsTemplateValue('systemd/tripleframes-worker@.service', 'Group'))
+        ->and(opsTemplateValue($unit, 'WorkingDirectory'))->toBe(opsTemplateValue('systemd/tripleframes-worker@.service', 'WorkingDirectory'))
+        ->and(opsTemplateValue($unit, 'ExecStartPre'))->toBe('/usr/bin/test -f __TF_DEPLOY_PATH__/public/build/manifest.json')
+        ->and(opsTemplateValue($unit, 'ExecStart'))->toBe('/usr/bin/bash __TF_DEPLOY_PATH__/ops/deploy/hook.sh')
+        ->and(opsTemplateValue($unit, 'UMask'))->toBe('0027')
+        ->and(opsTemplateValue($unit, 'NoNewPrivileges'))->toBe('true')
+        ->and($assignments)->not->toHaveKey('Restart')
+        ->and($lines)->not->toContain('[Install]')
+        ->and(implode("\n", $lines))->not->toMatch('/\b(?:npm|node|systemctl|supervisor)\b/i');
 });
 
 it('borne chaque worker sous son plafond de cgroup, dans l\'ordre --memory < memory_limit < MemoryMax', function (): void {

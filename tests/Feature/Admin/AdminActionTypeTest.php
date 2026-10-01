@@ -78,8 +78,8 @@ function adminJournalRawLine(AdminActionType $action, array $overrides = []): Ad
     return $line;
 }
 
-test('la liste fermée compte exactement quarante-sept cas', function (): void {
-    expect(AdminActionType::cases())->toHaveCount(47)
+test('la liste fermée compte exactement cinquante et un cas', function (): void {
+    expect(AdminActionType::cases())->toHaveCount(51)
         ->and(array_map(static fn (AdminActionType $case): string => $case->value, AdminActionType::cases()))
         ->toEqualCanonicalizing([
             'role.changed',
@@ -127,6 +127,11 @@ test('la liste fermée compte exactement quarante-sept cas', function (): void {
             'accounts.access_viewed',
             'user.looked_up',
             'user.viewed',
+            // D46 du 01/10 : inspection des parties et des sièges.
+            'games.directory_viewed',
+            'game.viewed',
+            'players.directory_viewed',
+            'player.viewed',
             // D43 du 01/10 : l'écran des thèmes.
             'theme.created',
             'theme.updated',
@@ -141,18 +146,23 @@ test('la liste fermée compte exactement quarante-sept cas', function (): void {
         expect(strlen($case->value))->toBeLessThanOrEqual(40);
     }
 
-    expect(AdminActionSubject::cases())->toHaveCount(9)
+    expect(AdminActionSubject::cases())->toHaveCount(12)
         ->and(AdminActionSubject::ImportRun->value)->toBe('import_run')
         ->and(AdminActionSubject::Accounts->value)->toBe('accounts')
         ->and(AdminActionSubject::Theme->value)->toBe('theme')
-        ->and(AdminActionSubject::Theme->hasIdentifier())->toBeTrue();
+        ->and(AdminActionSubject::Theme->hasIdentifier())->toBeTrue()
+        // D46 du 01/10 : une partie inspectée, et deux ensembles sans identifiant.
+        ->and(AdminActionSubject::Game->hasIdentifier())->toBeTrue()
+        ->and(AdminActionSubject::Games->hasIdentifier())->toBeFalse()
+        ->and(AdminActionSubject::Players->hasIdentifier())->toBeFalse();
 
     // `subject_type` reste un `string(20)`.
     foreach (AdminActionSubject::cases() as $subject) {
         expect(strlen($subject->value))->toBeLessThanOrEqual(20);
     }
 
-    // Quatre lectures sensibles, et elles seules ne sont pas des gestes.
+    // Huit lectures sensibles (D41 du 30/09, D46 du 01/10), et elles seules
+    // ne sont pas des gestes.
     expect(array_values(array_filter(
         AdminActionType::cases(),
         static fn (AdminActionType $case): bool => $case->isRead(),
@@ -161,6 +171,10 @@ test('la liste fermée compte exactement quarante-sept cas', function (): void {
         AdminActionType::AccountsAccessViewed,
         AdminActionType::UserLookedUp,
         AdminActionType::UserViewed,
+        AdminActionType::GamesDirectoryViewed,
+        AdminActionType::GameViewed,
+        AdminActionType::PlayersDirectoryViewed,
+        AdminActionType::PlayerViewed,
     ]);
 
     // Aucun cas nouveau n'exige de motif ni n'admet la console ou le système.
@@ -411,7 +425,7 @@ test('subject_id est nul si et seulement si le sujet n\'a pas d\'identifiant, si
     expect(array_values(array_filter(
         AdminActionSubject::cases(),
         static fn (AdminActionSubject $subject): bool => ! $subject->hasIdentifier(),
-    )))->toBe([AdminActionSubject::Site, AdminActionSubject::Accounts]);
+    )))->toBe([AdminActionSubject::Site, AdminActionSubject::Accounts, AdminActionSubject::Games, AdminActionSubject::Players]);
 
     expect(fn () => adminJournalRawLine(AdminActionType::AccountsDirectoryViewed, ['subject_id' => 4242])->save())
         ->toThrow(LogicException::class);
@@ -562,7 +576,7 @@ test('une lecture ne s\'écrit que par recordRead, un geste jamais par elle', fu
             ->toThrow(LogicException::class, 'record()');
     }
 
-    expect(AdminAction::query()->count())->toBe(4);
+    expect(AdminAction::query()->count())->toBe(8);
 });
 
 test('details est exigé des seuls cas qui en déclarent, et borné', function (): void {

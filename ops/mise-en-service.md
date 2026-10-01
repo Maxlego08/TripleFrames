@@ -176,10 +176,11 @@ unset REDISCLI_AUTH
 
 Attendu : `PONG` ; `flushall` refusé (commande inconnue) ; `aof_enabled:1` ; `maxmemory_policy:noeviction` ; écoute sur `127.0.0.1` seulement. Les avertissements de démarrage sur les réglages du noyau (`vm.overcommit_memory`, pages énormes) concernent toute la machine : aucun réglage du noyau sans décision du porteur, les voisins en dépendent.
 
-**b) Workers et Reverb** (`ops/systemd/`) :
+**b) Workers, Reverb et relance manuelle du déploiement** (`ops/systemd/`) :
 
 - [ ] `tripleframes-worker@.service`, `worker-game.env`, `worker-default.env` et les deux drop-ins `limits.conf` recopiés (boucle en tête du gabarit), paramètres remplacés.
 - [ ] `tripleframes-reverb.service` recopié, paramètres remplacés.
+- [ ] `tripleframes-deploy.service` recopié, paramètres remplacés, mais **jamais activé** : `systemctl start tripleframes-deploy` relance à la demande le hook sous l'utilisateur d'abonnement après que Plesk a déposé la branche `deploy`. Il ne tire pas Git, ne construit pas les assets et ne remplace pas l'action additionnelle Plesk.
 - [ ] `systemctl daemon-reload` puis `systemctl enable` des trois unités, **sans les démarrer** (étape 5).
 
 **c) nginx** :

@@ -14,6 +14,7 @@ use App\Models\RoundPlayer;
 use App\Models\RoundTier;
 use App\Models\SeenFrame;
 use App\Models\TmdbCompany;
+use App\Models\WrongAnswer;
 use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
@@ -86,6 +87,7 @@ function loadTestRoom(array $nicknames, bool $gameInProgress = false): Room
 
         RoundChoiceSet::factory()->forRound($round)->create();
         Guess::factory()->forRound($round, $seats[0])->create();
+        WrongAnswer::factory()->forRound($round, $seats[1])->create();
     }
 
     SeenFrame::factory()->forRoom($room)->forFrame(Frame::factory()->create())->create();
@@ -117,6 +119,7 @@ function loadTestFacts(int $roomId): array
 
     return [
         'guess' => Guess::query()->whereIn('round_id', $roundIds)->count(),
+        'wrong_answer' => WrongAnswer::query()->whereIn('round_id', $roundIds)->count(),
         'round_choice_set' => RoundChoiceSet::query()->whereIn('round_id', $roundIds)->count(),
         'round_tier' => RoundTier::query()->whereIn('round_id', $roundIds)->count(),
         'round_player' => RoundPlayer::query()->whereIn('round_id', $roundIds)->count(),
@@ -133,7 +136,7 @@ function loadTestFacts(int $roomId): array
 function loadTestNoFacts(): array
 {
     return array_fill_keys(
-        ['guess', 'round_choice_set', 'round_tier', 'round_player', 'round', 'game_player', 'game', 'player', 'seen_frame', 'room'],
+        ['guess', 'wrong_answer', 'round_choice_set', 'round_tier', 'round_player', 'round', 'game_player', 'game', 'player', 'seen_frame', 'room'],
         0,
     );
 }
@@ -232,7 +235,7 @@ it('supprime les faits de ces salons dans l’ordre imposé par les restrict', f
     // mémoire d'images part par la cascade de `seen_frame.room_id`, sans
     // instruction propre.
     expect(array_map(static fn (array $write): string => $write[1], $writes))->toBe([
-        'guess', 'round_choice_set', 'round_tier', 'round_player', 'round', 'game_player', 'game', 'player', 'room',
+        'guess', 'wrong_answer', 'round_choice_set', 'round_tier', 'round_player', 'round', 'game_player', 'game', 'player', 'room',
     ])->and(array_unique(array_map(static fn (array $write): string => $write[0], $writes)))->toBe(['delete from'])
         ->and(loadTestFacts($roomId))->toBe(loadTestNoFacts());
 });

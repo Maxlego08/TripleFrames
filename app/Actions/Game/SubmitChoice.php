@@ -154,7 +154,7 @@ final readonly class SubmitChoice
             );
         }
 
-        return self::refuse($seat, $game, $round, $roundPlayer, $receivedAt);
+        return self::refuse($seat, $game, $round, $roundPlayer, $receivedAt, $choice);
     }
 
     /**
@@ -222,8 +222,9 @@ final readonly class SubmitChoice
         Round $round,
         RoundPlayer $roundPlayer,
         CarbonImmutable $receivedAt,
+        string $choice,
     ): SubmissionVerdict {
-        return DB::transaction(static function () use ($seat, $game, $round, $roundPlayer, $receivedAt): SubmissionVerdict {
+        return DB::transaction(static function () use ($seat, $game, $round, $roundPlayer, $receivedAt, $choice): SubmissionVerdict {
             $sharedRound = Round::query()->whereKey($round->id)->sharedLock()->firstOrFail();
 
             $touched = AcceptanceWindow::admits($sharedRound, $game, $receivedAt)
@@ -241,6 +242,10 @@ final readonly class SubmitChoice
             if ($touched === 0) {
                 return SubmissionVerdict::closed($reread->input_state);
             }
+
+            // Le journal des réponses fausses (D46 du 01/10) : la chaîne
+            // cliquée, sans rang de tentative.
+            SubmitTextAnswer::journal($round, $seat, GuessSource::Choice, $choice, AnswerKeyNormalizer::normalize($choice), null, $receivedAt);
 
             // La fin anticipée se réévalue par 60, après commit
             // (`ShouldDispatchAfterCommit`) ; jamais diffusé : `qcm_wrong`

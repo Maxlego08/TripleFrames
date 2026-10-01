@@ -7,9 +7,11 @@ use App\Models\AdminAction;
 use App\Models\Alias;
 use App\Models\Frame;
 use App\Models\FrameReview;
+use App\Models\Game;
 use App\Models\ImportRun;
 use App\Models\Movie;
 use App\Models\MovieTitle;
+use App\Models\Player;
 use App\Models\Theme;
 use App\Models\User;
 use App\Settings\PlatformLimits;
@@ -693,6 +695,44 @@ function adminRoutesMatrix(): array
             guards: ['can:viewAny,'.AdminAction::class],
             curator: 403,
             admin: 200,
+        ),
+
+        // Ligne 36 — les parties et la fiche d'une partie (D46 du 01/10) :
+        // administrateur seul.
+        'admin.games.index' => adminRoutesRow(
+            row: 36,
+            method: 'GET',
+            guards: ['can:viewAny,'.Game::class],
+            curator: 403,
+            admin: 200,
+        ),
+
+        'admin.games.show' => adminRoutesRow(
+            row: 36,
+            method: 'GET',
+            guards: ['can:view,game'],
+            curator: 403,
+            admin: 200,
+            parameters: fn (): array => ['game' => Game::factory()->create()->getKey()],
+        ),
+
+        // Ligne 42 — l'annuaire des sièges et la fiche d'un siège (D46 du
+        // 01/10) : administrateur seul, `{player}` lié par `public_id`.
+        'admin.players.index' => adminRoutesRow(
+            row: 42,
+            method: 'GET',
+            guards: ['can:viewAny,'.Player::class],
+            curator: 403,
+            admin: 200,
+        ),
+
+        'admin.players.show' => adminRoutesRow(
+            row: 42,
+            method: 'GET',
+            guards: ['can:view,player'],
+            curator: 403,
+            admin: 200,
+            parameters: fn (): array => ['player' => Player::factory()->create()->public_id],
         ),
     ];
 }
