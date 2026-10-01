@@ -42,6 +42,7 @@ return [
         'dashboard' => 'Tableau de bord',
         'curation' => 'File de curation',
         'catalog' => 'Catalogue',
+        'near_misses' => 'Suggestions d’alias',
         // L'écran des thèmes (spec 20 § 9.6, D43 du 01/10).
         'themes' => 'Thèmes',
         'import' => 'Import',
@@ -725,6 +726,39 @@ return [
                 'reason' => 'Motif',
                 'terminated_at' => 'Écarté le',
             ],
+        ],
+    ],
+
+    /*
+    | Réponses texte récurrentes, agrégées sans donnée de joueur. Une ligne
+    | n'apparaît qu'après trois manches distinctes ; elle reste une suggestion
+    | jusqu'au geste explicite d'un curateur.
+    */
+    'near_misses' => [
+        'title' => 'Suggestions d’alias',
+        'heading' => 'Suggestions d’alias',
+        'description' => 'Des réponses refusées qui reviennent dans au moins trois parties différentes. Vérifiez qu’elles désignent bien le film avant de les accepter.',
+        'refresh' => 'Actualiser les suggestions',
+        'empty' => 'Aucune formulation récurrente à examiner.',
+        'list' => 'Formulations à examiner',
+        'column' => [
+            'movie' => 'Film',
+            'answer' => 'Réponse proposée',
+            'frequency' => 'Fréquence',
+            'period' => 'Mois observés',
+            'locale' => 'Langue de l’alias',
+            'actions' => 'Actions',
+        ],
+        'frequency' => ':occurrences saisie(s) dans :rounds partie(s) · écart au titre :distance (plus petit = plus proche)',
+        'period' => 'Du :first au :last',
+        'alias_label' => 'Graphie de l’alias proposé depuis « :answer »',
+        'locale_label' => 'Langue de l’alias « :answer »',
+        'promote' => 'Accepter comme alias',
+        'dismiss_label' => 'Ignorer la suggestion « :answer »',
+        'flash' => [
+            'refreshed' => 'Suggestions actualisées : :count à examiner.',
+            'promoted' => 'La formulation est désormais acceptée comme alias.',
+            'dismissed' => 'La suggestion a été ignorée.',
         ],
     ],
 

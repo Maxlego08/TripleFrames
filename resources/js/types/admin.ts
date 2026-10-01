@@ -53,6 +53,22 @@ export type MovieDifficulty =
 
 export type ContentOrigin = 'tmdb' | 'curator';
 
+/** Formulation récurrente proposée comme alias, sans donnée de joueur. */
+export type AdminAliasSuggestion = {
+    id: number;
+    normalized_text: string;
+    occurrences: number;
+    distinct_rounds: number;
+    best_distance: number;
+    first_seen_on: string;
+    last_seen_on: string;
+    movie: {
+        id: number;
+        title_original: string;
+        release_year: number | null;
+    };
+};
+
 export type ThemeMembershipState = 'added' | 'removed';
 
 /** Natures d'un thème — miroir de `App\Enums\ThemeKind`. */

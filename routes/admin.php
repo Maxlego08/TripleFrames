@@ -35,6 +35,7 @@ use App\Http\Controllers\Admin\MoviePublishController;
 use App\Http\Controllers\Admin\MovieThemeController;
 use App\Http\Controllers\Admin\MovieTitleController;
 use App\Http\Controllers\Admin\MovieUnpublishController;
+use App\Http\Controllers\Admin\NearMissController;
 use App\Http\Controllers\Admin\PerformanceController;
 use App\Http\Controllers\Admin\PlayerInspectionController;
 use App\Http\Controllers\Admin\ThemeController;
@@ -49,6 +50,7 @@ use App\Models\FrameReview;
 use App\Models\Game;
 use App\Models\ImportRun;
 use App\Models\Movie;
+use App\Models\NearMiss;
 use App\Models\PerfSample;
 use App\Models\Player;
 use App\Models\Theme;
@@ -401,6 +403,24 @@ Route::middleware(['auth', 'verified', 'role:curator', 'admin.2fa', 'admin.local
         Route::post('import/seed-list', [ImportSeedListController::class, 'store'])
             ->middleware(['can:create,'.ImportRun::class, 'throttle:admin-import'])
             ->name('import.seed_list');
+
+        // Les formulations fausses récurrentes, agrégées sans aucun lien vers
+        // un joueur : lecture, reconstruction, promotion en alias et rejet.
+        Route::get('near-misses', [NearMissController::class, 'index'])
+            ->middleware('can:viewAny,'.NearMiss::class)
+            ->name('near_misses.index');
+
+        Route::post('near-misses/refresh', [NearMissController::class, 'refresh'])
+            ->middleware(['can:viewAny,'.NearMiss::class, 'throttle:admin-curation'])
+            ->name('near_misses.refresh');
+
+        Route::post('near-misses/{nearMiss}/promote', [NearMissController::class, 'promote'])
+            ->middleware(['can:promote,nearMiss', 'throttle:admin-curation'])
+            ->name('near_misses.promote');
+
+        Route::post('near-misses/{nearMiss}/dismiss', [NearMissController::class, 'dismiss'])
+            ->middleware(['can:dismiss,nearMiss', 'throttle:admin-curation'])
+            ->name('near_misses.dismiss');
 
         // Les écrans de l'administrateur seul (§ 2.8, lignes 34 et 40) :
         // une seconde porte, `role:admin`, en plus de la garde `can:` de

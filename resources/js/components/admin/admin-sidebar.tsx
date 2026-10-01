@@ -13,6 +13,7 @@ import {
     ListOrdered,
     ScrollText,
     ShieldCheck,
+    Sparkles,
     Tags,
     UserRound,
     Users,
@@ -54,6 +55,7 @@ import { index as curationIndex } from '@/routes/admin/curation';
 import { index as gamesIndex } from '@/routes/admin/games';
 import { index as importIndex } from '@/routes/admin/import';
 import { index as journalIndex } from '@/routes/admin/journal';
+import { index as nearMissesIndex } from '@/routes/admin/near_misses';
 import { index as performanceIndex } from '@/routes/admin/performance';
 import { index as playersIndex } from '@/routes/admin/players';
 import { index as reviewIndex } from '@/routes/admin/review';
@@ -139,6 +141,11 @@ export function AdminSidebar() {
             title: t('admin.nav.catalog'),
             href: catalogIndex(),
             icon: Clapperboard,
+        },
+        {
+            title: t('admin.nav.near_misses'),
+            href: nearMissesIndex(),
+            icon: Sparkles,
         },
         // L'écran des thèmes (spec 20 § 9.6, D43 du 01/10) : créer, corriger,
         // publier sous seuil.

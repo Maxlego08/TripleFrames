@@ -247,7 +247,7 @@ Ces quatre règles ne sont pas des consignes dispersées : elles sont citées pa
 
 | Table | Possède | Purge |
 |---|---|---|
-| `near_miss` | La file d'alias : chaînes quasi-justes **agrégées** par film, au-dessus d'un seuil de k-anonymat. **Vide au J1** : son alimentation arrive au J2 (D24 du 23/09 — amendé le 23/09). | 90 jours |
+| `near_miss` | La file d'alias : réponses texte récurrentes **agrégées** par film, au-dessus d'un seuil de k-anonymat. Alimentée au J1 depuis `wrong_answer`, hors requête de jeu, après trois manches distinctes ; acceptation humaine seulement (D50 du 01/10, révise D24 du 23/09). | 90 jours |
 | `report` | Un signalement de joueur, limité par construction à deux cibles. | 12 mois |
 | `takedown_request` | Une demande de retrait publique et sa décision motivée. | identité seule, à échéance |
 | `admin_action` | Le journal en ajout seul de tout geste du back-office et des lectures sensibles : qui, quoi, sur quoi, pourquoi, quand (— amendé le 30/09, D41 du 30/09 ; naguère « de tout geste engageant »). | par classe |

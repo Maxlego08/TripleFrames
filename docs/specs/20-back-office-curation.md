@@ -948,18 +948,19 @@ Question 16. `movie_group` est **manuel**, jamais alimenté par TMDB, jamais mon
 - **[J1] Candidats exacts** sur la fiche : films portant une forme **exacte** de titre identique (`answer_key`, natures `title_original`, `title_latin`, `title`), lue par `answer_key_norm_movie_uq` — c'est le cas des homonymes et des remakes au même titre (Old Boy). Prop `group_exact_candidates`, nom distinct de la prop J2 `group_candidates` ; les films retirés en sont exclus — amendé le 25/09 (E49-3, E49-6).
 - **[J2] Candidats par proximité** (C12 : « suggestion de candidats `movie_group` par `distance()` ») : `App\Support\Curation\MovieGroupCandidates` [nouveau], calcul en PHP sur les formes de titre, à `AnswerKeyNormalizer::distance()` ≤ `AnswerRules::tolerance()` et même suite de chiffres, plus `collection_id` identique ; servi sur la fiche en prop **optionnelle** `group_candidates` de `admin.catalog.show` (`CatalogController@show` [modifié], garde existante `can:view,movie`), chargée à la demande par rechargement partiel : aucune route nouvelle, et le coût quadratique n'est payé que sur clic. Le back-office **suggère**, il ne regroupe jamais seul : le regroupement reste le geste du J1.
 
-### 9.5 Quasi-justes et rapport de collisions [J2]
+### 9.5 Suggestions d'alias [J1 depuis D50 du 01/10] et rapport de collisions [J2]
 
-D24 du 23/09 : au J1, ni job ni message, la table `near_miss` reste vide et les alias se saisissent à la main (§ 9.2).
+D50 du 01/10 révise D24 du 23/09 : la file `near_miss` est alimentée au J1 depuis les réponses texte refusées de D46. Elle contient les formulations récurrentes d'un film après trois manches distinctes, y compris un titre alternatif éloigné ; elle ne contient aucun identifiant de joueur, de salon, de partie ou de manche. Le traitement horaire sur la file `default` est idempotent, relançable à l'écran et protégé par verrou.
 
-- **Quasi-justes** : page `admin/near-misses/index`, lignes par film triées par `distinct_rounds` décroissant ; « Promouvoir en alias » (`NearMissPromoteController@store`, `App\Actions\Curation\PromoteNearMiss`) crée un `alias` en `origin = curator` dans la locale choisie par le curateur et déclenche le projecteur (`10` § 7.9) ; « Écarter » pose `dismissed_at`, **sans auteur** (la table ne référence aucun compte). La qualification d'une quasi-juste appartient à `70`.
-- **Rapport de collisions** : page `admin/collisions/index`, mêmes données que `answers:collisions` (C12, outil du porteur au J1), chaque ligne menant à la fiche pour retirer l'alias fautif.
+- **Suggestions d'alias** : page `admin/near-misses/index`, lignes par film triées par `distinct_rounds`, puis `occurrences`, décroissants ; « Accepter comme alias » (`NearMissController@promote`, `App\Actions\Curation\PromoteNearMiss`) crée un `alias` en `origin = curator` dans la locale choisie par le curateur et déclenche le projecteur (`10` § 7.9) ; « Ignorer » pose `dismissed_at`, **sans auteur** (la table ne référence aucun compte). Une forme déjà acceptée disparaît au prochain calcul. Un film retiré n'est jamais proposé à la promotion.
+- **Rapport de collisions** : reste au J2 ; page `admin/collisions/index`, mêmes données que `answers:collisions` (C12, outil du porteur au J1), chaque ligne menant à la fiche pour retirer l'alias fautif.
 
 | Méthode | URI | Nom | Action | Garde | Requête |
 |---|---|---|---|---|---|
-| GET | `admin/near-misses` | `admin.near_misses.index` | `NearMissController@index` | `can:viewAny,App\Models\Movie` | — |
-| POST | `admin/catalog/{movie}/near-misses/{nearMiss}/promote` | `admin.near_misses.promote` | `NearMissPromoteController@store` | `can:curate,movie`, `throttle:admin-curation`, `scopeBindings` | `NearMissPromoteRequest` : `locale` ∈ locales activées, `alias` rogné 1 à 255, pré-rempli par la forme de la quasi-juste |
-| POST | `admin/catalog/{movie}/near-misses/{nearMiss}/dismiss` | `admin.near_misses.dismiss` | `NearMissDismissController@store` | `can:curate,movie`, `throttle:admin-curation`, `scopeBindings` | — |
+| GET | `admin/near-misses` | `admin.near_misses.index` | `NearMissController@index` | `can:viewAny,App\Models\NearMiss` | — |
+| POST | `admin/near-misses/refresh` | `admin.near_misses.refresh` | `NearMissController@refresh` | `can:viewAny,App\Models\NearMiss`, `throttle:admin-curation` | — |
+| POST | `admin/near-misses/{nearMiss}/promote` | `admin.near_misses.promote` | `NearMissController@promote` | `can:promote,nearMiss`, `throttle:admin-curation` | `NearMissPromoteRequest` : `locale` ∈ locales activées, `alias` rogné 1 à 255, prérempli par la forme normalisée et éditable |
+| POST | `admin/near-misses/{nearMiss}/dismiss` | `admin.near_misses.dismiss` | `NearMissController@dismiss` | `can:dismiss,nearMiss`, `throttle:admin-curation` | — |
 | GET | `admin/collisions` | `admin.collisions.index` | `CollisionsController@index` | `can:viewAny,App\Models\Movie` | — |
 
 Pages `admin/near-misses/index` et `admin/collisions/index` ; clés `admin.near_misses.*` et `admin.collisions.*`.
@@ -1356,7 +1357,7 @@ Estimations en heures, **barre « terminé » incluse** (tests Pest et Vitest, t
 | L20-23 | J2 | Messages FR/EN au demandeur | L20-22 | 3-4 | — |
 | L20-24 | J2 | Resynchronisation à l'écran, clore un balayage, limiteur TMDB partagé | L20-16 | 6-8 | — |
 | L20-25 | J2 | Geste rétroactif de grille | L20-12, L20-8, L20-1 | 2-4 | — |
-| L20-26 | J2 | Quasi-justes et rapport de collisions | L20-14 ; `near_miss` J2 de `70` | 3-5 | — |
+| L20-26 | **J1 pour les suggestions d’alias (D50 du 01/10)** ; collisions J2 | Formulations récurrentes et rapport de collisions | L20-14 ; `wrong_answer` de D46 | 3-5 | — |
 | L20-27 | J2 | Candidats `movie_group` par distance et collection | L20-14 | 2-3 | — |
 | L20-28 | **J1 (D43 du 01/10)** — amendé le 01/10 | Thèmes : création de toute nature et thèmes manuels, libellés, ordre, correction de règle, publication sous seuil, bloc « Thèmes » de la fiche et appartenance manuelle, saga depuis la fiche, thèmes choisis au collage ; cinq cas du journal | L20-3, L20-16, L20-34 ; L30-8 (`ThemeEvaluator`, `SyncThemeMembership`, `tmdb_company`) ; L30-9 ; L30-11a (`themeWorks()`) | 9-13 | — |
 | L20-28b | J2 — amendé le 01/10 | Difficulté corrigée (reste de L20-28 avant D43 du 01/10) et son cas du journal | L20-28 ; L30-10 (`DeriveMovieDifficulty`) | 1-2 | — |
@@ -1543,8 +1544,8 @@ Estimations en heures, **barre « terminé » incluse** (tests Pest et Vitest, t
 
 ### L20-26 à L20-33 — Lots J2 restants
 
-- **L20-26 Quasi-justes et collisions** (3-5 h).
-  - **Fichiers** : `app/Http/Controllers/Admin/NearMissController.php`, `NearMissPromoteController.php`, `NearMissDismissController.php`, `CollisionsController.php` ; `app/Http/Requests/Admin/NearMissPromoteRequest.php` ; `app/Actions/Curation/PromoteNearMiss.php` ; `routes/admin.php` (quatre routes du § 9.5) ; `resources/js/pages/admin/near-misses/index.tsx`, `resources/js/pages/admin/collisions/index.tsx` ; `lang/fr/admin.php` (`near_misses.*`, `collisions.*`).
+- **L20-26 Suggestions d’alias [J1 depuis D50] et collisions [J2]** (3-5 h).
+  - **Fichiers J1** : `app/Http/Controllers/Admin/NearMissController.php` ; `app/Http/Requests/Admin/NearMissPromoteRequest.php` ; `app/Actions/Curation/PromoteNearMiss.php`, `DismissNearMiss.php` ; `app/Support/Curation/NearMissAggregator.php` ; `app/Jobs/Curation/AggregateNearMisses.php` ; `routes/admin.php`, `routes/console.php` ; `resources/js/pages/admin/near-misses/index.tsx` ; `lang/fr/admin.php` (`near_misses.*`). **Restent au J2** : `CollisionsController.php`, `resources/js/pages/admin/collisions/index.tsx`, `collisions.*`.
   - **Tests** : `tests/Feature/Catalog/NearMissPromotionTest.php` — « promouvoir une quasi-juste crée un alias curé et reprojette » ; « écarter une quasi-juste ne nomme aucun auteur » ; « une quasi-juste d'un autre film répond 404 ». `tests/Feature/Catalog/CollisionsScreenTest.php` — « l'écran rend les mêmes lignes que answers:collisions ».
 - **L20-27 Candidats `movie_group`** (2-3 h).
   - **Fichiers** : `app/Support/Curation/MovieGroupCandidates.php` [nouveau] (distance par `AnswerKeyNormalizer::distance()` ≤ `AnswerRules::tolerance()`, chiffres identiques, `collection_id` identique) ; `app/Http/Controllers/Admin/CatalogController.php` (prop optionnelle `group_candidates` de la fiche) ; `resources/js/pages/admin/catalog/show.tsx` (bloc « candidats ») ; `resources/js/types/admin.ts` (`AdminGroupCandidate`) ; `lang/fr/admin.php` (`group.candidates.*`).

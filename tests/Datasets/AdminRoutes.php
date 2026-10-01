@@ -12,6 +12,7 @@ use App\Models\Game;
 use App\Models\ImportRun;
 use App\Models\Movie;
 use App\Models\MovieTitle;
+use App\Models\NearMiss;
 use App\Models\PerfSample;
 use App\Models\Player;
 use App\Models\Theme;
@@ -356,6 +357,49 @@ function adminRoutesMatrix(): array
                 ];
             },
             redirect: fn (array $parameters): string => route('admin.catalog.show', ['movie' => $parameters['movie']]),
+        ),
+
+        // Ligne 27 — file agrégée de suggestions, reconstruction idempotente,
+        // promotion en alias curé et rejet sans auteur.
+        'admin.near_misses.index' => adminRoutesRow(
+            row: 27,
+            method: 'GET',
+            guards: ['can:viewAny,'.NearMiss::class],
+            curator: 200,
+            admin: 200,
+        ),
+
+        'admin.near_misses.refresh' => adminRoutesRow(
+            row: 27,
+            method: 'POST',
+            guards: ['can:viewAny,'.NearMiss::class],
+            curator: 302,
+            admin: 302,
+            redirect: fn (array $parameters): string => route('admin.near_misses.index'),
+        ),
+
+        'admin.near_misses.promote' => adminRoutesRow(
+            row: 27,
+            method: 'POST',
+            guards: ['can:promote,nearMiss'],
+            curator: 302,
+            admin: 302,
+            parameters: fn (): array => ['nearMiss' => NearMiss::factory()->create()->id],
+            payload: fn (): array => [
+                'locale' => Locale::French->value,
+                'alias' => 'Alias suggéré par la matrice',
+            ],
+            redirect: fn (array $parameters): string => route('admin.near_misses.index'),
+        ),
+
+        'admin.near_misses.dismiss' => adminRoutesRow(
+            row: 27,
+            method: 'POST',
+            guards: ['can:dismiss,nearMiss'],
+            curator: 302,
+            admin: 302,
+            parameters: fn (): array => ['nearMiss' => NearMiss::factory()->create()->id],
+            redirect: fn (array $parameters): string => route('admin.near_misses.index'),
         ),
 
         // Ligne 23 — regrouper deux films sans groupe : le groupe naît.

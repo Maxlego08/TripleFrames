@@ -116,7 +116,7 @@ Lexique **normatif** : `docs/specs/00-overview.md` § Vocabulaire du projet. Tou
 | difficulté de saisie du salon | `input_difficulty` (`easy`/`normal`/`expert`) — à ne jamais confondre avec `movie_difficulty`, `frame_level` ni `frames_per_round` |
 | œuvre identique (remake, homonyme) | `movie_group` — manuelle, jamais TMDB, jamais montrée ; sa seule conséquence est l'exclusion mutuelle dans un même tirage. À ne pas confondre avec `collection` (même saga, qui doit au contraire pouvoir tomber ensemble) |
 | demande de retrait d'un ayant droit | `takedown_request` (`reference` `char(12)` aléatoire, jamais dérivée de l'id) |
-| quasi-juste agrégée | `near_miss` — sans aucune colonne joueur, purgée à 90 jours, hors du chemin chaud ; alimentée au J2 seulement, vide au J1 (D24 du 23/09, amendé le 23/09) |
+| formulation récurrente proposée comme alias | `near_miss` — sans aucune colonne joueur, reconstruite hors du chemin chaud depuis `wrong_answer` sur 90 jours ; seuil de trois manches distinctes, promotion humaine seulement (D50 du 01/10, révise D24 du 23/09) |
 | compte lié Discord/Google | `linked_account` |
 | avatar | `avatar` (`avatar_preset` invité / copie locale du provider / image téléversée d'un compte `upload`, D49 du 01/10) — une seule nature effective, résolue par un accesseur serveur unique |
 | langue d'interface | `locale` — colonne sur `User` **et sur `player`** (obligatoire : un événement Reverb n'a pas de requête HTTP, donc pas de cookie, et l'envoi ciblé du QCM se compose au moment d'émettre), portée en revendication par le `player_token` pour l'invité |

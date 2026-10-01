@@ -566,6 +566,18 @@ Le 01/10/2026, le porteur a demandé de pouvoir donner à chaque film ses thème
 |---|---|---|---|---|
 | D49 | Avatar personnalisé téléversé | **oui, J1** : comptes seulement, nature `upload`, recadrage carré navigateur et normalisation serveur synchrone, disque privé servi par route, rattachement du siège au compte, signalement par deux sièges distincts, écran admin « Avatars » | **oui** — renverse la décision 14 ; amende C4 I4.10 (`player.user_id` écrit à la prise de siège) ; `report` gagne une troisième cible | `40` § 2.4, § 11 ; `10` § 5.1, § 5.3, § 8.1, § 8.3 ; `20` ligne 45, § 2.7, § 12.5 ; `00` § Avatars ; `CLAUDE.md` § 2, § 6, § 8 |
 
+### D50. Les formulations récurrentes refusées proposent-elles des alias ? — **oui, automatiquement, après trois manches distinctes et validation humaine**
+
+**Demande du porteur.** Certains films ont plusieurs titres usuels selon le pays ou l’édition — par exemple « Harry Potter à l’école des sorciers » et « Harry Potter et la pierre philosophale » — et ces formulations doivent pouvoir devenir des réponses acceptées.
+
+**Ce que la décision arrête.** Les réponses texte fausses déjà conservées par D46 sont agrégées chaque heure sur les 90 derniers jours. Une même forme normalisée n’entre dans `near_miss` qu’après trois manches distinctes ; les clics QCM, les formes déjà acceptées et les données de joueur sont exclus. La file « Suggestions d’alias » montre seulement le film, la forme, le nombre de saisies et de manches, la meilleure distance et des mois (jamais les parties ni les joueurs). Un curateur choisit FR ou EN puis accepte la forme, ce qui crée un alias `curator` et reprojette `answer_key`, ou l’ignore. Une actualisation manuelle est disponible ; le traitement planifié est idempotent et protégé par verrou. Les formulations éloignées sont volontairement admises dans cette **file de candidats** : un titre alternatif officiel comme « pierre philosophale » n’est pas nécessairement une faute proche de la clé existante. Rien n’est accepté automatiquement.
+
+**Écart assumé.** D24 du 23/09 reportait `near_miss` au J2 et le limitait aux fautes dans la marge de proximité. D46 fournit désormais une source uniforme et conservée ; D50 avance au J1 la file et l’élargit aux formulations récurrentes afin de couvrir les titres alternatifs. Le rapport de collisions reste au J2.
+
+| # | Décision | Réponse retenue | Écart | Inscrite dans |
+|---|---|---|---|---|
+| D50 | Suggestions d’alias depuis les réponses refusées | **oui, J1** : trois manches distinctes, fenêtre de 90 jours, job horaire + actualisation manuelle, validation ou rejet par un curateur | **oui** — révise D24 ; `near_miss` devient une file de formulations récurrentes, pas seulement de fautes proches | `70` § 11 ; `20` § 9.5 et L20-26 ; `10` § 7.9 et § 11.1 ; `CLAUDE.md` § 5 |
+
 ---
 
 ## Seule question encore ouverte — le nom de domaine (décision 5)

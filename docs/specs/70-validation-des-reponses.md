@@ -711,7 +711,11 @@ Une fois par manche, jamais par joueur : égalité indexée `movie_projection_qc
 
 ---
 
-## 11. Quasi-justes (`near_miss`) : règle complète, écriture au J2 (D24 du 23/09)
+## 11. Formulations récurrentes (`near_miss`) : alimentation au J1 (D50 du 01/10)
+
+**Amendement D50 du 01/10, qui remplace la mécanique J2 ci-dessous.** Depuis D46, chaque refus texte est déjà écrit de manière uniforme dans `wrong_answer` ; aucun tampon conditionnel n'est donc nécessaire dans la requête de jeu. Un traitement horaire, relançable manuellement et idempotent, reconstruit `near_miss` depuis les 90 derniers jours : source `text` seulement, forme non vide, au moins trois manches distinctes pour un même film. Il compte toutes les occurrences, conserve seulement les mois de première et dernière observation et calcule la meilleure distance à titre indicatif. Les formes exactes déjà acceptées sont exclues. Aucune qualification par proximité : un titre alternatif officiel peut être éloigné du titre actuellement indexé. La promotion reste un geste explicite du curateur ; le traitement n'accepte jamais une réponse seul. Le rapport de collisions reste au J2.
+
+Le texte historique suivant décrit D24 avant D46 et D50 ; il est conservé pour tracer la décision remplacée.
 
 **Au J1** : aucune tâche, aucun message, aucun interrupteur, **aucune écriture**. La table reste vide et les alias se saisissent à la main dans l'écran de 20. Le report retire quatre à cinq heures de la taille du J1 (mesure de taille, jamais un budget, D36 du 23/09) et reste acquis sous D35 du 23/09 : rien de ce qui est marqué J2 ne remonte au J1 — amendé le 23/09. À 60 films, le curateur corrige les alias à la main, et le signal n'a de valeur qu'avec du trafic réel. Un interrupteur de configuration serait du code mort.
 

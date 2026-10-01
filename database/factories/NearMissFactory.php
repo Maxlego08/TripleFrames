@@ -7,8 +7,8 @@ use App\Models\NearMiss;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
- * Fabrique de test de {@see NearMiss} — les chaînes quasi-justes **agrégées par
- * film**, au-dessus d'un seuil de k-anonymat (§ 7.9).
+ * Fabrique de test de {@see NearMiss} — les formulations récurrentes
+ * **agrégées par film**, au-dessus d'un seuil de k-anonymat (§ 7.9, D50).
  *
  * **La table n'a AUCUNE colonne de joueur** : ni `player_id`, ni `room_id`, ni
  * `game_id`, ni `round_id`, ni adresse IP, ni locale, et `dismissed_at` est sans

@@ -1,6 +1,7 @@
 <?php
 
 use App\Console\Commands\RoomArchiveIdleCommand;
+use App\Jobs\Curation\AggregateNearMisses;
 use App\Jobs\Ops\ReportBruteForce;
 use App\Jobs\Ops\WorkerHeartbeat;
 use App\Jobs\Retention\RunRetentionPurge;
@@ -49,6 +50,13 @@ Schedule::command(RoomArchiveIdleCommand::class)->cron(RoomExpiry::sweepCron());
 // être purgé la veille.
 Schedule::job(new RunRetentionPurge)
     ->dailyAt(Config::string('ops.purge.daily_at'));
+
+// Suggestions d'alias : reconstruction idempotente depuis les réponses texte
+// refusées, sur la file par défaut. Le verrou applicatif empêche qu'un geste
+// manuel « Actualiser » croise ce passage planifié.
+Schedule::job(new AggregateNearMisses)
+    ->hourly()
+    ->withoutOverlapping();
 
 // Élagage des instantanés de la règle 12 (§ 13.1) : après la purge de
 // rétention, avant le tier chaud.
