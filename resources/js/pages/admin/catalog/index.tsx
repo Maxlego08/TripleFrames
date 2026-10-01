@@ -30,6 +30,7 @@ import type {
     AdminCatalogFacets,
     AdminCatalogFilters,
     AdminCatalogOptions,
+    AdminAvailableTheme,
     AdminMovieRow,
     Paginated,
 } from '@/types/admin';
@@ -40,6 +41,8 @@ type Props = {
     filters: AdminCatalogFilters;
     facets: AdminCatalogFacets;
     options: AdminCatalogOptions;
+    /** Le filtre « thème » : tous les thèmes, publiés ou non (spec 20 § 9.6). */
+    theme_options: AdminAvailableTheme[];
 };
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -66,6 +69,7 @@ export default function AdminCatalogIndex({
     filters,
     facets,
     options,
+    theme_options,
 }: Props) {
     const { t, locale } = useTranslations();
     const filtered = hasActiveFilters(filters);
@@ -134,6 +138,7 @@ export default function AdminCatalogIndex({
                         <AdminCatalogFiltersForm
                             filters={filters}
                             options={options}
+                            themeOptions={theme_options}
                         />
                     </CardContent>
                 </Card>

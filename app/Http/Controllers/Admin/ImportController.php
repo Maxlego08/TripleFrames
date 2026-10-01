@@ -10,6 +10,7 @@ use App\Http\Requests\Admin\CatalogIndexRequest;
 use App\Http\Requests\Admin\ImportSearchRequest;
 use App\Models\ImportRun;
 use App\Models\Movie;
+use App\Models\Theme;
 use App\Support\Admin\AdminCatalogPresenter;
 use App\Support\Admin\PastePreview;
 use App\Support\Admin\SeedList;
@@ -90,6 +91,11 @@ class ImportController extends Controller
             'tmdb_configured' => $tmdb->isConfigured(),
             'seed_list' => fn (): array => SeedList::summary(),
             'paste_preview' => fn (): ?array => self::pastePreview($userId),
+            // Les thèmes proposables au collage (D43 du 01/10, spec 20 § 3.3) :
+            // tous, publiés ou non, groupés par nature à l'écran. Fermeture :
+            // ni le sondage de l'aperçu ni le rafraîchissement du journal ne
+            // les relisent.
+            'themes' => fn (): array => self::themes(),
             'poll_seconds' => max(1, Config::integer('catalog.curation.poll_seconds')),
         ];
     }
@@ -114,6 +120,23 @@ class ImportController extends Controller
             ->first();
 
         return $resumable === null ? null : AdminCatalogPresenter::importRunRow($resumable);
+    }
+
+    /**
+     * Tous les thèmes, dans l'ordre du sélecteur du lobby — deux requêtes,
+     * thèmes et libellés, quel que soit leur nombre.
+     *
+     * @return list<array{id: int, key: string, label: string, kind: string, is_published: bool}>
+     */
+    private static function themes(): array
+    {
+        $themes = [];
+
+        foreach (Theme::query()->with('labels')->orderBy('sort_order')->orderBy('key')->get() as $theme) {
+            $themes[] = AdminCatalogPresenter::availableTheme($theme);
+        }
+
+        return $themes;
     }
 
     /**
@@ -178,6 +201,7 @@ class ImportController extends Controller
      *     pages_max: int,
      *     pages_default: int,
      *     paste_max_ids: int,
+     *     paste_max_themes: int,
      *     search_min_length: int,
      *     search_max_length: int,
      * }
@@ -210,6 +234,7 @@ class ImportController extends Controller
             'pages_max' => self::pagesMax(),
             'pages_default' => self::pagesMin(),
             'paste_max_ids' => self::pasteMaxIds(),
+            'paste_max_themes' => self::pasteMaxThemes(),
             'search_min_length' => ImportSearchRequest::QUERY_MIN_LENGTH,
             'search_max_length' => ImportSearchRequest::QUERY_MAX_LENGTH,
         ];

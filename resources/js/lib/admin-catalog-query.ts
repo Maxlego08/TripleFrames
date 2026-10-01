@@ -64,6 +64,10 @@ export function catalogQuery(
         query.curation_status = filters.curation_status;
     }
 
+    if (filters.theme_id !== null) {
+        query.theme_id = filters.theme_id;
+    }
+
     query.sort = overrides.sort ?? filters.sort;
     query.direction = overrides.direction ?? filters.direction;
 
@@ -100,6 +104,7 @@ export function hasActiveFilters(filters: AdminCatalogFilters): boolean {
         filters.exception !== null ||
         filters.playable_at !== null ||
         filters.missing_title !== null ||
-        filters.curation_status !== null
+        filters.curation_status !== null ||
+        filters.theme_id !== null
     );
 }

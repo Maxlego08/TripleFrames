@@ -6,7 +6,13 @@ import ImportPreviewController from '@/actions/App/Http/Controllers/Admin/Import
 import { AdminCardTitle } from '@/components/admin/admin-card-title';
 import { AdminEmptyState } from '@/components/admin/admin-empty-state';
 import { AdminErrorState } from '@/components/admin/admin-error-state';
+import { AdminInputError } from '@/components/admin/admin-input-error';
 import { AdminLoadingState } from '@/components/admin/admin-loading-state';
+import {
+    ImportThemeFields,
+    ImportThemeRecap,
+    importThemeError,
+} from '@/components/admin/import-theme-picker';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -31,6 +37,7 @@ import {
 } from '@/lib/admin-enum-keys';
 import { show as catalogShow } from '@/routes/admin/catalog';
 import type {
+    AdminImportTheme,
     AdminPastePreview,
     AdminPastePreviewRow,
     ImportDecision,
@@ -44,6 +51,12 @@ type Props = {
     tmdbConfigured: boolean;
     /** Un collage est ouvert : « Importer ces films » attend sa fin. */
     pasteBusy: boolean;
+    /**
+     * Les thèmes cochés dans la carte du collage (D43 du 01/10) : « Importer
+     * ces films » les applique, et les affiche (critique C8).
+     */
+    themes: AdminImportTheme[];
+    selectedThemeIds: number[];
 };
 
 type BadgeVariant = 'default' | 'secondary' | 'destructive' | 'outline';
@@ -81,6 +94,8 @@ export function PastePreviewPanel({
     pollSeconds,
     tmdbConfigured,
     pasteBusy,
+    themes,
+    selectedThemeIds,
 }: Props) {
     const { t } = useTranslations();
     const [pollFailed, setPollFailed] = useState(false);
@@ -208,12 +223,19 @@ export function PastePreviewPanel({
                             {...ImportIdsController.store.form()}
                             options={{ preserveScroll: true }}
                         >
-                            {({ processing }) => (
+                            {({ processing, errors }) => (
                                 <>
                                     <input
                                         type="hidden"
                                         name="ids"
                                         value={collage}
+                                    />
+                                    <ImportThemeFields
+                                        selected={selectedThemeIds}
+                                    />
+                                    <ImportThemeRecap
+                                        themes={themes}
+                                        selected={selectedThemeIds}
                                     />
                                     <Button
                                         type="submit"
@@ -226,6 +248,9 @@ export function PastePreviewPanel({
                                     >
                                         {t('admin.import.preview.import')}
                                     </Button>
+                                    <AdminInputError
+                                        message={importThemeError(errors)}
+                                    />
                                 </>
                             )}
                         </Form>

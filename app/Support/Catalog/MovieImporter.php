@@ -2,6 +2,7 @@
 
 namespace App\Support\Catalog;
 
+use App\Actions\Curation\SetMovieThemeMembership;
 use App\Enums\ContentAvailability;
 use App\Enums\ContentFlag;
 use App\Enums\ContentOrigin;
@@ -16,6 +17,9 @@ use App\Models\Movie;
 use App\Models\MovieCertification;
 use App\Models\MovieTitle;
 use App\Models\MovieTmdbTag;
+use App\Models\Theme;
+use App\Models\TmdbCompany;
+use App\Models\User;
 use App\Support\Tmdb\TmdbMovie;
 use App\Support\Tmdb\TmdbMovieSummary;
 use App\Support\Tmdb\TmdbTitle;
@@ -25,6 +29,7 @@ use App\ValueObjects\Catalog\ImportFilter;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 
 /**
  * Le service d'import — il applique les filtres, déduplique, écrit le
@@ -78,9 +83,19 @@ final class MovieImporter
      */
     private const string ROMAJI_TYPE = 'romaji';
 
+    /**
+     * Tentatives de la transaction d'un film sur un interblocage MySQL : les
+     * lignes `movie_theme` qu'elle verrouille (évaluation, thèmes du collage)
+     * peuvent croiser un `syncTheme()`. La transaction est la plus externe, et
+     * son écriture repart de zéro : Laravel la rejoue.
+     */
+    private const int DEADLOCK_ATTEMPTS = 3;
+
     public function __construct(
         private readonly AnswerKeyProjector $answerKeys,
         private readonly MovieProjector $projection,
+        private readonly ThemeEvaluator $themes,
+        private readonly SetMovieThemeMembership $membership,
     ) {}
 
     /**
@@ -193,10 +208,22 @@ final class MovieImporter
             return ImportOutcome::simulated($tmdb->tmdbId, $motives, $isException);
         }
 
+        /** @var array{applied: int, kept_removed: int} $themeCounts */
+        $themeCounts = ['applied' => 0, 'kept_removed' => 0];
+
         /** @var Movie $movie */
-        $movie = DB::transaction(
-            fn (): Movie => $this->create($tmdb, $run, $gate, $motives, $isException),
-        );
+        $movie = DB::transaction(function () use ($tmdb, $run, $gate, $motives, $isException, &$themeCounts): Movie {
+            $movie = $this->create($tmdb, $run, $gate, $motives, $isException);
+
+            // Les thèmes choisis au collage, dans la MÊME transaction, après
+            // l'évaluation automatique de `create()` (spec 30 § 13.1).
+            $themeCounts = $this->applyRunThemes($movie, $run);
+
+            return $movie;
+        }, self::DEADLOCK_ATTEMPTS);
+
+        // Compté après le commit seulement : un import annulé ne compte rien.
+        $this->tallyRunThemes($run, $themeCounts);
 
         return ImportOutcome::imported($movie, $motives, $isException);
     }
@@ -243,6 +270,114 @@ final class MovieImporter
             /** @var int $current */
             $current = $run->getAttribute($column);
             $run->setAttribute($column, $current + $increment);
+        }
+    }
+
+    /**
+     * Les thèmes choisis au collage (`import_run.added_theme_ids`, spec 20
+     * § 3.3, D43 du 01/10), posés en exception `added` sur `$movie` — **dans
+     * la transaction ouverte de l'appelant**, celle de l'import du film ou,
+     * pour un film déjà présent, celle que la commande ouvre pour lui.
+     *
+     * Par {@see SetMovieThemeMembership::applyPasteAddition()}, seul écrivain
+     * de l'exception, signée de `import_run.actor_id` (critique C6) :
+     * - un `removed` posé par un curateur n'est jamais changé en `added` —
+     *   compté dans `kept_removed` ;
+     * - une ligne déjà active (par la règle ou par un ajout) n'est pas
+     *   touchée, et n'est pas comptée.
+     *
+     * Rien hors d'un collage (`discover`, `resync`) ni sans sélection. Les
+     * thèmes sont relus à chaque appel, jamais mis en cache sur le balayage ;
+     * un thème disparu est ignoré. Ordre par identifiant : deux collages
+     * concurrents verrouillent les lignes dans le même ordre.
+     *
+     * Aucune ligne de journal par film (exception assumée à D41, spec 20
+     * § 2.7) : le collage est journalisé une fois, à son ouverture.
+     *
+     * @return array{applied: int, kept_removed: int}
+     */
+    public function applyRunThemes(Movie $movie, ImportRun $run): array
+    {
+        $counts = ['applied' => 0, 'kept_removed' => 0];
+
+        $themeIds = $run->run_kind === ImportRunKind::Paste ? $run->addedThemeIds() : [];
+
+        if ($themeIds === []) {
+            return $counts;
+        }
+
+        // La policy est relue à CHAQUE écriture, pour l'auteur du collage et
+        // ce film (CLAUDE.md § 5) : un auteur supprimé (`actor_id` passé à
+        // NULL), rétrogradé en cours de balayage, ou un film qui ne se cure
+        // plus (retiré) ne reçoit aucune exception — jamais une exception
+        // signée de personne ni d'un compte qui n'a plus le droit de la poser.
+        $actor = $run->actor_id === null ? null : User::query()->find($run->actor_id);
+
+        if (! $actor instanceof User || Gate::forUser($actor)->denies('curate', $movie)) {
+            return $counts;
+        }
+
+        $at = CarbonImmutable::now();
+
+        $themes = Theme::query()->whereKey($themeIds)->orderBy('id')->get();
+
+        foreach ($themes as $theme) {
+            $result = $this->membership->applyPasteAddition($movie, $theme, $actor->id, $at);
+
+            if ($result === SetMovieThemeMembership::PASTE_APPLIED) {
+                $counts['applied']++;
+            } elseif ($result === SetMovieThemeMembership::PASTE_KEPT_REMOVED) {
+                $counts['kept_removed']++;
+            }
+        }
+
+        return $counts;
+    }
+
+    /**
+     * Les thèmes d'un collage appliqués à un film DÉJÀ PRÉSENT (issue
+     * `duplicate`), dans une transaction à lui : le film est relu sous
+     * verrou — même ordre que le geste de la fiche, film puis ligne — et un
+     * film retiré entre-temps ne reçoit rien. Les deux compteurs du balayage
+     * sont accumulés en mémoire après le commit, comme les quatre autres.
+     */
+    public function applyRunThemesToExisting(Movie $movie, ImportRun $run): void
+    {
+        if ($run->run_kind !== ImportRunKind::Paste || $run->addedThemeIds() === []) {
+            return;
+        }
+
+        /** @var array{applied: int, kept_removed: int} $counts */
+        $counts = DB::transaction(function () use ($movie, $run): array {
+            $locked = Movie::query()->whereKey($movie->id)->lockForUpdate()->first();
+
+            // Un film disparu ne reçoit rien ; un film retiré entre-temps est
+            // refusé par la policy `curate`, relue sur la ligne verrouillée.
+            if (! $locked instanceof Movie) {
+                return ['applied' => 0, 'kept_removed' => 0];
+            }
+
+            return $this->applyRunThemes($locked, $run);
+        }, self::DEADLOCK_ATTEMPTS);
+
+        $this->tallyRunThemes($run, $counts);
+    }
+
+    /**
+     * Accumule les deux compteurs de thèmes **en mémoire**, comme
+     * {@see self::journal()} les quatre autres : la commande les enregistre
+     * avec eux.
+     *
+     * @param  array{applied: int, kept_removed: int}  $counts
+     */
+    private function tallyRunThemes(ImportRun $run, array $counts): void
+    {
+        if ($counts['applied'] > 0) {
+            $run->total_themes_applied += $counts['applied'];
+        }
+
+        if ($counts['kept_removed'] > 0) {
+            $run->total_themes_kept_removed += $counts['kept_removed'];
         }
     }
 
@@ -335,9 +470,14 @@ final class MovieImporter
         $movie->save();
 
         $this->writeTmdbTags($movie, $tmdb);
+        $this->writeTmdbCompanies($tmdb);
         $this->writeCertifications($movie, $gate);
         $this->writeTmdbTitles($movie, $tmdb);
         $this->writeTmdbAliases($movie, $tmdb);
+
+        // Appartenance aux thèmes, synchrone et dans la transaction du film
+        // (spec 30 § 13.2) : les étiquettes viennent de l'appel de détail.
+        $this->themes->syncMovie($movie, tagKeys: $this->tagKeys($tmdb));
 
         $this->answerKeys->project($movie);
         $this->projection->recompute($movie);
@@ -352,8 +492,10 @@ final class MovieImporter
      * Écrasable : `title_original`, `title_original_latin`, `original_language`,
      * `release_year`, `vote_count`, `adult`, `collection_id`, les lignes
      * `movie_tmdb_tag`, les lignes `movie_certification`, les seules lignes
-     * `movie_title` et `alias` d'`origin = 'tmdb'`, plus `movie_projection` et
-     * `answer_key`, reprojetés librement.
+     * `movie_title` et `alias` d'`origin = 'tmdb'`, plus `movie_projection`,
+     * `answer_key` et les lignes `movie_theme` automatiques (`is_auto`,
+     * jamais `manual_state`), reprojetés librement, et le nom des sociétés du
+     * film dans `tmdb_company` (D43 du 01/10).
      *
      * Jamais touché : les lignes `curator`, `movie_difficulty_override`,
      * `group_id`, `is_import_exception` et ses trois motifs, `import_source`,
@@ -415,6 +557,7 @@ final class MovieImporter
 
             MovieTmdbTag::query()->where('movie_id', $movie->id)->delete();
             $this->writeTmdbTags($movie, $tmdb);
+            $this->writeTmdbCompanies($tmdb);
 
             MovieCertification::query()->where('movie_id', $movie->id)->delete();
             $this->writeCertifications($movie, $gate);
@@ -430,6 +573,10 @@ final class MovieImporter
                 ->where('origin', ContentOrigin::Tmdb->value)
                 ->delete();
             $this->writeTmdbAliases($movie, $tmdb);
+
+            // `is_auto` réécrit pour tous les thèmes ; `manual_state` jamais
+            // touché (spec 30 § 13.1, spec 10 § 9.3).
+            $this->themes->syncMovie($movie, tagKeys: $this->tagKeys($tmdb));
 
             $this->answerKeys->project($movie);
             $this->projection->recompute($movie);
@@ -466,6 +613,52 @@ final class MovieImporter
             $tag->tmdb_tag_id = $tagId;
             $tag->save();
         }
+    }
+
+    /**
+     * Le nom TMDB de chaque société de production du film, déjà dans la
+     * réponse de l'appel de détail (spec 10 § 3.6 bis, D43 du 01/10) : insérée
+     * si absente, **nom réécrit** sinon — métadonnée TMDB pure, comme les
+     * étiquettes. Une société sans nom n'écrit rien : elle reste désignée par
+     * son identifiant.
+     */
+    private function writeTmdbCompanies(TmdbMovie $tmdb): void
+    {
+        $rows = [];
+
+        foreach ($tmdb->productionCompanyNames as $tmdbId => $name) {
+            $rows[] = [
+                'tmdb_id' => $tmdbId,
+                'name' => mb_substr($name, 0, TmdbCompany::NAME_MAX_LENGTH),
+            ];
+        }
+
+        if ($rows === []) {
+            return;
+        }
+
+        TmdbCompany::query()->upsert($rows, ['tmdb_id'], ['name']);
+    }
+
+    /**
+     * Les clés d'étiquette de l'appel de détail, pour l'évaluateur : aucune
+     * relecture de `movie_tmdb_tag` en base à l'import.
+     *
+     * @return array<string, true>
+     */
+    private function tagKeys(TmdbMovie $tmdb): array
+    {
+        $keys = [];
+
+        foreach ($tmdb->genreIds as $genreId) {
+            $keys[ThemeEvaluator::tagKey(TmdbTagKind::Genre, $genreId)] = true;
+        }
+
+        foreach ($tmdb->productionCompanyIds as $companyId) {
+            $keys[ThemeEvaluator::tagKey(TmdbTagKind::Company, $companyId)] = true;
+        }
+
+        return $keys;
     }
 
     /**

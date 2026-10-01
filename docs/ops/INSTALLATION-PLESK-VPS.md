@@ -5,17 +5,20 @@
 > `docs/ops/repetition-vm.md`.
 >
 > Ce document explique **quoi faire, où le faire, avec quel utilisateur et
-> pourquoi**. Les documents d'origine restent la référence exhaustive en cas
-> de doute.
+> pourquoi**. Il est adapté à la configuration réelle de `tripleframes.fun` :
+> application dans `httpdocs`, PHP 8.5 et Redis provisoirement distant. Les
+> documents d'origine décrivent encore PHP 8.4 et un Redis local ; sur ces
+> trois points précis, les commandes de ce guide remplacent donc leurs valeurs.
 
 ## 1. Ce que l'on installe réellement
 
 TripleFrames n'est pas un simple site PHP. La production comprend :
 
-- nginx et PHP-FPM 8.4, gérés par Plesk ;
+- nginx et PHP-FPM 8.5, gérés par Plesk ;
 - MySQL, avec une base et un utilisateur dédiés ;
 - le code Laravel, livré par la branche Git `deploy` ;
-- une instance Redis dédiée, locale au VPS ;
+- une instance Redis située temporairement sur un autre VPS, jointe par un
+  réseau privé ou un tunnel chiffré ;
 - deux workers Laravel : `game` et `default` ;
 - Laravel Reverb pour les WebSockets ;
 - le planificateur Laravel exécuté chaque minute ;
@@ -34,22 +37,24 @@ dans son interface et d'autres en SSH.
 | **[POSTE]** | ordinateur local et forge Git | pousser le code, suivre la CI, tester HTTPS et WSS |
 | **[PLESK]** | interface web Plesk | domaine, PHP-FPM, base, Git, nginx, certificat et tâche planifiée |
 | **[ABO]** | SSH avec l'utilisateur système de l'abonnement | `.env`, Composer, Artisan et déploiement applicatif |
-| **[ROOT]** | SSH `root` sur le VPS | Redis, systemd, contrôle réseau et services |
+| **[ROOT]** | SSH `root` sur le VPS applicatif | systemd, contrôle réseau et services |
 
 Une commande **[ABO]** ne doit pas être lancée en `root`. Cela créerait des
 fichiers appartenant à `root` que PHP-FPM et le hook ne pourraient plus gérer.
 
 ## 3. Règles absolues
 
-1. Remplacer chaque valeur entre chevrons, par exemple `<DOMAINE>`, avant
-   d'exécuter une commande.
+1. Les valeurs réelles connues sont déjà inscrites dans ce guide. Les seuls
+   champs encore à renseigner concernent les secrets et la connexion au VPS
+   Redis distant.
 2. Ne jamais copier une adresse IP, un mot de passe, `APP_KEY` ou un autre
    secret dans Git, dans ce document ou dans une commande conservée dans
    l'historique du shell.
 3. Toute session **[ABO]** commence par `umask 027`.
-4. Toujours appeler PHP par `/opt/plesk/php/8.4/bin/php`, jamais par `php`.
-5. Ne jamais exposer Redis ou Reverb sur l'IP publique. Ils doivent écouter
-   uniquement sur `127.0.0.1`.
+4. Toujours appeler PHP par `/opt/plesk/php/8.5/bin/php`, jamais par `php`.
+5. Reverb doit écouter uniquement sur `127.0.0.1:8081`. Le Redis distant ne
+   doit jamais être joint en clair par son adresse publique : utiliser le
+   réseau privé de l'hébergeur ou un tunnel WireGuard équivalent.
 6. Ne jamais exécuter `composer setup` en production.
 7. Ne jamais exécuter `npm install` ou `npm run build` sur le VPS. La CI
    construit déjà `public/build` et le publie dans la branche `deploy`.
@@ -67,30 +72,28 @@ Ne mettre aucun secret dans cette fiche si elle est enregistrée dans Git.
 
 | Valeur | Exemple de forme | Valeur réelle |
 | --- | --- | --- |
-| Domaine | `jeu.exemple.fr` | `<DOMAINE>` |
-| IP publique du VPS | utilisée seulement pour SSH/DNS | `<IP_VPS>` |
-| Utilisateur système Plesk | nom créé par Plesk | `<UTILISATEUR_ABO>` |
-| Groupe de l'utilisateur | souvent `psacln` | `<GROUPE_ABO>` |
-| Racine de l'abonnement | `/var/www/vhosts/<DOMAINE>` | `<RACINE_ABO>` |
-| Chemin de déploiement | `/var/www/vhosts/<DOMAINE>/tripleframes` | `<DEPLOY_PATH>` |
-| PHP Plesk | `/opt/plesk/php/8.4/bin/php` | à confirmer |
-| Composer Plesk | Debian : `/usr/lib/plesk-9.0/composer.phar` | `<COMPOSER_PHAR>` |
-| Port Redis privé | par exemple `6381`, jamais `6379` | `<PORT_REDIS>` |
-| Port Reverb privé | par exemple `8081` | `<PORT_REVERB>` |
-| Base MySQL | créée dans Plesk | `<DB_NAME>` |
-| Utilisateur MySQL | limité à cette base | `<DB_USER>` |
-
-Les exemples `6381` et `8081` ne sont pas des choix automatiques. Il faut
-d'abord confirmer qu'ils sont libres avec `ss -ltnp`.
+| Domaine et hôte SSH | — | `tripleframes.fun` |
+| Utilisateur système Plesk | nom créé par Plesk | `tripleframes` |
+| Groupe de l'utilisateur | — | `psacln` |
+| Racine de l'abonnement | — | `/var/www/vhosts/tripleframes.fun` |
+| Chemin de déploiement | — | `/var/www/vhosts/tripleframes.fun/httpdocs` |
+| Racine publique nginx | — | `/var/www/vhosts/tripleframes.fun/httpdocs/public` |
+| PHP Plesk | — | `/opt/plesk/php/8.5/bin/php` |
+| Composer Plesk | — | `/usr/lib/plesk-9.0/composer.phar` |
+| Hôte Redis privé | VPS Redis distant | à renseigner dans `.env` |
+| Port Redis privé | configuration du VPS Redis | à renseigner dans `.env` |
+| Port Reverb local | à confirmer libre | `8081` |
+| Base MySQL | — | `tripleframes` |
+| Utilisateur MySQL | — | `tripleframes` |
 
 ## 5. Vue d'ensemble de l'ordre à suivre
 
-1. Vérifier le VPS et choisir deux ports locaux libres.
+1. Vérifier le VPS et confirmer que le port local `8081` est libre.
 2. Créer/configurer le domaine, PHP et MySQL dans Plesk.
 3. Connecter Plesk à la branche Git `deploy`, puis effectuer un premier
    déploiement **sans hook**.
 4. Créer les répertoires privés et le `.env` avec l'utilisateur d'abonnement.
-5. Installer/configurer l'instance Redis dédiée en `root`.
+5. Valider la connexion privée au Redis situé sur l'autre VPS.
 6. Installer les dépendances PHP, migrer et initialiser la plateforme.
 7. Installer les unités systemd des workers et de Reverb.
 8. Ajouter les directives nginx et la tâche planifiée dans Plesk.
@@ -105,7 +108,7 @@ d'abord confirmer qu'ils sont libres avec `ss -ltnp`.
 **[POSTE]**
 
 ```bash
-ssh root@<IP_VPS>
+ssh root@tripleframes.fun
 ```
 
 **[ROOT]**
@@ -128,23 +131,23 @@ Résultat attendu :
 - `cgroup2fs` pour les limites mémoire et CPU ;
 - heure système en UTC et NTP actif ;
 - idéalement au moins 4 Go de RAM et 2 vCPU ;
-- aucun service sur les deux ports envisagés pour Redis et Reverb.
+- aucun service local sur le port `8081` réservé à Reverb.
 
-### 6.2 Vérifier PHP 8.4
+### 6.2 Vérifier PHP 8.5
 
 **[ROOT]**
 
 ```bash
-/opt/plesk/php/8.4/bin/php -v
-/opt/plesk/php/8.4/bin/php -m | grep -E 'imagick|pdo_mysql|mbstring|openssl|sodium|pcntl'
-/opt/plesk/php/8.4/bin/php -r 'echo ini_get("memory_limit"), PHP_EOL;'
+/opt/plesk/php/8.5/bin/php -v
+/opt/plesk/php/8.5/bin/php -m | grep -E 'imagick|pdo_mysql|mbstring|openssl|sodium|pcntl'
+/opt/plesk/php/8.5/bin/php -r 'echo ini_get("memory_limit"), PHP_EOL;'
 ```
 
 Les extensions indispensables sont `imagick`, `pdo_mysql`, `mbstring`,
 `openssl` et `sodium`. `pcntl` est souhaitable pour borner correctement la
 durée des jobs.
 
-Si PHP 8.4 ou une extension manque, l'installer avec **Plesk Installer** plutôt
+Si PHP 8.5 ou une extension manque, l'installer avec **Plesk Installer** plutôt
 qu'avec le PHP système, puis rejouer ces commandes.
 
 ### 6.3 Vérifier Composer
@@ -162,42 +165,28 @@ Sur Debian/Ubuntu, le chemin attendu est généralement
 Vérifier avec le PHP Plesk :
 
 ```bash
-/opt/plesk/php/8.4/bin/php <COMPOSER_PHAR> --version
+/opt/plesk/php/8.5/bin/php /usr/lib/plesk-9.0/composer.phar --version
 ```
 
-### 6.4 Vérifier Redis sans perturber les autres sites
+### 6.4 Préparer le client Redis
 
 **[ROOT]**
 
+Redis n'est pas installé comme serveur sur ce VPS applicatif. Seul
+`redis-cli` est utile pour valider la connexion au VPS Redis distant :
+
 ```bash
-command -v redis-server || true
 command -v redis-cli || true
-redis-server --version 2>/dev/null || true
-ss -ltnp | grep ':6379\b' || true
 ```
 
-Si Redis n'est pas installé sur Debian/Ubuntu :
+S'il manque sur Debian/Ubuntu :
 
 ```bash
 apt-get update
-apt-get install -y redis-server redis-tools
+apt-get install -y redis-tools
 ```
 
-Attention : le paquet peut démarrer automatiquement une instance sur le port
-6379. Ne jamais l'arrêter si un autre site l'utilisait déjà. S'il vient d'être
-créé par cette installation et qu'aucun voisin ne l'utilise :
-
-```bash
-systemctl disable --now redis-server
-```
-
-TripleFrames utilisera sa propre unité `tripleframes-redis` sur un autre port.
-
-Vérifier que le binaire supporte la notification systemd :
-
-```bash
-ldd "$(command -v redis-server)" | grep libsystemd
-```
+Ne pas installer ni activer `redis-server` localement dans cette topologie.
 
 ### 6.5 Vérifier MySQL
 
@@ -212,18 +201,16 @@ Objectif : MySQL 8, horodatage cohérent en UTC, `explicit_defaults_for_timestam
 `backup:snapshot` devra être corrigée pour utiliser
 `--set-gtid-purged=OFF` avant de considérer les sauvegardes restaurables.
 
-### 6.6 Choisir et contrôler les ports
-
-Exemple avec Redis `6381` et Reverb `8081` :
+### 6.6 Confirmer que le port Reverb 8081 est libre
 
 **[ROOT]**
 
 ```bash
-ss -ltnp | grep -E ':(6381|8081)\b' || echo 'Les deux ports semblent libres'
+ss -ltnp | grep ':8081\b' || echo 'Le port 8081 est libre'
 ```
 
-Ne continuer que si aucune ligne d'écoute n'apparaît. Reporter les deux ports
-réels dans la fiche de valeurs.
+Ne continuer que si aucune ligne d'écoute n'apparaît. Reverb écoutera ensuite
+sur `127.0.0.1:8081`.
 
 ## 7. Phase B — préparer l'abonnement dans Plesk
 
@@ -234,14 +221,14 @@ réels dans la fiche de valeurs.
 1. Créer un abonnement dédié au domaine.
 2. Utiliser un utilisateur système dédié, jamais partagé avec un autre site.
 3. Régler l'accès SSH sur `/bin/bash`, **non chrooté**. Le hook, Composer et la
-   tâche planifiée doivent pouvoir appeler `/opt/plesk/php/8.4/bin/php`.
+   tâche planifiée doivent pouvoir appeler `/opt/plesk/php/8.5/bin/php`.
 4. Faire pointer les enregistrements DNS `A`/`AAAA` vers le VPS.
 5. Attendre que le domaine résolve avant de demander le certificat.
 
 **[POSTE]**
 
 ```bash
-nslookup <DOMAINE>
+nslookup tripleframes.fun
 ```
 
 Après la création de l'abonnement, relever les valeurs exactes.
@@ -249,10 +236,10 @@ Après la création de l'abonnement, relever les valeurs exactes.
 **[ROOT]**
 
 ```bash
-id <UTILISATEUR_ABO>
-getent passwd <UTILISATEUR_ABO>
-stat -c '%A %U:%G %n' /var/www/vhosts/<DOMAINE>
-ls -ld /var/www/vhosts/<DOMAINE>/private
+id tripleframes
+getent passwd tripleframes
+stat -c '%A %U:%G %n' /var/www/vhosts/tripleframes.fun
+ls -ld /var/www/vhosts/tripleframes.fun/private
 ```
 
 Reporter le groupe principal, le répertoire personnel et la présence du
@@ -263,7 +250,7 @@ le groupe du serveur web.
 Tester ensuite la connexion dédiée depuis le poste :
 
 ```bash
-ssh <UTILISATEUR_ABO>@<IP_VPS>
+ssh tripleframes@tripleframes.fun
 id
 pwd
 ```
@@ -272,8 +259,8 @@ pwd
 
 **[PLESK]** → Sites Web & Domaines → Hébergement :
 
-- racine du document : `tripleframes/public` ;
-- chemin de l'application/déploiement : `tripleframes` ;
+- racine du document : `httpdocs/public` ;
+- chemin de l'application/déploiement : `httpdocs` ;
 - redirection HTTP vers HTTPS : permanente ;
 - certificat : Let's Encrypt avec renouvellement automatique ;
 - HSTS : durée courte au départ, sans `includeSubDomains`, sans `preload`.
@@ -282,13 +269,19 @@ La racine publique doit absolument finir par `/public`. Le `.env`, `vendor`,
 `storage` et le code applicatif ne doivent jamais être directement servis par
 nginx.
 
+Le code complet se trouve donc dans
+`/var/www/vhosts/tripleframes.fun/httpdocs`, mais nginx ne publie que
+`/var/www/vhosts/tripleframes.fun/httpdocs/public`. L'utilisateur
+`tripleframes` ayant un shell non chrooté peut naviguer dans les autres dossiers
+de `/var/www/vhosts/tripleframes.fun/`, notamment `private/`.
+
 ### 7.3 PHP-FPM
 
 **[PLESK]** → Paramètres PHP :
 
 | Paramètre | Valeur initiale |
 | --- | --- |
-| version | PHP 8.4 |
+| version | PHP 8.5 |
 | gestionnaire | application FPM servie par nginx |
 | `pm` | `ondemand` |
 | `pm.max_children` | `12` |
@@ -370,7 +363,7 @@ workflows de tests/build sont rouges.
 - type : dépôt Git distant ;
 - URL : URL SSH du dépôt ;
 - branche active : `deploy` ;
-- chemin de déploiement : `tripleframes` ;
+- chemin de déploiement : `httpdocs` ;
 - mode : **déploiement manuel** ;
 - webhook/déploiement automatique : désactivé ;
 - actions additionnelles : **vides pour ce premier déploiement**.
@@ -387,7 +380,7 @@ Dans Plesk, cliquer d'abord sur **Tirer les mises à jour**, puis sur
 
 ```bash
 umask 027
-cd <DEPLOY_PATH>
+cd /var/www/vhosts/tripleframes.fun/httpdocs
 pwd
 test -f artisan && echo 'artisan présent'
 test -f public/index.php && echo 'racine publique présente'
@@ -419,15 +412,15 @@ Ne jamais rendre `.env`, `bootstrap/cache` ou `storage` lisibles par tous.
 
 ```bash
 umask 027
-PHP=/opt/plesk/php/8.4/bin/php
-cd <DEPLOY_PATH>
+PHP=/opt/plesk/php/8.5/bin/php
+cd /var/www/vhosts/tripleframes.fun/httpdocs
 (umask 077 && mkdir -p \
-    /var/www/vhosts/<DOMAINE>/private/tripleframes/frames \
-    /var/www/vhosts/<DOMAINE>/private/tripleframes/snapshots \
+    /var/www/vhosts/tripleframes.fun/private/tripleframes/frames \
+    /var/www/vhosts/tripleframes.fun/private/tripleframes/snapshots \
     "$HOME/.config/tripleframes")
 chmod 0700 \
-    /var/www/vhosts/<DOMAINE>/private/tripleframes/frames \
-    /var/www/vhosts/<DOMAINE>/private/tripleframes/snapshots \
+    /var/www/vhosts/tripleframes.fun/private/tripleframes/frames \
+    /var/www/vhosts/tripleframes.fun/private/tripleframes/snapshots \
     "$HOME/.config/tripleframes"
 ```
 
@@ -460,16 +453,16 @@ Attribuer les résultats, dans l'ordre, à :
 3. `REVERB_APP_SECRET` ;
 4. `OPS_PROBE_TOKEN`.
 
-Générer aussi un mot de passe Redis avec `openssl rand -hex 32`. Il devra être
-strictement identique dans `/etc/tripleframes/tripleframes-redis.conf` et dans
-le `.env`. Le stocker immédiatement dans le gestionnaire de secrets.
+Ne pas générer un nouveau mot de passe si l'instance Redis distante existe
+déjà. Utiliser le mot de passe ou l'identifiant ACL fourni par ce VPS et le
+stocker dans le gestionnaire de secrets.
 
 ### 9.3 Créer et remplir le `.env`
 
 **[ABO]**
 
 ```bash
-cd <DEPLOY_PATH>
+cd /var/www/vhosts/tripleframes.fun/httpdocs
 (umask 077 && cp .env.example .env)
 chmod 0600 .env
 nano .env
@@ -483,7 +476,7 @@ APP_NAME=TripleFrames
 APP_ENV=production
 APP_KEY=<SECRET_APP_KEY>
 APP_DEBUG=false
-APP_URL=https://<DOMAINE>
+APP_URL=https://tripleframes.fun
 APP_LOCALE=fr
 APP_FALLBACK_LOCALE=en
 
@@ -500,22 +493,23 @@ LEGAL_CONTACT_EMAIL=
 DB_CONNECTION=mysql
 DB_HOST=127.0.0.1
 DB_PORT=3306
-DB_DATABASE=<DB_NAME>
-DB_USERNAME=<DB_USER>
+DB_DATABASE=tripleframes
+DB_USERNAME=tripleframes
 DB_PASSWORD=<SECRET_DB_PASSWORD>
 
 SESSION_DRIVER=database
 SESSION_SECURE_COOKIE=true
 
-FRAMES_DISK_ROOT=/var/www/vhosts/<DOMAINE>/private/tripleframes/frames
-BACKUP_SNAPSHOT_DIR=/var/www/vhosts/<DOMAINE>/private/tripleframes/snapshots
+FRAMES_DISK_ROOT=/var/www/vhosts/tripleframes.fun/private/tripleframes/frames
+BACKUP_SNAPSHOT_DIR=/var/www/vhosts/tripleframes.fun/private/tripleframes/snapshots
 BACKUP_SNAPSHOT_KEEP_DAYS=7
 
 CACHE_STORE=redis
 QUEUE_CONNECTION=redis
 REDIS_CLIENT=predis
-REDIS_HOST=127.0.0.1
-REDIS_PORT=<PORT_REDIS>
+REDIS_HOST=À_RENSEIGNER_HOTE_PRIVE_REDIS
+REDIS_PORT=À_RENSEIGNER_PORT_REDIS
+REDIS_USERNAME=
 REDIS_PASSWORD=<SECRET_REDIS_PASSWORD>
 REDIS_QUEUE_RETRY_AFTER=960
 
@@ -524,14 +518,14 @@ REVERB_APP_ID=<SECRET_REVERB_APP_ID>
 REVERB_APP_KEY=<SECRET_REVERB_APP_KEY>
 REVERB_APP_SECRET=<SECRET_REVERB_APP_SECRET>
 REVERB_HOST=127.0.0.1
-REVERB_PORT=<PORT_REVERB>
+REVERB_PORT=8081
 REVERB_SCHEME=http
 REVERB_SERVER_HOST=127.0.0.1
-REVERB_SERVER_PORT=<PORT_REVERB>
+REVERB_SERVER_PORT=8081
 REVERB_CLIENT_HOST=
 REVERB_CLIENT_PORT=
 REVERB_CLIENT_SCHEME=
-REVERB_ALLOWED_ORIGINS=<DOMAINE>
+REVERB_ALLOWED_ORIGINS=tripleframes.fun
 REVERB_MAX_REQUEST_SIZE=524288
 
 DEPLOY_DRAIN_TIMEOUT_MINUTES=
@@ -548,6 +542,11 @@ Points importants :
 
 - `APP_ENV=production` et `APP_DEBUG=false` sont obligatoires ;
 - `SITE_INDEXABLE=false` maintient le site en `noindex` au lancement ;
+- `REDIS_HOST` doit être l'adresse privée ou le nom DNS privé du VPS Redis,
+  jamais son adresse publique exposée directement à Internet ;
+- `REDIS_PORT` est le port réellement configuré sur ce VPS Redis ;
+- `REDIS_USERNAME` reste vide pour une authentification par mot de passe seul,
+  ou reçoit le nom ACL fourni par l'administrateur Redis ;
 - `REVERB_CLIENT_*` restent vides, car les navigateurs passent par nginx en
   HTTPS/WSS sur le port 443 ;
 - `REVERB_ALLOWED_ORIGINS` contient le domaine sans `https://` ;
@@ -570,84 +569,55 @@ l'abonnement.
 
 Copier immédiatement `APP_KEY` dans deux emplacements sécurisés hors du VPS.
 
-## 10. Phase E — installer l'instance Redis dédiée
+## 10. Phase E — connecter le Redis distant
 
-Les commandes suivantes supposent que le code est déjà présent dans
-`<DEPLOY_PATH>` et que les ports ont été confirmés libres.
+### 10.1 Conditions de sécurité obligatoires
 
-### 10.1 Créer le compte système et copier les gabarits
+Le Redis se trouve temporairement sur un autre VPS. Avant de continuer, il
+doit respecter les conditions suivantes :
 
-**[ROOT]**
+- liaison par réseau privé de l'hébergeur ou par tunnel WireGuard ;
+- aucune écoute Redis directement accessible depuis Internet ;
+- pare-feu du VPS Redis limité au réseau/tunnel du VPS applicatif ;
+- authentification par mot de passe long ou ACL dédiée ;
+- instance ou périmètre réservé à TripleFrames ;
+- persistance AOF activée ;
+- politique mémoire `noeviction` ;
+- commandes `FLUSHALL`, `FLUSHDB`, `KEYS`, `CONFIG` et `DEBUG` désactivées.
 
-```bash
-cd <DEPLOY_PATH>
-id tfredis >/dev/null 2>&1 || useradd --system --user-group --no-create-home \
-    --home-dir /var/lib/tripleframes-redis --shell /usr/sbin/nologin tfredis
-install -d -o root -g root -m 0755 /etc/tripleframes
-install -o root -g tfredis -m 0640 ops/redis/tripleframes-redis.conf \
-    /etc/tripleframes/tripleframes-redis.conf
-install -o root -g root -m 0644 ops/systemd/tripleframes-redis.service \
-    /etc/systemd/system/tripleframes-redis.service
-```
+Une connexion Redis brute vers une adresse publique n'est pas acceptable,
+même avec un mot de passe : le protocole et les données applicatives seraient
+exposés au réseau. Si aucun réseau privé ou tunnel n'existe encore, arrêter ici
+et le mettre en place avant l'ouverture du site.
 
-Remplacer le port non secret :
+### 10.2 Tester depuis le VPS applicatif
 
-```bash
-sed -i 's/__TF_REDIS_PORT__/<PORT_REDIS>/g' \
-    /etc/tripleframes/tripleframes-redis.conf
-```
-
-Ouvrir ensuite le fichier en éditeur :
+**[ROOT]** ou **[ABO]** :
 
 ```bash
-nano /etc/tripleframes/tripleframes-redis.conf
-```
-
-Remplacer seulement :
-
-```text
-requirepass __TF_REDIS_PASSWORD__
-```
-
-par le mot de passe Redis stocké dans le gestionnaire de secrets. Le mot de
-passe ne doit pas être passé en argument à `sed` ni apparaître dans
-l'historique du shell.
-
-Si `command -v redis-server` ne renvoie pas `/usr/bin/redis-server`, adapter
-`ExecStart` dans `/etc/systemd/system/tripleframes-redis.service`.
-
-### 10.2 Démarrer et contrôler Redis
-
-**[ROOT]**
-
-```bash
-systemctl daemon-reload
-systemctl enable --now tripleframes-redis
-systemctl --no-pager --full status tripleframes-redis
-ss -ltnp | grep ':<PORT_REDIS>\b'
-```
-
-Le port doit apparaître sur `127.0.0.1` seulement.
-
-Tester l'authentification sans mettre le secret dans la ligne de commande :
-
-```bash
+read -rp 'Hôte privé Redis : ' REDIS_HOST_TEST
+read -rp 'Port Redis : ' REDIS_PORT_TEST
+read -rp 'Utilisateur ACL Redis (vide si aucun) : ' REDIS_USER_TEST
 read -rsp 'Mot de passe Redis : ' REDISCLI_AUTH; echo
 export REDISCLI_AUTH
-redis-cli -h 127.0.0.1 -p <PORT_REDIS> ping
-redis-cli -h 127.0.0.1 -p <PORT_REDIS> flushall
-redis-cli -h 127.0.0.1 -p <PORT_REDIS> info persistence | grep aof_enabled
-redis-cli -h 127.0.0.1 -p <PORT_REDIS> info memory | grep -E 'maxmemory:|maxmemory_policy'
-unset REDISCLI_AUTH
+REDIS_TEST_ARGS=(-h "$REDIS_HOST_TEST" -p "$REDIS_PORT_TEST")
+[ -z "$REDIS_USER_TEST" ] || REDIS_TEST_ARGS+=(--user "$REDIS_USER_TEST")
+redis-cli "${REDIS_TEST_ARGS[@]}" ping
+redis-cli "${REDIS_TEST_ARGS[@]}" info persistence | grep aof_enabled
+redis-cli "${REDIS_TEST_ARGS[@]}" info memory | grep -E 'maxmemory:|maxmemory_policy'
+unset REDISCLI_AUTH REDIS_HOST_TEST REDIS_PORT_TEST REDIS_USER_TEST REDIS_TEST_ARGS
 ```
 
-Résultats attendus :
+Résultats attendus : `PONG`, `aof_enabled:1` et
+`maxmemory_policy:noeviction`. Ne pas tester `FLUSHALL` sur un serveur distant
+déjà utilisé : faire confirmer sa désactivation par l'administrateur Redis.
 
-- `PONG` ;
-- `flushall` refusé ;
-- `aof_enabled:1` ;
-- politique mémoire `noeviction` ;
-- écoute uniquement en boucle locale.
+Cette topologie ajoute de la latence réseau sur la file `game`, le cache, les
+sessions et Reverb. Elle est provisoire : refaire impérativement la séance de
+charge et les tests de cadencement avant d'autoriser de vraies parties.
+
+Reporter ensuite l'hôte privé, le port et le secret dans le `.env`. La phase
+suivante vérifiera la configuration Laravel après l'installation de `vendor/`.
 
 ## 11. Phase F — installer Laravel et initialiser la base
 
@@ -657,9 +627,9 @@ Résultats attendus :
 
 ```bash
 umask 027
-PHP=/opt/plesk/php/8.4/bin/php
-COMPOSER_PHAR=<COMPOSER_PHAR>
-cd <DEPLOY_PATH>
+PHP=/opt/plesk/php/8.5/bin/php
+COMPOSER_PHAR=/usr/lib/plesk-9.0/composer.phar
+cd /var/www/vhosts/tripleframes.fun/httpdocs
 "$PHP" "$COMPOSER_PHAR" install \
     --no-dev --optimize-autoloader --no-interaction
 ```
@@ -674,10 +644,13 @@ exactement `composer.lock`.
 ```bash
 grep -E '^(APP_ENV|APP_DEBUG|DB_CONNECTION|DB_HOST|DB_DATABASE|DB_USERNAME)=' .env
 "$PHP" artisan about --only=environment
+"$PHP" artisan tinker --execute='dump(Illuminate\Support\Facades\Redis::connection()->ping());'
 ```
 
 Ne migrer que si l'environnement est `production`, le débogage est désactivé
-et la base affichée est bien la nouvelle base de production.
+et la base affichée est bien la nouvelle base de production. Le dernier test
+doit répondre `PONG` ; sinon, corriger la liaison vers le Redis distant avant
+de lancer les migrations ou les workers.
 
 ### 11.3 Schéma et données de plateforme
 
@@ -698,7 +671,7 @@ est prévu par le hook. Les seeders de démonstration sont interdits ici.
 **[ROOT]**
 
 ```bash
-cd <DEPLOY_PATH>
+cd /var/www/vhosts/tripleframes.fun/httpdocs
 install -d -o root -g root -m 0755 /etc/tripleframes
 install -o root -g root -m 0644 ops/systemd/tripleframes-worker@.service \
     /etc/systemd/system/tripleframes-worker@.service
@@ -713,13 +686,17 @@ install -o root -g root -m 0644 ops/systemd/tripleframes-reverb.service \
     /etc/systemd/system/tripleframes-reverb.service
 ```
 
-Remplacer les trois paramètres non secrets dans les deux fichiers concernés :
+Remplacer les paramètres du VPS, passer les commandes systemd à PHP 8.5 et
+retirer leur dépendance à l'unité Redis locale, qui n'existe pas dans la
+topologie actuelle :
 
 ```bash
 sed -i \
-  -e 's/__TF_SUBSCRIPTION_USER__/<UTILISATEUR_ABO>/g' \
-  -e 's/__TF_SUBSCRIPTION_GROUP__/<GROUPE_ABO>/g' \
-  -e 's|__TF_DEPLOY_PATH__|<DEPLOY_PATH>|g' \
+  -e 's/__TF_SUBSCRIPTION_USER__/tripleframes/g' \
+  -e 's/__TF_SUBSCRIPTION_GROUP__/psacln/g' \
+  -e 's|__TF_DEPLOY_PATH__|/var/www/vhosts/tripleframes.fun/httpdocs|g' \
+  -e 's|/opt/plesk/php/8.4/bin/php|/opt/plesk/php/8.5/bin/php|g' \
+  -e 's/ tripleframes-redis\.service//g' \
   /etc/systemd/system/tripleframes-worker@.service \
   /etc/systemd/system/tripleframes-reverb.service
 ```
@@ -727,19 +704,19 @@ sed -i \
 Vérifier les remplacements :
 
 ```bash
-grep -nE '^[^#]*__TF_' \
+grep -nE '^[^#]*(__TF_|tripleframes-redis\.service|php/8\.4/)' \
     /etc/systemd/system/tripleframes-worker@.service \
     /etc/systemd/system/tripleframes-reverb.service \
     /etc/tripleframes/worker-*.env || true
 systemd-analyze verify \
-    /etc/systemd/system/tripleframes-redis.service \
     /etc/systemd/system/tripleframes-worker@.service \
     /etc/systemd/system/tripleframes-reverb.service
 ```
 
-Aucune ligne de valeur `__TF_` ne doit rester. Les commentaires des gabarits
-peuvent encore citer les placeholders pour les expliquer. Les avertissements
-qui concernent des unités MySQL absentes peuvent être normaux ; une erreur de
+Aucune ligne de valeur ne doit encore contenir `__TF_`, PHP 8.4 ou une
+dépendance à `tripleframes-redis.service`. Les commentaires des gabarits peuvent
+encore citer ces anciennes valeurs pour les expliquer. Les avertissements qui
+concernent des unités MySQL absentes peuvent être normaux ; une erreur de
 syntaxe ne l'est pas.
 
 Les limites livrées supposent environ 4 Go de RAM. Si le relevé montre moins de
@@ -764,8 +741,8 @@ Ne pas encore les démarrer : les caches Laravel doivent être construits avant.
 **[ROOT]** — préparer une copie sans secret :
 
 ```bash
-sed 's/__TF_REVERB_PORT__/<PORT_REVERB>/g' \
-    <DEPLOY_PATH>/ops/nginx/additional-directives.conf
+sed 's/__TF_REVERB_PORT__/8081/g' \
+    /var/www/vhosts/tripleframes.fun/httpdocs/ops/nginx/additional-directives.conf
 ```
 
 Copier toute la sortie.
@@ -786,16 +763,17 @@ les deux lignes `fastcgi_*` du texte collé.
 
 ### 12.4 Pare-feu
 
-**[PLESK]** ou **[ROOT]** : ne créer aucune règle entrante pour `<PORT_REDIS>`
-ou `<PORT_REVERB>`. Seuls 80/443 et le port SSH d'administration doivent être
-accessibles selon la politique habituelle du serveur.
+**[PLESK]** ou **[ROOT]** : ne créer aucune règle entrante pour `8081`. Seuls
+80/443 et le port SSH d'administration doivent être accessibles selon la
+politique habituelle du serveur. La règle Redis se trouve sur l'autre VPS et
+doit accepter uniquement le réseau privé ou le tunnel du VPS applicatif.
 
 ### 12.5 Ajouter le planificateur Laravel
 
 **[PLESK]** → Tâches planifiées de l'abonnement → Exécuter une commande :
 
 ```text
-/opt/plesk/php/8.4/bin/php <DEPLOY_PATH>/artisan schedule:run
+/opt/plesk/php/8.5/bin/php /var/www/vhosts/tripleframes.fun/httpdocs/artisan schedule:run
 ```
 
 Réglages :
@@ -811,8 +789,8 @@ Cliquer sur **Exécuter maintenant** une fois, puis vérifier côté SSH :
 
 ```bash
 umask 027
-cd <DEPLOY_PATH>
-/opt/plesk/php/8.4/bin/php artisan schedule:list
+cd /var/www/vhosts/tripleframes.fun/httpdocs
+/opt/plesk/php/8.5/bin/php artisan schedule:list
 ```
 
 ## 13. Phase H — construire les caches et démarrer les services
@@ -823,8 +801,8 @@ cd <DEPLOY_PATH>
 
 ```bash
 umask 027
-PHP=/opt/plesk/php/8.4/bin/php
-cd <DEPLOY_PATH>
+PHP=/opt/plesk/php/8.5/bin/php
+cd /var/www/vhosts/tripleframes.fun/httpdocs
 "$PHP" artisan optimize
 "$PHP" artisan lang:hash
 stat -c '%a %U:%G %n' bootstrap/cache/config.php
@@ -849,26 +827,24 @@ Puis toujours conserver `umask 027` lors des futures commandes Artisan.
 ```bash
 systemctl start tripleframes-worker@game tripleframes-worker@default tripleframes-reverb
 systemctl --no-pager --full status \
-    tripleframes-redis \
     tripleframes-worker@game \
     tripleframes-worker@default \
     tripleframes-reverb
 systemctl show \
-    tripleframes-redis \
     tripleframes-worker@game \
     tripleframes-worker@default \
     tripleframes-reverb \
     -p Id -p MemoryMax -p CPUWeight
-ss -ltnp | grep -E ':(<PORT_REDIS>|<PORT_REVERB>)\b'
+ss -ltnp | grep ':8081\b'
 ```
 
-Les quatre unités doivent être `active (running)`. Redis et Reverb doivent
-écouter uniquement sur `127.0.0.1`.
+Les trois unités locales doivent être `active (running)`. Reverb doit écouter
+uniquement sur `127.0.0.1:8081`. La disponibilité du Redis distant est validée
+par les sondes et par le test `redis-cli` de la phase E.
 
 En cas d'échec :
 
 ```bash
-journalctl -u tripleframes-redis -n 100 --no-pager
 journalctl -u tripleframes-worker@game -n 100 --no-pager
 journalctl -u tripleframes-worker@default -n 100 --no-pager
 journalctl -u tripleframes-reverb -n 100 --no-pager
@@ -881,11 +857,11 @@ journalctl -u tripleframes-reverb -n 100 --no-pager
 **[POSTE]** ou **[ABO]**
 
 ```bash
-curl -sS -o /dev/null -w '%{http_code}\n' https://<DOMAINE>/up
-curl -sSI https://<DOMAINE>/
-curl -sS -o /dev/null -w '%{http_code}\n' https://<DOMAINE>/login
-curl -sS -o /dev/null -w '%{http_code}\n' https://<DOMAINE>/register
-curl -sS https://<DOMAINE>/robots.txt
+curl -sS -o /dev/null -w '%{http_code}\n' https://tripleframes.fun/up
+curl -sSI https://tripleframes.fun/
+curl -sS -o /dev/null -w '%{http_code}\n' https://tripleframes.fun/login
+curl -sS -o /dev/null -w '%{http_code}\n' https://tripleframes.fun/register
+curl -sS https://tripleframes.fun/robots.txt
 ```
 
 Attendu :
@@ -900,9 +876,9 @@ Attendu :
 ### 14.2 Vérifier langue et absence de cache nginx
 
 ```bash
-curl -s -D - -H 'Accept-Language: fr' https://<DOMAINE>/ \
+curl -s -D - -H 'Accept-Language: fr' https://tripleframes.fun/ \
     | grep -iE '^(age|x-cache|x-proxy-cache):|<html'
-curl -s -D - -H 'Accept-Language: en' https://<DOMAINE>/ \
+curl -s -D - -H 'Accept-Language: en' https://tripleframes.fun/ \
     | grep -iE '^(age|x-cache|x-proxy-cache):|<html'
 ```
 
@@ -918,7 +894,7 @@ read -rsp 'OPS_PROBE_TOKEN : ' TOKEN; echo
 for probe in worker-game worker-default load integrity purge; do
     printf '%s ' "$probe"
     curl -sS -H @<(printf 'X-Probe-Token: %s\n' "$TOKEN") \
-        "https://<DOMAINE>/ops/probe/$probe"
+        "https://tripleframes.fun/ops/probe/$probe"
     echo
 done
 unset TOKEN
@@ -930,8 +906,8 @@ Sur une base neuve, `purge` peut rester rouge jusqu'à la première exécution :
 
 ```bash
 umask 027
-cd <DEPLOY_PATH>
-/opt/plesk/php/8.4/bin/php artisan purge:run --sync
+cd /var/www/vhosts/tripleframes.fun/httpdocs
+/opt/plesk/php/8.5/bin/php artisan purge:run --sync
 ```
 
 Attendre ensuite jusqu'à environ dix minutes pour le premier passage de
@@ -942,22 +918,22 @@ Attendre ensuite jusqu'à environ dix minutes pour le premier passage de
 **[POSTE]**
 
 ```bash
-npx wscat -o https://<DOMAINE> \
-  -c 'wss://<DOMAINE>/app/<REVERB_APP_KEY>?protocol=7&client=js&version=8.4.0'
+npx wscat -o https://tripleframes.fun \
+  -c 'wss://tripleframes.fun/app/<REVERB_APP_KEY>?protocol=7&client=js&version=8.4.0'
 ```
 
 Attendu : événement `pusher:connection_established`.
 
-### 14.5 Confirmer que les ports privés sont injoignables
+### 14.5 Confirmer que Reverb n'est pas exposé directement
 
 **[POSTE Windows / PowerShell]**
 
 ```powershell
-Test-NetConnection <IP_VPS> -Port <PORT_REDIS>
-Test-NetConnection <IP_VPS> -Port <PORT_REVERB>
+Test-NetConnection tripleframes.fun -Port 8081
 ```
 
-Attendu pour les deux : `TcpTestSucceeded : False`.
+Attendu : `TcpTestSucceeded : False`. Les navigateurs atteignent Reverb
+uniquement à travers `wss://tripleframes.fun/app/` sur le port 443.
 
 ### 14.6 Premier instantané SQL
 
@@ -965,12 +941,12 @@ Attendu pour les deux : `TcpTestSucceeded : False`.
 
 ```bash
 umask 027
-PHP=/opt/plesk/php/8.4/bin/php
-cd <DEPLOY_PATH>
+PHP=/opt/plesk/php/8.5/bin/php
+cd /var/www/vhosts/tripleframes.fun/httpdocs
 "$PHP" artisan backup:snapshot
-ls -l /var/www/vhosts/<DOMAINE>/private/tripleframes/snapshots
-gzip -t /var/www/vhosts/<DOMAINE>/private/tripleframes/snapshots/snapshot-*.sql.gz
-zcat /var/www/vhosts/<DOMAINE>/private/tripleframes/snapshots/snapshot-*.sql.gz | tail -n 1
+ls -l /var/www/vhosts/tripleframes.fun/private/tripleframes/snapshots
+gzip -t /var/www/vhosts/tripleframes.fun/private/tripleframes/snapshots/snapshot-*.sql.gz
+zcat /var/www/vhosts/tripleframes.fun/private/tripleframes/snapshots/snapshot-*.sql.gz | tail -n 1
 "$PHP" artisan backup:snapshot --if-pending
 ```
 
@@ -989,8 +965,8 @@ la restauration.
 
 ```bash
 umask 027
-cd <DEPLOY_PATH>
-/opt/plesk/php/8.4/bin/php artisan admin:first-admin --create
+cd /var/www/vhosts/tripleframes.fun/httpdocs
+/opt/plesk/php/8.5/bin/php artisan admin:first-admin --create
 ```
 
 La commande demande interactivement l'adresse e-mail, le nom de compte, le nom
@@ -998,7 +974,7 @@ réel et le mot de passe. Ne passer aucun de ces éléments en argument.
 
 Ensuite :
 
-1. ouvrir `https://<DOMAINE>/login` ;
+1. ouvrir `https://tripleframes.fun/login` ;
 2. se connecter ;
 3. enrôler immédiatement le second facteur ;
 4. ranger les codes de secours dans deux emplacements hors du VPS, avec la
@@ -1006,13 +982,44 @@ Ensuite :
 
 ## 16. Phase K — activer le hook de déploiement Plesk
 
+### Prérequis bloquant : versionner PHP 8.5 et le Redis distant
+
+Le hook et les unités versionnées désignent encore PHP 8.4 au moment de la
+rédaction de ce guide. Les unités attendent aussi une unité Redis locale. Il
+faut aligner ces fichiers avec la topologie réelle avant d'activer le hook.
+
+**[POSTE]**, dans la branche de développement appropriée :
+
+```bash
+sed -i 's|/opt/plesk/php/8.4/bin/php|/opt/plesk/php/8.5/bin/php|g' \
+  ops/deploy/hook.sh \
+  ops/systemd/tripleframes-worker@.service \
+  ops/systemd/tripleframes-reverb.service
+sed -i 's/ tripleframes-redis\.service//g' \
+  ops/systemd/tripleframes-worker@.service \
+  ops/systemd/tripleframes-reverb.service
+git diff --check
+git grep -n '/opt/plesk/php/8.4/bin/php' -- \
+  ops/deploy/hook.sh \
+  ops/systemd/tripleframes-worker@.service \
+  ops/systemd/tripleframes-reverb.service
+git grep -n '^[^#].*tripleframes-redis\.service' -- \
+  ops/systemd/tripleframes-worker@.service \
+  ops/systemd/tripleframes-reverb.service
+```
+
+Les deux commandes `git grep` ne doivent rien afficher. Committer et pousser
+cette modification, attendre la CI verte et la reconstruction de la branche
+`deploy`. Ne pas modifier le hook directement dans `httpdocs`, car le prochain
+déploiement écraserait cette modification.
+
 ### 16.1 Créer la configuration locale du hook
 
 **[ABO]**
 
 ```bash
 (umask 077 && mkdir -p "$HOME/.config/tripleframes" && \
-  printf 'COMPOSER_PHAR=%s\n' '<COMPOSER_PHAR>' \
+  printf 'COMPOSER_PHAR=%s\n' '/usr/lib/plesk-9.0/composer.phar' \
   > "$HOME/.config/tripleframes/hook.env")
 chmod 0600 "$HOME/.config/tripleframes/hook.env"
 stat -c '%a %U:%G %n' "$HOME/.config/tripleframes/hook.env"
@@ -1066,7 +1073,7 @@ ouvrir de vraies parties tant que l'activation versionnée du drainage n'a pas
 
 ```bash
 umask 027
-cd <DEPLOY_PATH>
+cd /var/www/vhosts/tripleframes.fun/httpdocs
 stat -c '%a %U:%G %n' bootstrap/cache/*.php
 find public \( -type f ! -perm -o=r \) -o \( -type d ! -perm -o=x \) | wc -l
 ```
@@ -1086,8 +1093,8 @@ Après livraison du commit qui active les étapes `deploy:guard` et
 
 ```bash
 umask 027
-PHP=/opt/plesk/php/8.4/bin/php
-cd <DEPLOY_PATH>
+PHP=/opt/plesk/php/8.5/bin/php
+cd /var/www/vhosts/tripleframes.fun/httpdocs
 "$PHP" artisan deploy:drain
 "$PHP" artisan deploy:guard
 ```
@@ -1114,10 +1121,10 @@ doit être un commit testé et publié dans la branche `deploy` par la CI.
 **[ROOT]**
 
 ```bash
-grep -rnE '^[^#]*(__TF_|<DOMAINE>|<PORT_|<UTILISATEUR_|<GROUPE_|<DEPLOY_PATH>)' \
+grep -rnE '^[^#]*(__TF_|<[A-Z0-9_]+>|À_RENSEIGNER_)' \
   /etc/tripleframes \
   /etc/systemd/system/tripleframes-* \
-  <DEPLOY_PATH>/.env
+  /var/www/vhosts/tripleframes.fun/httpdocs/.env
 ```
 
 La commande ne doit rien afficher. Un placeholder oublié peut produire une
@@ -1127,12 +1134,10 @@ Contrôler aussi :
 
 ```bash
 systemctl is-enabled \
-  tripleframes-redis \
   tripleframes-worker@game \
   tripleframes-worker@default \
   tripleframes-reverb
 systemctl is-active \
-  tripleframes-redis \
   tripleframes-worker@game \
   tripleframes-worker@default \
   tripleframes-reverb
@@ -1145,7 +1150,7 @@ Toutes les lignes doivent répondre `enabled`, puis `active`.
 ### `/up` répond 500
 
 ```bash
-tail -n 100 <DEPLOY_PATH>/storage/logs/laravel*.log
+tail -n 100 /var/www/vhosts/tripleframes.fun/httpdocs/storage/logs/laravel*.log
 journalctl -u tripleframes-worker@default -n 100 --no-pager
 ```
 
@@ -1154,8 +1159,8 @@ Vérifier en priorité `.env`, la connexion MySQL, Redis, les permissions de
 
 ```bash
 umask 027
-cd <DEPLOY_PATH>
-/opt/plesk/php/8.4/bin/php artisan about --only=environment
+cd /var/www/vhosts/tripleframes.fun/httpdocs
+/opt/plesk/php/8.5/bin/php artisan about --only=environment
 ```
 
 ### `/login` répond 502
@@ -1172,24 +1177,30 @@ refusé par Plesk.
 ### Les assets répondent 403
 
 ```bash
-cd <DEPLOY_PATH>
+cd /var/www/vhosts/tripleframes.fun/httpdocs
 find public \( -type f ! -perm -o=r \) -o \( -type d ! -perm -o=x \) -print
 ```
 
 Corriger uniquement les fichiers/répertoires listés dans `public/`, puis revoir
 les permissions produites par Plesk Git.
 
-### Redis refuse la connexion
+### Redis distant refuse la connexion
 
 ```bash
-systemctl status tripleframes-redis --no-pager
-ss -ltnp | grep ':<PORT_REDIS>\b'
-journalctl -u tripleframes-redis -n 100 --no-pager
+read -rp 'Hôte privé Redis : ' REDIS_HOST_TEST
+read -rp 'Port Redis : ' REDIS_PORT_TEST
+read -rp 'Utilisateur ACL Redis (vide si aucun) : ' REDIS_USER_TEST
+read -rsp 'Mot de passe Redis : ' REDISCLI_AUTH; echo
+export REDISCLI_AUTH
+REDIS_TEST_ARGS=(-h "$REDIS_HOST_TEST" -p "$REDIS_PORT_TEST")
+[ -z "$REDIS_USER_TEST" ] || REDIS_TEST_ARGS+=(--user "$REDIS_USER_TEST")
+redis-cli "${REDIS_TEST_ARGS[@]}" ping
+unset REDISCLI_AUTH REDIS_HOST_TEST REDIS_PORT_TEST REDIS_USER_TEST REDIS_TEST_ARGS
 ```
 
-Vérifier que le port et le mot de passe sont identiques dans la configuration
-Redis et le `.env`. Ne jamais afficher le mot de passe avec `grep` dans une
-capture ou un ticket.
+Vérifier le réseau privé/tunnel, le pare-feu du VPS Redis, l'hôte, le port, le
+mot de passe ou l'ACL et la valeur du `.env`. Ne jamais afficher le mot de passe
+avec `grep` dans une capture ou un ticket.
 
 ### Worker en boucle de redémarrage
 
@@ -1205,7 +1216,7 @@ lisibilité de `.env` par l'utilisateur d'abonnement et la connexion Redis.
 
 ```bash
 systemctl status tripleframes-reverb --no-pager
-ss -ltnp | grep ':<PORT_REVERB>\b'
+ss -ltnp | grep ':8081\b'
 journalctl -u tripleframes-reverb -n 100 --no-pager
 ```
 
@@ -1218,7 +1229,7 @@ certificat du domaine.
 **[ROOT]**
 
 ```bash
-crontab -u <UTILISATEUR_ABO> -l
+crontab -u tripleframes -l
 ```
 
 Vérifier le chemin absolu vers PHP et Artisan, le shell non chrooté, le fuseau
@@ -1231,8 +1242,8 @@ Arrêter de lancer Artisan en `root`. Réparer une fois :
 **[ROOT]**
 
 ```bash
-chown <UTILISATEUR_ABO>:<GROUPE_ABO> <DEPLOY_PATH>/bootstrap/cache/*.php
-chmod 0640 <DEPLOY_PATH>/bootstrap/cache/*.php
+chown tripleframes:psacln /var/www/vhosts/tripleframes.fun/httpdocs/bootstrap/cache/*.php
+chmod 0640 /var/www/vhosts/tripleframes.fun/httpdocs/bootstrap/cache/*.php
 ```
 
 Puis reconstruire uniquement en **[ABO]** avec `umask 027`.
@@ -1240,15 +1251,16 @@ Puis reconstruire uniquement en **[ABO]** avec `umask 027`.
 ## 20. Checklist finale courte
 
 - [ ] DNS correct, certificat valide, redirection HTTP → HTTPS.
-- [ ] Document root = `tripleframes/public`.
-- [ ] PHP 8.4 FPM via nginx, Apache proxy et cache nginx désactivés.
+- [ ] Document root = `httpdocs/public` et code dans `httpdocs`.
+- [ ] PHP 8.5 FPM via nginx, Apache proxy et cache nginx désactivés.
 - [ ] Base et utilisateur MySQL dédiés.
 - [ ] Plesk tire manuellement la branche `deploy`.
 - [ ] `.env` en `600`, `APP_ENV=production`, `APP_DEBUG=false`.
 - [ ] `APP_KEY` sauvegardée deux fois hors VPS.
-- [ ] Redis dédié, authentifié, persistant et local à `127.0.0.1`.
+- [ ] Redis distant authentifié, persistant et joint uniquement par réseau
+  privé ou tunnel chiffré.
 - [ ] Deux workers et Reverb actifs sous l'utilisateur d'abonnement.
-- [ ] Redis et Reverb injoignables depuis Internet.
+- [ ] Redis et le port direct Reverb `8081` injoignables depuis Internet.
 - [ ] Tâche `schedule:run` chaque minute.
 - [ ] `/up`, `/login`, langue, sondes et WSS validés.
 - [ ] Premier instantané SQL validé.
@@ -1268,7 +1280,8 @@ Références propres au projet :
 - `ops/plesk/settings.md` : réglages Plesk détaillés ;
 - `ops/deploy/hook.sh` : hook réellement exécuté ;
 - `ops/nginx/additional-directives.conf` : configuration nginx ;
-- `ops/redis/` et `ops/systemd/` : gabarits système ;
+- `ops/redis/` : futur gabarit si Redis revient sur le VPS applicatif ;
+- `ops/systemd/` : gabarits système des workers et de Reverb ;
 - `docs/ops/repetition-vm.md` : répétition exhaustive et résultats observés.
 
 Documentation Plesk consultée pour vérifier le parcours d'interface :

@@ -89,6 +89,12 @@ return [
     | à blanc d'un collage, tenu en cache et lisible par son seul auteur. Au
     | moins 1. L'aperçu est indicatif : l'import réel rejoue toutes les gardes.
     |
+    | `paste_max_themes` (§ 3.3, D43 du 01/10) : plafond de la multi-sélection
+    | de thèmes d'un collage, appliqués en exception `added` aux films du
+    | collage. Pas de variable d'environnement. Bornée à [1, 20] par
+    | `pasteMaxThemes()` : vingt identifiants de dix chiffres tiennent dans les
+    | 255 caractères de `import_run.added_theme_ids`.
+    |
     | `seed_list_path` (§ 3.5) : la liste d'amorçage, fichier VERSIONNÉ au
     | format du collage, relatif à la racine du projet (un chemin absolu est
     | lu tel quel). Le bouton « Importer la liste d'amorçage » en importe les
@@ -101,6 +107,7 @@ return [
         'requests_per_second' => 35,
         'deduplication_chunk' => 200,
         'paste_max_ids' => 50,
+        'paste_max_themes' => 10,
         'pages_min' => 1,
         'pages_max' => 5,
         'language_choices' => ['fr', 'en', 'ja', 'ko', 'it', 'es', 'de', 'zh', 'ru', 'sv'],

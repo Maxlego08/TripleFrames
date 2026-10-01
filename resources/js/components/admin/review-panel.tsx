@@ -17,12 +17,12 @@ import type {
 } from '@/types/admin';
 
 /**
- * Les props qu'une ÉCRITURE de la passe de revue recharge : la file, et elle
- * seule. Une revue, une dépublication ou une mise à l'écart reviennent sur
+ * Les props qu'une ÉCRITURE de la passe de revue recharge : la file, et les
+ * lots de validation en une fois qui en dérivent (D42 du 30/09). Une revue, une dépublication ou une mise à l'écart reviennent sur
  * la file par une redirection ; la visite partielle suit la redirection, et
  * un refus rafraîchit la file en même temps qu'il s'affiche.
  */
-export const REVIEW_WRITE_PROPS: string[] = ['queue'];
+export const REVIEW_WRITE_PROPS: string[] = ['queue', 'review_batches'];
 
 /** Ce que la revue envoyée a produit, pour la suite de l'écran. */
 export type ReviewOutcome = {

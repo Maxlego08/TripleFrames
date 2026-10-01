@@ -26,6 +26,7 @@ import { AdminFieldList } from '@/components/admin/admin-field-list';
 import { AdminPageHeading } from '@/components/admin/admin-page-heading';
 import { AdminLevelDots } from '@/components/admin/admin-stat-tile';
 import { MovieGroupPanel } from '@/components/admin/movie-group-panel';
+import { MovieThemesPanel } from '@/components/admin/movie-themes-panel';
 import {
     MovieAliasesCard,
     MovieAnswerKeysCard,
@@ -37,6 +38,7 @@ import {
     usePublicationPreview,
 } from '@/components/admin/publish-dialog';
 import { ReasonDialog } from '@/components/admin/reason-dialog';
+import { ReviewBatchButton } from '@/components/admin/review-batch-button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -64,7 +66,6 @@ import {
     FRAME_PROCESSING_KEYS,
     localeLabel,
     MOVIE_DIFFICULTY_KEYS,
-    THEME_MEMBERSHIP_KEYS,
     TMDB_TAG_KIND_KEYS,
 } from '@/lib/admin-enum-keys';
 import {
@@ -91,9 +92,12 @@ import type {
     AdminMovieProjection,
     AdminMovieTag,
     AdminMovieTheme,
+    AdminAvailableTheme,
+    AdminMovieCollection,
     AdminMovieTitle,
     AdminPublication,
     AdminPublicationPreview,
+    AdminReviewBatch,
     AdminTextPreview,
     AdminTitleLocale,
     ContentFlag,
@@ -125,7 +129,16 @@ type Props = {
     certifications: AdminMovieCertification[];
     tags: AdminMovieTag[];
     themes: AdminMovieTheme[];
+    /** Tous les thèmes, publiés ou non, pour un ajout manuel (§ 9.6). */
+    available_themes: AdminAvailableTheme[];
+    /** La collection TMDB du film et la saga qui la désigne (§ 9.6). */
+    collection: AdminMovieCollection | null;
     frames: AdminMovieFrameRow[];
+    /**
+     * Le lot des images en attente de revue, à valider en une fois (D42 du
+     * 30/09, spec 20 § 7.9) ; `null` s'il n'y a rien à valider.
+     */
+    review_batch: AdminReviewBatch | null;
     import_run: AdminImportRunRow | null;
     publication: AdminPublication;
     /** Prop facultative : servie au seul rechargement qui ouvre la publication. */
@@ -198,7 +211,10 @@ export default function AdminCatalogShow({
     certifications,
     tags,
     themes,
+    available_themes,
+    collection,
     frames,
+    review_batch,
     import_run,
     publication,
     publication_preview,
@@ -406,6 +422,9 @@ export default function AdminCatalogShow({
 
                         <MovieGestures
                             sectionRef={gesturesRef}
+                            movieId={movie.id}
+                            movieTitle={movie.title_original}
+                            reviewBatch={review_batch}
                             availability={movie.availability}
                             contentFlag={movie.content_flag}
                             publication={publication}
@@ -680,92 +699,16 @@ export default function AdminCatalogShow({
                         </Card>
                     </TabsContent>
 
-                    {/* Thèmes */}
+                    {/* Thèmes (spec 20 § 9.6, D43 du 01/10) */}
                     <TabsContent value="themes">
-                        <Card>
-                            <CardHeader>
-                                <AdminCardTitle>
-                                    {t('admin.movie.themes.heading')}
-                                </AdminCardTitle>
-                                <CardDescription>
-                                    {t('admin.movie.themes.description')}
-                                </CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                                {themes.length === 0 ? (
-                                    <AdminEmptyState
-                                        title={t('admin.movie.themes.empty')}
-                                    />
-                                ) : (
-                                    <Table>
-                                        <TableHeader>
-                                            <TableRow>
-                                                <TableHead>
-                                                    {t(
-                                                        'admin.movie.themes.column.theme',
-                                                    )}
-                                                </TableHead>
-                                                <TableHead>
-                                                    {t(
-                                                        'admin.movie.themes.column.auto',
-                                                    )}
-                                                </TableHead>
-                                                <TableHead>
-                                                    {t(
-                                                        'admin.movie.themes.column.manual',
-                                                    )}
-                                                </TableHead>
-                                                <TableHead>
-                                                    {t(
-                                                        'admin.movie.themes.column.active',
-                                                    )}
-                                                </TableHead>
-                                            </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                            {themes.map((theme) => (
-                                                <TableRow key={theme.key}>
-                                                    <TableCell className="font-medium text-foreground">
-                                                        {theme.label}
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        {theme.is_auto
-                                                            ? t(
-                                                                  'admin.common.yes',
-                                                              )
-                                                            : t(
-                                                                  'admin.common.no',
-                                                              )}
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        {theme.manual_state ===
-                                                        null
-                                                            ? t(
-                                                                  'admin.common.none',
-                                                              )
-                                                            : t(
-                                                                  THEME_MEMBERSHIP_KEYS[
-                                                                      theme
-                                                                          .manual_state
-                                                                  ],
-                                                              )}
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        {theme.is_active
-                                                            ? t(
-                                                                  'admin.common.yes',
-                                                              )
-                                                            : t(
-                                                                  'admin.common.no',
-                                                              )}
-                                                    </TableCell>
-                                                </TableRow>
-                                            ))}
-                                        </TableBody>
-                                    </Table>
-                                )}
-                            </CardContent>
-                        </Card>
+                        <MovieThemesPanel
+                            movieId={movie.id}
+                            themes={themes}
+                            availableThemes={available_themes}
+                            collection={collection}
+                            canCurate={abilities.curate}
+                            canEditThemes={abilities.editThemes}
+                        />
                     </TabsContent>
 
                     {/* Banque d'images */}
@@ -1060,6 +1003,9 @@ AdminCatalogShow.layout = { breadcrumbs };
  */
 function MovieGestures({
     sectionRef,
+    movieId,
+    movieTitle,
+    reviewBatch,
     availability,
     contentFlag,
     publication,
@@ -1067,6 +1013,9 @@ function MovieGestures({
     onOpen,
 }: {
     sectionRef: RefObject<HTMLElement | null>;
+    movieId: number;
+    movieTitle: string;
+    reviewBatch: AdminReviewBatch | null;
     availability: AdminMovieDetail['availability'];
     contentFlag: ContentFlag;
     publication: AdminPublication;
@@ -1078,6 +1027,7 @@ function MovieGestures({
     const canUnpublish = abilities.unpublish && availability === 'published';
     const canSetAside = abilities.unpublish && availability === 'draft';
     const any =
+        reviewBatch !== null ||
         abilities.publish ||
         canUnpublish ||
         canSetAside ||
@@ -1112,6 +1062,20 @@ function MovieGestures({
 
             {any && (
                 <div className="flex flex-wrap items-start gap-3">
+                    {/*
+                     * Valider en lot les images en attente (D42 du 30/09,
+                     * § 7.9) : avant « Publier », qui en dépend. La
+                     * publication du film reste un geste distinct.
+                     */}
+                    {reviewBatch !== null && (
+                        <ReviewBatchButton
+                            movieId={movieId}
+                            movieTitle={movieTitle}
+                            batch={reviewBatch}
+                            fallbackFocusRef={sectionRef}
+                        />
+                    )}
+
                     {abilities.publish && (
                         <PublishButton
                             publication={publication}
@@ -1412,6 +1376,8 @@ function RawTagList({
     tags: AdminMovieTag[];
     empty: string;
 }) {
+    const { t } = useTranslations();
+
     return (
         <div className="space-y-1.5">
             <h3 className="text-xs font-medium text-muted-foreground">
@@ -1425,7 +1391,12 @@ function RawTagList({
                         <li key={`${tag.tag_kind}-${tag.tmdb_tag_id}`}>
                             <Badge variant="outline">
                                 <span className="sr-only">{kindLabel} </span>
-                                {tag.tmdb_tag_id}
+                                {tag.name === null
+                                    ? tag.tmdb_tag_id
+                                    : t('admin.movie.tags.company_label', {
+                                          name: tag.name,
+                                          id: tag.tmdb_tag_id,
+                                      })}
                             </Badge>
                         </li>
                     ))}

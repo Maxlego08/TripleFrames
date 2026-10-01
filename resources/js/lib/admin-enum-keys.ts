@@ -16,6 +16,7 @@ import type {
     ImportRunKind,
     ImportSource,
     MovieDifficulty,
+    ThemeKind,
     ThemeMembershipState,
     TmdbTagKind,
 } from '@/types/admin';
@@ -96,6 +97,15 @@ export const THEME_MEMBERSHIP_KEYS: Record<
 > = {
     added: 'admin.enum.theme_membership.added',
     removed: 'admin.enum.theme_membership.removed',
+};
+
+export const THEME_KIND_KEYS: Record<ThemeKind, TranslationKey> = {
+    genre: 'admin.enum.theme_kind.genre',
+    decade: 'admin.enum.theme_kind.decade',
+    studio: 'admin.enum.theme_kind.studio',
+    saga: 'admin.enum.theme_kind.saga',
+    language: 'admin.enum.theme_kind.language',
+    difficulty: 'admin.enum.theme_kind.difficulty',
 };
 
 export const TMDB_TAG_KIND_KEYS: Record<TmdbTagKind, TranslationKey> = {
@@ -306,12 +316,14 @@ export const ADMIN_ACTION_KEYS: Record<AdminActionTypeValue, TranslationKey> = {
     'movie.alias_removed': 'admin.enum.admin_action.movie_alias_removed',
     'movie.grouped': 'admin.enum.admin_action.movie_grouped',
     'movie.ungrouped': 'admin.enum.admin_action.movie_ungrouped',
+    'movie.theme_set': 'admin.enum.admin_action.movie_theme_set',
     'frame.added': 'admin.enum.admin_action.frame_added',
     'frame.recropped': 'admin.enum.admin_action.frame_recropped',
     'frame.processing_retried':
         'admin.enum.admin_action.frame_processing_retried',
     'frame.level_changed': 'admin.enum.admin_action.frame_level_changed',
     'frame.reviewed': 'admin.enum.admin_action.frame_reviewed',
+    'movie.frames_reviewed': 'admin.enum.admin_action.movie_frames_reviewed',
     'import.discover_started':
         'admin.enum.admin_action.import_discover_started',
     'import.paste_started': 'admin.enum.admin_action.import_paste_started',
@@ -323,6 +335,10 @@ export const ADMIN_ACTION_KEYS: Record<AdminActionTypeValue, TranslationKey> = {
     'accounts.access_viewed': 'admin.enum.admin_action.accounts_access_viewed',
     'user.looked_up': 'admin.enum.admin_action.user_looked_up',
     'user.viewed': 'admin.enum.admin_action.user_viewed',
+    'theme.created': 'admin.enum.admin_action.theme_created',
+    'theme.updated': 'admin.enum.admin_action.theme_updated',
+    'theme.published': 'admin.enum.admin_action.theme_published',
+    'theme.unpublished': 'admin.enum.admin_action.theme_unpublished',
 };
 
 /** Les sujets du journal — `AdminActionSubject::labelKey()`. */
@@ -338,6 +354,7 @@ export const ADMIN_ACTION_SUBJECT_KEYS: Record<
     site: 'admin.enum.admin_action_subject.site',
     import_run: 'admin.enum.admin_action_subject.import_run',
     accounts: 'admin.enum.admin_action_subject.accounts',
+    theme: 'admin.enum.admin_action_subject.theme',
 };
 
 /** Les deux classes de conservation d'une ligne du journal. */
@@ -376,6 +393,16 @@ export const JOURNAL_DETAIL_KEYS: Partial<Record<string, TranslationKey>> = {
     review_id: 'admin.journal.details.review_id',
     decision: 'admin.journal.details.decision',
     grid_version: 'admin.journal.details.grid_version',
+    frame_ids: 'admin.journal.details.frame_ids',
     pages: 'admin.journal.details.pages',
     tmdb_ids: 'admin.journal.details.tmdb_ids',
+    key: 'admin.journal.details.key',
+    kind: 'admin.journal.details.kind',
+    rule_value: 'admin.journal.details.rule_value',
+    rule_negated: 'admin.journal.details.rule_negated',
+    labels: 'admin.journal.details.labels',
+    sort_order: 'admin.journal.details.sort_order',
+    works: 'admin.journal.details.works',
+    theme_key: 'admin.journal.details.theme_key',
+    theme_ids: 'admin.journal.details.theme_ids',
 };

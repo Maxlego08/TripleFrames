@@ -6,12 +6,14 @@ use App\Enums\FrameLevel;
 use App\Models\Frame;
 use App\Models\Round;
 use App\Models\RoundTier;
+use App\ValueObjects\Catalog\FrameLevelCoverage;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Query\JoinClause;
 use InvalidArgumentException;
 
 /**
- * Le choix d'une variante parmi celles d'un même (film, niveau) — au lancement
+ * Le choix d'une variante parmi celles d'un palier d'un film, niveaux de sa
+ * plage mêlés (D45 du 01/10) — au lancement
  * ({@see self::choose()}) comme en substitution ({@see self::substitute()})
  * (spec 30 § 7 et § 8.1, contrat C3).
  *
@@ -39,37 +41,26 @@ use InvalidArgumentException;
  * **Le choix n'est jamais bloqué** : une variante déjà vue vaut mieux qu'une
  * manche annulée. `null` ne sort que d'une liste vide, ce que le tirage des
  * films exclut par construction du masque (§ 7.3) ; en substitution, `null`
- * signifie qu'aucune variante du même niveau ne reste, et la spec 60 annule la
+ * signifie qu’aucune variante de la plage ne reste, et la spec 60 annule la
  * manche (`no_variant_available`).
  */
 final readonly class VariantChooser
 {
     /**
-     * La variante retenue parmi `$candidates`, toutes d'un même niveau.
+     * La variante retenue parmi `$candidates`, qui peuvent mêler les niveaux
+     * d'une plage (D45 du 01/10) : la préférence « non vue » porte sur toute la
+     * plage, le niveau montré en découle.
      *
-     * @param  list<VariantCandidate>  $candidates  Variantes jouables d'un (film, niveau).
+     * @param  list<VariantCandidate>  $candidates  Variantes jouables d'un palier d'un film.
      * @param  CarbonImmutable|null  $memorySince  Borne basse de la mémoire du salon ; nulle sans salon.
      * @param  DrawContext  $context  `DrawContext::variant(s, i)` au lancement,
      *                                `DrawContext::substitute(s, i)` en substitution.
      * @return int|null `frame.id` retenu ; nul seulement pour une liste vide.
-     *
-     * @throws InvalidArgumentException Les candidates mêlent plusieurs niveaux :
-     *                                  un palier ne change jamais de niveau (§ 8.1).
      */
     public function choose(array $candidates, ?CarbonImmutable $memorySince, SeededPrf $prf, DrawContext $context): ?int
     {
         if ($candidates === []) {
             return null;
-        }
-
-        $level = $candidates[0]->frameLevel;
-
-        foreach ($candidates as $candidate) {
-            if ($candidate->frameLevel !== $level) {
-                throw new InvalidArgumentException(
-                    'VariantChooser : les variantes candidates d’un palier sont toutes d’un même niveau.',
-                );
-            }
         }
 
         $group = self::tieGroup($candidates, $memorySince);
@@ -85,8 +76,9 @@ final readonly class VariantChooser
      * `served_frame_id` / `substitution_reason` et l'annulation appartiennent à
      * la spec 60, qui l'appelle à la frappe du `serve_token` du palier.
      *
-     * - **Candidates** : les variantes du film `round.movie_id`, **au niveau
-     *   `tier.frame_level` et à lui seul**, qui satisfont le prédicat unique de
+     * - **Candidates** : les variantes du film `round.movie_id`, **aux niveaux
+     *   de la plage du palier** (plus son niveau tiré), strictement entre les
+     *   niveaux de ses voisins (D45 du 01/10), qui satisfont le prédicat unique de
      *   variante jouable ({@see Frame::servable()}) **et dont le fichier est
      *   présent sur le disque `frames`, sous le préfixe `game/`** (C8, C9),
      *   moins `tier.frame_id` et moins `$excludedFrameIds`. La présence sur
@@ -98,9 +90,10 @@ final readonly class VariantChooser
      * - **Choix** : la règle du § 7.1 ({@see self::choose()}), contexte
      *   `DrawContext::substitute(round.sequence_index, tier.tier_index)`.
      *
-     * **Jamais un autre niveau** : le palier matérialisé porte une durée, une
-     * valeur en points et une place dans l'échelle de cryptivité ; servir un
-     * niveau 5 au palier 1 donnerait la réponse au palier le mieux payé.
+     * **Jamais hors de la plage ni hors de l'ordre** : le palier matérialisé
+     * porte une durée, une valeur en points et une place dans l'échelle de
+     * cryptivité ; servir un niveau 5 au palier 1 donnerait la réponse au
+     * palier le mieux payé.
      *
      * Aucune écriture, aucun verrou, aucun aléa hors de {@see SeededPrf} : à
      * entrées identiques (manche, palier, exclusions, instant, catalogue,
@@ -108,7 +101,7 @@ final readonly class VariantChooser
      *
      * @param  list<int>  $excludedFrameIds  Candidates déjà écartées par l'appelant
      *                                       (fichier disparu entre le choix et la frappe).
-     * @return int|null `frame.id` de même niveau, ou `null` : aucune variante ne
+     * @return int|null `frame.id` d'un niveau permis, ou `null` : aucune variante ne
      *                  reste, la spec 60 annule la manche (`no_variant_available`).
      *
      * @throws InvalidArgumentException Le palier n'appartient pas à la manche.
@@ -126,7 +119,12 @@ final readonly class VariantChooser
             $excludedFrameIds[] = $tier->frame_id;
         }
 
-        $candidates = self::substituteCandidates($round->movie_id, $tier->frame_level, $excludedFrameIds, $roomId);
+        $candidates = self::substituteCandidates(
+            $round->movie_id,
+            self::substituteLevels($game->frames_per_round, $tier),
+            $excludedFrameIds,
+            $roomId,
+        );
 
         if ($candidates === []) {
             return null;
@@ -183,23 +181,79 @@ final readonly class VariantChooser
     }
 
     /**
+     * Les niveaux permis à la substitution d'un palier (§ 8.1, D45 du 01/10) :
+     * ceux de sa plage `FrameLevelCoverage::bands(N)[i − 1]`, plus son niveau
+     * tiré (un palier tiré en repli de niveau garde son niveau), strictement
+     * entre le niveau du palier précédent et celui du palier suivant. Un
+     * voisin déjà substitué compte pour le niveau de l'image réellement
+     * servie.
+     *
+     * @return list<int>
+     */
+    private static function substituteLevels(int $framesPerRound, RoundTier $tier): array
+    {
+        $levels = array_map(
+            static fn (FrameLevel $level): int => $level->value,
+            FrameLevelCoverage::bands($framesPerRound)[$tier->tier_index - 1],
+        );
+        $levels[] = $tier->frame_level->value;
+
+        $neighbours = RoundTier::query()
+            ->where('round_id', $tier->round_id)
+            ->whereIn('tier_index', [$tier->tier_index - 1, $tier->tier_index + 1])
+            ->get(['tier_index', 'frame_id', 'frame_level', 'served_frame_id']);
+
+        $servedLevels = Frame::query()
+            ->whereIn('id', $neighbours
+                ->filter(static fn (RoundTier $neighbour): bool => $neighbour->served_frame_id !== null
+                    && $neighbour->served_frame_id !== $neighbour->frame_id)
+                ->pluck('served_frame_id')
+                ->all())
+            ->pluck('frame_level', 'id');
+
+        $floor = 0;
+        $ceiling = PHP_INT_MAX;
+
+        foreach ($neighbours as $neighbour) {
+            $served = $neighbour->served_frame_id === null ? null : $servedLevels->get($neighbour->served_frame_id);
+            $level = $served instanceof FrameLevel ? $served->value : $neighbour->frame_level->value;
+
+            if ($neighbour->tier_index < $tier->tier_index) {
+                $floor = $level;
+            } else {
+                $ceiling = $level;
+            }
+        }
+
+        return array_values(array_unique(array_filter(
+            $levels,
+            static fn (int $level): bool => $level > $floor && $level < $ceiling,
+        )));
+    }
+
+    /**
      * Les candidates de substitution, en une requête puis au plus un `exists()`
-     * par ligne : variantes jouables du film au seul niveau du palier, moins
-     * les exclues, triées par `id`, fichier présent sous `game/`. Avec un
+     * par ligne : variantes jouables du film aux niveaux permis du palier,
+     * moins les exclues, triées par `id`, fichier présent sous `game/`. Avec un
      * salon, jointure gauche sur `seen_frame` du salon
      * (`seen_frame_room_frame_uq`) pour `lastSeenAt` ; sans salon, aucune
      * jointure : aucune mémoire n'est lue, pas même un attribut absent.
      *
+     * @param  list<int>  $levels
      * @param  list<int>  $excludedFrameIds
      * @return list<VariantCandidate>
      */
-    private static function substituteCandidates(int $movieId, FrameLevel $level, array $excludedFrameIds, ?int $roomId): array
+    private static function substituteCandidates(int $movieId, array $levels, array $excludedFrameIds, ?int $roomId): array
     {
+        if ($levels === []) {
+            return [];
+        }
+
         $query = Frame::query()
             ->select(['frame.id', 'frame.frame_level', 'frame.game_path'])
             ->servable()
             ->where('frame.movie_id', $movieId)
-            ->where('frame.frame_level', $level->value)
+            ->whereIn('frame.frame_level', $levels)
             ->orderBy('frame.id');
 
         if ($excludedFrameIds !== []) {

@@ -42,6 +42,15 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * de joueur** : rien ici n'est caché parce que rien ici n'est personnel, et la
  * table ne quitte jamais le back-office.
  *
+ * `added_theme_ids` (D43 du 01/10, spec 20 § 3.3) porte les thèmes choisis au
+ * collage, identifiants joints par des virgules, **jamais interrogés** non
+ * plus : écrite à l'ouverture, jamais modifiée, relue par la reprise — c'est
+ * elle, et non la charge utile du job, qui dit à la commande quels thèmes
+ * appliquer. Un thème disparu entre-temps est ignoré à la lecture. Les deux
+ * compteurs `total_themes_*` sont le rapport de ce collage (critique C7) :
+ * couples (film, thème) qui ont reçu l'exception `added`, et couples laissés
+ * hors du thème parce qu'un curateur les en avait retirés.
+ *
  * Seules les trois colonnes de filtre sont mass-assignables. `run_kind` porte le
  * droit d'écrasement du balayage (§ 9.3), `is_widened` est **figée au démarrage**,
  * `status`, les quatre compteurs, le curseur de page et les horodatages sont
@@ -55,12 +64,15 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property string|null $filter_languages
  * @property int|null $filter_min_release_year
  * @property bool $is_widened
+ * @property string|null $added_theme_ids
  * @property int|null $tmdb_page_cursor
  * @property CarbonImmutable|null $last_request_at
  * @property int $total_seen
  * @property int $total_imported
  * @property int $total_skipped
  * @property int $total_refused_content
+ * @property int $total_themes_applied
+ * @property int $total_themes_kept_removed
  * @property CarbonImmutable|null $started_at
  * @property CarbonImmutable|null $finished_at
  * @property CarbonImmutable|null $created_at
@@ -97,6 +109,44 @@ class ImportRun extends Model
     }
 
     /**
+     * Les thèmes choisis au collage, dans l'ordre écrit — `[]` hors collage et
+     * pour un collage sans thème. Lecture tolérante : un fragment illisible
+     * est ignoré, jamais une exception au milieu d'un import.
+     *
+     * @return list<int>
+     */
+    public function addedThemeIds(): array
+    {
+        if ($this->added_theme_ids === null || $this->added_theme_ids === '') {
+            return [];
+        }
+
+        /** @var list<int> $ids */
+        $ids = [];
+
+        foreach (explode(',', $this->added_theme_ids) as $fragment) {
+            if (preg_match('/^[1-9]\d*$/', $fragment) === 1 && ! in_array((int) $fragment, $ids, true)) {
+                $ids[] = (int) $fragment;
+            }
+        }
+
+        return $ids;
+    }
+
+    /**
+     * La forme écrite de `added_theme_ids` : identifiants dédoublonnés joints
+     * par des virgules, ou `null` pour une sélection vide.
+     *
+     * @param  list<int>  $themeIds
+     */
+    public static function joinThemeIds(array $themeIds): ?string
+    {
+        $ids = array_values(array_unique(array_filter($themeIds, static fn (int $id): bool => $id > 0)));
+
+        return $ids === [] ? null : implode(',', $ids);
+    }
+
+    /**
      * Les balayages à reprendre au démarrage d'un worker — la raison d'être de
      * l'index `(status)` (§ 9.1). L'état reprenable lui-même vit dans
      * `tmdb_page_cursor`, `last_request_at` et les quatre compteurs.
@@ -126,6 +176,8 @@ class ImportRun extends Model
         'total_imported' => 0,
         'total_skipped' => 0,
         'total_refused_content' => 0,
+        'total_themes_applied' => 0,
+        'total_themes_kept_removed' => 0,
     ];
 
     /**
@@ -147,6 +199,8 @@ class ImportRun extends Model
             'total_imported' => 'integer',
             'total_skipped' => 'integer',
             'total_refused_content' => 'integer',
+            'total_themes_applied' => 'integer',
+            'total_themes_kept_removed' => 'integer',
             'started_at' => 'datetime',
             'finished_at' => 'datetime',
         ];

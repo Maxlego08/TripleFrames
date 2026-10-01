@@ -207,6 +207,8 @@ abstract class CatalogImportCommand extends Command
             'total_imported' => 0,
             'total_skipped' => 0,
             'total_refused_content' => 0,
+            'total_themes_applied' => 0,
+            'total_themes_kept_removed' => 0,
         ]));
 
         $this->persist($run);
@@ -298,6 +300,15 @@ abstract class CatalogImportCommand extends Command
                 (string) $run->total_refused_content,
             ]],
         );
+
+        // Les thèmes d'un collage (D43 du 01/10) : couples (film, thème)
+        // ajoutés, et ceux laissés hors du thème par un retrait de curateur.
+        if ($run->addedThemeIds() !== []) {
+            $this->components->info(
+                'Thèmes du collage : '.$run->total_themes_applied.' ajout(s), '
+                .$run->total_themes_kept_removed.' laissé(s) hors du thème par un retrait de curateur.',
+            );
+        }
 
         if (! $this->simulation && $run->status === ImportRunStatus::Running) {
             $this->components->warn(

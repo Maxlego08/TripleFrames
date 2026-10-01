@@ -1,12 +1,18 @@
 import { Head, Link, router } from '@inertiajs/react';
 import { CropIcon, EyeOffIcon, ListChecksIcon } from 'lucide-react';
 import { useEffect, useEffectEvent, useId, useRef, useState } from 'react';
+import type { RefObject } from 'react';
 import { toast } from 'sonner';
 import { AdminEmptyState } from '@/components/admin/admin-empty-state';
 import { AdminPageHeading } from '@/components/admin/admin-page-heading';
 import type { CoverageWarning } from '@/components/admin/frame-gesture-dialog';
 import { FRAME_LEVEL_KEYS } from '@/components/admin/level-picker';
-import { failedItemLabels, ReviewPanel } from '@/components/admin/review-panel';
+import { ReviewBatchButton } from '@/components/admin/review-batch-button';
+import {
+    failedItemLabels,
+    REVIEW_WRITE_PROPS,
+    ReviewPanel,
+} from '@/components/admin/review-panel';
 import type { ReviewOutcome } from '@/components/admin/review-panel';
 import { ReviewUnpublishDialog } from '@/components/admin/review-unpublish-dialog';
 import type { ReviewUnpublishTarget } from '@/components/admin/review-unpublish-dialog';
@@ -20,6 +26,7 @@ import { dashboard as adminDashboard } from '@/routes/admin';
 import { bank } from '@/routes/admin/catalog';
 import { index as reviewIndex } from '@/routes/admin/review';
 import type {
+    AdminQueueReviewBatch,
     AdminReviewFrame,
     AdminReviewGroup,
     AdminReviewList,
@@ -32,6 +39,11 @@ import type { TranslationKey } from '@/types/translations';
 
 type Props = {
     queue: AdminReviewQueue;
+    /**
+     * Les lots à valider en une fois, un par film qui en a un (D42 du 30/09,
+     * spec 20 § 7.9).
+     */
+    review_batches: AdminQueueReviewBatch[];
     /** Prop facultative : servie au seul rechargement qui la demande. */
     unpublish_preview?: AdminUnpublishPreview | null;
     /** Cadence du battement de débit (`catalog.curation.heartbeat_seconds`). */
@@ -143,6 +155,7 @@ function entriesOf(groups: AdminReviewGroup[]): Entry[] {
  */
 export default function AdminReviewIndex({
     queue,
+    review_batches,
     unpublish_preview,
     heartbeat_seconds,
 }: Props) {
@@ -387,6 +400,8 @@ export default function AdminReviewIndex({
                                             <QueueList
                                                 list={list}
                                                 groups={queue[list]}
+                                                batches={review_batches}
+                                                listRef={listRef}
                                                 currentId={
                                                     current?.frame.id ?? null
                                                 }
@@ -464,12 +479,16 @@ AdminReviewIndex.layout = { breadcrumbs };
 function QueueList({
     list,
     groups,
+    batches,
+    listRef,
     currentId,
     onSelect,
     onUnpublish,
 }: {
     list: AdminReviewList;
     groups: AdminReviewGroup[];
+    batches: AdminQueueReviewBatch[];
+    listRef: RefObject<HTMLDivElement | null>;
     currentId: number | null;
     onSelect: (frameId: number) => void;
     onUnpublish: (frame: AdminReviewFrame) => void;
@@ -481,6 +500,14 @@ function QueueList({
                     key={group.movie.id}
                     list={list}
                     group={group}
+                    batch={
+                        list === 'rejected'
+                            ? null
+                            : (batches.find(
+                                  (batch) => batch.movie_id === group.movie.id,
+                              ) ?? null)
+                    }
+                    listRef={listRef}
                     currentId={currentId}
                     onSelect={onSelect}
                     onUnpublish={onUnpublish}
@@ -493,12 +520,17 @@ function QueueList({
 function MovieGroup({
     list,
     group,
+    batch,
+    listRef,
     currentId,
     onSelect,
     onUnpublish,
 }: {
     list: AdminReviewList;
     group: AdminReviewGroup;
+    /** Le lot du film, hors de « Rejetées » ; `null` s'il n'y en a pas. */
+    batch: AdminQueueReviewBatch | null;
+    listRef: RefObject<HTMLDivElement | null>;
     currentId: number | null;
     onSelect: (frameId: number) => void;
     onUnpublish: (frame: AdminReviewFrame) => void;
@@ -523,6 +555,23 @@ function MovieGroup({
                     </span>
                 )}
             </h2>
+
+            {/*
+             * Valider en lot les images du film en attente (D42 du 30/09,
+             * § 7.9) : celles des deux premières listes, jamais un rejet.
+             */}
+            {batch !== null && (
+                <div>
+                    <ReviewBatchButton
+                        movieId={movie.id}
+                        movieTitle={movie.title_original}
+                        batch={batch}
+                        only={REVIEW_WRITE_PROPS}
+                        fallbackFocusRef={listRef}
+                        size="sm"
+                    />
+                </div>
+            )}
 
             <ul
                 aria-label={t('admin.review.list.label', {

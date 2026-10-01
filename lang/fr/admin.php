@@ -42,6 +42,8 @@ return [
         'dashboard' => 'Tableau de bord',
         'curation' => 'File de curation',
         'catalog' => 'Catalogue',
+        // L'écran des thèmes (spec 20 § 9.6, D43 du 01/10).
+        'themes' => 'Thèmes',
         'import' => 'Import',
         'review' => 'Revue',
         'throughput' => 'Débit',
@@ -330,6 +332,14 @@ return [
             'tmdb' => 'TMDB',
             'curator' => 'Curateur',
         ],
+        'theme_kind' => [
+            'genre' => 'Genre',
+            'decade' => 'Décennie',
+            'studio' => 'Studio',
+            'saga' => 'Saga',
+            'language' => 'Langue',
+            'difficulty' => 'Difficulté',
+        ],
         'theme_membership' => [
             'added' => 'Ajouté à la main',
             'removed' => 'Retiré à la main',
@@ -394,11 +404,13 @@ return [
             'movie_alias_removed' => 'Alias retiré',
             'movie_grouped' => 'Film regroupé',
             'movie_ungrouped' => 'Film retiré de son groupe',
+            'movie_theme_set' => 'Thème du film changé',
             'frame_added' => 'Image ajoutée',
             'frame_recropped' => 'Image recadrée',
             'frame_processing_retried' => 'Traitement de l’image relancé',
             'frame_level_changed' => 'Niveau de l’image changé',
             'frame_reviewed' => 'Image revue',
+            'movie_frames_reviewed' => 'Images du film validées en lot',
             'import_discover_started' => 'Balayage TMDB lancé',
             'import_paste_started' => 'Collage d’identifiants lancé',
             'import_seed_list_started' => 'Lot de la liste d’amorçage lancé',
@@ -407,6 +419,10 @@ return [
             'accounts_access_viewed' => 'Écran des accès consulté',
             'user_looked_up' => 'Compte recherché par adresse',
             'user_viewed' => 'Fiche du compte consultée',
+            'theme_created' => 'Thème créé',
+            'theme_updated' => 'Thème corrigé',
+            'theme_published' => 'Thème publié',
+            'theme_unpublished' => 'Thème dépublié',
         ],
         'admin_action_subject' => [
             'movie' => 'Film',
@@ -417,6 +433,7 @@ return [
             'site' => 'Site',
             'import_run' => 'Balayage d’import',
             'accounts' => 'Comptes',
+            'theme' => 'Thème',
         ],
     ],
 
@@ -734,6 +751,11 @@ return [
                 'ready_to_publish' => 'Prêts à publier',
                 'incomplete' => 'Publiés incomplets',
                 'set_aside' => 'Écartés',
+            ],
+            // Les films actifs dans un thème, publié ou non (spec 20 § 9.6).
+            'theme' => [
+                'label' => 'Thème',
+                'unpublished' => ':label (non publié)',
             ],
             'submit' => 'Filtrer',
             'reset' => 'Tout effacer',
@@ -1123,9 +1145,10 @@ return [
 
         'tags' => [
             'heading' => 'Étiquettes TMDB',
-            'description' => 'Le schéma ne stocke AUCUN libellé : genres et sociétés sont des identifiants TMDB bruts, et c’est délibéré.',
+            'description' => 'Identifiants TMDB bruts : une société porte son nom TMDB quand il est connu, un genre jamais (son libellé est celui de son thème).',
             'genres' => 'Genres',
             'companies' => 'Sociétés',
+            'company_label' => ':name (:id)',
             'empty' => 'Aucune étiquette.',
         ],
 
@@ -1149,13 +1172,74 @@ return [
         'themes' => [
             'heading' => 'Thèmes',
             'description' => 'La règle automatique et l’exception manuelle sont séparées ; l’appartenance effective est ce que le tirage lit.',
+            'empty' => 'Ce film n’appartient à aucun thème.',
             'column' => [
                 'theme' => 'Thème',
-                'auto' => 'Règle automatique',
-                'manual' => 'Exception manuelle',
+                'kind' => 'Nature',
+                'origin' => 'Origine',
                 'active' => 'Appartenance effective',
+                'actions' => 'Gestes',
             ],
-            'empty' => 'Ce film n’appartient à aucun thème.',
+            'origin' => [
+                'auto' => 'Règle',
+                'manual' => 'Exception : :state',
+                'auto_manual' => 'Règle, exception : :state',
+            ],
+            'active' => [
+                'yes' => 'Dans le thème',
+                'no' => 'Hors du thème',
+            ],
+            'unpublished' => 'Non publié',
+            'unpublished_hint' => 'Ce thème n’est pas publié : l’appartenance est enregistrée, mais aucun salon ne le propose encore.',
+            'add' => 'Ajouter',
+            'add_label' => 'Ajouter le film au thème :theme',
+            'remove' => 'Retirer',
+            'remove_label' => 'Retirer le film du thème :theme',
+            'clear' => 'Annuler l’exception',
+            'clear_label' => 'Annuler l’exception du thème :theme',
+            'picker' => [
+                'heading' => 'Ajouter un thème',
+                'description' => 'Tout thème, publié ou non ; les thèmes où le film est déjà ne sont pas proposés.',
+                'label' => 'Thème à ajouter',
+                'placeholder' => 'Choisir un thème',
+                'unpublished' => ':label (non publié)',
+                // Une option du sélecteur : le libellé, puis la nature.
+                'option' => ':label — :kind',
+                'empty' => 'Le film est déjà dans tous les thèmes.',
+                'submit' => 'Ajouter…',
+            ],
+            'confirm' => [
+                'add' => [
+                    'title' => 'Ajouter le film au thème',
+                    'description' => 'Le film entre dans « :theme » par une exception manuelle, signée de votre nom : une correction ultérieure de la règle ne l’en sortira pas.',
+                    'submit' => 'Ajouter au thème',
+                ],
+                'remove' => [
+                    'title' => 'Retirer le film du thème',
+                    'description' => 'Le film sort de « :theme » par une exception manuelle, signée de votre nom : la règle ne l’y fera plus revenir.',
+                    'submit' => 'Retirer du thème',
+                ],
+                'clear' => [
+                    'title' => 'Annuler l’exception',
+                    'description' => 'La règle de « :theme » décide de nouveau seule. Si elle ne porte pas le film, il sort du thème.',
+                    'submit' => 'Annuler l’exception',
+                ],
+            ],
+            'flash' => [
+                'added' => 'Film ajouté au thème.',
+                'removed' => 'Film retiré du thème.',
+                'cleared' => 'Exception annulée : la règle décide.',
+                'unchanged' => 'Rien n’a changé : l’exception était déjà celle-ci.',
+            ],
+            'collection' => [
+                'heading' => 'Collection TMDB',
+                'description' => 'La saga d’un film se désigne par sa collection TMDB.',
+                'none' => 'Ce film n’appartient à aucune collection TMDB.',
+                'name' => 'Collection',
+                'saga' => 'Thème de saga',
+                'no_saga' => 'Aucun thème de saga ne désigne cette collection.',
+                'create_saga' => 'Créer la saga depuis cette collection',
+            ],
         ],
 
         'frames' => [
@@ -1878,6 +1962,28 @@ return [
         'level_changed' => 'Le niveau de l’image a changé depuis son affichage, et les points de la grille avec lui : aucune revue n’a été enregistrée. Revoyez-la à son nouveau niveau.',
         'already_reviewed' => 'Cette image a déjà été jugée, ou n’attend plus de revue : aucune nouvelle revue n’a été enregistrée.',
         'answers_invalid' => 'Les réponses envoyées ne correspondent pas à la grille d’exclusion : aucune revue n’a été enregistrée. Revoyez l’image depuis la file à jour.',
+
+        /*
+        | Validation en lot des images d’un film (D42 du 30/09, § 7.9), depuis
+        | la fiche du film ou un groupe de la file. `:count` : le nombre
+        | d’images du lot ; `:version` : la version courante de la grille ;
+        | `:title` : le titre original du film. Les refus (`empty`,
+        | `stale_list`, `stale`) sont relus sous le verrou et n’écrivent rien.
+        */
+        'batch' => [
+            'action' => 'Tout valider (:count)',
+            'action_label' => 'Valider en une fois les :count images en attente de revue du film :title',
+            'title' => 'Valider toutes les images en attente ?',
+            'description' => ':count image sera validée et publiée.|:count images seront validées et publiées.',
+            'grid_notice' => 'Pour chacune, la grille d’exclusion (version :version) est enregistrée comme « rien à signaler » à son niveau, sous votre nom réel : une revue conforme par image, comme en revue individuelle.',
+            'excluded_notice' => 'Les images en traitement, en échec, rejetées ou hors jeu ne font pas partie du lot : elles restent en revue individuelle.',
+            'publish_notice' => 'Le film, lui, n’est jamais publié automatiquement : la fiche proposera « Publier » si ses conditions sont remplies.',
+            'submit' => 'Tout valider',
+            'flash' => ':count image validée et publiée.|:count images validées et publiées.',
+            'empty' => 'Ce film n’a plus aucune image en attente de revue à valider en lot : rien n’a été enregistré.',
+            'stale_list' => 'Les images en attente de ce film ont changé depuis l’affichage : aucune revue n’a été enregistrée. Rechargez la page et vérifiez le nouveau lot.',
+            'stale' => 'Une image du lot a changé depuis son affichage, un nouveau rendu l’a remplacée : aucune revue n’a été enregistrée. Rechargez la page et vérifiez le nouveau lot.',
+        ],
     ],
 
     /*
@@ -1935,6 +2041,23 @@ return [
             'submit' => 'Importer ces identifiants',
             'preview' => 'Prévisualiser',
             'preview_hint' => 'L’aperçu à blanc lit chaque fiche sans rien importer et montre le sort de chaque identifiant : c’est le geste normal avant tout import, un identifiant erroné important sinon un autre film en silence.',
+        ],
+
+        /*
+        | Thèmes choisis au collage (spec 20 § 3.3, D43 du 01/10). `selected`
+        | reçoit `:count` et `:max` ; `recap`, `:themes`, la liste déjà jointe.
+        */
+        'themes' => [
+            'heading' => 'Thèmes à appliquer (facultatif)',
+            'help' => 'Chaque film importé ou déjà au catalogue de ce collage sera ajouté aux thèmes cochés, signé de votre nom. Un film qu’un curateur a retiré d’un thème n’y est jamais remis ; un film déjà dans un thème n’est pas touché. Les films refusés n’en reçoivent aucun.',
+            'selected' => ':count thèmes cochés sur :max au plus',
+            'none' => 'Aucun thème ne sera appliqué.',
+            'empty' => 'Aucun thème n’existe encore : créez-en depuis l’écran des thèmes.',
+            'recap' => 'Thèmes appliqués à ce collage : :themes',
+            'separator' => ', ',
+            'unpublished' => 'non publié',
+            'too_many' => 'Au plus :max thèmes par collage : décochez-en un pour en cocher un autre.',
+            'clear' => 'Tout décocher',
         ],
 
         /*
@@ -2107,6 +2230,15 @@ return [
                 'last_request_at' => 'Dernier appel TMDB',
             ],
 
+            'themes' => [
+                'heading' => 'Thèmes du collage',
+                'description' => 'Les thèmes choisis au collage, posés en ajout manuel signé de l’auteur du collage. Un film qu’un curateur avait retiré d’un thème n’y a pas été remis.',
+                'none' => 'Aucun thème choisi pour ce collage.',
+                'applied' => 'Ajouts posés (film × thème)',
+                'kept_removed' => 'Laissés hors du thème par un retrait de curateur',
+                'unpublished' => 'non publié',
+            ],
+
             'movies' => [
                 'heading' => 'Films entrés par ce balayage',
                 'description' => 'La liste exacte de ce que ce balayage a fait entrer au catalogue.',
@@ -2121,6 +2253,134 @@ return [
     | Tous les comptes y figurent, joueurs compris ; les gestes se font depuis
     | la fiche d’un compte ou l’écran des accès.
     */
+    /*
+    | Écran des thèmes — spec 20 § 9.6, ligne 28 de la matrice (J1 depuis D43
+    | du 01/10). Créer un thème de toute nature créable ou sans règle, corriger
+    | sa règle, ses libellés et son ordre, le publier sous seuil ou le
+    | dépublier. Les refus des gestes sont des clés littérales, jamais
+    | construites par concaténation.
+    */
+    'themes' => [
+        'title' => 'Thèmes',
+        'heading' => 'Thèmes',
+        'description' => 'Chaque thème, publié ou non, avec sa règle, ses œuvres et ses films. Un thème rassemble les films qui satisfont sa règle, plus les ajouts manuels de la fiche film, moins ses retraits manuels.',
+        'threshold' => 'Un thème se publie à partir de :min œuvres au réglage par défaut (:frames images par manche). En deçà, un salon qui le choisirait seul serait bloqué au lancement. Dépublier est toujours permis.',
+        'selector_hidden' => 'Le sélecteur de thèmes reste masqué aux joueurs au jalon 1 : publier un thème le prépare, sans le montrer encore.',
+        'create' => 'Créer un thème',
+        'empty' => 'Aucun thème de cette nature.',
+        'none' => 'Aucun thème n’existe encore.',
+        'column' => [
+            'key' => 'Clé',
+            'label_fr' => 'Libellé FR',
+            'label_en' => 'Libellé EN',
+            'rule' => 'Règle',
+            'works' => 'Œuvres',
+            'active_films' => 'Films actifs',
+            'published' => 'Publié',
+            'sort_order' => 'Ordre',
+            'actions' => 'Gestes',
+        ],
+        'works_hint' => 'Œuvres jouables du thème seul, à :frames images par manche.',
+        'status' => [
+            'published' => 'Publié',
+            'unpublished' => 'Non publié',
+        ],
+        'missing_labels' => 'Libellé manquant : :locales',
+        'rule' => [
+            'manual' => 'Sans règle : ajouts manuels seulement',
+            'negated' => 'Tout sauf',
+            'named' => ':name (:value)',
+        ],
+        'actions' => [
+            'edit' => 'Modifier',
+            'publish' => 'Publier',
+            'unpublish' => 'Dépublier',
+        ],
+        'a11y' => [
+            'edit' => 'Modifier le thème :key',
+            'publish' => 'Publier le thème :key',
+            'unpublish' => 'Dépublier le thème :key',
+            'group' => 'Thèmes de nature :kind',
+        ],
+        'form' => [
+            'create_title' => 'Créer un thème',
+            'create_description' => 'Le thème naît non publié. Ses films sont calculés juste après la création, en tâche de fond ; la clé, dérivée du libellé anglais, ne changera plus.',
+            'edit_title' => 'Modifier le thème :key',
+            'edit_description' => 'La nature et la clé d’un thème ne changent jamais. Corriger la règle ou sa négation recalcule ses films en tâche de fond ; un libellé ou un ordre seuls ne recalculent rien.',
+            'kind' => 'Nature',
+            'kind_fixed' => 'Nature : :kind (immuable)',
+            'manual' => 'Sans règle',
+            'manual_help' => 'Le thème ne contiendra que les films ajoutés à la main depuis leur fiche.',
+            'rule' => 'Règle',
+            'negated' => 'Nier la règle',
+            'negated_help' => 'Le thème rassemble alors tous les films qui ne satisfont PAS la règle (un film sans la donnée n’y entre jamais).',
+            'label_fr' => 'Libellé français',
+            'label_en' => 'Libellé anglais',
+            'sort_order' => 'Ordre d’affichage',
+            'sort_order_help' => 'Laissé vide, le thème se range en fin de bloc de sa nature.',
+            'key_preview' => 'Clé prévue : :key',
+            'key_pending' => 'La clé sera dérivée du libellé anglais.',
+            'key_fixed' => 'Clé : :key (immuable)',
+            'prefill' => 'Saga préremplie depuis la collection « :name ».',
+            'submit_create' => 'Créer le thème',
+            'submit_update' => 'Enregistrer',
+        ],
+        'picker' => [
+            'loading' => 'Chargement des valeurs présentes au catalogue…',
+            'failed' => 'Les valeurs du catalogue n’ont pas pu être chargées.',
+            'retry' => 'Réessayer',
+            'empty' => 'Aucune valeur de cette nature n’est encore présente au catalogue.',
+            'choose' => 'Choisir…',
+            'option' => ':label — :count film(s)',
+            'taken' => ':label — déjà désignée par :key',
+            'genre' => 'Genre :id',
+            'current' => ':label (valeur actuelle)',
+            'selected' => 'Sociétés retenues',
+            'none_selected' => 'Aucune société retenue.',
+            'remove' => 'Retirer :label',
+            'add' => 'Ajouter',
+            'company_id' => 'Identifiant TMDB d’une société',
+            'company_id_help' => 'Pour une société encore absente du catalogue (correction d’un thème livré). À la création, chaque société doit être portée par au moins un film.',
+            'limit' => 'Au plus :max sociétés par thème.',
+            'add_company' => 'Ajouter une société du catalogue',
+        ],
+        'publish' => [
+            'title_publish' => 'Publier le thème :key',
+            'title_unpublish' => 'Dépublier le thème :key',
+            'description_publish' => 'Le thème compte :works œuvre(s) ; le seuil de publication est de :min. Publier ne recalcule rien : seuls ses films actifs y entrent.',
+            'description_unpublish' => 'Le thème sort des réglages proposés aux salons ; ses films et ses exceptions manuelles sont conservés.',
+            'below_threshold' => 'Sous le seuil : la publication sera refusée tant que le thème compte moins de :min œuvres.',
+            'notice' => [
+                'live_action_japanese' => 'Ce thème rassemble tous les films en japonais, prise de vue réelle comprise. Avant de le publier, retirez-en à la main les films japonais qui ne sont pas des animés : le seuil d’œuvres ne le vérifie pas.',
+            ],
+            'submit_publish' => 'Publier',
+            'submit_unpublish' => 'Dépublier',
+        ],
+        'flash' => [
+            'created' => 'Thème :key créé, non publié. Ses films se calculent en tâche de fond.',
+            'updated' => 'Thème :key enregistré.',
+            'unchanged' => 'Rien n’a changé : le thème est déjà dans cet état.',
+            'published' => 'Thème :key publié.',
+            'unpublished' => 'Thème :key dépublié.',
+        ],
+        'busy' => 'Un autre geste sur les thèmes est en cours : réessayez dans un instant.',
+        'kind_forbidden' => 'Les thèmes de difficulté sont livrés avec le site : cette nature ne se crée pas.',
+        'kind_immutable' => 'La nature d’un thème ne change jamais : créez un autre thème.',
+        'key_immutable' => 'La clé d’un thème ne change jamais.',
+        'key_invalid' => 'Ce libellé anglais ne donne aucune clé : utilisez au moins une lettre ou un chiffre.',
+        'key_taken' => 'La clé :key existe déjà : choisissez un autre libellé anglais.',
+        'collection_taken' => 'Cette collection est déjà la saga du thème :key.',
+        'company_taken' => 'Une de ces sociétés est déjà désignée par le thème :key.',
+        'company_absent' => 'Aucun film du catalogue ne porte ces sociétés : :ids.',
+        'genre_absent' => 'Aucun film du catalogue ne porte ce genre.',
+        'decade_invalid' => 'Une décennie s’écrit par son année de début, multiple de 10 (1990).',
+        'language_invalid' => 'Une langue s’écrit par son code de deux lettres minuscules (ja, fr).',
+        'rule_too_long' => 'La liste des sociétés dépasse :max caractères : retirez-en une.',
+        'negation_forbidden' => 'Une saga et un thème sans règle ne se nient pas.',
+        'labels_missing' => 'Ce thème n’a pas de libellé dans chaque langue : complétez-les avant de le publier.',
+        'too_small' => 'Ce thème ne compte que :count œuvre(s) : il en faut au moins :min pour le publier.',
+    ],
+
     'users' => [
         'title' => 'Comptes',
         'heading' => 'Annuaire des comptes',
@@ -2461,8 +2721,18 @@ return [
             'review_id' => 'Revue n°',
             'decision' => 'Décision',
             'grid_version' => 'Version de la grille',
+            'frame_ids' => 'Images n°',
             'pages' => 'Pages TMDB',
             'tmdb_ids' => 'Identifiants TMDB',
+            'key' => 'Clé',
+            'kind' => 'Nature',
+            'rule_value' => 'Règle',
+            'rule_negated' => 'Règle niée',
+            'labels' => 'Libellés',
+            'sort_order' => 'Ordre',
+            'works' => 'Œuvres',
+            'theme_key' => 'Thème',
+            'theme_ids' => 'Thèmes appliqués (identifiants)',
         ],
 
         'empty' => [
@@ -2496,6 +2766,11 @@ return [
         'min_year' => 'année minimale',
         'pages' => 'pages TMDB',
         'tmdb_query' => 'recherche TMDB',
+        // Thèmes choisis au collage (spec 20 § 3.3, D43 du 01/10).
+        'import_themes' => [
+            'attribute' => 'thèmes du collage',
+            'max' => 'Un collage applique au plus :max thèmes : retirez-en de la sélection.',
+        ],
         'ids' => [
             'required' => 'Collez au moins un identifiant ou une URL TMDB.',
             'max' => 'Un envoi accepte au plus :max identifiants : scindez la liste en plusieurs envois.',
@@ -2515,6 +2790,7 @@ return [
         'reason' => 'motif',
         'grid_version' => 'version de la grille',
         'reviewed_hash' => 'empreinte de l’image revue',
+        'frames' => 'images du lot',
         'answers' => 'réponses de la grille',
         'declared_source_reference' => 'source déclarée',
         'movie_title' => 'titre',
@@ -2523,8 +2799,24 @@ return [
         'group_movie' => 'identifiant de l’autre film',
         'group' => 'groupe',
         'group_leave' => 'retrait du groupe',
+        'movie_theme' => 'thème',
+        'movie_theme_state' => 'exception de thème',
+        'catalog_theme' => 'thème',
         'group_label' => 'libellé du groupe',
         'group_note' => 'note',
+        // L'écran des thèmes (spec 20 § 9.6, D43 du 01/10).
+        'theme_kind' => 'nature du thème',
+        'theme_manual' => 'thème sans règle',
+        'theme_collection' => 'collection',
+        'theme_companies' => 'sociétés',
+        'theme_company' => 'société',
+        'theme_rule' => 'valeur de la règle',
+        'theme_negated' => 'négation de la règle',
+        'theme_labels' => 'libellés',
+        'theme_label_fr' => 'libellé français',
+        'theme_label_en' => 'libellé anglais',
+        'theme_sort_order' => 'ordre',
+        'theme_published' => 'publication',
         // Filtres du journal d'administration (ligne 41, D41 du 30/09).
         'journal_actor' => 'auteur',
         'journal_action' => 'action',
@@ -2645,6 +2937,12 @@ return [
             'snapshot_unsafe_dir' => 'Répertoire d’instantanés refusé : BACKUP_SNAPSHOT_DIR doit être un chemin absolu situé hors du répertoire de déploiement. Aucun instantané n’a été pris.',
             'snapshot_driver' => 'Instantané impossible : la connexion par défaut emploie le pilote :driver, et seul un vidage MySQL est pris en charge. Aucun instantané n’a été pris.',
             'pruned' => 'Élagage des instantanés terminé. Instantanés supprimés : :count.',
+            // Tier froid et restauration jouée (spec 100 § 13.3 et § 13.5).
+            'manifest_unreadable' => 'Manifeste incomplet : :count fichier(s) du disque frames illisible(s). Les autres fichiers sont listés ; la sauvegarde est en échec.',
+            'manifest_missing' => 'Tier froid incomplet : :count fichier(s) du périmètre introuvable(s) sur le disque frames. Les fichiers présents sont listés ; lancez backup:verify pour les dérivés publiés.',
+            'manifest_altered' => 'Tier froid incomplet : :count dérivé(s) publié(s) dont le condensat diffère de published_hash, non listé(s). Lancez backup:verify.',
+            'verify_ok' => 'Vérification réussie : les :count frame(s) publiée(s) ont leur fichier de jeu présent, au condensat publié.',
+            'verify_failed' => 'Vérification en échec : :count fichier(s) de jeu manquant(s) ou altéré(s) sur :checked frame(s) publiée(s) (manquants : :missing ; altérés : :altered). Ne rouvrez pas le trafic.',
         ],
 
         /*
@@ -2653,6 +2951,28 @@ return [
         */
         'reproject' => [
             'done' => 'Reprojection terminée. Films reprojetés par différence : :movies.',
+        ],
+
+        /*
+        | Rattrapage des appartenances aux thèmes (spec 30 § 13.2, règle 12) :
+        | l'instantané précède toute écriture.
+        */
+        'themes' => [
+            'snapshot_failed' => 'Instantané refusé : aucune appartenance n’a été réévaluée. Corrigez la cause signalée par backup:snapshot, puis relancez catalog:themes.',
+            'theme' => 'lignes changées : :changed',
+            'done' => 'Réévaluation terminée. Thèmes : :themes ; lignes d’appartenance changées : :changed.',
+        ],
+
+        /*
+        | Rattrapage des noms de sociétés TMDB (spec 10 § 3.6 bis). N'écrit que
+        | `tmdb_company`, hors règle 12.
+        */
+        'company_names' => [
+            'invalid_limit' => 'Option refusée : --limit attend un entier strictement positif. Rien n’a été appelé ni écrit.',
+            'dry_run' => 'Simulation : :count société(s) sans nom seraient demandées à TMDB. Rien n’a été appelé ni écrit.',
+            'not_configured' => 'Aucune clé TMDB configurée : posez TMDB_API_READ_ACCESS_TOKEN ou TMDB_API_KEY dans .env. Rien n’a été appelé ni écrit.',
+            'failed' => 'TMDB a refusé un appel : :reason. Sociétés déjà nommées et conservées : :named. Relancez la commande pour reprendre.',
+            'done' => 'Noms de sociétés rattrapés. Nommées : :named ; inconnues de TMDB : :unknown.',
         ],
 
         /*

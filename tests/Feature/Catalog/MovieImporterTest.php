@@ -20,6 +20,7 @@ use App\Models\MovieGroup;
 use App\Models\MovieProjection;
 use App\Models\MovieTitle;
 use App\Models\MovieTmdbTag;
+use App\Models\TmdbCompany;
 use App\Models\User;
 use App\Support\Catalog\ImportDecision;
 use App\Support\Catalog\MovieImporter;
@@ -447,6 +448,74 @@ it('rattache la saga TMDB sans jamais la confondre avec le groupe manuel', funct
     expect($movie->collection_id)->not->toBeNull()
         ->and($movie->collection?->tmdb_id)->toBe(445566)
         ->and($movie->group_id)->toBeNull();
+});
+
+/*
+|--------------------------------------------------------------------------
+| Noms des sociétés TMDB — spec 10 § 3.6 bis (D43 du 01/10)
+|--------------------------------------------------------------------------
+*/
+
+/**
+ * La fiche `movie-987654` dont la société 7711 porte un autre nom.
+ */
+function tmdbMovieWithCompanyName(string $fixture, int $companyId, string $name, int $tmdbId = 987654): TmdbMovie
+{
+    $data = TmdbFixture::array($fixture);
+    $data['id'] = $tmdbId;
+
+    /** @var list<array<string, mixed>> $companies */
+    $companies = $data['production_companies'];
+
+    foreach ($companies as $index => $company) {
+        if ($company['id'] === $companyId) {
+            $companies[$index]['name'] = $name;
+        }
+    }
+
+    $data['production_companies'] = $companies;
+
+    return TmdbMovie::fromArray($data);
+}
+
+it('l\'import écrit le nom de chaque société de production', function (): void {
+    importer()->import(tmdbMovie('movie-987654'), importerRun(ImportRunKind::Discover), ImportFilter::default());
+
+    expect(TmdbCompany::query()->orderBy('tmdb_id')->pluck('name', 'tmdb_id')->all())
+        ->toBe([7711 => 'Atelier Kaze', 7712 => 'Studio Quintane']);
+});
+
+it('la resynchronisation réécrit le nom d\'une société renommée', function (): void {
+    importer()->import(tmdbMovie('movie-987654'), importerRun(ImportRunKind::Discover), ImportFilter::default());
+
+    importer()->import(
+        tmdbMovieWithCompanyName('movie-987654-resynced', 7711, 'Atelier Kaze Animation'),
+        importerRun(ImportRunKind::Resync),
+        ImportFilter::default(),
+    );
+
+    // Renommée, réécrite ; 7712, que la fiche relue ne cite plus, garde son nom.
+    expect(TmdbCompany::query()->orderBy('tmdb_id')->pluck('name', 'tmdb_id')->all())
+        ->toBe([7711 => 'Atelier Kaze Animation', 7712 => 'Studio Quintane']);
+});
+
+it('une simulation n\'écrit aucune société', function (): void {
+    importer()->import(tmdbMovie('movie-987654'), importerRun(ImportRunKind::Discover), ImportFilter::default(), dryRun: true);
+
+    expect(TmdbCompany::query()->count())->toBe(0);
+});
+
+it('deux films de la même société ne créent qu\'une ligne de société', function (): void {
+    importer()->import(tmdbMovie('movie-987654'), importerRun(ImportRunKind::Discover), ImportFilter::default());
+    importer()->import(
+        tmdbMovieWithCompanyName('movie-987654', 7711, 'Atelier Kaze', tmdbId: 987699),
+        importerRun(ImportRunKind::Paste),
+        ImportFilter::default(),
+    );
+
+    expect(Movie::query()->count())->toBe(2)
+        ->and(TmdbCompany::query()->count())->toBe(2)
+        ->and(TmdbCompany::query()->where('tmdb_id', 7711)->count())->toBe(1);
 });
 
 /*

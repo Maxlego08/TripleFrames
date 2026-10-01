@@ -15,6 +15,7 @@ use App\Settings\PlatformLimits;
 use App\Settings\RoomSettingsBounds;
 use App\Support\Draw\PoolCandidate;
 use App\Support\Draw\PoolQuery;
+use App\Support\Draw\PoolReporter;
 use App\Support\Draw\PoolScope;
 use App\Support\Draw\RoomMemoryWindow;
 use Carbon\CarbonImmutable;
@@ -292,6 +293,84 @@ it('un thème dépublié est élagué, signalé par themesPruned, et ne produit 
 
     expect($pool->themesPruned(PoolScope::catalogue([$kept->id], $n)))->toBeFalse()
         ->and($pool->themesPruned(PoolScope::catalogue([], $n)))->toBeFalse();
+});
+
+it('la mesure d’un thème non publié ne compte que ses films', function () {
+    $theme = Theme::factory()->unpublished()->create();
+    $other = Theme::factory()->published()->create();
+
+    [$member, $removed, $grouped, $groupedToo, $outside, $tooShort] = [
+        ...PoolFixtures::movies(2),
+        ...(function (): array {
+            $group = MovieGroup::factory()->create();
+
+            return [PoolFixtures::movie(group: $group), PoolFixtures::movie(group: $group)];
+        })(),
+        PoolFixtures::movie(),
+        // Éligible à aucun `N` par défaut : sa banque ne couvre qu'un niveau.
+        PoolFixtures::movie([FrameLevel::Level1]),
+    ];
+
+    PoolFixtures::member($member, $theme);
+    MovieTheme::factory()->for($removed)->for($theme)->auto()->manualRemoved()->create();
+    PoolFixtures::member($grouped, $theme);
+    PoolFixtures::member($groupedToo, $theme);
+    PoolFixtures::member($outside, $other);
+    PoolFixtures::member($tooShort, $theme);
+
+    $pool = app(PoolQuery::class);
+    $probe = PoolScope::themeProbe($theme->id);
+
+    // Un film actif, plus un movie_group entier (une œuvre) ; ni l'exclusion
+    // manuelle, ni le film d'un autre thème, ni celui inéligible au N par défaut.
+    expect($probe->framesPerRound)->toBe(RoomSettingsBounds::DEFAULT_FRAMES_PER_ROUND)
+        ->and($probe->roomId)->toBeNull()
+        ->and($probe->noRepeatMovies)->toBeFalse()
+        ->and($pool->effectiveThemeIds($probe))->toBe([$theme->id])
+        ->and($pool->themesPruned($probe))->toBeFalse()
+        ->and(poolQueryIds($probe))->toBe(poolQuerySorted($member, $grouped, $groupedToo))
+        ->and($pool->countWorks($probe))->toBe(2)
+        ->and(app(PoolReporter::class)->themeWorks($theme->id))->toBe(2);
+
+    // La mesure ne lit pas les thèmes publiés : aucune requête sur `theme`.
+    $queries = poolQueryCapture(fn () => app(PoolQuery::class)->countWorks($probe));
+
+    expect(poolQueryThemeReads($queries))->toBe([]);
+
+    // Un thème publié se mesure de même.
+    expect(app(PoolReporter::class)->themeWorks($other->id))->toBe(1);
+});
+
+it('aucun autre périmètre que la mesure d’un thème ne compte un thème non publié', function () {
+    $theme = Theme::factory()->unpublished()->create();
+    [$member, $outside] = PoolFixtures::movies(2);
+    PoolFixtures::member($member, $theme);
+
+    $pool = app(PoolQuery::class);
+    $n = poolQueryDefaultN();
+    $room = Room::factory()->create();
+    $settings = PoolFixtures::settings(themeIds: [$theme->id]);
+
+    $scopes = [
+        'catalogue' => PoolScope::catalogue([$theme->id], $n),
+        'salon' => PoolScope::forRoom($room, $settings, $this->now),
+        'partie' => PoolScope::forGame(PoolFixtures::game($room, $settings), $this->now),
+        'solo' => PoolScope::forGame(Game::factory()->solo()->withSettings($settings)->create(), $this->now),
+    ];
+
+    foreach ($scopes as $label => $scope) {
+        expect($scope->themesUnpublishedIncluded)->toBeFalse($label)
+            ->and($pool->effectiveThemeIds($scope))->toBe([], $label)
+            ->and($pool->themesPruned($scope))->toBeTrue($label)
+            // Élagué : branche sans thème, le film hors thème reste au vivier.
+            ->and(poolQueryIds($scope, $pool))->toBe(poolQuerySorted($member, $outside), $label);
+    }
+
+    // La mesure est un périmètre fermé : un seul thème, jamais de salon.
+    expect(PoolScope::themeProbe($theme->id)->themesUnpublishedIncluded)->toBeTrue()
+        ->and(PoolScope::themeProbe($theme->id)->withThemeIds([$theme->id])->themesUnpublishedIncluded)->toBeTrue();
+    expect(fn () => PoolScope::themeProbe($theme->id)->withThemeIds([]))
+        ->toThrow(InvalidArgumentException::class);
 });
 
 it('un film suspendu, retiré, bloqué ou non vérifié est hors du vivier', function () {

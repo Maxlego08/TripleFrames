@@ -28,6 +28,10 @@ use Inertia\Inertia;
  * trace, jamais pour la reprise : aucune colonne d'`import_run` ne la porte. C'est pour cette raison exacte
  * qu'un collage interrompu n'est pas reprenable depuis l'écran — question
  * renvoyée à la spec 20.
+ *
+ * Les thèmes choisis au collage (D43 du 01/10, spec 20 § 3.3), eux, sont
+ * portés par `import_run.added_theme_ids` : la commande les relit sur la
+ * ligne, et le journal les recopie dans `details.theme_ids`.
  */
 class ImportIdsController extends Controller
 {
@@ -48,13 +52,15 @@ class ImportIdsController extends Controller
         /** @var User $actor */
         $actor = $request->user();
         $identifiers = $request->identifiers();
+        $themeIds = $request->themeIds();
 
         $run = ImportLauncher::openExclusively(
             ImportRunKind::Paste,
             ImportFilter::default(),
             $actor,
             AdminActionType::ImportPasteStarted,
-            AdminActionDetails::importIds($identifiers),
+            AdminActionDetails::importIds($identifiers, $themeIds),
+            $themeIds,
         );
 
         if ($run === null) {

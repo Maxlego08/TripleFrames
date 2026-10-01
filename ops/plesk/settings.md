@@ -56,16 +56,20 @@ Réglés dans l'interface, sans root. À AJUSTER AU RELEVÉ : champs réellement
 
 Tâches de l'utilisateur d'abonnement, « Exécuter une commande », **sortie non notifiée**. Heures en UTC. À AJUSTER AU RELEVÉ : fuseau du serveur (`timedatectl`), dans lequel Plesk lit les heures des tâches.
 
-| Tâche            | Fréquence              | Lot                |
-| ---------------- | ---------------------- | ------------------ |
-| `schedule:run`   | chaque minute          | L100-9 (étape 27)  |
-| `backup-hot.sh`  | chaque jour, 03:10 UTC | L100-10 (étape 30) |
-| `backup-cold.sh` | chaque semaine         | L100-10 (étape 30) |
+| Tâche            | Fréquence                  | Lot                |
+| ---------------- | -------------------------- | ------------------ |
+| `schedule:run`   | chaque minute              | L100-9 (étape 27)  |
+| `backup-hot.sh`  | chaque jour, 03:10 UTC     | L100-10 (étape 30) |
+| `backup-cold.sh` | chaque dimanche, 04:10 UTC | L100-10 (étape 30) |
 
 - Commande du planificateur : `/opt/plesk/php/8.4/bin/php __TF_DEPLOY_PATH__/artisan schedule:run`.
 - **Une tâche sous la minute tient `schedule:run` vivant toute la minute** : le battement de la file `game` est planifié toutes les 30 secondes (`everyThirtySeconds()`), si bien que chaque passage reste en vie jusqu'à la fin de sa minute pour lancer le second battement. Il y a donc en permanence un processus PHP CLI du planificateur, à compter dans le budget mémoire, et le passage suivant démarre quand le précédent se termine. Ne jamais activer la notification de sortie : un courriel par minute.
 - Le planificateur est surveillé indirectement : s'il s'arrête, les battements vieillissent et les sondes `worker-game` et `worker-default` alertent (§ 15).
-- Les deux tâches de sauvegarde naissent avec L100-10 (`ops/backup/`), qui les consigne ici.
+- Commandes des sauvegardes : `bash __TF_DEPLOY_PATH__/ops/backup/backup-hot.sh` et `bash __TF_DEPLOY_PATH__/ops/backup/backup-cold.sh`. Chacun force son répertoire sur la racine du déploiement et appelle `/opt/plesk/php/8.4/bin/php` par chemin absolu.
+- Le tier chaud tourne **après** la purge de rétention (02:10) et l'élagage des instantanés (02:50) : on sauvegarde le moins de données personnelles possible (§ 13.2). Le tier froid tourne une heure après, pour ne jamais concourir avec lui. Le passage **quotidien** du tier froid est proposé au porteur (N100-2) : ne changer la fréquence qu'avec son accord, en mettant à jour ce tableau.
+- Fichier hors dépôt de l'utilisateur d'abonnement, **avec secrets**, `0600` : `~/.config/tripleframes/backup.env`, clés `DB_HOST`, `DB_PORT`, `DB_DATABASE`, `DB_USERNAME`, `DB_PASSWORD`, `AGE_RECIPIENT` (clé **publique** age ; la clé privée n'est jamais sur le VPS, § 13.4), `BACKUP_REMOTE` (distant rclone et bucket, clé limitée au dépôt d'objets), `BACKUP_HEARTBEAT_URL` (battement de la sonde « sauvegarde », § 15), `BACKUP_COLD_HEARTBEAT_URL` (battement de la sonde « sauvegarde froide », § 15), `FRAMES_DISK_ROOT` (tier froid, la même valeur que le `.env` de l'application) ; facultatives : `RCLONE_CONFIG`, `RCLONE_FLAGS` (drapeaux d'envoi sans lecture, à confirmer selon le fournisseur), `MYSQLDUMP_EXTRA_ARGS` (`--set-gtid-purged=OFF` si le relevé trouve `@@gtid_mode` à `ON`). Le fichier `rclone.conf`, s'il est séparé, est aussi en `0600`.
+- État local tenu par les scripts : `~/.local/state/tripleframes/` (verrous, `cold-sent.list`, liste des objets froids déjà envoyés — la perdre ne fait que renvoyer des objets identiques —, et répertoires de travail `hot.work.*` et `cold.work.*`, jamais sous `/tmp` : le vidage en clair n'y vit que le temps de son chiffrement, et un reste d'un passage tué est supprimé au passage suivant).
+- Chaque tier bat sa propre sonde, en dernière commande et seulement en cas de succès : « sauvegarde » (< 26 h) pour le tier chaud, « sauvegarde froide » (< 8 j au rythme hebdomadaire) pour le tier froid. Une tâche qui échoue ou s'arrête alerte d'elle-même, malgré la sortie non notifiée. L'adresse de battement porte le jeton de la sonde : elle passe à `curl` par l'entrée standard, jamais en argument.
 
 ## 5. Journaux (§ 10.9)
 

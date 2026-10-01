@@ -78,8 +78,8 @@ function adminJournalRawLine(AdminActionType $action, array $overrides = []): Ad
     return $line;
 }
 
-test('la liste fermée compte exactement quarante et un cas', function (): void {
-    expect(AdminActionType::cases())->toHaveCount(41)
+test('la liste fermée compte exactement quarante-sept cas', function (): void {
+    expect(AdminActionType::cases())->toHaveCount(47)
         ->and(array_map(static fn (AdminActionType $case): string => $case->value, AdminActionType::cases()))
         ->toEqualCanonicalizing([
             'role.changed',
@@ -120,11 +120,19 @@ test('la liste fermée compte exactement quarante et un cas', function (): void 
             'import.paste_started',
             'import.seed_list_started',
             'import.resumed',
+            // D42 du 30/09 : validation en lot des images d'un film.
+            'movie.frames_reviewed',
             // D41 du 30/09 : lectures sensibles.
             'accounts.directory_viewed',
             'accounts.access_viewed',
             'user.looked_up',
             'user.viewed',
+            // D43 du 01/10 : l'écran des thèmes.
+            'theme.created',
+            'theme.updated',
+            'theme.published',
+            'theme.unpublished',
+            'movie.theme_set',
         ]);
 
     // `action` reste un `string(40)` : aucun cas ne dépasse la colonne, et
@@ -133,9 +141,11 @@ test('la liste fermée compte exactement quarante et un cas', function (): void 
         expect(strlen($case->value))->toBeLessThanOrEqual(40);
     }
 
-    expect(AdminActionSubject::cases())->toHaveCount(8)
+    expect(AdminActionSubject::cases())->toHaveCount(9)
         ->and(AdminActionSubject::ImportRun->value)->toBe('import_run')
-        ->and(AdminActionSubject::Accounts->value)->toBe('accounts');
+        ->and(AdminActionSubject::Accounts->value)->toBe('accounts')
+        ->and(AdminActionSubject::Theme->value)->toBe('theme')
+        ->and(AdminActionSubject::Theme->hasIdentifier())->toBeTrue();
 
     // `subject_type` reste un `string(20)`.
     foreach (AdminActionSubject::cases() as $subject) {

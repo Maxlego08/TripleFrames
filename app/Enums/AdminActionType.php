@@ -9,7 +9,7 @@ use App\Support\Admin\AdminJournal;
  * Liste FERMÉE des gestes consignés au journal d'administration : cast de
  * `admin_action.action` (spec 10 § 8.3, contrat C14).
  *
- * **Quarante et un cas.** Les vingt-deux gestes engageants du jalon 1 — les
+ * **Quarante-sept cas.** Les vingt-deux gestes engageants du jalon 1 — les
  * vingt et un du contrat C14, dont six entrés le 23/09 (`movie.published`,
  * `frame.unpublished`, `frame.grid_unpublished`, `frame.unsuspended`,
  * `site.closed`, `site.reopened`), plus `user.real_name_changed` (28/09,
@@ -22,6 +22,16 @@ use App\Support\Admin\AdminJournal;
  * - quatre LECTURES SENSIBLES ({@see self::isRead()}) — l'annuaire, la fiche
  *   d'un compte, l'écran des accès et sa recherche par adresse —, écrites par
  *   la seule porte {@see AdminJournal::recordRead()}, sans transaction.
+ *
+ * - un cas entré par **D42 du 30/09** : `movie.frames_reviewed`, la
+ *   validation en lot des images d'un film — UNE ligne pour le lot, sujet le
+ *   film, quand chaque image garde sa propre preuve `frame_review`.
+ *
+ * - cinq cas entrés par **D43 du 01/10** (spec 10 § 8.3, spec 20 § 2.7
+ *   « Cas des thèmes ») : `theme.created`, `theme.updated`, `theme.published`
+ *   et `theme.unpublished`, sujet {@see AdminActionSubject::Theme} — l'écran
+ *   des thèmes du back-office, avancé au J1 —, et `movie.theme_set`, sujet le
+ *   film, le geste du bloc « Thèmes » de la fiche film.
  *
  * Tous sans migration de colonne : `action` reste un `string(40)`. `10`
  * possède la liste ; un cas nouveau s'y demande en exigence, jamais par un
@@ -103,6 +113,14 @@ enum AdminActionType: string
     /** Le film sort de son groupe, ou le groupe dissous l'en fait sortir. */
     case MovieUngrouped = 'movie.ungrouped';
 
+    /**
+     * L'exception manuelle d'un film pour un thème change (D43 du 01/10) :
+     * `details` porte la clé du thème, l'état avant et l'état après
+     * (`added` / `removed` / NULL). Un collage avec thèmes n'en écrit pas
+     * par film (exception assumée à D41, spec 20 § 2.7).
+     */
+    case MovieThemeSet = 'movie.theme_set';
+
     case FrameAdded = 'frame.added';
 
     /** Rectangle réécrit en place (`details` : avant, après). */
@@ -120,6 +138,15 @@ enum AdminActionType: string
      */
     case FrameReviewed = 'frame.reviewed';
 
+    /**
+     * Validation en lot des images d'un film en attente de revue (D42 du
+     * 30/09) : UNE ligne pour le lot, sujet le film. Chaque image garde sa
+     * preuve `frame_review`, seule opposable ; le lot n'écrit AUCUNE ligne
+     * `frame.reviewed` (`details` : les images validées, la version de la
+     * grille).
+     */
+    case MovieFramesReviewed = 'movie.frames_reviewed';
+
     case ImportDiscoverStarted = 'import.discover_started';
 
     /** Collage manuel ; `details` porte les identifiants collés, stockés nulle part ailleurs. */
@@ -129,6 +156,20 @@ enum AdminActionType: string
     case ImportSeedListStarted = 'import.seed_list_started';
 
     case ImportResumed = 'import.resumed';
+
+    // --- D43 du 01/10 : écran des thèmes ------------------------------------
+
+    /** Thème créé, toute nature ou sans règle (`details` : clé, nature, règle, négation, libellés). */
+    case ThemeCreated = 'theme.created';
+
+    /** Règle, négation, libellés ou ordre changés (`details` : avant, après — les seuls champs changés). */
+    case ThemeUpdated = 'theme.updated';
+
+    /** Bascule effective vers publié (`details` : nombre d'œuvres relu dans la transaction). */
+    case ThemePublished = 'theme.published';
+
+    /** Bascule effective vers non publié (`details` : nombre d'œuvres). */
+    case ThemeUnpublished = 'theme.unpublished';
 
     // --- D41 du 30/09 : lectures sensibles ----------------------------------
 
@@ -150,7 +191,7 @@ enum AdminActionType: string
     /**
      * Classe de conservation, écrite à l'insertion depuis l'action elle-même.
      * Permanent : tout geste dont le sujet est un film, une image, une demande
-     * de retrait, le site, un balayage d'import ou l'ensemble des comptes, plus
+     * de retrait, le site, un balayage d'import, un thème ou l'ensemble des comptes, plus
      * `role.changed`, `user.real_name_changed`, les cinq gestes de masquage et
      * les deux lectures sensibles qui visent un compte (D41 du 30/09 : tout
      * cas nouveau est permanent). Une trace ne peut jamais être plus courte
@@ -181,6 +222,7 @@ enum AdminActionType: string
             AdminActionSubject::TakedownRequest,
             AdminActionSubject::Site,
             AdminActionSubject::ImportRun,
+            AdminActionSubject::Theme,
             AdminActionSubject::Accounts => AdminActionRetention::Permanent,
             AdminActionSubject::User,
             AdminActionSubject::Player => AdminActionRetention::Rolling12m,
@@ -207,7 +249,9 @@ enum AdminActionType: string
             self::MovieAliasAdded,
             self::MovieAliasRemoved,
             self::MovieGrouped,
-            self::MovieUngrouped => AdminActionSubject::Movie,
+            self::MovieUngrouped,
+            self::MovieThemeSet,
+            self::MovieFramesReviewed => AdminActionSubject::Movie,
             self::FrameUnpublished,
             self::FrameGridUnpublished,
             self::FrameSuspended,
@@ -236,6 +280,10 @@ enum AdminActionType: string
             self::ImportResumed => AdminActionSubject::ImportRun,
             self::AccountsDirectoryViewed,
             self::AccountsAccessViewed => AdminActionSubject::Accounts,
+            self::ThemeCreated,
+            self::ThemeUpdated,
+            self::ThemePublished,
+            self::ThemeUnpublished => AdminActionSubject::Theme,
         };
     }
 
@@ -272,15 +320,21 @@ enum AdminActionType: string
             self::MovieAliasRemoved,
             self::MovieGrouped,
             self::MovieUngrouped,
+            self::MovieThemeSet,
             self::FrameAdded,
             self::FrameRecropped,
             self::FrameProcessingRetried,
             self::FrameLevelChanged,
             self::FrameReviewed,
+            self::MovieFramesReviewed,
             self::ImportDiscoverStarted,
             self::ImportPasteStarted,
             self::ImportSeedListStarted,
             self::ImportResumed,
+            self::ThemeCreated,
+            self::ThemeUpdated,
+            self::ThemePublished,
+            self::ThemeUnpublished,
         ], true);
     }
 

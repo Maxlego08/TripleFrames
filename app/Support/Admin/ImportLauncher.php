@@ -53,8 +53,16 @@ final class ImportLauncher
      * mass-assignables sur {@see ImportRun}, parce que `run_kind`, `status`,
      * `is_widened`, les quatre compteurs et le curseur sont écrits par le job
      * et par lui seul — aucune n'entre dans `#[Fillable]`.
+     *
+     * `$addedThemeIds` (D43 du 01/10, spec 20 § 3.3) : les thèmes choisis au
+     * collage, écrits ici une fois pour toutes dans `added_theme_ids` — la
+     * reprise les relit sur la ligne, jamais dans la charge utile du job.
+     * Hors collage, la sélection est ignorée : ni un balayage `discover` ni
+     * une resynchronisation ne posent d'exception.
+     *
+     * @param  list<int>  $addedThemeIds
      */
-    public static function open(ImportRunKind $kind, ImportFilter $filter, ?int $actorId): ImportRun
+    public static function open(ImportRunKind $kind, ImportFilter $filter, ?int $actorId, array $addedThemeIds = []): ImportRun
     {
         $run = new ImportRun;
 
@@ -67,6 +75,7 @@ final class ImportLauncher
             // sur une voie qui n'applique aucun filtre rendrait la colonne
             // illisible là où elle sert de preuve.
             'is_widened' => $kind === ImportRunKind::Discover && $filter->isWiderThanDefault(),
+            'added_theme_ids' => $kind === ImportRunKind::Paste ? ImportRun::joinThemeIds($addedThemeIds) : null,
             'started_at' => null,
         ]);
 
@@ -96,6 +105,8 @@ final class ImportLauncher
      * cas de lancement, D41 du 30/09) s'écrivent dans UNE transaction, sous le
      * verrou : un refus n'écrit ni l'une ni l'autre.
      *
+     * @param  list<int>  $addedThemeIds  les thèmes d'un collage, voir {@see self::open()}
+     *
      * @throws LogicException `$action` n'est pas un cas de lancement
      */
     public static function openExclusively(
@@ -104,6 +115,7 @@ final class ImportLauncher
         User $actor,
         AdminActionType $action,
         AdminActionDetails $details,
+        array $addedThemeIds = [],
     ): ?ImportRun {
         $opening = [
             AdminActionType::ImportDiscoverStarted,
@@ -120,8 +132,8 @@ final class ImportLauncher
                 3,
                 static fn (): ?ImportRun => self::hasOpenRun($kind)
                     ? null
-                    : DB::transaction(static function () use ($kind, $filter, $actor, $action, $details): ImportRun {
-                        $run = self::open($kind, $filter, $actor->id);
+                    : DB::transaction(static function () use ($kind, $filter, $actor, $action, $details, $addedThemeIds): ImportRun {
+                        $run = self::open($kind, $filter, $actor->id, $addedThemeIds);
 
                         app(AdminJournal::class)->record($actor, $action, $run->id, details: $details);
 

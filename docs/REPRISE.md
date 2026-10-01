@@ -1,5 +1,13 @@
 # Reprise — TripleFrames
 
+**Session du 01/10/2026 (suite 2) — plages de niveaux par palier (D45 du 01/10), livrées et NON commitées** : à la demande du porteur, chaque palier pioche son image dans une plage (N=2 → 1-2 | 4-5 ; N=3 → 1-2 | 2-4 | 4-5 ; N=4 → 1 | 2-3 | 4 | 5 ; N=5 → un par niveau), niveaux strictement croissants, variantes de la plage mêlées pour la préférence « non vue », repli de niveau conservé quand la banque ne remplit pas ses plages, substitution dans la plage bornée par les voisins. Code : `FrameLevelCoverage::bands()` / `sequences()`, `GameDrawer::tiers()`, `VariantChooser` (garde « un seul niveau » retirée, `substitute()` par plage). Tests : `FrameLevelCoverageTest`, `GameDrawTest`, `SubstitutionTest`, `FrameBankTest`, `DemoCatalogueChainTest`. Suite par défaut verte (4 647) ; groupes `mysql` et `locks-timing` non rejoués. Reste : libellé de l'aperçu du back-office (« Niveaux joués ») à reformuler en « séquence de référence » si le porteur le souhaite. Détail : `questions-ouvertes.md` D45, `30` § 2.
+
+**Session du 01/10/2026 (suite) — leurres apparentés à la cible (D44 du 01/10), livrés et NON commités** : à la demande du porteur (« pour Toy Story 3, le QCM ne propose que des Toy Story »), `DecoyPicker` cherche d'abord ses trois leurres dans le catalogue publié entier parmi les films de même saga (`collection_id`), puis d'un même thème studio, saga ou manuel (du plus spécifique au plus large), puis d'un même genre ; **un groupe n'est retenu que s'il fournit seul les trois leurres** (sinon la cible se lirait dans la paire de la saga) ; à défaut, l'échelle R1-R4 inchangée ; mêmes groupes au titre original avant R3-R4. Deux contextes ajoutés au registre `DrawContext` (`decoysAffinity`, `decoysAffinityOriginal`), vecteurs figés. Tests : `DecoyAffinityTest` [nouveau], `DecoyDrawTest` (thèmes de salon passés en décennies), `SeededPrfTest`. Détail : `questions-ouvertes.md` D44, `70` § 10.3 bis, `30` § 5.3, § 5.4, § 11.
+
+**Session du 01/10/2026 — thèmes par film avancés au J1 (D43 du 01/10), specs amendées avant le code** : à la demande du porteur (« définir les thèmes de chaque film, y compris à l'importation »), D43 du 01/10 avance au J1 l'évaluateur d'appartenance et `catalog:themes` (L30-8), les thèmes livrés étendus — Marvel 420, **DC** sur trois sociétés `429,128064,184898` (règle studio multi-valeurs), décennies sans trou, animés, **douze** sagas dont Avatar 87096 et Iron Man 131292 (L30-9) —, la mesure d'un thème (L30-11a) et le back-office des thèmes (L20-28 hors difficulté) : création de toute nature et thèmes manuels, bloc « Thèmes » de la fiche film, « Créer la saga depuis cette collection », multi-sélection de thèmes au collage ; noms des sociétés TMDB stockés (table `tmdb_company`, `catalog:company-names`) ; cinq cas du journal, **47 cas, 9 sujets**. Sélecteur du lobby et difficulté dérivée restent au J2. Identifiants TMDB vérifiés le 01/10. Ordre d'exécution : annexe, étapes 135 à 145 ; gestes du porteur : § 3, gestes 12 à 15. Détail : `questions-ouvertes.md` D43, `30` § 12-13, `20` § 2.7, § 3.3, § 9.6, `10` § 3.6 bis, § 8.3, § 9.1.
+
+**Session du 30/09/2026 (suite) — validation en lot des images d'un film, livrée et NON commitée (relecture du porteur demandée)** : par D42 du 30/09, « Tout valider » sur la fiche d'un film et en tête de son groupe dans la file de revue valide en une fois ses images en attente (hors rejets, traitement, échec et hors jeu) — une ligne `frame_review` par image sous la grille courante, une seule ligne `movie.frames_reviewed` (42 cas), tout ou rien sous verrou ; publication du film jamais automatique. Détail : `20` § 7.9 et L20-35, `10` § 8.3, `questions-ouvertes.md` D42.
+
 **Session du 30/09/2026 — journal de toute l'activité du back-office, partie serveur livrée et NON commitée (relecture du porteur demandée)** : par D41 du 30/09, `admin_action` consigne désormais **tout geste du back-office** (curateur comme administrateur) et les **lectures sensibles** (annuaire, fiche d'un compte, écran des accès et sa recherche) ; **19 cas nouveaux, 41 au total**, sujets `import_run` et `accounts`, colonne additive `admin_action.details` (migration `2026_09_30_100047_add_details_to_admin_action`), tous permanents ; une ligne par visite complète, jamais sur un rechargement partiel ni un préchargement. Pint, PHPStan, `npm run check` verts ; suite par défaut : une défaillance sur 4 429, corrigée, suite complète **à relancer**. **Reste dû** : l'écran « Journal » `/admin/journal` (administrateur seul, filtres acteur, type, période, sujet) et les liens « Historique » des fiches film et compte, spécifiés dans `20` § 2.10 (lot L20-34). Décision : `questions-ouvertes.md` § « Décisions du 30/09/2026 » ; schéma : `10` § 8.3 ; règle, inventaire et exclusions : `20` § 2.7 ; points ouverts EL41-1 à EL41-3.
 
 **Répétition de la mise en service jouée sur la VM le 28/09/2026 : voir `docs/ops/repetition-vm.md`.**
@@ -37,8 +45,8 @@ Il est réécrit à chaque fin de session. Il a été réécrit en entier à la 
 | `docs/specs/00-overview.md` | Vue d'ensemble : concept, réglages, vocabulaire, principes, exploitation, jalons, carte des specs | v3, à jour des 19 décisions et de D1 à D37 du 23/09. § Jalons est recalculé : taille du J1, chemin humain, ordre « curation d'abord » | 498 l., 157 Ko |
 | `docs/specs/05-i18n-et-langues.md` | Seul propriétaire de la règle de langue | écrite le 22/09, amendée le 23/09 | 384 l., 61 Ko |
 | `docs/specs/10-catalogue-et-modele-de-donnees.md` | **Seul propriétaire du schéma** : 35 tables de domaine + `users` altérée, rétention, purge | écrite le 22/09, amendée le 23/09. Les 35 tables sont inchangées ; au J1, 4 colonnes nouvelles (`users.real_name`, `player.kicked_at`, `player.solo_token_hash`, `round_choice_set.rendered_locale`) arrivent par des migrations additives portées par leurs lots, plus l'élargissement de `game_player.final_rank` (`10` § 12, n° 43 à 47 ; voie selon I-12) — amendé le 23/09 | 1 518 l., 323 Ko |
-| `docs/specs/20-back-office-curation.md` | Rôles et matrice, import, frame servable, recadreur, grille, revue, publication, lot pilote, modération | écrite le 23/09, complète, jalons marqués. § 14 tranche les 24 questions du panel admin. Lots J1 : L20-1 à L20-18 | 1 427 l., 321 Ko |
-| `docs/specs/30-themes-vivier-et-tirage-des-variantes.md` | Thèmes, vivier, tirage des films et des variantes | écrite le 23/09, complète. Lots J1 : L30-1 à L30-7 | 1 129 l., 167 Ko |
+| `docs/specs/20-back-office-curation.md` | Rôles et matrice, import, frame servable, recadreur, grille, revue, publication, lot pilote, modération | écrite le 23/09, complète, jalons marqués. § 14 tranche les 24 questions du panel admin. Lots J1 : L20-1 à L20-18 ; plus L20-33 (D38), L20-34 (D41), L20-35 (D42) et **L20-28 hors difficulté** (D43 du 01/10 — amendé le 01/10) | 1 427 l., 321 Ko |
+| `docs/specs/30-themes-vivier-et-tirage-des-variantes.md` | Thèmes, vivier, tirage des films et des variantes | écrite le 23/09, complète. Lots J1 : L30-1 à L30-7 ; **L30-8, L30-9 et L30-11a depuis D43 du 01/10** — amendé le 01/10 | 1 129 l., 167 Ko |
 | `docs/specs/40-comptes-auth-sociale-et-avatars.md` | Identité, connexion, avatars | **partielle** : la section [J1] « identité invitée » est écrite (D2 du 23/09) ; J2 à écrire. Lots J1 : L40-1 à L40-7 | 905 l., 137 Ko |
 | `docs/specs/50-salon-reglages-presets-et-lobby.md` | Salon, réglages, presets, lobby | écrite le 23/09, complète, onglet Avancé du J2 compris. Lots J1 : L50-1 à L50-9 | 2 045 l., 235 Ko |
 | `docs/specs/60-moteur-de-partie-temps-reel-et-mode-solo.md` | Moteur de partie, temps réel, solo | écrite le 23/09 **sous hypothèse root** (S2 du 23/09). Lots J1 : L60-1 à L60-16 | 1 464 l., 298 Ko |
@@ -46,10 +54,10 @@ Il est réécrit à chaque fin de session. Il a été réécrit en entier à la 
 | `docs/specs/80-scoring-podium-et-fin-de-partie.md` | Score, podium, fin de partie | écrite le 23/09. Lots J1 : L80-1 à L80-7 | 1 176 l., 152 Ko |
 | `docs/specs/90-ecrans-etats-et-structure.md` | Écrans, états, structure, pages publiques | **partielle** : la section J1 (pages publiques et socle de coquille de jeu, D3 du 23/09) est écrite ; J2 à écrire. Lots J1 : L90-1 à L90-9, dont L90-3b, L90-6a et L90-6b | 1 028 l., 206 Ko |
 | `docs/specs/100-qualite-tests-et-ci.md` | Qualité, tests, CI, production | **partielle** : la section [J1] (socle minimal de production) est écrite sous hypothèse root (D30 et S2 du 23/09) ; J2 à écrire. Lots J1 : L100-1 à L100-14 | 1 084 l., 246 Ko |
-| `docs/specs/questions-ouvertes.md` | Journal des décisions : 19 du 22/09, S1-S4 et D1-D37 du 23/09, « Laissé ouvert le 23/09 », D38-D40 du 28/09 (amendé le 28/09), déjà tranché, risques | questionnaire clos, sauf le nom de domaine | 517 l., 148 Ko |
+| `docs/specs/questions-ouvertes.md` | Journal des décisions : 19 du 22/09, S1-S4 et D1-D37 du 23/09, « Laissé ouvert le 23/09 », D38-D40 du 28/09 (amendé le 28/09), D41-D42 du 30/09, D43 du 01/10 (amendé le 01/10), déjà tranché, risques | questionnaire clos, sauf le nom de domaine | 517 l., 148 Ko |
 | `CLAUDE.md` | Mémoire projet chargée automatiquement à chaque session | **versionné désormais** (D9 du 23/09) : la ligne a été retirée de `.gitignore` et le fichier est exclu d'oxfmt dans `vite.config.ts`. Amendé le 23/09 | 165 l., 48 Ko |
 
-Les heures des sections « Lots d'implémentation » sont des **mesures de taille, jamais un calendrier** (D36 du 23/09). Les lots J1 des neuf specs mesurent **404,5 à 581,5 h brutes**. L'arithmétique vit dans `00` § Jalons, nulle part ailleurs.
+Les heures des sections « Lots d'implémentation » sont des **mesures de taille, jamais un calendrier** (D36 du 23/09). Les lots J1 des neuf specs mesurent **404,5 à 581,5 h brutes**. L'arithmétique vit dans `00` § Jalons, nulle part ailleurs. D43 du 01/10 y ajoute **22 à 31 h** de taille (`00` § Jalons, amendé le 01/10).
 
 **Commit.** Le travail documentaire du 23/09 et chaque lot livré du 24 au 27/09 sont commités sur `develop`, un commit par lot ; le report des écarts de la phase C l'est par le commit « :memo: Report des écarts d'implémentation de la phase C ». Aucun lot de la phase C ne rejoint la branche que tire Plesk avant l'étape 126 (règle de branche, § A.2) — amendé le 28/09.
 
@@ -59,10 +67,10 @@ Le code des phases A, B et C a été écrit du 24 au 27/09, un commit par lot su
 
 | Zone | Contenu | Écrit |
 |---|---|---|
-| `database/migrations/` | 47 fichiers : les 42 du 22/09, plus `users.real_name` (n° 43), `player.kicked_at` (n° 44), `player.solo_token_hash` (n° 45), `round_choice_set.rendered_locale` (n° 46) et le réalignement de l'ordre des thèmes de plateforme ; `final_rank` élargi dans la migration de création (n° 47, I-12) | 22-27/09 |
+| `database/migrations/` | 47 fichiers : les 42 du 22/09, plus `users.real_name` (n° 43), `player.kicked_at` (n° 44), `player.solo_token_hash` (n° 45), `round_choice_set.rendered_locale` (n° 46) et le réalignement de l'ordre des thèmes de plateforme ; `final_rank` élargi dans la migration de création (n° 47, I-12) ; 48 fichiers depuis `admin_action.details` (n° 49, 30/09) ; **50** après `tmdb_company` (n° 50) et `import_run.added_theme_ids` (n° 51), D43 du 01/10 — amendé le 01/10 | 22-27/09 |
 | `app/Models/`, `app/Enums/` | 37 modèles ; 57 énumérations | 22-27/09 |
 | `app/Actions/`, `app/Jobs/`, `app/Events/`, `app/Policies/` | 54 actions (curation, salon, partie, solo, réponses, score), 11 jobs (dont `AdvanceRound`, un par frontière de palier, `BroadcastLobbyState` et `ProcessFrameImage`), 24 événements Reverb, 6 policies | 24-27/09 |
-| `app/Console/Commands/` | 19 commandes, dont `catalog:*`, `admin:first-admin`, `backup:snapshot`, `deploy:{guard,drain,release}`, `game:reschedule`, `purge:{run,suspend,resume}`, `room:archive-idle`, `answers:collisions` | 22-27/09 |
+| `app/Console/Commands/` | 21 commandes, dont `catalog:*`, `admin:first-admin`, `backup:snapshot`, `deploy:{guard,drain,release}`, `game:reschedule`, `purge:{run,suspend,resume}`, `room:archive-idle`, `answers:collisions` ; `catalog:themes` (L30-8) et `catalog:company-names` livrées le 01/10 par D43 du 01/10 — amendé le 01/10 | 22-27/09, 01/10 |
 | `app/Http/Controllers/`, `resources/js/pages/` | 60 contrôleurs ; 32 pages Inertia : back-office de curation complet, accueil, pages légales en squelette, pages d'erreur, création et entrée de salon, salon expiré, `game/lobby` (du lobby au podium), `room/solo` et `game/solo` | 24-27/09 |
 | `resources/js/components/{game,room}/` | 33 composants de jeu et de salon, découplés de leur habillage (règle 5) | 24-27/09 |
 | `database/factories/`, `database/seeders/` | Catalogue de démonstration de 16 films jouables à N = 2 à 5 (78 `.webp` réels) ; la partie de 10 manches de bout en bout est prouvée par L100-14 (étape 103) | 22-27/09 |
@@ -202,6 +210,24 @@ Relevé seulement ; détail dans `questions-ouvertes.md` § « Décisions du 28/
 | D39 | Backdrops TMDB porteurs d'une langue masqués, comptés, refusés à l'ajout | — |
 | D40 | Gestion des comptes (L20-19) et annuaire livrés en avance du J2 ; EN20-3 acceptée | — |
 
+### Décisions du 30/09
+
+Relevé seulement ; détail dans `questions-ouvertes.md` § « Décisions du 30/09/2026 ». On les cite « D41 du 30/09 » — amendé le 01/10.
+
+| # | Décision | Écart |
+|---|---|---|
+| D41 | **Tout geste du back-office** au journal `admin_action`, lectures sensibles comprises (annuaire, fiche d'un compte, écran des accès), rétention permanente ; dix-neuf cas nouveaux, sujets `import_run` et `accounts`, colonne `details` ; écran « Journal », administrateur seul | **oui** — renverse la règle du « geste engageant » |
+| D42 | **« Tout valider »** les images en attente d'un film : une ligne `frame_review` par image, une seule ligne `movie.frames_reviewed`, tout ou rien sous verrou | **oui** — la revue n'est plus seulement image par image à l'écran ; la preuve, si |
+
+### Décisions du 01/10
+
+Relevé seulement ; détail dans `questions-ouvertes.md` § « Décisions du 01/10/2026 ». On la cite « D43 du 01/10 » (D42 était déjà pris) — amendé le 01/10.
+
+| # | Décision | Écart |
+|---|---|---|
+| D44 | **Leurres apparentés** : saga, puis thème studio, saga ou manuel, puis genre, dans le catalogue publié entier ; un seul groupe fournit les trois leurres ; puis R1-R4 inchangée — amendé le 01/10 | **oui** — un étage avant R1 et avant R3 ; deux contextes `DrawContext` |
+| D43 | **Thèmes par film au J1** : évaluateur et `catalog:themes` (L30-8), thèmes livrés étendus à DC, Avatar et Iron Man avec une **règle studio multi-valeurs** (L30-9), mesure d'un thème (L30-11a), back-office des thèmes (L20-28 hors difficulté) — création de toute nature et thèmes manuels, appartenance manuelle par film, « Créer la saga depuis cette collection », thèmes choisis au collage (jamais un `removed` changé en `added`) ; noms des sociétés TMDB stockés (`tmdb_company`) ; cinq cas du journal. Sélecteur du lobby et difficulté dérivée au J2 | **oui** — remonte des lots marqués J2 |
+
 ---
 
 ## 3. Ce qui bloque — le chemin humain (D36 du 23/09)
@@ -221,6 +247,10 @@ Le développement ne borne plus rien : **ce qui fixe la date de la première vra
 | 9 | **Nom réel complet du titulaire dans `LICENSE`**. Le fichier a été livré par L100-2 avec le nom d'auteur git (« Maxence »), faute de saisie possible par une porte non interactive ; `LicenseTest` n'écrit aucun nom en dur (`100` § 7.6, E7-6, E7-15) — amendé le 25/09 | tout push vers la forge | avant le premier push |
 | 10 | **Déposer le logo officiel TMDB** dans `public/brand/tmdb.svg` et **dater ses conditions d'usage** dans `public/brand/LICENSE.md` ; dans le même commit, passer sa ligne dans « Actifs livrés » de `THIRD_PARTY_NOTICES.md` (`90` § 3.2 et point resté ouvert n° 13, E15-2) — amendé le 25/09 | la mise en service (27), au plus tard | 27 au plus tard |
 | 11 | **Vérifications manuelles au navigateur**, qu'aucune porte automatisée n'a pu jouer : (a) le back-office **à 375 px** — parcours clavier et affichage de la coquille mobile et d'`admin/two-factor-required` (`20`, L20-2, E18-9) ; (b) le **recadreur au clavier et à la souris sur la vraie page de l'éditeur** (L20-9a, L20-9b, L20-10) ; (c) sur **iOS Safari, l'appui long** sur une image de jeu, qui ne doit ouvrir aucun menu (`-webkit-touch-callout: none`, `90`, L90-6a, E39-6) — amendé le 25/09 ; (d) la **voie capture** de bout en bout — choisir, coller, minutage, envoi, traitement, revue —, jamais essayée à la main à sa livraison (L20-33, D38 du 28/09) — amendé le 28/09 | la porte du pilote (56) ; (c) est rejouée à la recette sur appareil réel (127) | avant 56 |
+| 12 | **Avant le déploiement de L30-8 et L30-9** (D43 du 01/10) : `php artisan backup:snapshot`, **code 0 exigé**, pris à la main avant le déploiement ; le hook rejoue `PlatformDataSeeder`, qui dispatche une synchronisation par thème inséré (`30` § 13.2). `movie_theme` n'est pas une table de la règle 12, mais une passe sur tout le catalogue suit la même prudence. Les synchronisations partent sur la file par défaut à l'étape 6 du hook, avant `queue:restart` (étape 10) : un worker encore sur l'ancien code peut les consommer, et `SyncThemeMembership` n'a qu'un essai. **Après** le déploiement : `php artisan queue:failed` ; si une `SyncThemeMembership` y figure, `php artisan catalog:themes` (instantané en tête) rattrape toutes les appartenances — amendé le 01/10 | rien ; prudence avant écriture de masse | 137, 139 |
+| 13 | **Après le déploiement de L30-8** : `php artisan catalog:themes` (elle prend elle-même son instantané en tête et n'écrit rien s'il échoue), puis `php artisan catalog:company-names` avec la clé TMDB de production, jamais en CI (n'écrit que `tmdb_company`, hors règle 12) — amendé le 01/10 | les appartenances et les noms de société des films déjà importés | 138 |
+| 14 | **Après le déploiement de L20-28** : corriger en back-office la règle de `studio.disney` vers `2,6125,171656` (Frozen et Moana ne portent que 6125), geste journalisé `theme.updated` ; aucune migration ni aucun seeder ne le fait (`30` § 12.3) — amendé le 01/10 | l'exactitude du thème Disney | 144 |
+| 15 | **Publier les thèmes** livrés ou créés, un à un, quand chacun atteint 10 œuvres jouables au réglage par défaut : avec environ 60 films publiés, presque aucun ne l'atteint ; la publication est **attendue tard au J1**, ce n'est pas un défaut. `language.anime` seulement après avoir retiré les films japonais en prise de vue réelle — amendé le 01/10 | rien au J1 (sélecteur masqué) | 145 |
 
 Les autres gestes du chemin humain :
 
@@ -404,7 +434,7 @@ Deux écarts documentaires restent à corriger :
 
 L'ordre complet est en **annexe** : 134 étapes, humaines et IA. C'est la seule copie versionnée de l'ordre établi le 23/09. Le numéro d'une étape donne un ordre de démarrage, pas un calendrier. Une étape IA dont les prérequis sont livrés avance pendant qu'un geste humain antérieur attend.
 
-**État au 28/09.** Les phases A, B et C sont livrées pour leur part IA : étapes 6 à 25, 33 à 53, 62, 63 et 65 à 125. **Plus aucune étape IA de l'annexe n'a tous ses prérequis livrés** : chacune attend un geste du porteur, directement ou par ses prérequis. C'est désormais le chemin humain du § 3 qui fixe la date de la première partie — amendé le 28/09.
+**État au 28/09.** Les phases A, B et C sont livrées pour leur part IA : étapes 6 à 25, 33 à 53, 62, 63 et 65 à 125. **Plus aucune étape IA de l'annexe n'a tous ses prérequis livrés** : chacune attend un geste du porteur, directement ou par ses prérequis. Amendé le 01/10 (D43 du 01/10) : sauf les étapes IA des thèmes par film (136, 137 et 139 à 143), prêtes le 01/10 et livrées le même jour (arbre de travail, avant commit). C'est désormais le chemin humain du § 3 qui fixe la date de la première partie — amendé le 28/09.
 
 **Tout de suite, porteur, en parallèle :**
 
@@ -417,6 +447,8 @@ L'ordre complet est en **annexe** : 134 étapes, humaines et IA. C'est la seule 
 - **Étape 64** : licence, nom et lisibilité du pack d'avatars (§ 3, geste 4).
 - **Gestes 8 à 11 du § 3** : base de dev rafraîchie, nom réel dans `LICENSE`, logo TMDB, vérifications au navigateur.
 - **Questions du § 4**, en priorité celles qui décident d'un lot correctif : E116-10 et E122-7 (tests), E107-5 (refus texte après la révélation).
+
+**IA, livrées le 01/10 (D43 du 01/10)** : les étapes 136, 137, 139, 140 puis 141 à 143 de l'annexe — thèmes par film —, dont aucune n'attendait de geste du porteur ; restent les gestes 12 à 15 du § 3 (étapes 138, 144, 145) ; chacune finit par `composer ci:check`, `php artisan lang:types` dès qu'une clé est ajoutée et `npm run build` (Wayfinder) dès qu'une route est ajoutée, avant `npm run check` — amendé le 01/10.
 
 **IA, dès l'accord du porteur** : un lot correctif de tests, sans décision produit, pour que le job `mysql-redis` soit vert avant le déploiement du moteur : `EarlyEndHookTest` rouge sur MySQL (E116-10) et test instable de re-signature du jeton (E122-7).
 
@@ -639,6 +671,20 @@ Ensuite, à chaque session : **« Implémente l'étape suivante de l'ordre des l
 124. L90-8 — accueil, champ de code → 15, 100, 101, 121 — ✅ livrée le 27/09
 125. L90-9 — recette portrait et accessibilité (partie automatisée) → 99, 110, 117, 118, 119, 120, 123 — ✅ livrée le 27/09
 
+**Thèmes par film — D43 du 01/10 (IA et P ; 22 à 31 h de taille)** — amendé le 01/10. Aucune de ces étapes n'est prérequis de la porte du pilote (56) ni de la première partie (134) ; elles se livrent dès maintenant, de préférence avant l'import de la liste d'amorçage (57), pour que les films du pilote entrent avec leurs thèmes. Ordre des tranches : specs, noms des sociétés, évaluateur, thèmes livrés, écran des thèmes, fiche film, collage.
+
+135. IA — D43 : amendement des specs (`questions-ouvertes.md`, `30`, `20`, `10`, `00`), de ce fichier et de `CLAUDE.md` → — — ✅ livrée le 01/10
+136. L30-8 (1er temps) — `tmdb_company`, noms des sociétés écrits à l'import, `catalog:company-names` → 20, 51, 135 — ✅ livrée le 01/10
+137. L30-8 — `ThemeEvaluator`, `SyncThemeMembership` (`ShouldBeUniqueUntilProcessing`, écritures sous verrou), branchement à l'import, `catalog:themes`, seeder de démonstration → 19, 20, 136 — ✅ livrée le 01/10
+138. P — après le déploiement de 136 et 137, précédé de l'instantané manuel (§ 3, geste 12) : `catalog:themes`, puis `catalog:company-names` (§ 3, geste 13) → 29, 137
+139. L30-9 — thèmes livrés étendus : décennies sans trou, Marvel, DC, animés, douze sagas ; sociétés nommées ; déploiement précédé de l'instantané manuel (§ 3, geste 12) → 137 — ✅ livrée le 01/10
+140. L30-11a — mesure d'un thème (`themeProbe`, `themeWorks`) → 36, 137 — ✅ livrée le 01/10
+141. L20-28 (1er temps) — écran des thèmes : création de toute nature et thèmes manuels, correction de règle sous verrou, publication sous seuil, quatre cas du journal → 33, 136, 139, 140 — ✅ livrée le 01/10
+142. L20-28 (2e temps) — bloc « Thèmes » de la fiche film, `SetMovieThemeMembership` (jamais un `removed` écrasé), « Créer la saga depuis cette collection », `movie.theme_set` → 50, 141 — ✅ livrée le 01/10
+143. L20-28 (3e temps) — thèmes choisis au collage, `import_run.added_theme_ids`, doublons compris, reprise → 51, 142 — ✅ livrée le 01/10
+144. P — corriger `studio.disney` vers `2,6125,171656` en back-office (§ 3, geste 14) → 29, 141
+145. P — publier les thèmes prêts, tard au J1 (§ 3, geste 15) → 61, 141
+
 **Phase D — avant la première vraie partie (8 à 12 h)**
 
 126. P + IA — déploiement du moteur par la transition du drainage (I-13) ; ensuite, tout déploiement suit `100` § 11.4 → 62 à 125
@@ -671,4 +717,4 @@ Ensuite, à chaque session : **« Implémente l'étape suivante de l'ordre des l
 | I-12 | La mise en service précède L80-4 : la voie additive s'imposerait pour `final_rank` | Option : élargir dans la migration de création avant la mise en service (étape 25), **accord du porteur** — appliqué le 24/09 (accord du porteur, migration de création) |
 | I-13 | Le hook de L100-5 s'arrêterait à l'étape 3 lors du premier déploiement du drainage | Livrer L100-5 en deux déploiements (d'abord le drapeau et les commandes, puis les étapes 3 et 12), **accord du porteur** ; variante : arrêt attendu puis relance |
 
-L'ordre a été vérifié mécaniquement : chacune des 134 étapes vient après toutes ses dépendances directes, et aucun cycle ne subsiste une fois L50-2 scindé. La somme des tailles vaut 404,5 à 581,5 h, soit le total brut de `00` § Jalons.
+Les étapes 135 à 145 (D43 du 01/10) ne sont prérequis d'aucune des 134 premières et ne dépendent que d'étapes antérieures — amendé le 01/10. L'ordre a été vérifié mécaniquement : chacune des 134 étapes vient après toutes ses dépendances directes, et aucun cycle ne subsiste une fois L50-2 scindé. La somme des tailles vaut 404,5 à 581,5 h, soit le total brut de `00` § Jalons.

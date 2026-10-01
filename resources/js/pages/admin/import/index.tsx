@@ -16,6 +16,12 @@ import { AdminLoadingState } from '@/components/admin/admin-loading-state';
 import { AdminPageHeading } from '@/components/admin/admin-page-heading';
 import { AdminPagination } from '@/components/admin/admin-pagination';
 import { ImportSearchPanel } from '@/components/admin/import-search-panel';
+import {
+    ImportThemeFields,
+    ImportThemePicker,
+    ImportThemeRecap,
+    importThemeError,
+} from '@/components/admin/import-theme-picker';
 import { PastePreviewPanel } from '@/components/admin/paste-preview-panel';
 import { SeedListPanel } from '@/components/admin/seed-list-panel';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -39,6 +45,7 @@ import { index as importIndex } from '@/routes/admin/import';
 import type {
     AdminImportDefaults,
     AdminImportRunRow,
+    AdminImportTheme,
     AdminPastePreview,
     AdminSeedList,
     AdminTmdbSearchResults,
@@ -56,6 +63,8 @@ type Props = {
     paste_preview: AdminPastePreview | null;
     /** Cadence du sondage de l'aperçu (`catalog.curation.poll_seconds`). */
     poll_seconds: number;
+    /** Thèmes proposables au collage, publiés ou non (D43 du 01/10). */
+    themes: AdminImportTheme[];
     /** Présent sur `admin.import.search` seulement. */
     search_results?: AdminTmdbSearchResults;
 };
@@ -101,6 +110,7 @@ export default function AdminImportIndex({
     seed_list,
     paste_preview,
     poll_seconds,
+    themes,
     search_results,
 }: Props) {
     const { t, locale } = useTranslations();
@@ -119,6 +129,11 @@ export default function AdminImportIndex({
 
     // Le collage saisi, partagé par l'import direct et par « Prévisualiser ».
     const [pasteText, setPasteText] = useState('');
+
+    // Les thèmes du collage (spec 20 § 3.3) : portés par le formulaire de
+    // collage et par « Importer ces films » de l'aperçu, qui les affichent
+    // tous deux — jamais par l'aperçu à blanc ni par la recherche (C8).
+    const [themeIds, setThemeIds] = useState<number[]>([]);
 
     // Déconnexion pendant une visite : rien n'est parti, la saisie reste en
     // place, et le curateur l'apprend (§ 13.5).
@@ -545,6 +560,23 @@ export default function AdminImportIndex({
                                             />
                                         </div>
 
+                                        <ImportThemePicker
+                                            themes={themes}
+                                            selected={themeIds}
+                                            onChange={setThemeIds}
+                                            max={defaults.paste_max_themes}
+                                            disabled={!tmdb_configured}
+                                            error={importThemeError(errors)}
+                                        />
+
+                                        <ImportThemeFields
+                                            selected={themeIds}
+                                        />
+                                        <ImportThemeRecap
+                                            themes={themes}
+                                            selected={themeIds}
+                                        />
+
                                         <Button
                                             type="submit"
                                             disabled={
@@ -617,6 +649,8 @@ export default function AdminImportIndex({
                         pollSeconds={poll_seconds}
                         tmdbConfigured={tmdb_configured}
                         pasteBusy={pasteBusy}
+                        themes={themes}
+                        selectedThemeIds={themeIds}
                     />
                 )}
 

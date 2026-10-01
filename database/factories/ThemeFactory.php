@@ -7,6 +7,7 @@ use App\Enums\MovieDifficulty;
 use App\Enums\ThemeKind;
 use App\Models\Theme;
 use App\Models\ThemeLabel;
+use App\Support\Catalog\ThemeRules;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Collection;
 
@@ -115,11 +116,17 @@ class ThemeFactory extends Factory
     }
 
     /**
-     * Thème de studio — `rule_value` est un `tmdb_tag_id` de `tag_kind = company`.
+     * Thème de studio — `rule_value` est une **liste** de `tmdb_tag_id` de
+     * `tag_kind = company`, sous sa forme canonique (spec 30 § 12.1, D43 du
+     * 01/10) ; un seul identifiant reste une liste d'un élément.
+     *
+     * @param  int|list<int>  $tmdbTagIds
      */
-    public function studio(int $tmdbTagId, ?string $slug = null): static
+    public function studio(int|array $tmdbTagIds, ?string $slug = null): static
     {
-        return $this->rule(ThemeKind::Studio, (string) $tmdbTagId, $slug ?? 'tag-'.$tmdbTagId);
+        $rule = ThemeRules::studioRuleValue(is_int($tmdbTagIds) ? [$tmdbTagIds] : $tmdbTagIds);
+
+        return $this->rule(ThemeKind::Studio, $rule, $slug ?? 'tag-'.str_replace(',', '-', $rule));
     }
 
     /**

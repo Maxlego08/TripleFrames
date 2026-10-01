@@ -55,6 +55,18 @@ export type ContentOrigin = 'tmdb' | 'curator';
 
 export type ThemeMembershipState = 'added' | 'removed';
 
+/** Natures d'un thème — miroir de `App\Enums\ThemeKind`. */
+export type ThemeKind =
+    | 'genre'
+    | 'decade'
+    | 'studio'
+    | 'saga'
+    | 'language'
+    | 'difficulty';
+
+/** Les cinq natures qu'un curateur crée ; `difficulty` est livrée seule. */
+export type CreatableThemeKind = Exclude<ThemeKind, 'difficulty'>;
+
 export type TmdbTagKind = 'genre' | 'company';
 
 export type CertificationCountry = 'FR' | 'US';
@@ -402,14 +414,47 @@ export type AdminMovieCertification = {
 export type AdminMovieTag = {
     tag_kind: TmdbTagKind;
     tmdb_tag_id: number;
+    /** Nom TMDB d'une société (`tmdb_company`) ; toujours nul pour un genre. */
+    name: string | null;
 };
 
+/**
+ * Une appartenance du film à un thème (spec 20 § 9.6, D43 du 01/10) : la
+ * règle, l'exception et l'appartenance effective séparées.
+ */
 export type AdminMovieTheme = {
+    theme_id: number;
     key: string;
     label: string;
+    kind: ThemeKind;
+    is_published: boolean;
     is_auto: boolean;
     manual_state: ThemeMembershipState | null;
     is_active: boolean;
+};
+
+/** Un thème du sélecteur « Ajouter un thème » : tous, publiés ou non. */
+export type AdminAvailableTheme = {
+    id: number;
+    key: string;
+    label: string;
+    kind: ThemeKind;
+    is_published: boolean;
+};
+
+/**
+ * La collection TMDB du film, et la saga qui la désigne : sans elle, la
+ * fiche offre « Créer la saga depuis cette collection ».
+ */
+export type AdminMovieCollection = {
+    id: number;
+    name: string;
+    saga: {
+        id: number;
+        key: string;
+        label: string;
+        is_published: boolean;
+    } | null;
 };
 
 /**
@@ -762,6 +807,20 @@ export type AdminReviewList = 'to_review' | 'to_rereview' | 'rejected';
 
 export type AdminReviewQueue = Record<AdminReviewList, AdminReviewGroup[]>;
 
+/**
+ * Le lot d'un film à valider en une fois (D42 du 30/09, spec 20 § 7.9) —
+ * miroir de `AdminCatalogPresenter::reviewBatch()`. Chaque image
+ * `{ id, hash }` repart telle quelle : le serveur refuse tout le lot si la
+ * liste ou une empreinte a changé depuis l'affichage.
+ */
+export type AdminReviewBatch = {
+    grid_version: number;
+    frames: { id: number; hash: string }[];
+};
+
+/** Un lot de la file de revue, pour le groupe de son film. */
+export type AdminQueueReviewBatch = AdminReviewBatch & { movie_id: number };
+
 /** Les gestes de la fiche film, pour l'affichage seulement. */
 export type AdminMovieAbilities = {
     curate: boolean;
@@ -770,6 +829,8 @@ export type AdminMovieAbilities = {
     verifyContent: boolean;
     /** Le lien « Historique » vers le journal : administrateur seul. */
     viewJournal: boolean;
+    /** « Créer la saga depuis cette collection » (`ThemePolicy::create`). */
+    editThemes: boolean;
 };
 
 export type AdminImportRunRow = {
@@ -800,7 +861,19 @@ export type AdminImportRunRow = {
 export type AdminImportRunDetail = AdminImportRunRow & {
     tmdb_page_cursor: number | null;
     last_request_at: string | null;
+    /** Thèmes choisis au collage (D43 du 01/10) ; `[]` sans sélection. */
+    added_themes: AdminImportTheme[];
+    /** Couples (film, thème) qui ont reçu l'ajout. */
+    total_themes_applied: number;
+    /** Couples laissés hors du thème par un retrait de curateur. */
+    total_themes_kept_removed: number;
 };
+
+/**
+ * Un thème proposé au collage, ou appliqué par lui — même forme que le
+ * sélecteur de la fiche film.
+ */
+export type AdminImportTheme = AdminAvailableTheme;
 
 export type AdminImportDefaults = {
     min_vote_count: number;
@@ -812,6 +885,8 @@ export type AdminImportDefaults = {
     pages_max: number;
     pages_default: number;
     paste_max_ids: number;
+    /** Plafond de thèmes cochés par collage (`catalog.import.paste_max_themes`). */
+    paste_max_themes: number;
     /** Bornes de la recherche TMDB, relues d'`ImportSearchRequest`. */
     search_min_length: number;
     search_max_length: number;
@@ -969,6 +1044,8 @@ export type AdminCatalogFilters = {
     playable_at: number | null;
     missing_title: string | null;
     curation_status: AdminCurationStatus | null;
+    /** Les films actifs dans ce thème (spec 20 § 9.6). */
+    theme_id: number | null;
     sort: string;
     direction: AdminCatalogSortDirection;
 };
@@ -1166,7 +1243,8 @@ export type AdminAccessCandidate = {
 
 /**
  * Les cas du journal d'administration — miroir de la liste FERMÉE
- * `App\Enums\AdminActionType` (quarante et un cas, D41 du 30/09).
+ * `App\Enums\AdminActionType` (quarante-sept cas : D41 du 30/09, D42 du 30/09,
+ * D43 du 01/10).
  */
 export type AdminActionTypeValue =
     | 'role.changed'
@@ -1197,11 +1275,13 @@ export type AdminActionTypeValue =
     | 'movie.alias_removed'
     | 'movie.grouped'
     | 'movie.ungrouped'
+    | 'movie.theme_set'
     | 'frame.added'
     | 'frame.recropped'
     | 'frame.processing_retried'
     | 'frame.level_changed'
     | 'frame.reviewed'
+    | 'movie.frames_reviewed'
     | 'import.discover_started'
     | 'import.paste_started'
     | 'import.seed_list_started'
@@ -1209,7 +1289,11 @@ export type AdminActionTypeValue =
     | 'accounts.directory_viewed'
     | 'accounts.access_viewed'
     | 'user.looked_up'
-    | 'user.viewed';
+    | 'user.viewed'
+    | 'theme.created'
+    | 'theme.updated'
+    | 'theme.published'
+    | 'theme.unpublished';
 
 /** Les sujets du journal — miroir de `App\Enums\AdminActionSubject`. */
 export type AdminActionSubjectValue =
@@ -1220,7 +1304,8 @@ export type AdminActionSubjectValue =
     | 'takedown_request'
     | 'site'
     | 'import_run'
-    | 'accounts';
+    | 'accounts'
+    | 'theme';
 
 /** Les deux classes de conservation — `App\Enums\AdminActionRetention`. */
 export type AdminActionRetentionValue = 'permanent' | 'rolling_12m';
@@ -1278,4 +1363,75 @@ export type AdminJournalOptions = {
     actions: AdminActionTypeValue[];
     subject_types: AdminActionSubjectValue[];
     subject_types_with_id: AdminActionSubjectValue[];
+};
+
+/** Une valeur de la règle d'un thème, avec son nom résolu s'il existe. */
+export type AdminThemeRuleItem = {
+    value: string;
+    /** Nom de la société (`tmdb_company`) ou de la collection ; nul sinon. */
+    name: string | null;
+};
+
+/**
+ * Un thème de l'écran des thèmes (`AdminThemePresenter::theme()`, spec 20
+ * § 9.6). La règle arrive EN DONNÉES (`rule_items`), jamais en phrase
+ * composée côté serveur : l'écran compose « Marvel Studios (420) ».
+ */
+export type AdminTheme = {
+    id: number;
+    key: string;
+    kind: ThemeKind;
+    rule_value: string | null;
+    /** Identifiants de société d'un thème studio, dans l'ordre de la règle. */
+    company_ids: number[];
+    /** La collection désignée par un thème de saga. */
+    collection_id: number | null;
+    rule_items: AdminThemeRuleItem[];
+    negated: boolean;
+    /** Thème sans règle : il ne contient que ses ajouts manuels. */
+    manual: boolean;
+    is_published: boolean;
+    sort_order: number;
+    labels: Partial<Record<string, string | null>>;
+    /** Œuvres du thème seul, publié ou non, au `N` par défaut. */
+    works: number;
+    /** Films actifs dans le thème, tous états de film confondus. */
+    active_films: number;
+    missing_locales: string[];
+    /** Avertissement propre à la publication (`language.anime`, C17). */
+    publish_notice: 'live_action_japanese' | null;
+    abilities: { update: boolean; publish: boolean };
+};
+
+/** Une option de règle : une valeur présente au catalogue. */
+export type AdminThemeRuleOption = {
+    value: string;
+    /** Nom résolu (société, collection) ; nul quand le schéma n'en stocke aucun. */
+    name: string | null;
+    films: number;
+    /** La clé du thème de même nature qui désigne déjà cette valeur. */
+    taken_by: string | null;
+};
+
+/** Les options de règle d'une nature, servies au rechargement partiel. */
+export type AdminThemeRuleOptions = {
+    kind: ThemeKind;
+    options: AdminThemeRuleOption[];
+};
+
+/** Le préremplissage « Créer la saga depuis cette collection ». */
+export type AdminThemePrefill = {
+    kind: 'saga';
+    collection_id: number;
+    collection_name: string;
+};
+
+export type AdminThemeAbilities = {
+    create: boolean;
+};
+
+/** Le seuil de publication d'un thème, lu de `RoomSettingsBounds`. */
+export type AdminThemePublication = {
+    min_works: number;
+    frames_per_round: number;
 };

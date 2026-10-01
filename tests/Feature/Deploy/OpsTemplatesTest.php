@@ -1,5 +1,7 @@
 <?php
 
+use App\Console\Commands\BackupSnapshotCommand;
+use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Str;
 
 /*
@@ -424,5 +426,133 @@ it('documente dans la liste de mise en service chaque paramètre à remplacer de
 
     foreach (array_keys($parameters) as $parameter) {
         expect(str_contains($checklist, "`{$parameter}`"))->toBeTrue("Paramètre {$parameter} absent de ops/mise-en-service.md");
+    }
+});
+
+/**
+ * Les scripts de sauvegarde (§ 13.2 à § 13.4), chemins relatifs à `ops/`.
+ *
+ * @return list<string>
+ */
+function opsBackupScripts(): array
+{
+    return ['backup/backup-hot.sh', 'backup/backup-cold.sh'];
+}
+
+it('livre des scripts de sauvegarde stricts, sans secret, au PHP de l\'abonnement et aux secrets hors dépôt', function (): void {
+    foreach (opsBackupScripts() as $relative) {
+        $source = opsTemplateSource($relative);
+        $code = opsTemplateLines($relative);
+        $joined = implode("\n", $code);
+
+        expect($source)->not->toContain("\r", "ops/{$relative} : fin de ligne Windows")
+            ->and($source)->toStartWith("#!/usr/bin/env bash\n")
+            ->and($source)->toEndWith("\n")
+            ->and($code)->toContain('set -euo pipefail')
+            ->and($code)->toContain('umask 077')
+            // Le PHP de l'abonnement par défaut, figé avant la lecture des secrets.
+            ->and($code)->toContain('readonly PHP="${TF_PHP_BIN:-'.opsTemplatePhp().'}"')
+            ->and($joined)->toContain('source "${HOME:?}/.config/tripleframes/backup.env"')
+            ->and(array_search('readonly PHP="${TF_PHP_BIN:-'.opsTemplatePhp().'}"', $code, true))
+            ->toBeLessThan(array_search('source "${HOME:?}/.config/tripleframes/backup.env"', $code, true))
+            // Jamais de trace d'exécution : elle afficherait les secrets.
+            ->and($joined)->not->toMatch('/\bset\s+-[a-z]*x/')
+            ->and($joined)->not->toContain('echo')
+            ->and($joined)->not->toMatch('/__TF_|<DOMAINE>/')
+            // Aucun php du système : toute commande artisan passe par "$PHP".
+            ->and($joined)->not->toMatch('/(^|[\s;|&(])php\s/m')
+            ->and(preg_match_all('/\bartisan\b/', $joined))->toBe(preg_match_all('/"\$PHP" artisan /', $joined));
+
+        // Chiffrement pour une clé PUBLIQUE seulement : rien ne déchiffre sur le VPS.
+        foreach ($code as $line) {
+            if (preg_match('/(^|\s)age\s/', $line) === 1) {
+                expect($line)->toContain('age -r "$AGE_RECIPIENT"')
+                    ->and($line)->not->toMatch('/\s(-d|--decrypt|-i|--identity|-p|--passphrase)\b/');
+            }
+        }
+
+        // rclone en dépôt seul : jamais une commande qui lit, liste ou supprime.
+        preg_match_all('/\brclone\s+([a-z]+)/', $joined, $rclone);
+
+        expect($rclone[1])->not->toBeEmpty()
+            ->and(array_unique($rclone[1]))->toBe(['copyto'])
+            ->and($joined)->toContain('--s3-no-check-bucket --s3-no-head --no-check-dest --no-traverse');
+
+        // Le mot de passe ne sort de sa variable que vers le fichier d'options.
+        foreach ($code as $line) {
+            if (str_contains($line, 'DB_PASSWORD') && ! str_starts_with($line, ': ')) {
+                expect($line)->toBe('printf \'password=%s\n\' "$(option_value "$DB_PASSWORD")"');
+            }
+        }
+
+        if (PHP_OS_FAMILY !== 'Windows') {
+            $result = Process::run(['bash', '-n', base_path('ops/'.$relative)]);
+
+            expect($result->successful())->toBeTrue($result->errorOutput());
+        }
+    }
+});
+
+it('vide la base comme backup:snapshot et ne bat la supervision qu\'après l\'envoi réussi', function (): void {
+    $code = opsTemplateLines('backup/backup-hot.sh');
+    $joined = implode("\n", $code);
+
+    // Les sept tables exclues : la même liste que l'instantané de la règle 12.
+    $start = array_search('readonly EXCLUDED_DATA_TABLES=(', $code, true);
+    $end = $start === false ? false : array_search(')', array_slice($code, $start, null, true), true);
+
+    expect($start)->not->toBeFalse()
+        ->and($end)->not->toBeFalse()
+        ->and(array_slice($code, (int) $start + 1, (int) $end - (int) $start - 1))
+        ->toBe(BackupSnapshotCommand::EXCLUDED_DATA_TABLES);
+
+    expect($joined)->toContain('--defaults-extra-file=${credentials}')
+        ->and($joined)->toContain('--single-transaction')
+        ->and($joined)->toContain('--quick')
+        ->and($joined)->toContain('--no-tablespaces')
+        ->and($joined)->toContain('mysqldump "${common[@]}" --no-data "$DB_DATABASE"')
+        ->and($joined)->toContain('mysqldump "${common[@]}" --no-create-info --skip-triggers "${ignored[@]}" "$DB_DATABASE"')
+        ->and($joined)->toContain('"$PHP" artisan backup:manifest --no-ansi')
+        ->and($joined)->toContain('${BACKUP_REMOTE}/hot/${day}/')
+        ->and($joined)->toContain('day="$(date -u +%Y-%m-%d)"');
+
+    // Le battement est la DERNIÈRE commande : sous set -e, il n'est jamais
+    // atteint après un échec.
+    $curl = array_values(array_filter($code, static fn (string $line): bool => str_contains($line, 'curl ')));
+
+    // L'adresse de battement porte le jeton de la sonde : jamais en argument.
+    expect($curl)->toHaveCount(1)
+        ->and(end($code))->toBe($curl[0])
+        ->and($curl[0])->toBe('printf \'url = "%s"\n\' "$BACKUP_HEARTBEAT_URL" | curl -fsS --max-time 20 --retry 3 -o /dev/null -K -');
+
+    // Un tableau d'options vide reste sûr sous set -u, même avant bash 4.4.
+    expect($code)->toContain('${dump_extra[@]+"${dump_extra[@]}"}')
+        ->and($joined)->not->toContain('"${dump_extra[@]}"'."\n");
+
+    // Le tier froid envoie par condensat et bat sa propre sonde, en dernière
+    // commande, après la sortie en échec.
+    $coldCode = opsTemplateLines('backup/backup-cold.sh');
+    $cold = implode("\n", $coldCode);
+    $coldCurl = array_values(array_filter($coldCode, static fn (string $line): bool => str_contains($line, 'curl ')));
+
+    expect($cold)->toContain('"$PHP" artisan backup:manifest --cold --no-ansi')
+        ->and($cold)->toContain('${BACKUP_REMOTE}/cold/${key}.webp.age')
+        ->and($cold)->toContain('key="${prefix}/${hash}"')
+        ->and($cold)->toContain('"${BACKUP_COLD_HEARTBEAT_URL:?}"')
+        ->and($coldCurl)->toHaveCount(1)
+        ->and(end($coldCode))->toBe($coldCurl[0])
+        ->and($coldCurl[0])->toBe('printf \'url = "%s"\n\' "$BACKUP_COLD_HEARTBEAT_URL" | curl -fsS --max-time 20 --retry 3 -o /dev/null -K -')
+        ->and($cold)->toContain("if ((status != 0)); then\nexit \"\$status\"\nfi")
+        // La liste est lue sur le descripteur 3 : rien n'hérite du manifeste en entrée.
+        ->and($cold)->toContain('while read -r hash path <&3; do')
+        ->and($cold)->toContain('done 3< "${work}/cold.txt"');
+
+    // Le répertoire de travail, vidage en clair compris, vit sous l'état privé
+    // de l'abonnement, jamais sous /tmp, et un reste d'un passage tué est
+    // supprimé au suivant.
+    foreach (['hot' => $code, 'cold' => $coldCode] as $tier => $lines) {
+        expect($lines)->toContain("rm -rf -- \"\${state_dir}\"/{$tier}.work.*")
+            ->and($lines)->toContain("work=\"\$(mktemp -d \"\${state_dir}/{$tier}.work.XXXXXX\")\"")
+            ->and(implode("\n", $lines))->not->toMatch('/mktemp -d\)|\/tmp\b/');
     }
 });

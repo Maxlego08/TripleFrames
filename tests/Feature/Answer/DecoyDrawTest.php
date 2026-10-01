@@ -6,6 +6,7 @@ use App\Enums\Locale;
 use App\Enums\RoundIncidentReason;
 use App\Enums\RoundPlayerInputState;
 use App\Enums\RoundStatus;
+use App\Enums\ThemeKind;
 use App\Events\Game\InputClosed;
 use App\Models\Game;
 use App\Models\Movie;
@@ -80,6 +81,22 @@ function decoyDrawSeeds(): array
         static fn (int $index): string => hash('sha256', "decoy-draw-seed-{$index}"),
         range(1, 8),
     );
+}
+
+/**
+ * Un thème de salon qui n'apparente pas ses films : une décennie à règle,
+ * jamais un genre, un studio, une saga ni un thème manuel. Les tests de
+ * l'échelle R1-R4 l'emploient pour que leurs leurres ne forment aucun groupe
+ * d'affinité (D44 du 01/10) : l'échelle y est observée telle quelle, celle où
+ * l'on retombe quand aucun groupe ne suffit.
+ */
+function decoyDrawRoomTheme(): Theme
+{
+    return Theme::factory()->published()->state([
+        'key' => 'decade.decoy-'.Str::lower(Str::random(10)),
+        'theme_kind' => ThemeKind::Decade,
+        'rule_value' => '1990',
+    ])->create();
 }
 
 /** Un titre inventé, unique dans le test. */
@@ -231,7 +248,7 @@ function decoyDrawSet(DecoyPick $pick): array
 }
 
 it('tire les leurres dans le vivier du salon au même profil de titre', function () {
-    $theme = Theme::factory()->published()->create();
+    $theme = decoyDrawRoomTheme();
     $settings = PoolFixtures::settings(themeIds: [$theme->id]);
     $game = decoyDrawGame(Room::factory()->create(), $settings, decoyDrawSeeds()[0]);
 
@@ -276,7 +293,7 @@ it('tire les leurres dans le vivier du salon au même profil de titre', function
     // Masque nul (aucun titre dans une locale activée) : la forme du titre
     // original entre dans le profil — des titres natifs ne sont jamais
     // associés à une cible latine, même au même masque.
-    $nullTheme = Theme::factory()->published()->create();
+    $nullTheme = decoyDrawRoomTheme();
     $nullGame = decoyDrawGame(
         Room::factory()->create(),
         PoolFixtures::settings(themeIds: [$nullTheme->id]),
@@ -309,7 +326,7 @@ it('tire les leurres dans le vivier du salon au même profil de titre', function
 });
 
 it('complète par le catalogue publié en conservant la non-répétition', function () {
-    $theme = Theme::factory()->published()->create();
+    $theme = decoyDrawRoomTheme();
     $room = Room::factory()->create();
     $settings = PoolFixtures::settings(themeIds: [$theme->id], noRepeatMovies: true);
 
@@ -363,7 +380,7 @@ it('complète par le catalogue publié en conservant la non-répétition', funct
 });
 
 it('bascule tout le salon sur title_original à défaut de trois leurres au même profil', function () {
-    $theme = Theme::factory()->published()->create();
+    $theme = decoyDrawRoomTheme();
     $game = decoyDrawGame(
         Room::factory()->create(),
         PoolFixtures::settings(themeIds: [$theme->id]),
@@ -413,7 +430,7 @@ it('bascule tout le salon sur title_original à défaut de trois leurres au mêm
 
 it("en mode dégradé n'associe que des films de même forme de titre original", function () {
     // 1. Cible au titre natif (sans translittération), seule de son profil.
-    $theme = Theme::factory()->published()->create();
+    $theme = decoyDrawRoomTheme();
     $room = Room::factory()->create();
     $settings = PoolFixtures::settings(themeIds: [$theme->id], noRepeatMovies: true);
 
@@ -477,7 +494,7 @@ it('exclut la cible, son movie_group et les films des manches déjà démarrées
     // Non-répétition COUPÉE : l'exclusion des manches démarrées ne doit rien à
     // la mémoire du salon.
     foreach (['mode normal' => false, 'mode dégradé' => true] as $label => $degraded) {
-        $theme = Theme::factory()->published()->create();
+        $theme = decoyDrawRoomTheme();
         $game = decoyDrawGame(
             Room::factory()->create(),
             PoolFixtures::settings(themeIds: [$theme->id], noRepeatMovies: false),
@@ -542,7 +559,7 @@ it("n'exclut jamais le film d'une manche future", function () {
 
     // Même règle au mode dégradé : une cible seule de son profil tire, en R3,
     // les films des manches futures.
-    $degradedTheme = Theme::factory()->published()->create();
+    $degradedTheme = decoyDrawRoomTheme();
     $degradedGame = decoyDrawGame(
         Room::factory()->create(),
         PoolFixtures::settings(themeIds: [$degradedTheme->id]),
@@ -632,7 +649,7 @@ it('un masque de version périmée fait basculer en mode dégradé', function ()
 
     // 1. Masque de la CIBLE à une version périmée (`catalog:reproject` pas
     // encore joué) : bascule, même avec quatre pairs au même profil.
-    $theme = Theme::factory()->published()->create();
+    $theme = decoyDrawRoomTheme();
     $game = decoyDrawGame(Room::factory()->create(), PoolFixtures::settings(themeIds: [$theme->id]), decoyDrawSeeds()[0]);
     $target = decoyDrawMovie(theme: $theme);
     $round = decoyDrawTarget($game, $target, $this->at);
@@ -654,7 +671,7 @@ it('un masque de version périmée fait basculer en mode dégradé', function ()
 
     // 2. Masque de CANDIDATS périmé : ils ne comptent plus au même profil, et
     // les pairs restants ne font pas trois leurres.
-    $englishTheme = Theme::factory()->published()->create();
+    $englishTheme = decoyDrawRoomTheme();
     $englishGame = decoyDrawGame(Room::factory()->create(), PoolFixtures::settings(themeIds: [$englishTheme->id]), decoyDrawSeeds()[1]);
     $englishTarget = decoyDrawMovie(decoyDrawEnglishOnly(), $englishTheme);
     $englishRound = decoyDrawTarget($englishGame, $englishTarget, $this->at);
@@ -676,7 +693,7 @@ it('un masque de version périmée fait basculer en mode dégradé', function ()
     // 3. Masque à la version courante mais au contenu périmé : un film qui n'a
     // qu'un titre anglais porte le masque « français ». Les quatre films
     // n'atteignent plus la même locale : bascule, jamais un QCM hétérogène.
-    $frenchTheme = Theme::factory()->published()->create();
+    $frenchTheme = decoyDrawRoomTheme();
     $frenchGame = decoyDrawGame(Room::factory()->create(), PoolFixtures::settings(themeIds: [$frenchTheme->id]), decoyDrawSeeds()[2]);
     $frenchTarget = decoyDrawMovie(decoyDrawFrenchOnly(), $frenchTheme);
     $frenchRound = decoyDrawTarget($frenchGame, $frenchTarget, $this->at);
@@ -699,7 +716,7 @@ it('un masque de version périmée fait basculer en mode dégradé', function ()
 });
 
 it('en solo, tire les leurres dans le vivier catalogue du preset, sans non-répétition de salon', function () {
-    $theme = Theme::factory()->published()->create();
+    $theme = decoyDrawRoomTheme();
     // L'instantané garde `noRepeatMovies` à vrai : il est ignoré en solo.
     $preset = PoolFixtures::settings(themeIds: [$theme->id], noRepeatMovies: true);
     $game = decoyDrawGame(null, $preset, decoyDrawSeeds()[0]);
@@ -740,7 +757,7 @@ it('en solo, tire les leurres dans le vivier catalogue du preset, sans non-rép�
 });
 
 it("rejette un candidat dont le movie_group est pris ou dont une chaîne rendue double celle de la cible ou d'un leurre retenu", function () {
-    $theme = Theme::factory()->published()->create();
+    $theme = decoyDrawRoomTheme();
     $game = decoyDrawGame(Room::factory()->create(), PoolFixtures::settings(themeIds: [$theme->id]), decoyDrawSeeds()[0]);
 
     $target = decoyDrawMovie([

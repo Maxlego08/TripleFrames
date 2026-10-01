@@ -6,6 +6,7 @@ use App\Enums\AdminActionSubject;
 use App\Models\AdminAction;
 use App\Models\Frame;
 use App\Models\Movie;
+use App\Models\Theme;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
@@ -27,7 +28,7 @@ use Illuminate\Support\Collection;
  * acteurs réservés.
  *
  * Le libellé d'un sujet est, lui, COURANT : le titre original d'un film, le
- * pseudo d'un compte. Un joueur, une demande de retrait, le site et
+ * pseudo d'un compte, la clé d'un thème. Un joueur, une demande de retrait, le site et
  * l'ensemble des comptes n'ont pas de libellé ici — l'écran montre leur
  * type et, s'il existe, leur numéro. Le pseudo d'un joueur, effacé à
  * l'archivage de son salon, ne ressuscite jamais par le journal.
@@ -42,7 +43,7 @@ final class AdminJournalPresenter
      *
      * @param  Collection<int, AdminAction>  $lines
      * @param  array{0: AdminActionSubject, 1: int}|null  $extra
-     * @return array{movies: array<int, string>, frames: array<int, array{movie_id: int, movie_title: string|null}>, users: array<int, string>}
+     * @return array{movies: array<int, string>, frames: array<int, array{movie_id: int, movie_title: string|null}>, users: array<int, string>, themes: array<int, string>}
      */
     public static function resolveSubjects(Collection $lines, ?array $extra = null): array
     {
@@ -89,6 +90,15 @@ final class AdminJournalPresenter
             }
         }
 
+        $themes = [];
+        $themeIds = $idsOf(AdminActionSubject::Theme);
+
+        if ($themeIds !== []) {
+            foreach (Theme::query()->whereIn('id', $themeIds)->get(['id', 'key']) as $theme) {
+                $themes[$theme->id] = $theme->key;
+            }
+        }
+
         $resolvedFrames = [];
 
         foreach ($frames as $frameId => $movieId) {
@@ -102,13 +112,14 @@ final class AdminJournalPresenter
             'movies' => $movies,
             'frames' => $resolvedFrames,
             'users' => $users,
+            'themes' => $themes,
         ];
     }
 
     /**
      * Une ligne du journal.
      *
-     * @param  array{movies: array<int, string>, frames: array<int, array{movie_id: int, movie_title: string|null}>, users: array<int, string>}  $subjects
+     * @param  array{movies: array<int, string>, frames: array<int, array{movie_id: int, movie_title: string|null}>, users: array<int, string>, themes: array<int, string>}  $subjects
      * @return array{
      *     id: int,
      *     action: string,
@@ -151,7 +162,7 @@ final class AdminJournalPresenter
      * un compte ne sont jamais détruits, mais un filtre posé à la main peut
      * viser un numéro qui n'a jamais existé.
      *
-     * @param  array{movies: array<int, string>, frames: array<int, array{movie_id: int, movie_title: string|null}>, users: array<int, string>}  $subjects
+     * @param  array{movies: array<int, string>, frames: array<int, array{movie_id: int, movie_title: string|null}>, users: array<int, string>, themes: array<int, string>}  $subjects
      * @return array{type: string, id: int|null, label: string|null, movie_id: int|null, exists: bool}
      */
     public static function subject(AdminActionSubject $type, ?int $id, array $subjects): array
@@ -172,6 +183,12 @@ final class AdminJournalPresenter
                 $subjects['users'][$id] ?? null,
                 null,
                 isset($subjects['users'][$id]),
+            ],
+            // Un thème par sa clé, immuable (D43 du 01/10) : jamais supprimé.
+            $type === AdminActionSubject::Theme => [
+                $subjects['themes'][$id] ?? null,
+                null,
+                isset($subjects['themes'][$id]),
             ],
             // Joueur, demande de retrait, balayage : aucun libellé à
             // résoudre, le numéro suffit.

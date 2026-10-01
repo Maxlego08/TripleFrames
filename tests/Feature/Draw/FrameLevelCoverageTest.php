@@ -39,6 +39,52 @@ function frameLevelCoverageNominalTable(): array
 }
 
 /**
+ * Plages de niveaux par palier (D45 du 01/10), en niveaux entiers.
+ *
+ * @return array<int, list<list<int>>>
+ */
+function frameLevelCoverageBandsTable(): array
+{
+    return [
+        2 => [[1, 2], [4, 5]],
+        3 => [[1, 2], [2, 3, 4], [4, 5]],
+        4 => [[1], [2, 3], [4], [5]],
+        5 => [[1], [2], [3], [4], [5]],
+    ];
+}
+
+/**
+ * Les séquences strictement croissantes de `N` niveaux du masque qui placent
+ * chaque palier dans sa plage, en ordre lexicographique — oracle écrit sans la
+ * classe testée.
+ *
+ * @return list<list<int>>
+ */
+function frameLevelCoverageInBands(int $framesPerRound, int $mask): array
+{
+    $bands = frameLevelCoverageBandsTable()[$framesPerRound];
+    $sequences = [[]];
+
+    foreach ($bands as $band) {
+        $next = [];
+
+        foreach ($sequences as $prefix) {
+            foreach ($band as $level) {
+                if (($mask & (1 << ($level - 1))) !== 0 && ($prefix === [] || $level > end($prefix))) {
+                    $next[] = [...$prefix, $level];
+                }
+            }
+        }
+
+        $sequences = $next;
+    }
+
+    usort($sequences, static fn (array $a, array $b): int => $a <=> $b);
+
+    return $sequences;
+}
+
+/**
  * Tous les `N` des bornes du salon.
  *
  * @return list<int>
@@ -280,21 +326,70 @@ it('un masque hors bornes lève InvalidArgumentException', function (int $mask) 
     'entier maximal' => [PHP_INT_MAX],
 ]);
 
-it('usesFallback est vrai exactement quand select diffère de nominal', function () {
-    foreach (frameLevelCoverageFramesPerRound() as $framesPerRound) {
-        $nominal = FrameLevelCoverage::nominal($framesPerRound);
+it('les plages de chaque palier sont celles de D45 et contiennent la répartition nominale', function () {
+    $table = frameLevelCoverageBandsTable();
 
+    expect(array_keys($table))->toBe(frameLevelCoverageFramesPerRound());
+
+    foreach ($table as $framesPerRound => $bands) {
+        $actual = array_map(
+            static fn (array $band): array => frameLevelCoverageValues($band) ?? [],
+            FrameLevelCoverage::bands($framesPerRound),
+        );
+        $nominal = frameLevelCoverageNominalTable()[$framesPerRound];
+
+        expect($actual)->toBe($bands);
+
+        foreach ($nominal as $index => $level) {
+            expect($bands[$index])->toContain($level);
+        }
+    }
+
+    expect(fn () => FrameLevelCoverage::bands(RoomSettingsBounds::MAX_FRAMES_PER_ROUND + 1))
+        ->toThrow(InvalidArgumentException::class);
+});
+
+it('sequences rend les séquences croissantes dans les plages, sinon la seule séquence de repli', function () {
+    foreach (frameLevelCoverageFramesPerRound() as $framesPerRound) {
         foreach (frameLevelCoverageMasks() as $mask) {
+            $sequences = FrameLevelCoverage::sequences($framesPerRound, $mask);
+            $inBands = frameLevelCoverageInBands($framesPerRound, $mask);
             $selected = FrameLevelCoverage::select($framesPerRound, $mask);
 
+            if ($selected === null) {
+                expect($sequences)->toBeNull();
+
+                continue;
+            }
+
+            $values = array_map(static fn (array $sequence): array => frameLevelCoverageValues($sequence) ?? [], $sequences ?? []);
+
+            expect($values)->toBe($inBands === [] ? [frameLevelCoverageValues($selected)] : $inBands)
+                // La séquence de référence est toujours admissible.
+                ->and($sequences)->toContain($selected);
+        }
+    }
+
+    // N = 3, banque 1,2,3,4,5 : les huit séquences admissibles.
+    expect(frameLevelCoverageInBands(3, frameLevelCoverageMask([1, 2, 3, 4, 5])))->toBe([
+        [1, 2, 4], [1, 2, 5], [1, 3, 4], [1, 3, 5], [1, 4, 5], [2, 3, 4], [2, 3, 5], [2, 4, 5],
+    ]);
+});
+
+it('usesFallback est vrai exactement quand aucune séquence ne tient dans les plages', function () {
+    foreach (frameLevelCoverageFramesPerRound() as $framesPerRound) {
+        foreach (frameLevelCoverageMasks() as $mask) {
+            $playable = frameLevelCoveragePopcount($mask) >= $framesPerRound;
+
             expect(FrameLevelCoverage::usesFallback($framesPerRound, $mask))
-                ->toBe($selected !== null && $selected !== $nominal);
+                ->toBe($playable && frameLevelCoverageInBands($framesPerRound, $mask) === []);
         }
     }
 
     // Les deux prédicats de spec 30 § 2.5 ne se confondent pas.
     expect(FrameLevelCoverage::usesFallback(4, frameLevelCoverageMask([1, 2, 3, 5])))->toBeTrue()
-        ->and(FrameLevelCoverage::usesFallback(3, frameLevelCoverageMask([2, 3, 4, 5])))->toBeTrue()
+        ->and(FrameLevelCoverage::usesFallback(3, frameLevelCoverageMask([2, 3, 4, 5])))->toBeFalse()
+        ->and(FrameLevelCoverage::usesFallback(2, frameLevelCoverageMask([1, 2, 3])))->toBeTrue()
         ->and(FrameLevelCoverage::usesFallback(3, frameLevelCoverageMask([1, 3, 5])))->toBeFalse()
         // Injouable n'est pas « en repli » : il n'y a rien à montrer.
         ->and(FrameLevelCoverage::usesFallback(4, frameLevelCoverageMask([1, 3, 5])))->toBeFalse();

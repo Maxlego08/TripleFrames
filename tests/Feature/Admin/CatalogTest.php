@@ -16,6 +16,7 @@ use App\Models\MovieGroup;
 use App\Models\MovieProjection;
 use App\Models\MovieTitle;
 use App\Models\MovieTmdbTag;
+use App\Models\TmdbCompany;
 use App\Models\User;
 use App\Support\Frames\FrameStoragePrefix;
 use Database\Factories\MovieFactory;
@@ -411,6 +412,49 @@ test('la fiche ne fait aucun N+1 sur les titres, alias et thèmes', function ():
     DB::disableQueryLog();
 
     expect($large)->toBe($small);
+});
+
+test('l’onglet étiquettes affiche le nom d’une société connue', function (): void {
+    $movie = Movie::factory()->withGenre(16)->withCompany(420)->withCompany(7711)->create();
+    TmdbCompany::factory()->named(420, 'Marvel Studios')->create();
+    // Un genre ne porte jamais de nom, même si une société partage son identifiant.
+    TmdbCompany::factory()->named(16, 'Homonyme d’un genre')->create();
+
+    $this->actingAs($this->curator)
+        ->get(route('admin.catalog.show', $movie))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('tags', 3)
+            ->where('tags.0.tag_kind', 'company')
+            ->where('tags.0.tmdb_tag_id', 420)
+            ->where('tags.0.name', 'Marvel Studios')
+            ->where('tags.1.tmdb_tag_id', 7711)
+            ->where('tags.1.name', null)
+            ->where('tags.2.tag_kind', 'genre')
+            ->where('tags.2.name', null));
+});
+
+test('les noms des sociétés se lisent en une requête, quel que soit leur nombre', function (): void {
+    $movie = Movie::factory()->withGenre(16)->create();
+
+    $this->actingAs($this->curator);
+
+    DB::enableQueryLog();
+    $this->get(route('admin.catalog.show', $movie))->assertOk();
+    $none = count(DB::getQueryLog());
+
+    foreach ([420, 429, 128064, 184898] as $companyId) {
+        MovieTmdbTag::factory()->company($companyId)->create(['movie_id' => $movie->id]);
+        TmdbCompany::factory()->named($companyId, 'Société '.$companyId)->create();
+    }
+
+    DB::flushQueryLog();
+    $this->get(route('admin.catalog.show', $movie))->assertOk();
+    $many = count(DB::getQueryLog());
+
+    DB::disableQueryLog();
+
+    expect($many)->toBe($none);
 });
 
 test('le filtre des titres manquants lit title_locale_mask à la version courante', function (): void {
