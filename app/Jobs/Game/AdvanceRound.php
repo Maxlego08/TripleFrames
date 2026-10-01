@@ -7,6 +7,8 @@ use App\Models\Game;
 use App\Settings\EngineConstants;
 use App\Support\Game\GameJournal;
 use App\Support\Game\RoundStep;
+use App\Support\Perf\GameTraceWriter;
+use App\Support\Perf\PerfRecorder;
 use App\Support\Realtime\WireTime;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Queue\ShouldQueueAfterCommit;
@@ -157,7 +159,27 @@ final class AdvanceRound implements ShouldQueueAfterCommit
             return;
         }
 
-        $catchUp->handle($game, Date::now()->toImmutable());
+        $startedAt = Date::now()->toImmutable();
+        $recorder = app(PerfRecorder::class);
+        $before = $recorder->snapshot();
+        $startedNs = PerfRecorder::nowNs();
+
+        $catchUp->handle($game, $startedAt);
+
+        // La chronologie technique (D47 du 01/10) : retard au démarrage du
+        // travail sur l'instant théorique, durée et requêtes du rattrapage.
+        $after = $recorder->snapshot();
+
+        GameTraceWriter::record(
+            gameId: $game->id,
+            event: GameTraceWriter::JOB_PREFIX.$this->step->value,
+            tierIndex: $this->tierIndex,
+            theoreticalAt: $this->dueAtInstant(),
+            recordedAt: $startedAt,
+            durationMs: PerfRecorder::elapsedMs($startedNs),
+            queryCount: $before !== null && $after !== null ? $after['query_count'] - $before['query_count'] : null,
+            details: ['round' => $this->roundId, 'retried' => $this->retried],
+        );
     }
 
     /**

@@ -33,6 +33,7 @@ use App\Http\Controllers\Admin\MoviePublishController;
 use App\Http\Controllers\Admin\MovieThemeController;
 use App\Http\Controllers\Admin\MovieTitleController;
 use App\Http\Controllers\Admin\MovieUnpublishController;
+use App\Http\Controllers\Admin\PerformanceController;
 use App\Http\Controllers\Admin\PlayerInspectionController;
 use App\Http\Controllers\Admin\ThemeController;
 use App\Http\Controllers\Admin\ThemePublishController;
@@ -45,6 +46,7 @@ use App\Models\FrameReview;
 use App\Models\Game;
 use App\Models\ImportRun;
 use App\Models\Movie;
+use App\Models\PerfSample;
 use App\Models\Player;
 use App\Models\Theme;
 use App\Models\User;
@@ -462,5 +464,11 @@ Route::middleware(['auth', 'verified', 'role:curator', 'admin.2fa', 'admin.local
             Route::get('players/{player}', [PlayerInspectionController::class, 'show'])
                 ->middleware('can:view,player')
                 ->name('players.show');
+
+            // Les performances (ligne 43, D47 du 01/10) : routes, jobs, SQL
+            // lentes et retards du moteur. Aucune donnée personnelle.
+            Route::get('performance', [PerformanceController::class, 'index'])
+                ->middleware('can:viewAny,'.PerfSample::class)
+                ->name('performance.index');
         });
     });

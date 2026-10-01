@@ -6,6 +6,7 @@ use App\Enums\GameStatus;
 use App\Enums\RoundStatus;
 use App\Models\Game;
 use App\Models\GamePlayer;
+use App\Models\GameTrace;
 use App\Models\Guess;
 use App\Models\Movie;
 use App\Models\MovieTitle;
@@ -67,7 +68,7 @@ final class GameInspectionPresenter
             'room_code' => $game->room?->room_code,
             'participants_count' => is_numeric($count) ? (int) $count : 0,
             'started_at' => self::moment($game->started_at),
-            'ended_at' => self::moment($game->ended_at),
+            'finished_at' => self::moment($game->ended_at),
         ];
     }
 
@@ -156,13 +157,57 @@ final class GameInspectionPresenter
                 'player' => self::playerIdentity($seat->player, $seat->display_nickname),
                 'status' => $seat->status->value,
                 'first_round_number' => $seat->first_round_number,
-                'rounds_played' => $seat->rounds_played,
-                'correct_answers' => $seat->correct_answers,
-                'final_score' => $seat->final_score,
-                'final_rank' => $seat->final_rank,
+                'played_rounds' => $seat->rounds_played,
+                'correct_count' => $seat->correct_answers,
+                'score' => $seat->final_score,
+                'rank' => $seat->final_rank,
             ])->values()->all(),
             'rounds' => $lines,
+            'trace' => self::trace($game, $rounds, $publicIds),
         ];
+    }
+
+    /**
+     * La chronologie technique de la partie (D47 du 01/10, `game_trace`) :
+     * transitions, diffusions et leur retard, jobs de frontière, soumissions
+     * et resynchronisations. Aucune ligne ne porte de contenu de jeu ; un job
+     * désigne sa manche par son identifiant interne, traduit ici en numéro de
+     * tirage.
+     *
+     * @param  Collection<int, Round>  $rounds
+     * @param  array<int, string>  $publicIds
+     * @return list<array<string, mixed>>
+     */
+    private static function trace(Game $game, Collection $rounds, array $publicIds): array
+    {
+        $sequences = [];
+
+        foreach ($rounds as $round) {
+            $sequences[$round->id] = $round->sequence_index;
+        }
+
+        $lines = [];
+
+        foreach (GameTrace::query()->where('game_id', $game->id)->orderBy('id')->get() as $line) {
+            $details = $line->details ?? [];
+            $roundId = $details['round'] ?? null;
+            unset($details['round']);
+
+            $lines[] = [
+                'event' => $line->event,
+                'sequence_index' => $line->sequence_index ?? (is_int($roundId) ? ($sequences[$roundId] ?? null) : null),
+                'tier_index' => $line->tier_index,
+                'player_id' => $line->player_id === null ? null : ($publicIds[$line->player_id] ?? null),
+                'theoretical_at' => self::moment($line->theoretical_at),
+                'recorded_at' => self::moment($line->recorded_at),
+                'delay_ms' => $line->delay_ms,
+                'duration_ms' => $line->duration_ms,
+                'query_count' => $line->query_count,
+                'details' => $details,
+            ];
+        }
+
+        return $lines;
     }
 
     /**
@@ -206,9 +251,9 @@ final class GameInspectionPresenter
             $games[] = [
                 'game' => self::gameRow($game),
                 'status' => $seat->status->value,
-                'final_score' => $seat->final_score,
-                'final_rank' => $seat->final_rank,
-                'correct_answers' => $seat->correct_answers,
+                'score' => $seat->final_score,
+                'rank' => $seat->final_rank,
+                'correct_count' => $seat->correct_answers,
                 'rounds' => $lines,
             ];
         }
@@ -334,7 +379,7 @@ final class GameInspectionPresenter
             'round_number' => $round->round_number,
             'status' => $round->status->value,
             'started_at' => self::moment($round->started_at),
-            'ended_at' => self::moment($round->ended_at),
+            'finished_at' => self::moment($round->ended_at),
             'cancel_reason' => $round->cancel_reason?->value,
             'disclosed' => false,
             'movie' => null,
@@ -359,11 +404,11 @@ final class GameInspectionPresenter
         $line['tiers'] = array_map(fn (RoundTier $tier): array => [
             'tier_index' => $tier->tier_index,
             'frame_level' => $tier->frame_level->value,
-            'substitution_reason' => $tier->substitution_reason?->value,
+            'substitution' => $tier->substitution_reason?->value,
             'starts_at_offset_ms' => $tier->starts_at_offset_ms,
             'duration_ms' => $tier->duration_ms,
             'points' => $tier->points,
-            'served_at' => self::moment($tier->served_at),
+            'opened_at' => self::moment($tier->served_at),
         ], $tiers);
 
         foreach ($facts['participations'][$round->id] ?? [] as $participation) {
@@ -388,9 +433,9 @@ final class GameInspectionPresenter
                     'submitted_normalized' => $guess->submitted_normalized,
                     'edit_distance' => $guess->edit_distance,
                     'prefix_was_ambiguous' => $guess->prefix_was_ambiguous,
-                    'points_tier' => $guess->points_tier,
-                    'points_bonus' => $guess->points_bonus,
-                    'points_total' => $guess->points_total,
+                    'tier_points' => $guess->points_tier,
+                    'bonus_points' => $guess->points_bonus,
+                    'total_points' => $guess->points_total,
                 ] : null,
                 'wrong_answers' => array_map(fn (WrongAnswer $answer): array => [
                     'source' => $answer->source->value,

@@ -56,6 +56,7 @@ php artisan catalog:import | catalog:import-discover | catalog:import-ids   # im
 php artisan catalog:themes | catalog:company-names   # rattrapages manuels des thèmes (instantané en tête) et des noms de société TMDB (D43 du 01/10)
 php artisan admin:first-admin   # premier admin, interactif (`--name=` aujourd'hui ; nom réel exigé par `--real-name=` à partir de L20-1, D12 du 23/09)
 php artisan lang:types | lang:hash   # translations.d.ts | bootstrap/cache/lang-version.php (étape du hook de déploiement)
+php artisan perf:report [--hours=24]   # performances mesurées : routes, jobs, moteur, SQL lentes (D47 du 01/10 ; écran admin « Performances »)
 ```
 
 Le `--timeout=900` de `composer dev` borne seul `RunCatalogImport` sans `pcntl` : ne pas le retirer. **Ne pas** lancer `storage:link` pour les images de jeu (§8). `php artisan install:api` seulement si un vrai besoin JSON apparaît — amendé le 23/09.

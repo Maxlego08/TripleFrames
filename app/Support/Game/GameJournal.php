@@ -6,6 +6,7 @@ use App\Enums\GameStatus;
 use App\Enums\RoundIncidentReason;
 use App\Models\Game;
 use App\Models\Round;
+use App\Support\Perf\GameTraceWriter;
 use App\Support\Realtime\GameRef;
 use App\Support\Realtime\WireTime;
 use Carbon\CarbonImmutable;
@@ -95,6 +96,8 @@ final class GameJournal
             ...self::roundContext($round),
             'startedAt' => WireTime::iso($startedAt),
         ]);
+
+        GameTraceWriter::record($game->id, GameTraceWriter::ROUND_OPENED, $round->sequence_index, 1, $startedAt);
     }
 
     /**
@@ -110,6 +113,8 @@ final class GameJournal
             'cause' => $cause,
             'closedAt' => WireTime::iso($closedAt),
         ]);
+
+        GameTraceWriter::record($game->id, GameTraceWriter::ROUND_CLOSED, $round->sequence_index, theoreticalAt: $closedAt, details: ['cause' => $cause]);
     }
 
     /** Substitution décidée à la frappe du jeton d'un palier (E10-25). */
@@ -121,6 +126,8 @@ final class GameJournal
             'tierIndex' => $tierIndex,
             'reason' => $reason->value,
         ]);
+
+        GameTraceWriter::record($game->id, GameTraceWriter::TIER_SUBSTITUTED, $round->sequence_index, $tierIndex, details: ['reason' => $reason->value]);
     }
 
     /**
@@ -135,6 +142,8 @@ final class GameJournal
             'reason' => $reason->value,
             'replaced' => $replaced,
         ]);
+
+        GameTraceWriter::record($game->id, GameTraceWriter::ROUND_CANCELLED, $round->sequence_index, details: ['reason' => $reason->value, 'replaced' => $replaced]);
     }
 
     /** Mise en pause (§ 14.1), à l'instant théorique de la pause. */
@@ -144,6 +153,8 @@ final class GameJournal
             ...self::gameContext($game),
             'pausedAt' => WireTime::iso($pausedAt),
         ]);
+
+        GameTraceWriter::record($game->id, GameTraceWriter::GAME_PAUSED, theoreticalAt: $pausedAt);
     }
 
     /** Reprise d'une partie en pause (§ 14.2, `ResumeGame`, L60-13). */
@@ -153,6 +164,8 @@ final class GameJournal
             ...self::gameContext($game),
             'resumedAt' => WireTime::iso($resumedAt),
         ]);
+
+        GameTraceWriter::record($game->id, GameTraceWriter::GAME_RESUMED, theoreticalAt: $resumedAt);
     }
 
     /**
@@ -167,6 +180,8 @@ final class GameJournal
             'outcome' => $outcome->value,
             'finalizedAt' => WireTime::iso($finalizedAt),
         ]);
+
+        GameTraceWriter::record($game->id, GameTraceWriter::GAME_FINALIZED, theoreticalAt: $finalizedAt, details: ['outcome' => $outcome->value]);
     }
 
     /**
@@ -176,6 +191,8 @@ final class GameJournal
     public static function resynchronized(Game $game): void
     {
         self::write(LogLevel::INFO, self::RESYNCHRONIZED, self::gameContext($game));
+
+        GameTraceWriter::record($game->id, GameTraceWriter::RESYNCHRONIZED);
     }
 
     /**
@@ -192,11 +209,18 @@ final class GameJournal
         ?int $tierIndex,
         CarbonImmutable $serverNow,
         ?CarbonImmutable $theoreticalAt,
+        ?int $gameId = null,
     ): void {
         self::$lastEmission = ['event' => $event, 'gameRef' => $gameRef, 'sequenceIndex' => $sequenceIndex];
 
         if (! $theoreticalAt instanceof CarbonImmutable) {
             return;
+        }
+
+        // La chronologie technique (D47 du 01/10) : la même mesure, rattachée
+        // à la partie par son identifiant, que ce journal ne porte jamais.
+        if ($gameId !== null) {
+            GameTraceWriter::record($gameId, GameTraceWriter::BROADCAST_PREFIX.$event, $sequenceIndex, $tierIndex, $theoreticalAt, $serverNow);
         }
 
         self::write(LogLevel::INFO, self::BROADCAST_DELAY, array_filter([
@@ -247,6 +271,8 @@ final class GameJournal
         } catch (Throwable) {
             // Base indisponible : la ligne part sans référence de partie.
         }
+
+        GameTraceWriter::record($gameId, GameTraceWriter::TRANSITION_FAILED_TWICE, details: ['step' => $step->value, 'tierIndex' => $tierIndex, 'dueAt' => $dueAt]);
 
         self::write(LogLevel::ERROR, self::TRANSITION_FAILED_TWICE, array_filter(
             $context,

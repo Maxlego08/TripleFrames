@@ -113,6 +113,7 @@ Cette matrice est la table de vérité des écrans et de la famille de tests d'a
 | 40 | Annuaire des comptes ; fiche d'un compte, en lecture (§ 2.8) | `admin.users.index`, `admin.users.show` | `UserPolicy::viewAny`, `view` | **403** | 200 | lecture : `accounts.directory_viewed` ; `user.viewed` (— amendé le 30/09) | livré le 28/09 (D40 du 28/09) — amendé le 28/09 |
 | 41 | Journal d'administration : liste filtrée de `admin_action`, historique d'un film ou d'un compte (§ 2.10) | `admin.journal.index` (sous-groupe `role:admin`) | `can:viewAny,App\Models\AdminAction` (`AdminActionPolicy`) | **403** | 200 | — (l'écran d'audit lui-même, § 2.7) | D41 du 30/09 — amendé le 30/09 |
 | 42 | Annuaire des sièges, invités compris ; fiche d'un siège (§ 12.2) | `admin.players.index`, `admin.players.show` (sous-groupe `role:admin`) | `PlayerPolicy::viewAny`, `view` | **403** | 200 | lecture : `players.directory_viewed` ; `player.viewed` | J1 (D46 du 01/10 — amendé le 01/10) |
+| 43 | Performances : requêtes, jobs, SQL lentes, retards du moteur (§ 12.3) | `admin.performance.index` (sous-groupe `role:admin`) | `PerfSamplePolicy::viewAny` | **403** | 200 | — (aucune donnée personnelle) | J1 (D47 du 01/10 — amendé le 01/10) |
 
 ### 2.3 La porte `/admin` [J1]
 
@@ -1119,6 +1120,7 @@ Amendé le 01/10 (D46 du 01/10) : avancé du J2 au J1 et élargi ; remplace la l
 - **`admin/players/index`** (`PlayerInspectionController@index`, `PlayerPolicy::viewAny`) : tous les sièges `player`, invités compris ; recherche par pseudo (`LIKE` sur `nickname`) ou identifiant public ; filtre mode (salon, solo) ; par ligne : pseudo ou « effacé », salon ou solo, compte lié (lien vers `admin.users.show`), langue, arrivée, dernière présence, parties jouées.
 - **`admin/players/show`** (`PlayerPolicy::view`) : identité du siège, ses parties (`game_player` : score, rang, statut, lien vers la partie) et, partie par partie, manche par manche, son état, sa bonne réponse et ses réponses fausses.
 - **Règle 3, inchangée** : pour une partie non terminale (`running`, `paused`), une manche qui n'a pas atteint `revealing`, `completed` ou `cancelled` ne montre que `sequence_index`, `round_number`, `status` et ses horaires ; film, titres, frames, leurres, QCM, bonnes réponses **et réponses fausses** n'en sont ni chargés ni sérialisés (`GameInspectionPresenter`, seul constructeur des props des deux fiches). Les écarts de rejeu `ScoreReplayer::mismatches()` arrivent avec L80-9 (J2).
+- **Chronologie technique** — amendé le 01/10 (D47 du 01/10) : la fiche d'une partie montre aussi sa `game_trace` (`10` § 7.11) : transitions, diffusions et leur retard, jobs de frontière, soumissions et resynchronisations, avec durée et requêtes SQL.
 - **Consultations consignées** (D41 du 30/09) : une ligne `recordRead()` par visite qui compte — `games.directory_viewed`, `game.viewed` (sujet `game`), `players.directory_viewed`, `player.viewed` (sujet `player`) —, toutes permanentes ; ni la recherche ni les filtres ne sont recopiés. Aucun export.
 ---
 
@@ -1603,6 +1605,10 @@ Amendé le 30/09. Règle et écrans : § 7.9 ; schéma : `10` § 8.3.
 - **Reste dû** : un essai à la main dans un navigateur, et la relecture du porteur.
 
 ---
+
+### 12.3 Performances [J1, D47 du 01/10]
+
+Amendé le 01/10. Page `admin/performance/index` (`PerformanceController@index`, `PerfSamplePolicy::viewAny`, **administrateur seul**), fenêtre de 1 h, 24 h ou 7 jours : par route et par job, volume, p50, p95, maximum, requêtes SQL moyennes, erreurs (statut ≥ 500 ou job en échec) ; requêtes lentes regroupées par empreinte (volume, maximum, dernière occurrence, contexte) ; retards des diffusions de frontière du moteur (p50, p95, maximum, par événement). Aucune donnée personnelle : la consultation n'est pas une lecture sensible. Règle complète : `100` § 10.11.
 
 ### L20-36 — Parties, sièges et réponses [D46 du 01/10]
 

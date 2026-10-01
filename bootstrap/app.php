@@ -10,6 +10,7 @@ use App\Http\Middleware\ForceAdminLocale;
 use App\Http\Middleware\ForceGameAppearance;
 use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
+use App\Http\Middleware\MeasureRequest;
 use App\Http\Middleware\RobotsDirectives;
 use App\Http\Middleware\SelectTranslationDomains;
 use App\Http\Middleware\SetLocale;
@@ -61,6 +62,11 @@ return Application::configure(basePath: dirname(__DIR__))
         // d'un chemin mal encodé, ni la 413 d'un corps trop lourd, que les
         // middlewares globaux du framework rendent avant lui.
         $middleware->prepend(RobotsDirectives::class);
+
+        // La mesure des performances (spec 100 § 10.11, D47 du 01/10) : global
+        // pour couvrir aussi les routes hors `web`, terminable pour écrire
+        // après l'envoi de la réponse. Inerte si `PERF_ENABLED=false`.
+        $middleware->append(MeasureRequest::class);
 
         // `locale` rejoint `appearance` et `sidebar_state` pour la même raison :
         // c'est une préférence publique, non sensible, que le front lit et écrit

@@ -1522,7 +1522,7 @@ export type InspectionGameRow = {
     room_code: string | null;
     participants_count: number;
     started_at: string | null;
-    ended_at: string | null;
+    finished_at: string | null;
 };
 
 export type InspectionGameDetail = InspectionGameRow & {
@@ -1546,10 +1546,10 @@ export type InspectionLeaderboardLine = {
     player: InspectionPlayer;
     status: InspectionSeatStatus;
     first_round_number: number | null;
-    rounds_played: number | null;
-    correct_answers: number | null;
-    final_score: number | null;
-    final_rank: number | null;
+    played_rounds: number | null;
+    correct_count: number | null;
+    score: number | null;
+    rank: number | null;
 };
 
 export type InspectionGuess = {
@@ -1563,9 +1563,9 @@ export type InspectionGuess = {
     submitted_normalized: string;
     edit_distance: number;
     prefix_was_ambiguous: boolean;
-    points_tier: number;
-    points_bonus: number;
-    points_total: number;
+    tier_points: number;
+    bonus_points: number;
+    total_points: number;
 };
 
 export type InspectionWrongAnswer = {
@@ -1591,11 +1591,11 @@ export type InspectionParticipant = {
 export type InspectionTier = {
     tier_index: number;
     frame_level: number;
-    substitution_reason: InspectionIncidentReason | null;
+    substitution: InspectionIncidentReason | null;
     starts_at_offset_ms: number;
     duration_ms: number;
     points: number;
-    served_at: string | null;
+    opened_at: string | null;
 };
 
 type InspectionRoundBase = {
@@ -1603,7 +1603,7 @@ type InspectionRoundBase = {
     round_number: number | null;
     status: InspectionRoundStatus;
     started_at: string | null;
-    ended_at: string | null;
+    finished_at: string | null;
     cancel_reason: InspectionIncidentReason | null;
     disclosed: boolean;
     movie: {
@@ -1626,9 +1626,9 @@ export type InspectionPlayerRound = InspectionRoundBase & {
 export type InspectionPlayerGame = {
     game: InspectionGameRow;
     status: InspectionSeatStatus;
-    final_score: number | null;
-    final_rank: number | null;
-    correct_answers: number | null;
+    score: number | null;
+    rank: number | null;
+    correct_count: number | null;
     rounds: InspectionPlayerRound[];
 };
 
@@ -1641,4 +1641,74 @@ export type InspectionGameFilters = {
 export type InspectionPlayerFilters = {
     q: string | null;
     mode: 'room' | 'solo' | null;
+};
+
+/*
+ * --- Performances et chronologie technique (spec 20 § 12.3, D47 du 01/10) ---
+ *
+ * Miroir de `App\Support\Perf\PerformanceReport` et de la chronologie de
+ * `GameInspectionPresenter`. Durées et retards en millisecondes entières.
+ */
+
+export type PerfGroupRow = {
+    name: string;
+    count: number;
+    p50_ms: number | null;
+    p95_ms: number | null;
+    max_ms: number;
+    avg_queries: number;
+    avg_query_ms: number;
+    max_memory_kb: number;
+    errors: number;
+    p95_wait_ms: number | null;
+};
+
+export type PerfEngineRow = {
+    event: string;
+    count: number;
+    p50_delay_ms: number | null;
+    p95_delay_ms: number | null;
+    max_delay_ms: number | null;
+    p50_duration_ms: number | null;
+    p95_duration_ms: number | null;
+    avg_queries: number;
+};
+
+export type PerfSlowQueryRow = {
+    sql: string;
+    count: number;
+    max_ms: number;
+    avg_ms: number;
+    last_at: string;
+    context: string | null;
+};
+
+export type PerfReport = {
+    since: string;
+    requests: PerfGroupRow[];
+    jobs: PerfGroupRow[];
+    slow_queries: PerfSlowQueryRow[];
+    engine: PerfEngineRow[];
+    totals: {
+        requests: number;
+        request_errors: number;
+        jobs: number;
+        job_failures: number;
+        traced_games: number;
+    };
+};
+
+export type PerfWindow = '1h' | '24h' | '7d';
+
+export type InspectionTraceLine = {
+    event: string;
+    sequence_index: number | null;
+    tier_index: number | null;
+    player_id: string | null;
+    theoretical_at: string | null;
+    recorded_at: string | null;
+    delay_ms: number | null;
+    duration_ms: number | null;
+    query_count: number | null;
+    details: Record<string, string | number | boolean | null>;
 };

@@ -181,6 +181,7 @@ abstract class RoomBroadcast implements ShouldBroadcastNow, ShouldDispatchAfterC
             is_int($tierIndex) ? $tierIndex : null,
             $serverNow,
             $this->theoreticalAt,
+            $this->game?->id,
         );
 
         return [

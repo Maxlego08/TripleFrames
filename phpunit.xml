@@ -79,6 +79,12 @@
              fermée le dit par `Config::set`. -->
         <env name="CURATION_CAPTURE_ENABLED" value="" force="true"/>
         <server name="CURATION_CAPTURE_ENABLED" value=""/>
+        <!-- La mesure des performances (spec 100 § 10.11, D47 du 01/10) : coupée
+             pour que ses écritures ne comptent dans aucune séquence de requêtes
+             observée par un test ; les tests de la mesure l'activent par
+             `Config::set`. `off` et non `false` : PHPUnit réécrit `false` en
+             chaîne vide, que `config/perf.php` lit comme « active ». -->
+        <env name="PERF_ENABLED" value="off" force="true"/>
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
         <env name="NIGHTWATCH_ENABLED" value="false"/>

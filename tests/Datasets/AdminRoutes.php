@@ -11,6 +11,7 @@ use App\Models\Game;
 use App\Models\ImportRun;
 use App\Models\Movie;
 use App\Models\MovieTitle;
+use App\Models\PerfSample;
 use App\Models\Player;
 use App\Models\Theme;
 use App\Models\User;
@@ -733,6 +734,15 @@ function adminRoutesMatrix(): array
             curator: 403,
             admin: 200,
             parameters: fn (): array => ['player' => Player::factory()->create()->public_id],
+        ),
+
+        // Ligne 43 — les performances (D47 du 01/10) : administrateur seul.
+        'admin.performance.index' => adminRoutesRow(
+            row: 43,
+            method: 'GET',
+            guards: ['can:viewAny,'.PerfSample::class],
+            curator: 403,
+            admin: 200,
         ),
     ];
 }

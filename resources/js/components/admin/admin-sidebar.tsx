@@ -3,6 +3,7 @@ import {
     BookOpen,
     Clapperboard,
     DownloadCloud,
+    Activity,
     Gamepad2,
     Gauge,
     LayoutDashboard,
@@ -49,6 +50,7 @@ import { index as curationIndex } from '@/routes/admin/curation';
 import { index as gamesIndex } from '@/routes/admin/games';
 import { index as importIndex } from '@/routes/admin/import';
 import { index as journalIndex } from '@/routes/admin/journal';
+import { index as performanceIndex } from '@/routes/admin/performance';
 import { index as playersIndex } from '@/routes/admin/players';
 import { index as reviewIndex } from '@/routes/admin/review';
 import { index as themesIndex } from '@/routes/admin/themes';
@@ -204,6 +206,14 @@ export function AdminSidebar() {
             title: t('admin.nav.players'),
             href: playersIndex(),
             icon: UserRound,
+            minRole: 'admin',
+            prefetch: false,
+        },
+        // Les performances (ligne 43, D47 du 01/10).
+        {
+            title: t('admin.nav.performance'),
+            href: performanceIndex(),
+            icon: Activity,
             minRole: 'admin',
             prefetch: false,
         },

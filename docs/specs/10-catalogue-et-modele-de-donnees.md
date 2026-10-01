@@ -1055,6 +1055,16 @@ La table ne contredit pas l'interdiction de stocker une tentative fausse : ce n'
 
 ---
 
+### 7.11 `perf_sample`, `perf_slow_query` et `game_trace` — la mesure [J1, D47 du 01/10]
+
+Ajoutées le 01/10 par D47 du 01/10. Aucune donnée personnelle de joueur hors `game_trace.player_id` ; aucune IP ; aucune URL ; aucune valeur liée.
+
+**`perf_sample`** : `id` · `kind` string(10) (`request` / `job`) · `name` string(150) (nom de route, `unnamed`, ou classe du job) · `method` string(8) nullable · `queue` string(20) nullable · `status` string(12) (code HTTP, ou `processed` / `failed`) · `duration_ms` unsignedInteger · `query_count` unsignedSmallInteger · `query_ms` unsignedInteger · `memory_kb` unsignedInteger · `wait_ms` unsignedInteger nullable (job : démarrage − mise en file) · `recorded_at` timestamp(3). Index `perf_sample_recorded_idx (recorded_at)`, `perf_sample_kind_name_idx (kind, name, recorded_at)`. Pas de `created_at` : `recorded_at` en tient lieu, `$timestamps = false`.
+
+**`perf_slow_query`** : `id` · `perf_sample_id` FK `cascadeOnDelete`, obligatoire · `sql_text` string(2000) (SQL à paramètres, tronqué) · `sql_hash` char(40) (sha1 du texte, regroupement) · `duration_ms` unsignedInteger · `recorded_at` timestamp(3). Index `(recorded_at)`, `(sql_hash, recorded_at)`.
+
+**`game_trace`** : `id` · `game_id` FK `cascadeOnDelete` · `sequence_index` unsignedSmallInteger nullable · `tier_index` unsignedTinyInteger nullable · `event` string(40) · `player_id` FK nullable `nullOnDelete` (soumission, resynchronisation d'un siège) · `theoretical_at` timestamp(3) nullable · `recorded_at` timestamp(3) · `delay_ms` integer nullable (réel − théorique, signé) · `duration_ms` unsignedInteger nullable · `query_count` unsignedSmallInteger nullable · `details` json nullable (issue, cause, motif, statut HTTP ; jamais un titre ni une saisie) . Index `game_trace_game_idx (game_id, id)`, `game_trace_recorded_idx (recorded_at)`. Jamais lue par le moteur.
+
 ## 8. Modération et conformité
 
 ### 8.1 `report` — deux cibles, et deux signaleurs distincts
@@ -1281,6 +1291,7 @@ Le plafond d'**entrée** est distinct des deux plafonds de sortie de ce tableau 
 | Idem, **sièges solo**, plus `player.solo_token_hash` (— amendé le 23/09) | 24 h | `room_id IS NULL AND last_seen_at < now − 24 h` (`player_solo_expiry_idx`). Un siège solo n'appartient à aucun salon : sans ce second déclencheur, son pseudo vit douze mois. | `orphan_player` |
 | Lignes `player` et `room` | dépendante | Après que **toutes** les parties du salon sont sorties de leur fenêtre. `DELETE … WHERE NOT EXISTS (game_player) AND NOT EXISTS (round_player) AND NOT EXISTS (guess) AND NOT EXISTS (wrong_answer)` (— amendé le 01/10, D46). **Jamais piloté par `player.created_at`.** | `orphan_player` |
 | `seen_frame` | **90 jours OU 500 manches**, la borne atteinte en premier | `seen_frame.last_seen_at` antérieur à **`RoomMemoryWindow::since()`**, bâtie sur `PlatformLimits::roomMemoryWindowDays()` et `roomMemoryWindowRounds()` : **source unique** partagée par la non-répétition, la préférence de variante et la purge (§ 7.9 — amendé le 23/09) ; la borne des manches se calcule **au moment de la purge** depuis `round (room_id, started_at)`, manches démarrées seulement. Aucune colonne compteur. Fenêtre **totalement indépendante** des 12 mois. | `seen_frame` |
+| `perf_sample`, `perf_slow_query`, `game_trace` (D47 du 01/10 — amendé le 01/10) | **14 jours** | `recorded_at`, indexée ; `perf_slow_query` part en cascade avec son échantillon, `game_trace` aussi avec sa partie. | `perf` (`perf_sample`), `game_trace` |
 | `near_miss` | 90 jours | `near_miss.last_seen_on` (une **date**, pas un horodatage). **[J2]** : table vide au J1 (D24 du 23/09 — amendé le 23/09). | `near_miss` |
 | **[J2]** Tampon de manche des refus texte (cache) | au plus `D + R` + une marge | Vidé par la tâche d'agrégation à la clôture de la manche ; **aucun identifiant de personne** (§ 7.9, `70` — amendé le 23/09). | — (cache) |
 | **[J2]** Compteur k-anonyme de quasi-justes (cache) | 90 jours | Clé (film, empreinte de la chaîne), **sans identifiant de manche** ; la ligne `near_miss` ne naît qu'au troisième incrément (§ 7.9, `70` — amendé le 23/09). | — (cache) |

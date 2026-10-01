@@ -115,7 +115,7 @@ export function InspectionRoundHeader({
                                 points: tier.points,
                                 duration: tier.duration_ms / 1000,
                             })}
-                            {tier.substitution_reason !== null && (
+                            {tier.substitution !== null && (
                                 <>
                                     {' · '}
                                     {t(
@@ -123,7 +123,7 @@ export function InspectionRoundHeader({
                                         {
                                             reason: t(
                                                 INSPECTION_INCIDENT_KEYS[
-                                                    tier.substitution_reason
+                                                    tier.substitution
                                                 ],
                                             ),
                                         },
@@ -197,9 +197,9 @@ export function InspectionParticipantAnswers({
                         {t('admin.inspection.answers.correct_detail', {
                             tier: guess.tier_index,
                             rank: guess.lock_rank,
-                            total: guess.points_total,
-                            tier_points: guess.points_tier,
-                            bonus: guess.points_bonus,
+                            total: guess.total_points,
+                            tier_points: guess.tier_points,
+                            bonus: guess.bonus_points,
                             seconds: seconds(guess.answered_at_ms, locale),
                         })}
                     </p>

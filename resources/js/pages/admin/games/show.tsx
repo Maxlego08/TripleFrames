@@ -5,6 +5,7 @@ import {
     InspectionParticipantAnswers,
     InspectionRoundHeader,
 } from '@/components/admin/inspection-answers';
+import { InspectionTrace } from '@/components/admin/inspection-trace';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
@@ -31,6 +32,7 @@ import type {
     InspectionGameDetail,
     InspectionLeaderboardLine,
     InspectionRound,
+    InspectionTraceLine,
 } from '@/types/admin';
 import type { BreadcrumbItem } from '@/types/navigation';
 
@@ -38,6 +40,7 @@ type Props = {
     game: InspectionGameDetail;
     leaderboard: InspectionLeaderboardLine[];
     rounds: InspectionRound[];
+    trace: InspectionTraceLine[];
 };
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -51,7 +54,12 @@ const breadcrumbs: BreadcrumbItem[] = [
  * juste ou fausse de chaque participant. Une manche non révélée d'une partie
  * en cours n'arrive qu'avec son numéro et son statut (règle 3).
  */
-export default function AdminGamesShow({ game, leaderboard, rounds }: Props) {
+export default function AdminGamesShow({
+    game,
+    leaderboard,
+    rounds,
+    trace,
+}: Props) {
     const { t, locale } = useTranslations();
 
     const summary: Array<[string, string]> = [
@@ -92,7 +100,7 @@ export default function AdminGamesShow({ game, leaderboard, rounds }: Props) {
         ],
         [
             t('admin.inspection.game.summary.ended_at'),
-            formatMoment(game.ended_at, locale) ?? t('admin.common.none'),
+            formatMoment(game.finished_at, locale) ?? t('admin.common.none'),
         ],
     ];
 
@@ -233,7 +241,7 @@ export default function AdminGamesShow({ game, leaderboard, rounds }: Props) {
                                     {leaderboard.map((line) => (
                                         <TableRow key={line.player.public_id}>
                                             <TableCell>
-                                                {line.final_rank ??
+                                                {line.rank ??
                                                     t('admin.common.none')}
                                             </TableCell>
                                             <TableCell>
@@ -269,19 +277,19 @@ export default function AdminGamesShow({ game, leaderboard, rounds }: Props) {
                                                 )}
                                             </TableCell>
                                             <TableCell>
-                                                {line.final_score === null
+                                                {line.score === null
                                                     ? t('admin.common.none')
                                                     : formatInteger(
-                                                          line.final_score,
+                                                          line.score,
                                                           locale,
                                                       )}
                                             </TableCell>
                                             <TableCell>
-                                                {line.correct_answers ??
+                                                {line.correct_count ??
                                                     t('admin.common.none')}
                                             </TableCell>
                                             <TableCell>
-                                                {line.rounds_played ??
+                                                {line.played_rounds ??
                                                     t('admin.common.none')}
                                             </TableCell>
                                         </TableRow>
@@ -344,6 +352,8 @@ export default function AdminGamesShow({ game, leaderboard, rounds }: Props) {
                         </Card>
                     ))}
                 </section>
+
+                <InspectionTrace lines={trace} />
             </div>
         </>
     );

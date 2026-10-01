@@ -58,6 +58,8 @@ return [
         // L'inspection des parties et des sièges (lignes 36 et 42, D46 du 01/10).
         'games' => 'Parties',
         'players' => 'Joueurs',
+        // Les performances (ligne 43, D47 du 01/10).
+        'performance' => 'Performances',
         'back_to_site' => 'Retour au site',
         'role' => [
             'curator' => 'Curateur',
@@ -2769,6 +2771,71 @@ return [
     ],
 
     /*
+    | Performances (spec 20 § 12.3, D47 du 01/10) : administrateur seul,
+    | aucune donnée personnelle.
+    */
+    'performance' => [
+        'title' => 'Performances',
+        'heading' => 'Performances',
+        'description' => 'Durée des requêtes et des jobs, requêtes SQL lentes, retards du moteur de partie.',
+        'disabled' => 'La mesure est coupée (PERF_ENABLED=false) : rien de nouveau n’est enregistré.',
+        'settings' => 'Seuil de requête lente : :ms ms · échantillonnage : :rate',
+        'window' => [
+            'label' => 'Fenêtre',
+            '1h' => 'Dernière heure',
+            '24h' => 'Dernières 24 h',
+            '7d' => '7 derniers jours',
+        ],
+        'totals' => [
+            'requests' => 'Requêtes',
+            'request_errors' => 'Requêtes en erreur (5xx)',
+            'jobs' => 'Jobs',
+            'job_failures' => 'Jobs en échec',
+            'traced_games' => 'Parties tracées',
+        ],
+        'requests' => [
+            'heading' => 'Requêtes HTTP, par route',
+            'description' => 'Triées par p95. Le nom de la route, jamais l’URL.',
+        ],
+        'jobs' => [
+            'heading' => 'Jobs, par classe',
+            'description' => 'L’attente compte depuis la mise en file, délai d’un job différé compris.',
+        ],
+        'engine' => [
+            'heading' => 'Moteur de partie',
+            'description' => 'Retard = instant réel − instant théorique de la frontière. Durée et requêtes : jobs de frontière et soumissions.',
+        ],
+        'slow_queries' => [
+            'heading' => 'Requêtes SQL lentes',
+            'description' => 'Regroupées par empreinte, valeurs liées jamais enregistrées.',
+        ],
+        'column' => [
+            'name' => 'Nom',
+            'event' => 'Événement',
+            'count' => 'Nb',
+            'p50' => 'p50',
+            'p95' => 'p95',
+            'max' => 'max',
+            'queries' => 'SQL moy.',
+            'query_ms' => 'Temps SQL moy.',
+            'memory' => 'Mémoire max',
+            'errors' => 'Erreurs',
+            'wait' => 'Attente p95',
+            'delay_p50' => 'Retard p50',
+            'delay_p95' => 'Retard p95',
+            'delay_max' => 'Retard max',
+            'duration_p95' => 'Durée p95',
+            'avg' => 'moy.',
+            'context' => 'Contexte',
+            'sql' => 'SQL',
+            'last' => 'Dernière',
+        ],
+        'ms' => ':value ms',
+        'kb' => ':value Ko',
+        'empty' => 'Aucune mesure sur cette fenêtre.',
+    ],
+
+    /*
     | Inspection des parties, des sièges et des réponses (spec 20 § 12.2,
     | D46 du 01/10) : administrateur seul, chaque consultation consignée.
     */
@@ -2939,6 +3006,23 @@ return [
                 'empty' => 'Aucune manche.',
             ],
         ],
+        'trace' => [
+            'heading' => 'Chronologie technique',
+            'description' => 'Chaque transition, diffusion, job de frontière et soumission, avec son retard sur l’instant prévu, sa durée et ses requêtes SQL. Conservée 14 jours.',
+            'empty' => 'Aucune chronologie : partie antérieure à la mesure, purgée, ou mesure coupée.',
+            'column' => [
+                'at' => 'Instant',
+                'event' => 'Événement',
+                'round' => 'Manche',
+                'tier' => 'Palier',
+                'player' => 'Joueur',
+                'delay' => 'Retard',
+                'duration' => 'Durée',
+                'queries' => 'SQL',
+                'details' => 'Détails',
+            ],
+            'ms' => ':value ms',
+        ],
         'answers' => [
             'wrong_attempts' => ':count tentatives fausses',
             'correct' => 'Bonne réponse',
@@ -3046,6 +3130,7 @@ return [
         'game_state' => 'état de la partie',
         'game_mode' => 'mode',
         'room_code' => 'code de salon',
+        'perf_window' => 'fenêtre',
         'email' => 'adresse',
         'tmdb_file_path' => 'visuel TMDB',
         'capture_source' => 'capture',
@@ -3157,6 +3242,32 @@ return [
     | Locale forcée en français par la commande elle-même.
     */
     'console' => [
+        // `perf:report` (spec 100 § 10.11, D47 du 01/10).
+        'perf' => [
+            'summary' => 'Fenêtre : :hours h — :requests requêtes (:request_errors en erreur), :jobs jobs (:job_failures en échec), :games parties tracées.',
+            'requests' => 'Requêtes HTTP, par p95',
+            'jobs' => 'Jobs, par p95',
+            'engine' => 'Moteur de partie : retards (réel − théorique) et durées',
+            'slow_queries' => 'Requêtes SQL lentes',
+            'column' => [
+                'route' => 'Route',
+                'job' => 'Job',
+                'event' => 'Événement',
+                'count' => 'Nb',
+                'p50' => 'p50 ms',
+                'p95' => 'p95 ms',
+                'max' => 'max ms',
+                'queries' => 'SQL moy.',
+                'errors' => 'Erreurs',
+                'delay_p50' => 'retard p50',
+                'delay_p95' => 'retard p95',
+                'delay_max' => 'retard max',
+                'duration_p95' => 'durée p95',
+                'avg' => 'moy. ms',
+                'context' => 'Contexte',
+                'sql' => 'SQL',
+            ],
+        ],
         /*
         | Commandes d'import lancées à la main (spec 20 § 3.3, spec 100 § 11.4,
         | règle 12). La garde d'instantané précède toute écriture.

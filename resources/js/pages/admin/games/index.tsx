@@ -321,7 +321,7 @@ export default function AdminGamesIndex({
                                                 <TableCell className="align-top">
                                                     <Badge
                                                         variant={
-                                                            game.ended_at ===
+                                                            game.finished_at ===
                                                             null
                                                                 ? 'default'
                                                                 : 'secondary'
@@ -368,7 +368,7 @@ export default function AdminGamesIndex({
                                                 </TableCell>
                                                 <TableCell className="align-top whitespace-nowrap">
                                                     {formatMoment(
-                                                        game.ended_at,
+                                                        game.finished_at,
                                                         locale,
                                                     ) ?? t('admin.common.none')}
                                                 </TableCell>

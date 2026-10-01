@@ -508,6 +508,25 @@ Le 01/10/2026, le porteur a demandé de pouvoir donner à chaque film ses thème
 |---|---|---|---|---|
 | D46 | Inspection des parties, des joueurs et des réponses | **oui** : admin seul, J1, réponses fausses stockées 12 mois, lectures consignées, règle 3 tenue | **oui** — révise la décision 19 (« tentatives fausses jamais stockées ») ; L20-30 avancé au J1 et élargi | `10` § 7.6, § 7.6 bis, § 11.1 ; `70` § 7.4 à § 7.6 ; `20` § 2.2, § 12.2, L20-36 ; `00` § Vocabulaire ; `CLAUDE.md` § 2, § 6 |
 
+### D47. Le projet mesure-t-il ses performances et trace-t-il chaque partie ? — **oui : mesure maison, écran admin, chronologie technique en base, partout, coupable**
+
+**Demande du porteur.** « Ajoute des outils de mesure et de débug pour les performances, les requêtes, pour savoir tout ce qu'il se passe lors d'une partie. » Options présentées le 01/10 ; choix du porteur, toutes recommandées : mesure maison plutôt que Pulse ou Telescope, chronologie en base plutôt que lecture de `game.log`, active partout et coupable.
+
+**Ce que la décision arrête** (règle complète : `100` § 10.11, schéma : `10` § 7.11) :
+
+1. **Échantillons** (`perf_sample`) : une ligne par requête HTTP du groupe `web` et par job, écrite **après la réponse** (middleware terminable) ou après le job : nom de route (jamais l'URL, qui porte codes de salon et jetons), méthode, statut, durée, nombre et temps des requêtes SQL, mémoire de pointe ; pour un job, sa file et son attente. **Aucune IP, aucun identifiant de compte, aucun contenu de requête.**
+2. **Requêtes SQL lentes** (`perf_slow_query`) : au-delà d'un seuil, le texte SQL **à paramètres**, jamais les valeurs liées, rattaché à son échantillon ; au plus vingt par échantillon.
+3. **Chronologie technique d'une partie** (`game_trace`) : chaque transition du moteur, chaque diffusion de frontière (instant théorique, instant réel, retard), chaque job de frontière (retard au démarrage, durée, requêtes), chaque soumission de réponse et chaque resynchronisation (durée, requêtes, issue) ; affichée sur la fiche d'une partie, administrateur seul (`20` § 12.2). Jamais un titre, une saisie ni une chaîne du QCM.
+4. **Écran « Performances »** (`20` ligne 43, administrateur seul) et commande `perf:report` : par route et par job, volume, p50, p95, maximum, requêtes SQL moyennes, erreurs ; requêtes lentes regroupées ; retards de diffusion du moteur.
+5. **Partout, coupable** : `PERF_ENABLED` (vide = actif), `PERF_SAMPLE_RATE` (1 par défaut), `PERF_SLOW_QUERY_MS` (100 par défaut) ; désactivé dans la suite de tests, sauf les tests qui l'activent. **Jamais bloquant** : un échec d'écriture est avalé. Conservation **14 jours**, périmètres de purge `perf` et `game_trace`.
+6. **Debugbar** reste l'outil du poste de développement, jamais en production (`APP_DEBUG=false`).
+
+**Conséquences assumées.** Une insertion par requête et par job, hors du temps de réponse du joueur (après l'envoi sous PHP-FPM) ; quelques centaines de lignes de chronologie par partie. Une décision : elle se cite « D47 du 01/10 ».
+
+| # | Décision | Réponse retenue | Écart | Inscrite dans |
+|---|---|---|---|---|
+| D47 | Mesure des performances et chronologie technique des parties | **oui** : maison, écran admin, `game_trace` en base, actif partout et coupable, 14 jours | **oui** — « aucun outil de mesure de performance externe » reste vrai ; une mesure interne s'ajoute | `100` § 10.11 ; `10` § 7.11, § 11.1 ; `20` ligne 43, § 12.2, § 12.3 ; `CLAUDE.md` § 4 |
+
 ---
 
 ## Seule question encore ouverte — le nom de domaine (décision 5)

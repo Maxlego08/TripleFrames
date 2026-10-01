@@ -10,6 +10,7 @@ use App\Listeners\Game\BroadcastGameEnded;
 use App\Listeners\Game\CloseSeatInput;
 use App\Listeners\RecordLastLogin;
 use App\Listeners\SyncCarbonLocale;
+use App\Models\PerfSample;
 use App\Settings\EngineConstants;
 use App\Settings\PlatformLimits;
 use App\Support\Draw\PoolQuery;
@@ -19,14 +20,19 @@ use App\Support\I18n\PlayerTokenLocale;
 use App\Support\I18n\TranslationDomains;
 use App\Support\Identity\PlayerTokenManager;
 use App\Support\Ops\SystemLoad;
+use App\Support\Perf\PerfRecorder;
 use App\Support\Realtime\SeatPrincipal;
 use App\Support\Retention\PurgeHandler;
 use App\Support\Retention\PurgeHandlers;
 use Carbon\CarbonImmutable;
 use Illuminate\Auth\Events\Login;
+use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Foundation\Events\DiagnosingHealth;
 use Illuminate\Foundation\Events\LocaleUpdated;
 use Illuminate\Http\Request;
+use Illuminate\Queue\Events\JobExceptionOccurred;
+use Illuminate\Queue\Events\JobProcessed;
+use Illuminate\Queue\Events\JobProcessing;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
@@ -47,6 +53,10 @@ class AppServiceProvider extends ServiceProvider
         $this->registerEngineConstants();
         $this->registerDraw();
         $this->registerOperations();
+
+        // La mesure des performances (spec 100 § 10.11, D47 du 01/10) : une
+        // seule instance, qui porte les portées ouvertes de la requête ou du job.
+        $this->app->singleton(PerfRecorder::class);
     }
 
     /**
@@ -76,6 +86,7 @@ class AppServiceProvider extends ServiceProvider
 
         $this->registerGameListeners();
         $this->registerPlayerGuard();
+        $this->registerPerformance();
     }
 
     /**
@@ -91,6 +102,41 @@ class AppServiceProvider extends ServiceProvider
         Event::listen(AnswerAccepted::class, [CloseSeatInput::class, 'answerAccepted']);
         Event::listen(InputClosed::class, [CloseSeatInput::class, 'inputClosed']);
         Event::listen(GameFinalized::class, BroadcastGameEnded::class);
+    }
+
+    /**
+     * La mesure des performances (spec 100 § 10.11, D47 du 01/10) : un seul
+     * écouteur `DB::listen`, et une portée par job, ouverte à `JobProcessing`
+     * et refermée à `JobProcessed` ou `JobExceptionOccurred`. Toujours
+     * inscrits, inertes si `perf.enabled` est faux : un test peut activer la
+     * mesure par la configuration seule.
+     */
+    protected function registerPerformance(): void
+    {
+        $recorder = fn (): PerfRecorder => $this->app->make(PerfRecorder::class);
+
+        DB::listen(static function (QueryExecuted $query) use ($recorder): void {
+            $recorder()->query($query);
+        });
+
+        Event::listen(JobProcessing::class, static function (JobProcessing $event) use ($recorder): void {
+            $createdAt = $event->job->payload()['createdAt'] ?? null;
+
+            $recorder()->begin(
+                PerfSample::KIND_JOB,
+                null,
+                $event->job->getQueue(),
+                is_int($createdAt) ? max(0, (int) (Date::now()->getTimestampMs() - $createdAt * 1000)) : null,
+            );
+        });
+
+        Event::listen(JobProcessed::class, static function (JobProcessed $event) use ($recorder): void {
+            $recorder()->finish($event->job->resolveName(), PerfSample::STATUS_PROCESSED);
+        });
+
+        Event::listen(JobExceptionOccurred::class, static function (JobExceptionOccurred $event) use ($recorder): void {
+            $recorder()->finish($event->job->resolveName(), PerfSample::STATUS_FAILED);
+        });
     }
 
     /**

@@ -24,6 +24,12 @@ final class RetentionWindows
     public const int FAILED_JOBS_DAYS = 14;
 
     /**
+     * `perf_sample` (et ses requêtes lentes, en cascade) et `game_trace` :
+     * 14 jours (périmètres `perf` et `game_trace`, D47 du 01/10).
+     */
+    public const int PERF_DAYS = 14;
+
+    /**
      * `purge_run` : 13 mois, auto-purgé par le même job — une fenêtre de plus
      * que la plus longue qu'il atteste (périmètre `purge_run`).
      */

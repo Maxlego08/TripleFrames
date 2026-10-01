@@ -194,13 +194,13 @@ export default function AdminPlayersShow({ player, games }: Props) {
                                             'admin.inspection.player.games.score',
                                             {
                                                 score:
-                                                    entry.final_score === null
+                                                    entry.score === null
                                                         ? none
                                                         : formatInteger(
-                                                              entry.final_score,
+                                                              entry.score,
                                                               locale,
                                                           ),
-                                                rank: entry.final_rank ?? none,
+                                                rank: entry.rank ?? none,
                                             },
                                         )}
                                     </span>
