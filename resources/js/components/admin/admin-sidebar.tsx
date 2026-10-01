@@ -5,6 +5,7 @@ import {
     DownloadCloud,
     Activity,
     BarChart3,
+    CircleUserRound,
     Gamepad2,
     Gauge,
     LayoutDashboard,
@@ -47,6 +48,7 @@ import {
 } from '@/routes/admin';
 import { index as accessIndex } from '@/routes/admin/access';
 import { index as audienceIndex } from '@/routes/admin/audience';
+import { index as avatarsIndex } from '@/routes/admin/avatars';
 import { index as catalogIndex } from '@/routes/admin/catalog';
 import { index as curationIndex } from '@/routes/admin/curation';
 import { index as gamesIndex } from '@/routes/admin/games';
@@ -224,6 +226,14 @@ export function AdminSidebar() {
             title: t('admin.nav.audience'),
             href: audienceIndex(),
             icon: BarChart3,
+            minRole: 'admin',
+            prefetch: false,
+        },
+        // Les avatars téléversés (ligne 45, D49 du 01/10).
+        {
+            title: t('admin.nav.avatars'),
+            href: avatarsIndex(),
+            icon: CircleUserRound,
             minRole: 'admin',
             prefetch: false,
         },

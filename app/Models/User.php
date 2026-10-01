@@ -68,6 +68,9 @@ use LogicException;
  * @property string|null $avatar_preset
  * @property string|null $avatar_provider_path
  * @property CarbonImmutable|null $avatar_provider_hidden_at
+ * @property string|null $avatar_upload_path
+ * @property CarbonImmutable|null $avatar_upload_hidden_at
+ * @property CarbonImmutable|null $avatar_upload_reports_from
  * @property CarbonImmutable|null $terms_accepted_at
  * @property string|null $terms_version
  * @property CarbonImmutable|null $age_confirmed_at
@@ -111,6 +114,11 @@ use LogicException;
     'plan',
     'avatar_provider_path',
     'avatar_provider_hidden_at',
+    // Image téléversée (D49 du 01/10) : le chemin ne quitte jamais le serveur,
+    // l'URL passe par `avatarRef()`, et l'état de modération reste au serveur.
+    'avatar_upload_path',
+    'avatar_upload_hidden_at',
+    'avatar_upload_reports_from',
     'terms_accepted_at',
     'terms_version',
     'age_confirmed_at',
@@ -160,6 +168,8 @@ class User extends Authenticatable implements HasLocalePreference, MustVerifyEma
             'plan' => Plan::class,
             'avatar_kind' => AvatarKind::class,
             'avatar_provider_hidden_at' => 'datetime',
+            'avatar_upload_hidden_at' => 'datetime',
+            'avatar_upload_reports_from' => 'datetime',
             'terms_accepted_at' => 'datetime',
             'age_confirmed_at' => 'datetime',
             'anonymized_at' => 'datetime',
@@ -406,12 +416,21 @@ class User extends Authenticatable implements HasLocalePreference, MustVerifyEma
      * `public function avatar(): AvatarRef` ferait retomber `mutateAttributeForArray()`
      * sur un `getAvatarAttribute()` inexistant, et TOUTE page authentifiée renverrait
      * 500 — le modèle est sérialisé partout.
+     *
+     * Chaîne (spec 40 § 11.1, D49 du 01/10) : image téléversée choisie ET
+     * visible ; sinon le prédéfini du compte — choisi, ou repli d'une image
+     * masquée ou retirée ; sinon la copie provider visible ; sinon les
+     * initiales.
      */
     public function avatarRef(): AvatarRef
     {
         $initials = AvatarRef::initialsFrom($this->name);
 
-        if ($this->avatar_kind === AvatarKind::Preset && $this->avatar_preset !== null) {
+        if ($this->avatar_kind === AvatarKind::Upload && $this->hasVisibleUploadedAvatar()) {
+            return AvatarRef::upload((string) $this->avatar_upload_path, $initials);
+        }
+
+        if (in_array($this->avatar_kind, [AvatarKind::Preset, AvatarKind::Upload], true) && $this->avatar_preset !== null) {
             return AvatarRef::preset($this->avatar_preset, $initials);
         }
 
@@ -423,6 +442,26 @@ class User extends Authenticatable implements HasLocalePreference, MustVerifyEma
         }
 
         return AvatarRef::initials($initials);
+    }
+
+    /**
+     * Vrai si le compte porte une image téléversée affichable : un fichier,
+     * aucun masquage ni retrait, compte non anonymisé (spec 40 § 11.3).
+     */
+    public function hasVisibleUploadedAvatar(): bool
+    {
+        return $this->avatar_upload_path !== null
+            && $this->avatar_upload_hidden_at === null
+            && $this->anonymized_at === null;
+    }
+
+    /**
+     * Vrai tant qu'un masquage ou un retrait bloque le téléversement : seule une
+     * levée par l'administrateur le rouvre (spec 40 § 11.2, § 11.7).
+     */
+    public function isAvatarUploadBlocked(): bool
+    {
+        return $this->avatar_upload_hidden_at !== null;
     }
 
     /**

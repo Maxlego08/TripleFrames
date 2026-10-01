@@ -754,6 +754,46 @@ function adminRoutesMatrix(): array
             curator: 403,
             admin: 200,
         ),
+
+        // Ligne 45 — les avatars téléversés (D49 du 01/10) : administrateur
+        // seul, l'image servie même masquée, deux gestes consignés.
+        'admin.avatars.index' => adminRoutesRow(
+            row: 45,
+            method: 'GET',
+            guards: ['can:moderateAvatars,'.User::class],
+            curator: 403,
+            admin: 200,
+        ),
+
+        'admin.avatars.image' => adminRoutesRow(
+            row: 45,
+            method: 'GET',
+            guards: ['can:moderateAvatar,user'],
+            curator: 403,
+            admin: 200,
+            parameters: fn (): array => ['user' => User::factory()->uploadedAvatarHidden()->create()->getKey()],
+        ),
+
+        'admin.avatars.unhide' => adminRoutesRow(
+            row: 45,
+            method: 'POST',
+            guards: ['can:moderateAvatar,user'],
+            curator: 403,
+            admin: 302,
+            parameters: fn (): array => ['user' => User::factory()->uploadedAvatarHidden()->create()->getKey()],
+            redirect: fn (array $parameters): string => route('admin.avatars.index'),
+        ),
+
+        'admin.avatars.remove' => adminRoutesRow(
+            row: 45,
+            method: 'POST',
+            guards: ['can:moderateAvatar,user'],
+            curator: 403,
+            admin: 302,
+            parameters: fn (): array => ['user' => User::factory()->withUploadedAvatar()->create()->getKey()],
+            payload: fn (): array => ['reason' => 'Retrait matrice'],
+            redirect: fn (array $parameters): string => route('admin.avatars.index'),
+        ),
     ];
 }
 

@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Admin\AccessController;
 use App\Http\Controllers\Admin\AudienceController;
+use App\Http\Controllers\Admin\AvatarModerationController;
 use App\Http\Controllers\Admin\CatalogController;
 use App\Http\Controllers\Admin\CurationHeartbeatController;
 use App\Http\Controllers\Admin\CurationQueueController;
@@ -478,5 +479,24 @@ Route::middleware(['auth', 'verified', 'role:curator', 'admin.2fa', 'admin.local
             Route::get('audience', [AudienceController::class, 'index'])
                 ->middleware('can:viewAny,'.AudienceDaily::class)
                 ->name('audience.index');
+
+            // Les avatars téléversés (ligne 45, D49 du 01/10) : la liste,
+            // l'image même masquée, et deux gestes consignés — lever, retirer
+            // (motif obligatoire). `{user}` est lié par `id`.
+            Route::get('avatars', [AvatarModerationController::class, 'index'])
+                ->middleware('can:moderateAvatars,'.User::class)
+                ->name('avatars.index');
+
+            Route::get('avatars/{user}/image', [AvatarModerationController::class, 'image'])
+                ->middleware('can:moderateAvatar,user')
+                ->name('avatars.image');
+
+            Route::post('avatars/{user}/unhide', [AvatarModerationController::class, 'unhide'])
+                ->middleware(['can:moderateAvatar,user', 'throttle:admin-curation'])
+                ->name('avatars.unhide');
+
+            Route::post('avatars/{user}/remove', [AvatarModerationController::class, 'remove'])
+                ->middleware(['can:moderateAvatar,user', 'throttle:admin-curation'])
+                ->name('avatars.remove');
         });
     });

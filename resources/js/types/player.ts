@@ -13,12 +13,13 @@
  */
 
 /**
- * Avatar effectif, résolu par l'accesseur serveur unique : prédéfini, puis
+ * Avatar effectif, résolu par l'accesseur serveur unique : image téléversée
+ * d'un compte (`upload`, spec 40 § 11, D49 du 01/10), prédéfini, puis
  * initiales (`kind` nul). `initials` est toujours rempli — contenu de repli
  * de l'image —, et vaut le caractère neutre pour un siège masqué.
  */
 export type AvatarData = {
-    kind: 'preset' | 'provider' | null;
+    kind: 'preset' | 'provider' | 'upload' | null;
     url: string | null;
     altKey: string;
     initials: string;
@@ -79,3 +80,12 @@ export type AvatarPresetOption = {
     url: string;
     labelKey: string;
 };
+
+/**
+ * Valeur du formulaire de siège qui désigne l'image du compte (« Mon
+ * avatar »), miroir de `SeatAvatar::ACCOUNT` (spec 40 § 11.4).
+ */
+export const ACCOUNT_AVATAR_CHOICE = 'account';
+
+/** Une valeur du sélecteur de siège : un prédéfini, ou l'image du compte. */
+export type SeatAvatarChoice = AvatarPresetKey | typeof ACCOUNT_AVATAR_CHOICE;

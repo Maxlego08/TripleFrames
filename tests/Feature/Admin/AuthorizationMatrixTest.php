@@ -1,5 +1,6 @@
 <?php
 
+use App\Avatars\UploadedAvatars;
 use App\Enums\ContentAvailability;
 use App\Enums\ContentFlag;
 use App\Http\Middleware\EnsurePrivilegedTwoFactor;
@@ -52,6 +53,7 @@ beforeEach(function (): void {
     // disque faux, jamais dans la racine réelle de `frames`, où ils
     // resteraient après le `RefreshDatabase`, qui n'annule que la ligne.
     Storage::fake(FrameStoragePrefix::DISK);
+    Storage::fake(UploadedAvatars::DISK);
 });
 
 /**

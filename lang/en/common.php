@@ -109,12 +109,23 @@ return [
     'avatar' => [
         'alt' => [
             'initials' => 'Player initials',
+            'upload' => 'Player personal avatar',
             'preset' => 'Player avatar',
             'provider' => 'Player profile photo',
         ],
         'picker' => [
             'label' => 'Choose an avatar',
+            'account' => 'My avatar',
             'taken' => 'already chosen in this room',
+        ],
+        // Report of another seat's uploaded image (spec 40 § 11.6, D49 of
+        // 01/10). `:nickname`: the targeted seat's nickname.
+        'report' => [
+            'action' => 'Report avatar',
+            'confirm_title' => 'Report :nickname’s avatar?',
+            'confirm_body' => 'Report a shocking or inappropriate image. After two reports, it is hidden until an administrator decides.',
+            'sent' => 'Report sent. Thank you.',
+            'not_reportable' => 'This avatar cannot be reported.',
         ],
         'preset' => [
             'preset-01' => 'Bear',

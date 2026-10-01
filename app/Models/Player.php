@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Avatars\AvatarRef;
+use App\Avatars\UploadedAvatars;
 use App\Enums\AvatarKind;
 use App\Enums\Locale;
 use App\Enums\PlayerConnectionState;
@@ -274,6 +275,11 @@ class Player extends Model
      * chacun des douze occupants, l'e-mail complet du compte, son `role` et sa date
      * d'inscription, à des inconnus réunis par un lien partagé.
      *
+     * **Branche `upload`** (spec 40 § 11.5, D49 du 01/10) : l'image VISIBLE du
+     * compte rattaché, lue vivante par clé primaire, sinon le prédéfini de
+     * repli du siège, sinon les initiales du PSEUDO — un masquage s'applique
+     * donc partout, à la prochaine composition d'une vue.
+     *
      * **La branche `provider` n'existe pas ici** : `player` n'a aucune colonne
      * `avatar_provider_path`, et `display_avatar_preset` n'est « jamais un chemin de
      * copie provider » (§ 7.3), précisément pour qu'un masquage postérieur fasse
@@ -286,7 +292,15 @@ class Player extends Model
     {
         $initials = AvatarRef::initialsFrom($this->nickname);
 
-        if ($this->avatar_kind === AvatarKind::Preset && $this->avatar_preset !== null) {
+        if ($this->avatar_kind === AvatarKind::Upload) {
+            $path = UploadedAvatars::visiblePath($this->user_id);
+
+            if ($path !== null) {
+                return AvatarRef::upload($path, $initials);
+            }
+        }
+
+        if (in_array($this->avatar_kind, [AvatarKind::Preset, AvatarKind::Upload], true) && $this->avatar_preset !== null) {
             return AvatarRef::preset($this->avatar_preset, $initials);
         }
 

@@ -52,12 +52,13 @@ export function isAvatarPresetKey(key: string): key is AvatarPresetKey {
 }
 
 /**
- * Table close des trois clés d'`alt` d'`AvatarRef` (`ALT_KEY_PRESET`,
- * `ALT_KEY_PROVIDER`, `ALT_KEY_INITIALS`), domaine `common`.
+ * Table close des quatre clés d'`alt` d'`AvatarRef` (`ALT_KEY_PRESET`,
+ * `ALT_KEY_PROVIDER`, `ALT_KEY_UPLOAD`, `ALT_KEY_INITIALS`), domaine `common`.
  */
 const AVATAR_ALT_KEYS = [
     'common.avatar.alt.preset',
     'common.avatar.alt.provider',
+    'common.avatar.alt.upload',
     'common.avatar.alt.initials',
 ] as const satisfies readonly TranslationKey[];
 

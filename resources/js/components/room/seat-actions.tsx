@@ -1,9 +1,10 @@
 import type { HttpExceptionResponse } from '@inertiajs/core';
 import { Form } from '@inertiajs/react';
-import { Crown, LogOut, UserX, XIcon } from 'lucide-react';
+import { Crown, Flag, LogOut, UserX, XIcon } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
+import AvatarReportController from '@/actions/App/Http/Controllers/Room/AvatarReportController';
 import HostTransferController from '@/actions/App/Http/Controllers/Room/HostTransferController';
 import KickController from '@/actions/App/Http/Controllers/Room/KickController';
 import LeaveRoomController from '@/actions/App/Http/Controllers/Room/LeaveRoomController';
@@ -20,6 +21,7 @@ import {
 } from '@/components/ui/dialog';
 import { Spinner } from '@/components/ui/spinner';
 import { useTranslations } from '@/hooks/use-translations';
+import { announce } from '@/lib/game/announcer';
 import type { SeatView } from '@/types/game-wire';
 import type { RouteFormDefinition } from '@/wayfinder';
 
@@ -326,6 +328,54 @@ export function SeatActions({
                 destructive
             />
         </div>
+    );
+}
+
+/**
+ * « Signaler l'avatar » (spec 40 § 11.6, D49 du 01/10) : un geste de TOUT
+ * siège sur un autre siège qui affiche une image téléversée — jamais un
+ * prédéfini. Confirmé ; l'envoi est annoncé dans l'unique région vivante
+ * (`common.avatar.report.sent`), le même message que le seuil soit atteint
+ * ou non. Le bouton disparaît après l'envoi : un second signalement du même
+ * siège ne compterait pas.
+ */
+export function ReportAvatarAction({
+    roomCode,
+    seat,
+    nickname,
+    describedBy,
+    disabled,
+    onHttpException,
+    onRefused,
+    onDone,
+}: SeatActionsProps) {
+    const { t } = useTranslations();
+    const [sent, setSent] = useState(false);
+
+    if (sent || seat.kicked || seat.avatar.kind !== 'upload') {
+        return null;
+    }
+
+    return (
+        <GestureDialog
+            form={AvatarReportController.store.form({
+                room: roomCode,
+                target: seat.publicId,
+            })}
+            label={t('common.avatar.report.action')}
+            title={t('common.avatar.report.confirm_title', { nickname })}
+            description={t('common.avatar.report.confirm_body')}
+            icon={Flag}
+            describedBy={describedBy}
+            disabled={disabled}
+            onHttpException={onHttpException}
+            onRefused={onRefused}
+            onDone={() => {
+                announce(t('common.avatar.report.sent'));
+                setSent(true);
+                onDone();
+            }}
+        />
     );
 }
 

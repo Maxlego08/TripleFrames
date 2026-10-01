@@ -20,7 +20,9 @@ use LogicException;
  *
  * **L'avatar passe par l'accesseur serveur unique** de sa ligne,
  * {@see Player::avatarRef()} au lobby et {@see GamePlayer::avatarRef()} en
- * partie (10 § 1.3) : chaîne prédéfini, puis initiales, sans branche
+ * partie (10 § 1.3) : image téléversée VISIBLE du compte rattaché (spec 40
+ * § 11.5, D49 du 01/10, `user_id` chargé avec le siège), puis prédéfini, puis
+ * initiales, sans branche
  * `provider` pour un siège (aucune copie provider sur `player`, jamais gelée
  * dans `game_player`, 10 § 7.3). La charge est {@see AvatarRef::toArray()} :
  * des données — une URL, une CLÉ d'`alt` du domaine `common`, des initiales —,
@@ -51,7 +53,7 @@ final readonly class PlayerIdentity
      *
      * @var list<string>
      */
-    public const array FROZEN_SEAT_COLUMNS = ['id', 'public_id', 'nickname_masked_at'];
+    public const array FROZEN_SEAT_COLUMNS = ['id', 'public_id', 'nickname_masked_at', 'user_id'];
 
     /**
      * @param  array{kind: string|null, url: string|null, altKey: string, initials: string}  $avatar

@@ -8,4 +8,7 @@ enum AvatarKind: string
     case Preset = 'preset';
 
     case Provider = 'provider';
+
+    /** Image téléversée par le compte (D49 du 01/10, spec 40 § 11). */
+    case Upload = 'upload';
 }

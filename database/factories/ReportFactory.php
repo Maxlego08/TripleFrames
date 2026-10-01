@@ -90,4 +90,17 @@ class ReportFactory extends Factory
             'target_user_id' => $target === null ? User::factory() : $target->id,
         ]);
     }
+
+    /**
+     * Cible « image téléversée » (D49 du 01/10) — comme la copie provider, un
+     * COMPTE, le masquage étant global.
+     */
+    public function againstUploadedAvatar(?User $target = null): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'target_type' => ReportTarget::UploadedAvatar,
+            'target_player_id' => null,
+            'target_user_id' => $target === null ? User::factory() : $target->id,
+        ]);
+    }
 }

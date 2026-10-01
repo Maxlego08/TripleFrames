@@ -114,7 +114,9 @@ it('déclare le domaine legal sur toute route joueur', function () {
     // jamais une page Inertia joueur — passkeys de gestionnaire de mots de
     // passe, fichiers du disque local, octets d'image, horloge, et
     // l'autorisation de canal de diffusion (sans nom).
-    $excludedNames = ['well-known.passkeys', 'storage.local', 'frame.serve', 'clock.show'];
+    // `avatar.show` (spec 40 § 11.3) sert des octets, comme `frame.serve` :
+    // aucune page, aucun domaine de traduction.
+    $excludedNames = ['well-known.passkeys', 'storage.local', 'frame.serve', 'clock.show', 'avatar.show'];
     $excludedUris = ['broadcasting/auth'];
 
     $checked = [];

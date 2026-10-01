@@ -115,6 +115,7 @@ Cette matrice est la table de vérité des écrans et de la famille de tests d'a
 | 42 | Annuaire des sièges, invités compris ; fiche d'un siège (§ 12.2) | `admin.players.index`, `admin.players.show` (sous-groupe `role:admin`) | `PlayerPolicy::viewAny`, `view` | **403** | 200 | lecture : `players.directory_viewed` ; `player.viewed` | J1 (D46 du 01/10 — amendé le 01/10) |
 | 43 | Performances : requêtes, jobs, SQL lentes, retards du moteur (§ 12.3) | `admin.performance.index` (sous-groupe `role:admin`) | `PerfSamplePolicy::viewAny` | **403** | 200 | — (aucune donnée personnelle) | J1 (D47 du 01/10 — amendé le 01/10) |
 | 44 | Audience : visiteurs, pages, entrées et sorties, provenance, temps réel, entonnoir de jeu (§ 12.4) | `admin.audience.index` (sous-groupe `role:admin`) | `AudienceDailyPolicy::viewAny` | **403** | 200 | — (agrégats, aucune donnée personnelle) | J1 (D48 du 01/10 — amendé le 01/10) |
+| 45 | Avatars téléversés : liste, filtres « masqués » et « signalés », lever, retirer (§ 12.5) | `admin.avatars.index`, `admin.avatars.image`, `admin.avatars.unhide`, `admin.avatars.remove` (sous-groupe `role:admin`) | `UserPolicy::moderateAvatar` | **403** | 200 / 303 | `avatar.unhidden` ; `avatar.removed` (motif obligatoire) | J1 (D49 du 01/10 — amendé le 01/10) |
 
 ### 2.3 La porte `/admin` [J1]
 
@@ -180,8 +181,9 @@ D12 du 23/09 : l'attribution de `curator` ou `admin` exige un **nom réel**, dis
 | `frame.suspended` | frame | facultatif | admin | 20 | J2 |
 | `frame.unsuspended` **[nouveau]** | frame | facultatif | admin | 20 | J2 |
 | `frame.withdrawn` | frame | **obligatoire** | admin | 20 | J2 |
-| `avatar.hidden` | user | — (`reports_count`) | `system` | 40 | J2 |
-| `avatar.unhidden` | user | facultatif | admin | 40 | J2 |
+| `avatar.hidden` | user | — (`reports_count`) | `system` | 40 | **J1** (image téléversée, D49 du 01/10) ; J2 (copie provider) |
+| `avatar.unhidden` | user | facultatif | admin | 40 | **J1** (écran « Avatars », ligne 45, D49 du 01/10) |
+| `avatar.removed` **[nouveau, D49 du 01/10]** | user | **obligatoire** | admin | 40 | J1 |
 | `nickname.masked` | player | — (`reports_count`) | `system` | 40 | J2 |
 | `nickname.unmasked` | player | facultatif | admin | 40 | J2 |
 | `nickname.banned` | player | facultatif (40 tranche) | admin | 40 | J2 |
@@ -1614,6 +1616,10 @@ Amendé le 01/10. Page `admin/performance/index` (`PerformanceController@index`,
 ### 12.4 Audience [J1, D48 du 01/10]
 
 Amendé le 01/10. Page `admin/audience/index` (`AudienceController@index`, `AudienceDailyPolicy::viewAny`, **administrateur seul**), fenêtre de 7, 30 ou 90 jours : totaux (visiteurs, visites, pages vues, pages par visite), courbe quotidienne en tableau, pages les plus vues, pages d'entrée et de sortie, provenances, langues, appareils ; **temps réel** (visiteurs des 5 dernières minutes et leurs pages, salons et parties en cours) ; **entonnoir de jeu** (salons créés, parties lancées en salon et en solo, parties terminées, joueurs par partie). Règle complète : `100` § 10.12.
+
+### 12.5 Avatars téléversés [J1, D49 du 01/10]
+
+Amendé le 01/10. Page `admin/avatars/index` (`AvatarModerationController@index`, `UserPolicy::moderateAvatar`, **administrateur seul**). Une ligne par compte qui porte une image téléversée **ou** un masquage (`avatar_upload_path` ou `avatar_upload_hidden_at` non nul), plus récents en tête, 25 par page : l'image, servie par `admin.avatars.image` sous la même garde (`no-store`), qui la sert **même masquée** — `avatar.show` la refuse alors à tout le monde, le nom affiché et l'e-mail du compte, l'état (visible, masquée, retirée), le nombre de signalements de la fenêtre courante, la date du dernier signalement. Filtres : tous, masqués, signalés. Deux gestes, chacun dans sa transaction avec sa ligne de journal (`40` § 11.7) : **Lever** (motif facultatif) et **Retirer** (motif obligatoire, confirmation). Limiteur `throttle:admin-curation`. Règle de masquage et de retrait : `40` § 11.6 et § 11.7, propriétaire.
 
 ### L20-36 — Parties, sièges et réponses [D46 du 01/10]
 

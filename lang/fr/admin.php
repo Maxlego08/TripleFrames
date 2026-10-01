@@ -62,6 +62,8 @@ return [
         'performance' => 'Performances',
         // L'audience (ligne 44, D48 du 01/10).
         'audience' => 'Audience',
+        // Les avatars téléversés (ligne 45, D49 du 01/10).
+        'avatars' => 'Avatars',
         'back_to_site' => 'Retour au site',
         'role' => [
             'curator' => 'Curateur',
@@ -397,8 +399,9 @@ return [
             'frame_suspended' => 'Image suspendue',
             'frame_unsuspended' => 'Suspension de l’image levée',
             'frame_withdrawn' => 'Image retirée (retrait juridique)',
-            'avatar_hidden' => 'Photo de profil masquée',
-            'avatar_unhidden' => 'Photo de profil rétablie',
+            'avatar_hidden' => 'Avatar masqué',
+            'avatar_unhidden' => 'Avatar rétabli',
+            'avatar_removed' => 'Avatar retiré',
             'nickname_masked' => 'Pseudo masqué',
             'nickname_unmasked' => 'Pseudo rétabli',
             'nickname_banned' => 'Pseudo banni',
@@ -2776,6 +2779,51 @@ return [
     | Audience (spec 20 § 12.4, D48 du 01/10) : compteurs quotidiens sans
     | cookie, administrateur seul.
     */
+    // L'écran « Avatars » (ligne 45, spec 20 § 12.5, D49 du 01/10).
+    'avatars' => [
+        'title' => 'Avatars téléversés',
+        'description' => 'Images téléversées par les comptes. Deux signalements de sièges distincts masquent une image ; vous seul pouvez lever ou retirer.',
+        'counts' => ':uploaded image(s) en ligne, :hidden masquée(s) ou retirée(s)',
+        'filter' => [
+            'label' => 'Filtre',
+            'all' => 'Tous',
+            'hidden' => 'Masqués',
+            'reported' => 'Signalés',
+        ],
+        'columns' => [
+            'image' => 'Image',
+            'account' => 'Compte',
+            'state' => 'État',
+            'reports' => 'Signalements',
+            'last_reported_at' => 'Dernier signalement',
+            'actions' => 'Gestes',
+        ],
+        'state' => [
+            'visible' => 'Visible',
+            'hidden' => 'Masquée',
+            'removed' => 'Retirée',
+        ],
+        'image_alt' => 'Avatar téléversé de :name',
+        'no_image' => 'Aucune image',
+        'never' => 'Jamais',
+        'empty' => 'Aucun avatar pour ce filtre.',
+        'unhide' => 'Lever',
+        'unhide_title' => 'Lever la mesure sur l’avatar de :name ?',
+        'unhide_body' => 'L’image redevient visible si elle existe encore, le compteur de signalements repart de zéro et le téléversement est rouvert.',
+        'remove' => 'Retirer',
+        'remove_title' => 'Retirer l’avatar de :name ?',
+        'remove_body' => 'Le fichier est supprimé et le téléversement reste bloqué jusqu’à une levée. Le motif est consigné au journal.',
+        'reason' => 'Motif',
+        'reason_optional' => 'Motif (facultatif)',
+        'cancel' => 'Annuler',
+        'unhidden' => 'Mesure levée.',
+        'removed' => 'Avatar retiré.',
+        'errors' => [
+            'not_hidden' => 'Cet avatar n’est ni masqué ni retiré.',
+            'no_image' => 'Ce compte ne porte aucune image.',
+        ],
+    ],
+
     'audience' => [
         'title' => 'Audience',
         'heading' => 'Audience',

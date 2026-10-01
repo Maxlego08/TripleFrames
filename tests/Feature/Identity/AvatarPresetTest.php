@@ -327,6 +327,6 @@ it("couvre côté client exactement les clés du catalogue d'avatars", function 
     preg_match_all("/'([^']+)'/", $altTable[1] ?? '', $altKeys);
     preg_match("/const AVATAR_ALT_FALLBACK_KEY: TranslationKey = '([^']+)'/", $keys, $fallback);
 
-    expect($altKeys[1])->toBe([AvatarRef::ALT_KEY_PRESET, AvatarRef::ALT_KEY_PROVIDER, AvatarRef::ALT_KEY_INITIALS])
+    expect($altKeys[1])->toBe([AvatarRef::ALT_KEY_PRESET, AvatarRef::ALT_KEY_PROVIDER, AvatarRef::ALT_KEY_UPLOAD, AvatarRef::ALT_KEY_INITIALS])
         ->and($fallback[1] ?? null)->toBe(AvatarRef::ALT_KEY_INITIALS);
 });

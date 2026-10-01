@@ -78,8 +78,8 @@ function adminJournalRawLine(AdminActionType $action, array $overrides = []): Ad
     return $line;
 }
 
-test('la liste fermée compte exactement cinquante et un cas', function (): void {
-    expect(AdminActionType::cases())->toHaveCount(51)
+test('la liste fermée compte exactement cinquante-deux cas', function (): void {
+    expect(AdminActionType::cases())->toHaveCount(52)
         ->and(array_map(static fn (AdminActionType $case): string => $case->value, AdminActionType::cases()))
         ->toEqualCanonicalizing([
             'role.changed',
@@ -98,6 +98,8 @@ test('la liste fermée compte exactement cinquante et un cas', function (): void
             'frame.withdrawn',
             'avatar.hidden',
             'avatar.unhidden',
+            // D49 du 01/10 : retrait d'une image téléversée.
+            'avatar.removed',
             'nickname.masked',
             'nickname.unmasked',
             'nickname.banned',
@@ -347,6 +349,7 @@ test('un motif vide est refusé quand l\'action l\'exige', function (): void {
         AdminActionType::MovieWithdrawn,
         AdminActionType::FrameGridUnpublished,
         AdminActionType::FrameWithdrawn,
+        AdminActionType::AvatarRemoved,
         AdminActionType::TakedownDecided,
         AdminActionType::SiteClosed,
     ]);

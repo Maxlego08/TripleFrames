@@ -14,13 +14,14 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use LogicException;
 
 /**
- * Un signalement de joueur, limité par construction à DEUX cibles (§ 8.1).
+ * Un signalement de joueur, limité par construction à TROIS cibles (§ 8.1).
  *
- * `target_type` est une liste fermée à deux natures — `nickname` et
- * `provider_avatar` —, ce qui rend structurellement impossible de signaler un
- * avatar prédéfini ou une image de jeu. `target_player_id` est renseigné si et
- * seulement si la cible est un pseudo ; `target_user_id` si et seulement si
- * c'est un avatar de fournisseur, le masquage étant global et non par salon.
+ * `target_type` est une liste fermée — `nickname`, `provider_avatar` et,
+ * depuis D49 du 01/10, `uploaded_avatar` —, ce qui rend structurellement
+ * impossible de signaler un avatar prédéfini ou une image de jeu.
+ * `target_player_id` est renseigné si et seulement si la cible est un pseudo ;
+ * `target_user_id` si et seulement si c'est un avatar de compte (copie
+ * provider ou image téléversée), le masquage étant global et non par salon.
  * Le signaleur, lui, est toujours désigné par son SIÈGE : un invité n'a pas de
  * compte.
  *
@@ -119,8 +120,9 @@ class Report extends Model
     }
 
     /**
-     * Renseigné si et seulement si `target_type` vaut `provider_avatar`, le
-     * masquage d'un avatar étant global et non par salon.
+     * Renseigné si et seulement si `target_type` vise un compte
+     * (`provider_avatar`, `uploaded_avatar`), le masquage d'un avatar étant
+     * global et non par salon.
      *
      * @return BelongsTo<User, $this>
      */

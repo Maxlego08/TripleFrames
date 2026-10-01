@@ -1180,7 +1180,8 @@ export type AdminAccountActionType =
     | 'role.changed'
     | 'user.real_name_changed'
     | 'avatar.hidden'
-    | 'avatar.unhidden';
+    | 'avatar.unhidden'
+    | 'avatar.removed';
 
 /** Une ligne du journal visant un compte : l'auteur par son instantané signé. */
 export type AdminAccountHistoryLine = {
@@ -1263,6 +1264,7 @@ export type AdminActionTypeValue =
     | 'frame.withdrawn'
     | 'avatar.hidden'
     | 'avatar.unhidden'
+    | 'avatar.removed'
     | 'nickname.masked'
     | 'nickname.unmasked'
     | 'nickname.banned'
@@ -1756,3 +1758,21 @@ export type AudienceReport = {
 };
 
 export type AudienceWindow = '7d' | '30d' | '90d';
+
+/**
+ * Une ligne de l'écran « Avatars » (ligne 45, spec 20 § 12.5, D49 du 01/10),
+ * miroir de `AvatarModerationController::row()`. Aucune adresse e-mail : la
+ * fiche du compte en est le seul accès.
+ */
+export type AdminAvatarRow = {
+    id: number;
+    name: string;
+    state: 'visible' | 'hidden' | 'removed';
+    /** `admin.avatars.image`, qui sert l'image même masquée ; `null` si retirée. */
+    image_url: string | null;
+    /** Sièges distincts dans la fenêtre courante de signalements. */
+    reports: number;
+    last_reported_at: string | null;
+};
+
+export type AdminAvatarFilter = 'hidden' | 'reported';

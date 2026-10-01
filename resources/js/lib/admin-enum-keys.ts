@@ -290,6 +290,7 @@ export const ACCOUNT_ACTION_KEYS: Record<
     'user.real_name_changed': 'admin.enum.admin_action.user_real_name_changed',
     'avatar.hidden': 'admin.enum.admin_action.avatar_hidden',
     'avatar.unhidden': 'admin.enum.admin_action.avatar_unhidden',
+    'avatar.removed': 'admin.enum.admin_action.avatar_removed',
 };
 
 /**
@@ -314,6 +315,7 @@ export const ADMIN_ACTION_KEYS: Record<AdminActionTypeValue, TranslationKey> = {
     'frame.withdrawn': 'admin.enum.admin_action.frame_withdrawn',
     'avatar.hidden': 'admin.enum.admin_action.avatar_hidden',
     'avatar.unhidden': 'admin.enum.admin_action.avatar_unhidden',
+    'avatar.removed': 'admin.enum.admin_action.avatar_removed',
     'nickname.masked': 'admin.enum.admin_action.nickname_masked',
     'nickname.unmasked': 'admin.enum.admin_action.nickname_unmasked',
     'nickname.banned': 'admin.enum.admin_action.nickname_banned',

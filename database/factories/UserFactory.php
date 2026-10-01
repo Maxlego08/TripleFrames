@@ -3,6 +3,7 @@
 namespace Database\Factories;
 
 use App\Avatars\AvatarPresetCatalog;
+use App\Avatars\UploadedAvatars;
 use App\Enums\AvatarKind;
 use App\Enums\Locale;
 use App\Enums\UserRole;
@@ -11,6 +12,9 @@ use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
+use Imagick;
+use ImagickPixel;
+use RuntimeException;
 
 /**
  * @extends Factory<User>
@@ -241,6 +245,57 @@ class UserFactory extends Factory
         return $this->withProviderAvatar()->state([
             'avatar_provider_hidden_at' => CarbonImmutable::now(),
         ]);
+    }
+
+    /**
+     * Image téléversée, choisie et VISIBLE (spec 40 § 11, D49 du 01/10) : un
+     * vrai WebP 256 × 256 écrit sur le disque `avatars`, qui doit être un
+     * `Storage::fake(UploadedAvatars::DISK)` — sans lui, la fixture partirait
+     * dans la racine réelle du disque et y resterait après le
+     * `RefreshDatabase`.
+     */
+    public function withUploadedAvatar(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'avatar_kind' => AvatarKind::Upload,
+            'avatar_preset' => $attributes['avatar_preset'] ?? AvatarPresetCatalog::keys()[0],
+            'avatar_upload_path' => UploadedAvatars::newPath(),
+            'avatar_upload_hidden_at' => null,
+            'avatar_upload_reports_from' => CarbonImmutable::now()->subDay(),
+        ])->afterCreating(function (User $user): void {
+            if ($user->avatar_upload_path !== null) {
+                self::writeAvatar($user->avatar_upload_path);
+            }
+        });
+    }
+
+    /**
+     * Image téléversée masquée (seuil ou retrait) : le fichier existe toujours,
+     * l'accesseur redescend au prédéfini et le téléversement est bloqué.
+     */
+    public function uploadedAvatarHidden(): static
+    {
+        return $this->withUploadedAvatar()->state([
+            'avatar_upload_hidden_at' => CarbonImmutable::now(),
+        ]);
+    }
+
+    /** Un WebP 256 × 256 uni, sur le seul disque `avatars` simulé. */
+    private static function writeAvatar(string $path): void
+    {
+        $disk = UploadedAvatars::disk();
+        $root = str_replace('\\', '/', $disk->path(''));
+        $fakeRoot = str_replace('\\', '/', storage_path('framework/testing'));
+
+        if (app()->runningUnitTests() && ! str_starts_with($root, $fakeRoot)) {
+            throw new RuntimeException('Storage::fake(UploadedAvatars::DISK) est obligatoire avant UserFactory::withUploadedAvatar().');
+        }
+
+        $image = new Imagick;
+        $image->newImage(256, 256, new ImagickPixel('rgb(40, 90, 160)'));
+        $image->setImageFormat('webp');
+        $disk->put($path, $image->getImageBlob());
+        $image->clear();
     }
 
     /**

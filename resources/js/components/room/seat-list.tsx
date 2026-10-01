@@ -2,7 +2,10 @@ import { Crown, LogOut, UserX, WifiOff } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useId, useRef } from 'react';
 import { PlayerAvatar } from '@/components/game/player-avatar';
-import { SeatActions } from '@/components/room/seat-actions';
+import {
+    ReportAvatarAction,
+    SeatActions,
+} from '@/components/room/seat-actions';
 import type { RoomGestureContext } from '@/components/room/seat-actions';
 import { Badge } from '@/components/ui/badge';
 import { useTranslations } from '@/hooks/use-translations';
@@ -25,6 +28,12 @@ type SeatListProps = {
      * sièges, qui voient la même liste sans bouton.
      */
     actions?: RoomGestureContext | null;
+    /**
+     * Le signalement d'un avatar téléversé (spec 40 § 11.6) : un geste de
+     * TOUT siège, offert sur chaque autre siège qui affiche une image ;
+     * `null` sans contexte de geste.
+     */
+    reports?: RoomGestureContext | null;
 };
 
 /** État de présence d'un siège qui n'est plus simplement « là ». */
@@ -52,6 +61,7 @@ type SeatRowProps = {
     seat: SeatView;
     isSelf: boolean;
     actions: RoomGestureContext | null;
+    reports: RoomGestureContext | null;
     /** Rend le focus à la liste après un geste réussi sur ce siège. */
     onGestureDone: () => void;
 };
@@ -61,7 +71,13 @@ type SeatRowProps = {
  * l'hôte, ses gestes sur ce siège — jamais sur le sien (il quitte le salon
  * au lieu de se retirer).
  */
-function SeatRow({ seat, isSelf, actions, onGestureDone }: SeatRowProps) {
+function SeatRow({
+    seat,
+    isSelf,
+    actions,
+    reports,
+    onGestureDone,
+}: SeatRowProps) {
     const { t } = useTranslations();
     const nicknameId = useId();
     const presence = presenceOf(seat);
@@ -117,6 +133,18 @@ function SeatRow({ seat, isSelf, actions, onGestureDone }: SeatRowProps) {
                     onDone={onGestureDone}
                 />
             )}
+
+            {reports !== null && !isSelf && seat.avatar.kind === 'upload' && (
+                <div className="flex justify-end">
+                    <ReportAvatarAction
+                        {...reports}
+                        seat={seat}
+                        nickname={nickname}
+                        describedBy={nicknameId}
+                        onDone={onGestureDone}
+                    />
+                </div>
+            )}
         </li>
     );
 }
@@ -146,6 +174,7 @@ export function SeatList({
     selfPublicId,
     capacity,
     actions = null,
+    reports = null,
 }: SeatListProps) {
     const { t, locale } = useTranslations();
     const headingId = useId();
@@ -174,6 +203,7 @@ export function SeatList({
                         seat={seat}
                         isSelf={seat.publicId === selfPublicId}
                         actions={actions}
+                        reports={reports}
                         onGestureDone={() => headingRef.current?.focus()}
                     />
                 ))}

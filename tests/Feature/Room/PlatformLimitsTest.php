@@ -197,7 +197,7 @@ it('déclare une clé game.platform par accesseur configurable, et réciproqueme
     $expectedKeys = array_map(static fn (string $accessor): string => Str::snake($accessor), $configurable);
     $declared = (array) config('game.platform');
 
-    expect($configurable)->toHaveCount(13);
+    expect($configurable)->toHaveCount(14);
     expect(array_keys($declared))->toEqualCanonicalizing($expectedKeys);
 
     // Chaque valeur déclarée vaut la constante `DEFAULT_*` : la constante reste la source unique.
@@ -221,6 +221,7 @@ it('déclare une clé game.platform par accesseur configurable, et réciproqueme
         'lobby_broadcast_debounce_ms' => 0,
         'frame_crop_max_width_percent' => 83,
         'frame_crop_min_width_px' => 800,
+        'avatar_upload_max_kilobytes' => 256,
     ];
 
     expect(array_keys($alternatives))->toEqualCanonicalizing($expectedKeys);

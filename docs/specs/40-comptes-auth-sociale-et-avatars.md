@@ -85,7 +85,7 @@ Le siège **solo** suit les étapes 2 à 6 sans unicité de pseudo ni expulsion 
 | `avatar_kind` / `avatar_preset` | `AvatarKind::Preset` / clé validée contre `AvatarPresetCatalog::keys()` | § 6.3 |
 | `player_token_hash` | `$token->hash()` | § 3.5, E10-33 |
 | `locale` | Locale effective de la requête (`App::getLocale()` posée par `SetLocale`) | `05` |
-| `user_id` | **Jamais écrite au J1** (I4.10) | § 2.4 |
+| `user_id` | `users.id` du compte connecté à la prise de siège, sinon nul (I4.10, amendé le 01/10, D49 du 01/10) | § 2.4 |
 
 `public_id`, `joined_at`, `connection_state`, `last_seen_at` et `active_seat_token` relèvent de `50` et `60` (10 § 7.1).
 
@@ -99,7 +99,7 @@ Le siège **solo** suit les étapes 2 à 6 sans unicité de pseudo ni expulsion 
 
 ### 2.4 Un compte connecté au J1
 
-Un joueur connecté prend un siège **exactement comme un invité** : il saisit un pseudo et choisit un prédéfini ; `player.user_id` n'est jamais écrite au J1 (I4.10). Le rattachement d'un siège à un compte est un sujet du J2 (§ 10), qui s'appuie sur la neutralité de la connexion (I4.6), déjà testée au J1. Ni `users.name` ni `users.real_name` ne sont jamais recopiés dans `player.nickname` (I5.11, § 8.4).
+Un joueur connecté prend un siège comme un invité — il saisit un pseudo et choisit un avatar —, mais **la prise de siège écrit `player.user_id`** (I4.10, amendé le 01/10, D49 du 01/10) : c'est ce lien qui permet d'afficher son avatar téléversé (§ 11). Le sélecteur lui propose en plus « Mon avatar » quand son compte porte une image visible. Seule la prise de siège rattache : une reprise ne réécrit pas `user_id`, et le rattachement d'un siège **déjà pris** (invité qui se connecte en cours de partie) reste un sujet du J2 (§ 10), qui s'appuie sur la neutralité de la connexion (I4.6). Ni `users.name` ni `users.real_name` ne sont jamais recopiés dans `player.nickname` (I5.11, § 8.4).
 
 ---
 
@@ -621,7 +621,7 @@ C'est la **seule** sérialisation de l'identité affichée d'un siège, jamais `
 
 ### 7.2 Gel pendant une partie
 
-`fromSeat()` sert au lobby. `fromGamePlayer()` sert pendant la partie et au podium : il lit `game_player.display_nickname`, `display_avatar_kind` et `display_avatar_preset`, gelés au lancement par `OpenGame` (C6, O6 ; E10-42). Raison du gel (00 § Cycle de vie) : pseudo et avatar servent à reconnaître un joueur d'un coup d'œil pendant qu'un classement défile ; on les gèle ensemble ou pas du tout. On ne gèle **jamais** le chemin d'une copie provider (10 § 7.3), pour qu'un masquage postérieur fasse redescendre la chaîne de repli.
+`fromSeat()` sert au lobby. `fromGamePlayer()` sert pendant la partie et au podium : il lit `game_player.display_nickname`, `display_avatar_kind` et `display_avatar_preset`, gelés au lancement par `OpenGame` (C6, O6 ; E10-42). Raison du gel (00 § Cycle de vie) : pseudo et avatar servent à reconnaître un joueur d'un coup d'œil pendant qu'un classement défile ; on les gèle ensemble ou pas du tout. On ne gèle **jamais** le chemin d'une copie provider (10 § 7.3), pour qu'un masquage postérieur fasse redescendre la chaîne de repli. Il en va de même de l'image téléversée (§ 11.5) : `display_avatar_kind = upload` gèle la **nature** et le prédéfini de repli, jamais un chemin ; l'image se lit vivante sur le compte — amendé le 01/10 (D49 du 01/10).
 
 ### 7.3 Masquage : forme au J1, règle au J2
 
@@ -759,6 +759,73 @@ Hors écrans de `90`, barre « terminé » comprise, **36 à 57 h** pour les suj
 
 ---
 
+## 11. Avatar téléversé [J1, D49 du 01/10]
+
+Ajoutée le 01/10 (D49 du 01/10), qui renverse la décision 14. Un **compte** peut téléverser une image, son avatar personnel ; un invité garde les 24 prédéfinis. Livré et actif au J1 pour tout compte existant ; il sert à tous à l'ouverture de l'inscription (§ 8.2), sans travail de plus.
+
+### 11.1 Troisième nature, choix explicite
+
+`AvatarKind::Upload` (`upload`) rejoint `preset` et `provider`. Le compte **choisit** sa nature effective dans l'écran « Avatar » des réglages (`settings/avatar`, `account.avatar.*`) : un prédéfini, ou son image. Le dernier choix l'emporte ; l'image non choisie reste stockée, pour y revenir sans la téléverser de nouveau. `users.avatar_preset` reste le prédéfini du compte, et sert de **repli** quand l'image est masquée ou retirée.
+
+Chaîne de `User::avatarRef()` (§ 5.3 de `10`, amendée) : `upload` et image **visible** (`avatar_upload_path` non nul, `avatar_upload_hidden_at` nul) → image ; `preset` (ou `upload` masquée) et `avatar_preset` non nul → prédéfini ; `provider` visible → copie provider (J2) ; sinon initiales de `users.name`. `altKey` d'une image : `common.avatar.alt.upload`.
+
+### 11.2 Téléversement
+
+- **Navigateur** : l'écran ouvre un fichier JPEG, PNG ou WebP, propose un **recadrage carré** (déplacement et zoom), et envoie un carré de `AvatarImage::SOURCE_SIZE_PX` (512) de côté, encodé en WebP (repli JPEG là où le navigateur n'encode pas le WebP), qualité descendante sous le plafond (`components/account/avatar-cropper.tsx`). Le travail lourd reste dans le navigateur, comme pour la voie capture (`CLAUDE.md` § 8 : dépasser `post_max_size` vide le jeton CSRF).
+- **Serveur autoritaire** (`App\Avatars\AvatarImage::normalize()`) : plafond `PlatformLimits::avatarUploadMaxKilobytes()` (512 par défaut, sous `upload_max_filesize`) vérifié par la règle de formulaire, donc une erreur traduite et jamais un 419 ; type relu par `finfo` (JPEG, PNG, WebP) ; en-tête borné **avant décodage** (`AvatarImage::MAX_SOURCE_PX`, 4096) ; image animée refusée par un « ping » qui compte les images sans les décoder ; `Imagick::setResourceLimit` posé avant toute lecture ; recadrage au **carré central** (le serveur ne fait pas confiance au carré reçu) ; sRGB ; `stripImage()` ; réduction à `AvatarImage::OUTPUT_SIZE_PX` (256) ; WebP à qualité descendante jusqu'à `AvatarImage::MAX_OUTPUT_BYTES` (40 Ko). La transparence est conservée.
+- **Synchrone**, dans la requête : la source est petite et bornée, et le joueur attend son image. Exception assumée et circonscrite à `AvatarImage` : « aucun traitement Imagick dans une requête HTTP » reste vrai pour les images de jeu (`FrameImageProcessor`).
+- **Écriture** : nouveau fichier `upload/<32 hex>.webp` (`bin2hex(random_bytes(16))`, jamais un ULID ni un identifiant), bascule de `avatar_upload_path` **et** `avatar_kind = upload` sous `lockForUpdate`, puis suppression de l'ancien fichier **après** le commit. `avatar_upload_reports_from` repart à l'instant du téléversement : les signalements d'une image ne comptent pas contre la suivante.
+- **Refus** (`validation` sous `avatar`, messages `account.avatar.errors.*`) : fichier trop lourd, format refusé, image animée, image illisible ou trop grande ; **téléversement bloqué** tant que l'image est masquée ou retirée (`avatar_upload_hidden_at` non nul) — sans quoi un masquage se contournerait en téléversant une autre image.
+- **Suppression par le titulaire** : fichier supprimé après le commit, `avatar_upload_path` vidé, `avatar_kind` ramené à `preset` si `avatar_preset` existe, sinon nul. `avatar_upload_hidden_at` est **conservé** : un compte masqué ne se démasque pas en supprimant puis en téléversant.
+- Limiteur `throttle:avatar-upload` (10 par heure et par compte).
+
+### 11.3 Stockage et service
+
+Disque **`avatars`** (`driver local`, `serve => false`, privé, racine `AVATARS_DISK_ROOT`, vide = `storage/app/avatars`, **hors du chemin de déploiement en production** comme `frames`). **Aucun `storage:link`** : les octets passent par la route `GET /a/{file}` (`avatar.show`, `App\Http\Controllers\Avatar\AvatarFileController`), sans session ni cookie, qui ne sert un fichier que s'il est l'image **courante et visible** d'un compte non anonymisé — 404 sinon, image masquée, retirée ou remplacée comprise : le masquage s'applique aussi à une URL déjà vue. Réponse `image/webp`, `Cache-Control: public, max-age=31536000, immutable` (un nom aléatoire ne désigne jamais deux contenus), `X-Content-Type-Options: nosniff`, `X-Robots-Tag: noindex`. Ce qui reste vrai : **aucune frame sur ce disque, jamais**, et les avatars ne passent pas par la route des images de jeu.
+
+Les images téléversées **ne vont pas dans les sauvegardes** : ce sont des actifs du compte que le titulaire peut téléverser de nouveau ; le manifeste de `100` § 13 ne couvre que `frames`.
+
+### 11.4 Le siège d'un compte
+
+- **I4.10 amendé** : la prise de siège (salon et solo) écrit `player.user_id` = le compte connecté (§ 2.4). Ni `users.name` ni `users.real_name` ne sont recopiés (I5.11).
+- Le formulaire de siège reçoit `avatars.account` = `{ url }` quand le compte porte une image visible, `null` sinon ; le sélecteur l'affiche en première tuile, « Mon avatar » (`common.avatar.picker.account`), de valeur `account` (`SeatAvatar::ACCOUNT`). Présélection : `account` si l'avatar effectif du compte est son image, sinon `suggest()` (I5.8).
+- La règle de formulaire (`seatAvatarRules()`) n'admet `account` que pour une requête authentifiée dont le compte porte une image visible. Sous le verrou, `SeatAvatar::resolve()` relit le compte : image toujours visible → siège `avatar_kind = upload` ; sinon → prédéfini. Dans les deux cas `avatar_preset` reçoit un **prédéfini de repli** : celui du compte, sinon `suggest()` sur les avatars pris. C'est ce prédéfini que porte la re-signature du jeton (I4.5).
+
+### 11.5 Résolution vivante, gel au lancement
+
+`Player::avatarRef()` et `GamePlayer::avatarRef()` gagnent une branche `upload` : image **visible** du compte rattaché (`player.user_id`), lue à chaque composition par `UploadedAvatars::visiblePath()` — une lecture par clé primaire, seulement pour un siège de nature `upload` ; sinon le prédéfini de repli du siège ; sinon les initiales **du pseudo**. Le gel du lancement (`OpenGame`, O6) et l'admission d'un retardataire recopient la nature et le prédéfini de repli, jamais un chemin. `PlayerIdentity::FROZEN_SEAT_COLUMNS` gagne `user_id`. Un masquage s'applique donc partout, partie en cours comprise, à la prochaine composition d'une vue.
+
+### 11.6 Signalement et masquage
+
+- **Qui** : tout siège actif (`seat.active`) d'un salon, sur un **autre** siège du même salon dont l'avatar affiché est une image téléversée — nature vivante du siège, ou nature gelée de sa participation à la partie en cours. Route `POST /r/{room}/players/{target}/report-avatar` (`room.players.report_avatar`), `throttle:game-write`, `App\Actions\Room\ReportSeatAvatar`. Bouton « Signaler l'avatar » (`common.avatar.report.*`) sur la liste des sièges du lobby et la bande des joueurs en partie, avec confirmation. Un siège ne se signale pas lui-même ; un avatar prédéfini n'est **jamais** signalable (I5.9).
+- **Ligne** : `report` de cible `uploaded_avatar` (`ReportTarget::UploadedAvatar`), `target_user_id` = le compte ; `insertOrIgnore` sur l'unique `(reporter_player_id, target_user_id)` : un second clic du même siège ne compte pas et ne dit rien de plus.
+- **Seuil** : `ReportSeatAvatar::DISTINCT_REPORTERS` = 2 sièges distincts, comptés sur les lignes `uploaded_avatar` de ce compte créées **depuis** `avatar_upload_reports_from`. Atteint, dans la même transaction, compte verrouillé : `avatar_upload_hidden_at = now`, puis `AdminJournal::recordAutomatic(AvatarHidden, user, n)`. Rien n'est supprimé : l'administrateur doit pouvoir voir l'image pour lever ou retirer.
+- **Réponse** au signaleur : un retour neutre (`common.avatar.report.sent`), identique que le seuil soit atteint ou non, image déjà masquée comprise.
+- **Aucune notification par e-mail au J1** : l'écran « Avatar » du titulaire dit l'état (`account.avatar.hidden_notice`) et ferme le téléversement.
+
+### 11.7 Levée et retrait par l'administrateur
+
+Écran « Avatars » de `20` (ligne 45, § 12.5), administrateur seul, `UserPolicy::moderateAvatar` :
+
+- **Lever** (`avatar.unhidden`, motif facultatif) : `avatar_upload_hidden_at` vidé, `avatar_upload_reports_from` = maintenant (le compteur repart de zéro). Lever un compte dont l'image a été retirée rouvre le téléversement.
+- **Retirer** (`avatar.removed`, **motif obligatoire**, cas nouveau d'`AdminActionType`) : fichier supprimé après le commit, `avatar_upload_path` vidé, `avatar_upload_hidden_at` posé s'il ne l'était pas (téléversement bloqué jusqu'à une levée), `avatar_kind` ramené au prédéfini ou nul.
+
+Chaque geste s'écrit dans sa transaction par `AdminJournal::record()`, sujet le compte.
+
+### 11.8 Rétention
+
+L'image et ses trois colonnes sont des **actifs du compte** : elles vivent tant que le compte vit, hors de la fenêtre de 12 mois. L'anonymisation (J2, § 10 sujet 9) supprimera le fichier et videra les colonnes, `avatar_upload_hidden_at` comprise. Les lignes `report` suivent leur périmètre (12 mois) : les purger ne démasque rien.
+
+### 11.9 Clés de traduction
+
+`common.avatar.alt.upload`, `common.avatar.picker.account`, `common.avatar.report.{action,confirm_title,confirm_body,confirm,cancel,sent}` ; `account.avatar.*` (titre, choix, téléversement, recadrage, suppression, état masqué, erreurs) ; `admin.avatars.*` et `admin.enum.admin_action.avatar_removed` (français seul). FR et EN dans le même commit pour les domaines joueur.
+
+### 11.10 Lot
+
+**L40-8 — Avatar téléversé** (J1, D49 du 01/10). Migration additive `users` (trois colonnes) ; `AvatarKind::Upload`, `ReportTarget::UploadedAvatar`, `AdminActionType::AvatarRemoved` ; disque `avatars` et route `avatar.show` ; `AvatarImage`, `UploadedAvatars`, `SeatAvatar` ; actions `Account\{UploadAvatar,ChooseAvatar,DeleteAvatar}`, `Room\ReportSeatAvatar`, `Admin\{UnhideAvatar,RemoveAvatar}` ; écrans `settings/avatar` et `admin/avatars/index` ; sélecteur et bouton de signalement. Tests : `tests/Feature/Identity/AvatarUploadTest.php`, `AvatarReportTest.php`, `tests/Feature/Admin/AvatarModerationTest.php`.
+
+---
+
 ## Exigences adressées à 10
 
 La section [J1] consomme les exigences déjà consolidées dans la feuille de contrats du 23/09, plus **une** exigence nouvelle, qui aligne `10` sur lui-même.
@@ -827,7 +894,7 @@ Ordre : **L40-5 → L40-1 → L40-2 ; L40-5 → L40-3 → L40-4 ; L40-3, L40-5 e
 - Dépendances : L40-5 (`AvatarPresetCatalog::keys()` et `has()`, lus par `PlayerToken::withAvatar()` et par le décodage du jeton) ; `10` amendée pour E10-01, E10-33 et E10-34. Débloque la prise de siège (`50`) et la garde `player` (`60`).
 - Crée : `app/Support/Identity/PlayerToken.php`, `PlayerTokenCookie.php`, `PlayerTokenManager.php` ; migration additive `add_kicked_at_to_player_table`.
 - Modifie : `app/Models/Player.php` (scope `heldByToken`, `wasKicked()`, cast et PHPDoc de `kicked_at`, `#[Hidden]` complété), `database/factories/PlayerFactory.php` (état `kicked()`), `app/Providers/AppServiceProvider.php` (`singleton(PlayerTokenManager::class)`).
-- Tests : `tests/Feature/Identity/PlayerTokenTest.php` — « ne frappe aucun player_token sur une requête qui ne prend aucun siège », « ne frappe qu'un player_token par requête, quel que soit le nombre d'appels à ensure », « ne stocke que le SHA-256 du tid dans player_token_hash », « écrit le cookie player_token chiffré, HttpOnly, SameSite=Lax, sur le chemin / pour 30 jours », « fait glisser l'expiration du cookie et réaligne la revendication de langue à chaque prise ou reprise de siège », « traite comme absent un cookie altéré, illisible, étranger ou d'une version future », « conserve le tid quand sa revendication de langue ou d'avatar n'est plus connue », « refuse de re-signer un jeton sous un autre tid », « laisse le player_token intact à la connexion, à la déconnexion et à l'inscription » (contrat C4 § 7) ; ajouts de `40` au même fichier — « ne frappe aucun player_token quand la prise de siège est refusée » (§ 2.1, étape 4), « repart de 30 jours pleins à chaque re-signature, changement de langue compris » (§ 3.6), « re-signe le player_token avec l'avatar choisi sous le même tid, que suggest() présélectionne au salon suivant s'il y est libre » (I4.5, I5.8), « prend le siège d'un compte connecté sous le pseudo saisi, sans user_id au jalon 1 » (I4.10) ; `tests/Feature/Identity/KickedSeatTest.php` — « masque un siège expulsé à seatIn tandis que wasKickedFrom le signale », « n'oublie le refus que lorsque l'archivage efface le hash du jeton » ; `tests/Feature/Architecture/PlayerTokenBoundaryTest.php` — « n'exempte jamais le cookie player_token du chiffrement », « ne lit et n'écrit le cookie player_token que par PlayerTokenCookie », « frappe des tid de 64 caractères hexadécimaux minuscules qui ne se répètent jamais » ; `tests/Feature/Schema/ModelSerializationTest.php` (ajout) — « ne sérialise jamais nickname_normalized ni kicked_at d'un siège ». Tant que `50` n'a pas livré `room.join`, les tests qui exigent un geste de siège — les quatre ajouts de `40` compris — passent par une route déclarée dans le fichier de test, qui suit l'ordre du § 2.1, étape 4. Condition tombée à la livraison de L50-3b (porte du 27/09, E101-6) : les onze tests à geste de siège de `PlayerTokenTest` passent par `room.join` (`JoinRoomRequest` puis `TakeSeat`), la route de test du siège est supprimée ; restent déclarées dans le fichier, faute de vraie route à leur mesure, les routes `probe`, `ensure-many`, `ensure-form`, `resign` (changement d'avatar hors siège, qu'aucun lot du J1 ne livre, E111-7) et `suggest` — amendé le 28/09.
+- Tests : `tests/Feature/Identity/PlayerTokenTest.php` — « ne frappe aucun player_token sur une requête qui ne prend aucun siège », « ne frappe qu'un player_token par requête, quel que soit le nombre d'appels à ensure », « ne stocke que le SHA-256 du tid dans player_token_hash », « écrit le cookie player_token chiffré, HttpOnly, SameSite=Lax, sur le chemin / pour 30 jours », « fait glisser l'expiration du cookie et réaligne la revendication de langue à chaque prise ou reprise de siège », « traite comme absent un cookie altéré, illisible, étranger ou d'une version future », « conserve le tid quand sa revendication de langue ou d'avatar n'est plus connue », « refuse de re-signer un jeton sous un autre tid », « laisse le player_token intact à la connexion, à la déconnexion et à l'inscription » (contrat C4 § 7) ; ajouts de `40` au même fichier — « ne frappe aucun player_token quand la prise de siège est refusée » (§ 2.1, étape 4), « repart de 30 jours pleins à chaque re-signature, changement de langue compris » (§ 3.6), « re-signe le player_token avec l'avatar choisi sous le même tid, que suggest() présélectionne au salon suivant s'il y est libre » (I4.5, I5.8), « prend le siège d'un compte connecté sous le pseudo saisi et le rattache au compte » (I4.10, amendé le 01/10, D49 du 01/10) ; `tests/Feature/Identity/KickedSeatTest.php` — « masque un siège expulsé à seatIn tandis que wasKickedFrom le signale », « n'oublie le refus que lorsque l'archivage efface le hash du jeton » ; `tests/Feature/Architecture/PlayerTokenBoundaryTest.php` — « n'exempte jamais le cookie player_token du chiffrement », « ne lit et n'écrit le cookie player_token que par PlayerTokenCookie », « frappe des tid de 64 caractères hexadécimaux minuscules qui ne se répètent jamais » ; `tests/Feature/Schema/ModelSerializationTest.php` (ajout) — « ne sérialise jamais nickname_normalized ni kicked_at d'un siège ». Tant que `50` n'a pas livré `room.join`, les tests qui exigent un geste de siège — les quatre ajouts de `40` compris — passent par une route déclarée dans le fichier de test, qui suit l'ordre du § 2.1, étape 4. Condition tombée à la livraison de L50-3b (porte du 27/09, E101-6) : les onze tests à geste de siège de `PlayerTokenTest` passent par `room.join` (`JoinRoomRequest` puis `TakeSeat`), la route de test du siège est supprimée ; restent déclarées dans le fichier, faute de vraie route à leur mesure, les routes `probe`, `ensure-many`, `ensure-form`, `resign` (changement d'avatar hors siège, qu'aucun lot du J1 ne livre, E111-7) et `suggest` — amendé le 28/09.
 
 **L40-2 — Langue portée par le jeton** (J1, 2–3 h)
 - Dépendances : L40-1 ; `SetLocale` existant (`05`).
