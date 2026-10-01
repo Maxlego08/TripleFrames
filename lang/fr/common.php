@@ -106,12 +106,23 @@ return [
     'avatar' => [
         'alt' => [
             'initials' => 'Initiales du joueur',
+            'upload' => 'Avatar personnel du joueur',
             'preset' => 'Avatar du joueur',
             'provider' => 'Photo de profil du joueur',
         ],
         'picker' => [
             'label' => 'Choisissez un avatar',
+            'account' => 'Mon avatar',
             'taken' => 'déjà choisi dans ce salon',
+        ],
+        // Signalement de l'image téléversée d'un autre siège (spec 40 § 11.6,
+        // D49 du 01/10). `:nickname` : le pseudo du siège visé.
+        'report' => [
+            'action' => 'Signaler l’avatar',
+            'confirm_title' => 'Signaler l’avatar de :nickname ?',
+            'confirm_body' => 'Signalez une image choquante ou inappropriée. Après deux signalements, elle est masquée jusqu’à la décision d’un administrateur.',
+            'sent' => 'Signalement envoyé. Merci.',
+            'not_reportable' => 'Cet avatar ne peut pas être signalé.',
         ],
         'preset' => [
             'preset-01' => 'Ours',

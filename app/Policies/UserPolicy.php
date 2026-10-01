@@ -70,4 +70,21 @@ class UserPolicy
             && $target->anonymized_at === null
             && $target->role->atLeast(UserRole::Curator);
     }
+
+    /**
+     * L'écran « Avatars » (ligne 45, spec 40 § 11.7, D49 du 01/10) :
+     * administrateur seul, comme toute modération.
+     */
+    public function moderateAvatars(User $actor): bool
+    {
+        return $actor->role->atLeast(UserRole::Admin);
+    }
+
+    /**
+     * Voir, lever ou retirer l'image téléversée d'un compte.
+     */
+    public function moderateAvatar(User $actor, User $target): bool
+    {
+        return $actor->role->atLeast(UserRole::Admin);
+    }
 }

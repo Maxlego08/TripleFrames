@@ -53,6 +53,22 @@ export type MovieDifficulty =
 
 export type ContentOrigin = 'tmdb' | 'curator';
 
+/** Formulation récurrente proposée comme alias, sans donnée de joueur. */
+export type AdminAliasSuggestion = {
+    id: number;
+    normalized_text: string;
+    occurrences: number;
+    distinct_rounds: number;
+    best_distance: number;
+    first_seen_on: string;
+    last_seen_on: string;
+    movie: {
+        id: number;
+        title_original: string;
+        release_year: number | null;
+    };
+};
+
 export type ThemeMembershipState = 'added' | 'removed';
 
 /** Natures d'un thème — miroir de `App\Enums\ThemeKind`. */
@@ -1180,7 +1196,8 @@ export type AdminAccountActionType =
     | 'role.changed'
     | 'user.real_name_changed'
     | 'avatar.hidden'
-    | 'avatar.unhidden';
+    | 'avatar.unhidden'
+    | 'avatar.removed';
 
 /** Une ligne du journal visant un compte : l'auteur par son instantané signé. */
 export type AdminAccountHistoryLine = {
@@ -1243,8 +1260,8 @@ export type AdminAccessCandidate = {
 
 /**
  * Les cas du journal d'administration — miroir de la liste FERMÉE
- * `App\Enums\AdminActionType` (quarante-sept cas : D41 du 30/09, D42 du 30/09,
- * D43 du 01/10).
+ * `App\Enums\AdminActionType` (cinquante et un cas : D41 du 30/09, D42 du
+ * 30/09, D43 du 01/10, D46 du 01/10).
  */
 export type AdminActionTypeValue =
     | 'role.changed'
@@ -1263,6 +1280,7 @@ export type AdminActionTypeValue =
     | 'frame.withdrawn'
     | 'avatar.hidden'
     | 'avatar.unhidden'
+    | 'avatar.removed'
     | 'nickname.masked'
     | 'nickname.unmasked'
     | 'nickname.banned'
@@ -1290,6 +1308,10 @@ export type AdminActionTypeValue =
     | 'accounts.access_viewed'
     | 'user.looked_up'
     | 'user.viewed'
+    | 'games.directory_viewed'
+    | 'game.viewed'
+    | 'players.directory_viewed'
+    | 'player.viewed'
     | 'theme.created'
     | 'theme.updated'
     | 'theme.published'
@@ -1305,7 +1327,10 @@ export type AdminActionSubjectValue =
     | 'site'
     | 'import_run'
     | 'accounts'
-    | 'theme';
+    | 'theme'
+    | 'game'
+    | 'games'
+    | 'players';
 
 /** Les deux classes de conservation — `App\Enums\AdminActionRetention`. */
 export type AdminActionRetentionValue = 'permanent' | 'rolling_12m';
@@ -1435,3 +1460,335 @@ export type AdminThemePublication = {
     min_works: number;
     frames_per_round: number;
 };
+
+/*
+ * --- Inspection des parties et des sièges (spec 20 § 12.2, D46 du 01/10) ---
+ *
+ * Miroir EXACT de `App\Support\Admin\GameInspectionPresenter`. Une manche
+ * non divulgable (`disclosed: false`) arrive sans film, sans paliers et sans
+ * participants : le serveur ne les a jamais chargés (règle 3).
+ */
+
+export type InspectionGameStatus =
+    | 'running'
+    | 'paused'
+    | 'completed'
+    | 'interrupted';
+
+export type InspectionGameMode = 'multiplayer' | 'solo';
+
+export type InspectionInputDifficulty = 'easy' | 'normal' | 'expert';
+
+export type InspectionRoundStatus =
+    | 'pending'
+    | 'running'
+    | 'revealing'
+    | 'completed'
+    | 'cancelled';
+
+export type InspectionInputState =
+    | 'open'
+    | 'text_exhausted'
+    | 'locked'
+    | 'qcm_wrong'
+    | 'attempts_exhausted'
+    | 'revealed'
+    | 'skipped';
+
+export type InspectionSeatStatus = 'playing' | 'left' | 'kicked';
+
+export type InspectionConnectionState = 'connected' | 'disconnected' | 'left';
+
+export type InspectionAnswerSource = 'text' | 'choice';
+
+export type InspectionMatchKind =
+    | 'title'
+    | 'alias'
+    | 'prefix'
+    | 'subtitle'
+    | 'choice';
+
+export type InspectionIncidentReason =
+    | 'frame_unavailable'
+    | 'no_variant_available'
+    | 'movie_withdrawn'
+    | 'choices_unavailable';
+
+/** L'identité d'un siège ; `nickname` nul = pseudo effacé à l'archivage. */
+export type InspectionPlayer = {
+    public_id: string;
+    nickname: string | null;
+    erased: boolean;
+    masked: boolean;
+    solo: boolean;
+    room_code: string | null;
+    user: { id: number; name: string } | null;
+    joined_at: string | null;
+    last_seen_at: string | null;
+};
+
+export type InspectionPlayerRow = InspectionPlayer & { games_count: number };
+
+export type InspectionGameRow = {
+    id: number;
+    mode: InspectionGameMode;
+    status: InspectionGameStatus;
+    input_difficulty: InspectionInputDifficulty;
+    frames_per_round: number;
+    rounds_count: number;
+    rounds_completed: number;
+    room_code: string | null;
+    participants_count: number;
+    started_at: string | null;
+    finished_at: string | null;
+};
+
+export type InspectionGameDetail = InspectionGameRow & {
+    paused_at: string | null;
+    terminal: boolean;
+    settings: {
+        round_duration: number;
+        tier_durations: number[];
+        tier_points: number[];
+        reveal_duration: number;
+        speed_bonus: boolean;
+        attempts_per_round: number;
+        max_answer_length: number;
+        capacity: number;
+        allow_late_join: boolean;
+    };
+    versions: { settings: number; scoring: number; validation: number };
+};
+
+export type InspectionLeaderboardLine = {
+    player: InspectionPlayer;
+    status: InspectionSeatStatus;
+    first_round_number: number | null;
+    played_rounds: number | null;
+    correct_count: number | null;
+    score: number | null;
+    rank: number | null;
+};
+
+export type InspectionGuess = {
+    received_at: string | null;
+    answered_at_ms: number;
+    tier_index: number;
+    lock_rank: number;
+    source: InspectionAnswerSource;
+    match_kind: InspectionMatchKind;
+    answer_key_normalized: string;
+    submitted_normalized: string;
+    edit_distance: number;
+    prefix_was_ambiguous: boolean;
+    tier_points: number;
+    bonus_points: number;
+    total_points: number;
+};
+
+export type InspectionWrongAnswer = {
+    source: InspectionAnswerSource;
+    submitted_text: string;
+    submitted_normalized: string;
+    attempt_number: number | null;
+    received_at: string | null;
+    answered_at_ms: number;
+    tier_index: number | null;
+};
+
+export type InspectionParticipant = {
+    player_id: string | null;
+    nickname: string | null;
+    input_state: InspectionInputState;
+    wrong_attempts: number;
+    input_closed_at: string | null;
+    guess: InspectionGuess | null;
+    wrong_answers: InspectionWrongAnswer[];
+};
+
+export type InspectionTier = {
+    tier_index: number;
+    frame_level: number;
+    substitution: InspectionIncidentReason | null;
+    starts_at_offset_ms: number;
+    duration_ms: number;
+    points: number;
+    opened_at: string | null;
+};
+
+type InspectionRoundBase = {
+    sequence_index: number;
+    round_number: number | null;
+    status: InspectionRoundStatus;
+    started_at: string | null;
+    finished_at: string | null;
+    cancel_reason: InspectionIncidentReason | null;
+    disclosed: boolean;
+    movie: {
+        id: number;
+        title_original: string | null;
+        titles: Record<string, string>;
+    } | null;
+    found_count: number | null;
+    tiers: InspectionTier[];
+};
+
+export type InspectionRound = InspectionRoundBase & {
+    participants: InspectionParticipant[];
+};
+
+export type InspectionPlayerRound = InspectionRoundBase & {
+    participation: InspectionParticipant | null;
+};
+
+export type InspectionPlayerGame = {
+    game: InspectionGameRow;
+    status: InspectionSeatStatus;
+    score: number | null;
+    rank: number | null;
+    correct_count: number | null;
+    rounds: InspectionPlayerRound[];
+};
+
+export type InspectionGameFilters = {
+    state: 'running' | 'ended';
+    mode: InspectionGameMode | null;
+    room: string | null;
+};
+
+export type InspectionPlayerFilters = {
+    q: string | null;
+    mode: 'room' | 'solo' | null;
+};
+
+/*
+ * --- Performances et chronologie technique (spec 20 § 12.3, D47 du 01/10) ---
+ *
+ * Miroir de `App\Support\Perf\PerformanceReport` et de la chronologie de
+ * `GameInspectionPresenter`. Durées et retards en millisecondes entières.
+ */
+
+export type PerfGroupRow = {
+    name: string;
+    count: number;
+    p50_ms: number | null;
+    p95_ms: number | null;
+    max_ms: number;
+    avg_queries: number;
+    avg_query_ms: number;
+    max_memory_kb: number;
+    errors: number;
+    p95_wait_ms: number | null;
+};
+
+export type PerfEngineRow = {
+    event: string;
+    count: number;
+    p50_delay_ms: number | null;
+    p95_delay_ms: number | null;
+    max_delay_ms: number | null;
+    p50_duration_ms: number | null;
+    p95_duration_ms: number | null;
+    avg_queries: number;
+};
+
+export type PerfSlowQueryRow = {
+    sql: string;
+    count: number;
+    max_ms: number;
+    avg_ms: number;
+    last_at: string;
+    context: string | null;
+};
+
+export type PerfReport = {
+    since: string;
+    requests: PerfGroupRow[];
+    jobs: PerfGroupRow[];
+    slow_queries: PerfSlowQueryRow[];
+    engine: PerfEngineRow[];
+    totals: {
+        requests: number;
+        request_errors: number;
+        jobs: number;
+        job_failures: number;
+        traced_games: number;
+    };
+};
+
+export type PerfWindow = '1h' | '24h' | '7d';
+
+export type InspectionTraceLine = {
+    event: string;
+    sequence_index: number | null;
+    tier_index: number | null;
+    player_id: string | null;
+    theoretical_at: string | null;
+    recorded_at: string | null;
+    delay_ms: number | null;
+    duration_ms: number | null;
+    query_count: number | null;
+    details: Record<string, string | number | boolean | null>;
+};
+
+/*
+ * --- Audience (spec 20 § 12.4, D48 du 01/10) ---
+ *
+ * Miroir de `App\Support\Audience\AudienceReport` : des compteurs, jamais
+ * une visite ni un visiteur.
+ */
+
+export type AudienceRanked = { name: string; total: number };
+
+export type AudienceDay = {
+    day: string;
+    visitors: number;
+    visits: number;
+    pageviews: number;
+};
+
+export type AudienceReport = {
+    since: string;
+    totals: { visitors: number; visits: number; pageviews: number };
+    daily: AudienceDay[];
+    pages: AudienceRanked[];
+    entries: AudienceRanked[];
+    exits: AudienceRanked[];
+    referrers: AudienceRanked[];
+    locales: AudienceRanked[];
+    devices: AudienceRanked[];
+    live: {
+        visitors: number;
+        pages: AudienceRanked[];
+        open_rooms: number;
+        running_games: number;
+        running_solo: number;
+    };
+    funnel: {
+        rooms_created: number;
+        games_multiplayer: number;
+        games_solo: number;
+        games_completed: number;
+        players_per_game: number | null;
+    };
+};
+
+export type AudienceWindow = '7d' | '30d' | '90d';
+
+/**
+ * Une ligne de l'écran « Avatars » (ligne 45, spec 20 § 12.5, D49 du 01/10),
+ * miroir de `AvatarModerationController::row()`. Aucune adresse e-mail : la
+ * fiche du compte en est le seul accès.
+ */
+export type AdminAvatarRow = {
+    id: number;
+    name: string;
+    state: 'visible' | 'hidden' | 'removed';
+    /** `admin.avatars.image`, qui sert l'image même masquée ; `null` si retirée. */
+    image_url: string | null;
+    /** Sièges distincts dans la fenêtre courante de signalements. */
+    reports: number;
+    last_reported_at: string | null;
+};
+
+export type AdminAvatarFilter = 'hidden' | 'reported';

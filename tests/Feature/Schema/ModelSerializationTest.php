@@ -16,6 +16,7 @@ use App\Models\RoundPlayer;
 use App\Models\RoundTier;
 use App\Models\SeenFrame;
 use App\Models\User;
+use App\Models\WrongAnswer;
 use App\Support\Answers\ChoicesPresenter;
 use App\ValueObjects\Answers\ChoicesPayload;
 use App\ValueObjects\Answers\SeatInputView;
@@ -108,6 +109,7 @@ function forbiddenSerializedKeys(): array
             'master_path',
         ]],
         'seen_frame' => [SeenFrame::class, ['id', 'room_id', 'frame_id']],
+        'wrong_answer' => [WrongAnswer::class, ['player_id', 'submitted_text', 'submitted_normalized']],
         'admin_action' => [AdminAction::class, ['actor_id']],
         'linked_account' => [LinkedAccount::class, ['provider_user_id', 'provider_email', 'provider_avatar_url']],
     ];

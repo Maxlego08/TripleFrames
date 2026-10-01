@@ -10,7 +10,9 @@ use Illuminate\Support\Facades\Config;
  * Résolution d'un avatar — l'objet rendu par l'accesseur serveur unique
  * {@see User::avatarRef()} (§ 5.3).
  *
- * Deux natures seulement en v1, et un repli qui n'est PAS un cas d'enum :
+ * Trois natures depuis D49 du 01/10 — l'image téléversée d'un compte
+ * ({@see self::upload()}, spec 40 § 11) s'ajoute aux deux ci-dessous —, et un
+ * repli qui n'est PAS un cas d'enum :
  * `avatar_kind = preset` et `avatar_preset` non nul → fichier statique de `public/` ;
  * sinon `avatar_kind = provider`, `avatar_provider_path` non nul et
  * `avatar_provider_hidden_at` nul → URL publique cacheable de la copie locale sur le
@@ -54,6 +56,9 @@ final readonly class AvatarRef
     public const string ALT_KEY_PROVIDER = 'common.avatar.alt.provider';
 
     public const string ALT_KEY_INITIALS = 'common.avatar.alt.initials';
+
+    /** Image téléversée par un compte (D49 du 01/10, spec 40 § 11.1). */
+    public const string ALT_KEY_UPLOAD = 'common.avatar.alt.upload';
 
     /** Initiale de repli d'un nom vide ou non alphabétique. */
     public const string FALLBACK_INITIAL = '?';
@@ -112,6 +117,21 @@ final readonly class AvatarRef
             kind: AvatarKind::Provider,
             url: $base.'/'.ltrim($path, '/'),
             altKey: self::ALT_KEY_PROVIDER,
+            initials: $initials,
+        );
+    }
+
+    /**
+     * Image téléversée d'un compte : chemin RELATIF sur le disque `avatars`,
+     * servi par la route `avatar.show` — jamais par `storage:link` (spec 40
+     * § 11.3). L'appelant a vérifié qu'elle est visible.
+     */
+    public static function upload(string $path, string $initials): self
+    {
+        return new self(
+            kind: AvatarKind::Upload,
+            url: UploadedAvatars::url($path),
+            altKey: self::ALT_KEY_UPLOAD,
             initials: $initials,
         );
     }

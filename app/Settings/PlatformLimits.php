@@ -26,7 +26,7 @@ use InvalidArgumentException;
  * constructeur refuse toute valeur hors bornes (`InvalidArgumentException`) : une
  * configuration fautive fait donc échouer tout accesseur, jamais un seul en silence.
  *
- * Familles (quinze valeurs sans argument, plus `B_max` fonction de `N`) :
+ * Familles (seize valeurs sans argument, plus `B_max` fonction de `N`) :
  * - **confort** (surchargeable) : configurations sauvegardées, sièges, avatars,
  *   fenêtre d'historique, seuil du taux de réussite, plafond de téléversement ;
  * - **règle figée sur `game` au lancement, NON surchargeable** : `tierGraceMs` et
@@ -85,6 +85,15 @@ final readonly class PlatformLimits
      * préfixe de stockage ({@see FrameStoragePrefix}).
      */
     public const int DEFAULT_FRAME_UPLOAD_MAX_KILOBYTES = 1536;
+
+    /**
+     * Plafond d'ENTRÉE d'un avatar téléversé, en kibioctets (spec 40 § 11.2,
+     * D49 du 01/10) : la source déjà recadrée au carré par le navigateur. Même
+     * raison que pour une capture — sous `upload_max_filesize`, pour qu'un
+     * dépassement soit une erreur de validation traduite et jamais un 419 —,
+     * et c'est aussi le PLAFOND de la surcharge.
+     */
+    public const int DEFAULT_AVATAR_UPLOAD_MAX_KILOBYTES = 512;
 
     /**
      * Tolérance aux frontières de palier, en millisecondes — constante de code.
@@ -200,7 +209,7 @@ final readonly class PlatformLimits
     private const int MILLISECONDS_PER_SECOND = 1000;
 
     /**
-     * Les quinze valeurs sans argument, gardées ici et nulle part ailleurs.
+     * Les seize valeurs sans argument, gardées ici et nulle part ailleurs.
      *
      * @param  int  $savedConfigsPerUser  Configurations sauvegardées par compte.
      * @param  int  $roomSeats  Sièges d'un salon, dans `[MIN_CAPACITY, avatarPresets]`.
@@ -217,6 +226,7 @@ final readonly class PlatformLimits
      * @param  int  $lobbyBroadcastDebounceMs  Anti-rebond de la diffusion du lobby.
      * @param  int  $frameCropMaxWidthPercent  Largeur maximale d'un cadre, en % du master.
      * @param  int  $frameCropMinWidthPx  Largeur minimale d'un cadre, en pixels du master.
+     * @param  int  $avatarUploadMaxKilobytes  Plafond d'entrée d'un avatar téléversé.
      *
      * @throws InvalidArgumentException Une valeur hors de ses bornes.
      */
@@ -236,6 +246,7 @@ final readonly class PlatformLimits
         public int $lobbyBroadcastDebounceMs,
         public int $frameCropMaxWidthPercent,
         public int $frameCropMinWidthPx,
+        public int $avatarUploadMaxKilobytes = self::DEFAULT_AVATAR_UPLOAD_MAX_KILOBYTES,
     ) {
         self::assertAtLeast('savedConfigsPerUser', $savedConfigsPerUser, self::MIN_POSITIVE);
         self::assertAtLeast('avatarPresets', $avatarPresets, self::MIN_POSITIVE);
@@ -262,6 +273,7 @@ final readonly class PlatformLimits
         self::assertBetween('frameCropMaxWidthPercent', $frameCropMaxWidthPercent, self::MIN_FRAME_CROP_MAX_WIDTH_PERCENT, self::MAX_FRAME_CROP_MAX_WIDTH_PERCENT);
         self::assertBetween('frameCropMinWidthPx', $frameCropMinWidthPx, self::MIN_FRAME_CROP_MIN_WIDTH_PX, self::MAX_FRAME_CROP_MIN_WIDTH_PX);
         self::assertMultipleOf('frameCropMinWidthPx', $frameCropMinWidthPx, self::FRAME_CROP_WIDTH_MULTIPLE_PX);
+        self::assertBetween('avatarUploadMaxKilobytes', $avatarUploadMaxKilobytes, self::MIN_POSITIVE, self::DEFAULT_AVATAR_UPLOAD_MAX_KILOBYTES);
     }
 
     /**
@@ -291,6 +303,7 @@ final readonly class PlatformLimits
             lobbyBroadcastDebounceMs: self::configured('lobby_broadcast_debounce_ms', self::DEFAULT_LOBBY_BROADCAST_DEBOUNCE_MS),
             frameCropMaxWidthPercent: self::configured('frame_crop_max_width_percent', self::DEFAULT_FRAME_CROP_MAX_WIDTH_PERCENT),
             frameCropMinWidthPx: self::configured('frame_crop_min_width_px', self::DEFAULT_FRAME_CROP_MIN_WIDTH_PX),
+            avatarUploadMaxKilobytes: self::configured('avatar_upload_max_kilobytes', self::DEFAULT_AVATAR_UPLOAD_MAX_KILOBYTES),
         );
     }
 
@@ -332,6 +345,11 @@ final readonly class PlatformLimits
     public static function frameUploadMaxKilobytes(): int
     {
         return self::current()->frameUploadMaxKilobytes;
+    }
+
+    public static function avatarUploadMaxKilobytes(): int
+    {
+        return self::current()->avatarUploadMaxKilobytes;
     }
 
     /**

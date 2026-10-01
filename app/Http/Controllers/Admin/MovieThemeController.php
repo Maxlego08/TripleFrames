@@ -13,7 +13,8 @@ use Inertia\Inertia;
 use Throwable;
 
 /**
- * Ajouter un film à un thème, l'en retirer, ou annuler l'exception — spec 20
+ * Ajouter un film à un ou plusieurs thèmes, l'en retirer, ou annuler
+ * l'exception — spec 20
  * § 9.6, ligne 28 de la matrice (`can:curate,movie`,
  * `throttle:admin-curation` ; D43 du 01/10).
  *
@@ -29,6 +30,24 @@ class MovieThemeController extends Controller
     {
         /** @var User $curator */
         $curator = $request->user();
+
+        if ($request->isBatchAddition()) {
+            $themes = Theme::query()
+                ->whereKey($request->themeIds())
+                ->orderBy('id')
+                ->get();
+
+            $changed = $membership->handleAdditions($curator, $movie, $themes);
+
+            Inertia::flash('toast', [
+                'type' => 'success',
+                'message' => $changed === 0
+                    ? __('admin.movie.themes.flash.unchanged')
+                    : trans_choice('admin.movie.themes.flash.added_many', $changed, ['count' => $changed]),
+            ]);
+
+            return back();
+        }
 
         $theme = Theme::query()->findOrFail($request->themeId());
 

@@ -13,7 +13,8 @@ import {
     isAvatarPresetKey,
 } from '@/lib/game/avatar-keys';
 import { terms } from '@/routes/legal';
-import type { AvatarPresetKey, AvatarPresetOption } from '@/types/player';
+import { ACCOUNT_AVATAR_CHOICE } from '@/types/player';
+import type { AvatarPresetOption, SeatAvatarChoice } from '@/types/player';
 import type { TranslationKey } from '@/types/translations';
 import type { RouteFormDefinition } from '@/wayfinder';
 
@@ -26,7 +27,13 @@ import type { RouteFormDefinition } from '@/wayfinder';
 export type SeatAvatars = {
     options: AvatarPresetOption[];
     taken: string[];
+    /** Une clé du catalogue, ou `account` (« Mon avatar »). */
     suggested: string;
+    /**
+     * L'image du compte connecté, offerte en première tuile (spec 40
+     * § 11.4) ; `null` pour un invité ou un compte sans image visible.
+     */
+    account?: { url: string } | null;
 };
 
 /**
@@ -121,11 +128,19 @@ export function SeatForm({
             taken: avatars.taken.includes(option.key),
         }));
 
-    const [avatar, setAvatar] = useState<AvatarPresetKey | null>(() =>
-        isAvatarPresetKey(avatars.suggested)
-            ? avatars.suggested
-            : (options[0]?.key ?? null),
-    );
+    const account = avatars.account ?? null;
+
+    const [avatar, setAvatar] = useState<SeatAvatarChoice | null>(() => {
+        if (isAvatarPresetKey(avatars.suggested)) {
+            return avatars.suggested;
+        }
+
+        if (account !== null && avatars.suggested === ACCOUNT_AVATAR_CHOICE) {
+            return ACCOUNT_AVATAR_CHOICE;
+        }
+
+        return options[0]?.key ?? null;
+    });
 
     const number = new Intl.NumberFormat(locale);
 
@@ -192,6 +207,16 @@ export function SeatForm({
                             <AvatarPicker
                                 name={AVATAR_FIELD}
                                 options={options}
+                                account={
+                                    account === null
+                                        ? null
+                                        : {
+                                              url: account.url,
+                                              label: t(
+                                                  'common.avatar.picker.account',
+                                              ),
+                                          }
+                                }
                                 value={avatar}
                                 onValueChange={setAvatar}
                                 legend={t('common.avatar.picker.label')}

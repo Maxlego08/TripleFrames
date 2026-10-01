@@ -15,6 +15,16 @@ import type {
     ImportDecision,
     ImportRunKind,
     ImportSource,
+    InspectionAnswerSource,
+    InspectionConnectionState,
+    InspectionGameMode,
+    InspectionGameStatus,
+    InspectionIncidentReason,
+    InspectionInputDifficulty,
+    InspectionInputState,
+    InspectionMatchKind,
+    InspectionRoundStatus,
+    InspectionSeatStatus,
     MovieDifficulty,
     ThemeKind,
     ThemeMembershipState,
@@ -280,6 +290,7 @@ export const ACCOUNT_ACTION_KEYS: Record<
     'user.real_name_changed': 'admin.enum.admin_action.user_real_name_changed',
     'avatar.hidden': 'admin.enum.admin_action.avatar_hidden',
     'avatar.unhidden': 'admin.enum.admin_action.avatar_unhidden',
+    'avatar.removed': 'admin.enum.admin_action.avatar_removed',
 };
 
 /**
@@ -304,6 +315,7 @@ export const ADMIN_ACTION_KEYS: Record<AdminActionTypeValue, TranslationKey> = {
     'frame.withdrawn': 'admin.enum.admin_action.frame_withdrawn',
     'avatar.hidden': 'admin.enum.admin_action.avatar_hidden',
     'avatar.unhidden': 'admin.enum.admin_action.avatar_unhidden',
+    'avatar.removed': 'admin.enum.admin_action.avatar_removed',
     'nickname.masked': 'admin.enum.admin_action.nickname_masked',
     'nickname.unmasked': 'admin.enum.admin_action.nickname_unmasked',
     'nickname.banned': 'admin.enum.admin_action.nickname_banned',
@@ -335,6 +347,11 @@ export const ADMIN_ACTION_KEYS: Record<AdminActionTypeValue, TranslationKey> = {
     'accounts.access_viewed': 'admin.enum.admin_action.accounts_access_viewed',
     'user.looked_up': 'admin.enum.admin_action.user_looked_up',
     'user.viewed': 'admin.enum.admin_action.user_viewed',
+    'games.directory_viewed': 'admin.enum.admin_action.games_directory_viewed',
+    'game.viewed': 'admin.enum.admin_action.game_viewed',
+    'players.directory_viewed':
+        'admin.enum.admin_action.players_directory_viewed',
+    'player.viewed': 'admin.enum.admin_action.player_viewed',
     'theme.created': 'admin.enum.admin_action.theme_created',
     'theme.updated': 'admin.enum.admin_action.theme_updated',
     'theme.published': 'admin.enum.admin_action.theme_published',
@@ -355,6 +372,9 @@ export const ADMIN_ACTION_SUBJECT_KEYS: Record<
     import_run: 'admin.enum.admin_action_subject.import_run',
     accounts: 'admin.enum.admin_action_subject.accounts',
     theme: 'admin.enum.admin_action_subject.theme',
+    game: 'admin.enum.admin_action_subject.game',
+    games: 'admin.enum.admin_action_subject.games',
+    players: 'admin.enum.admin_action_subject.players',
 };
 
 /** Les deux classes de conservation d'une ligne du journal. */
@@ -405,4 +425,106 @@ export const JOURNAL_DETAIL_KEYS: Partial<Record<string, TranslationKey>> = {
     works: 'admin.journal.details.works',
     theme_key: 'admin.journal.details.theme_key',
     theme_ids: 'admin.journal.details.theme_ids',
+};
+
+/*
+ * --- Inspection des parties et des sièges (spec 20 § 12.2, D46 du 01/10) ---
+ */
+
+export const INSPECTION_GAME_STATUS_KEYS: Record<
+    InspectionGameStatus,
+    TranslationKey
+> = {
+    running: 'admin.inspection.enum.game_status.running',
+    paused: 'admin.inspection.enum.game_status.paused',
+    completed: 'admin.inspection.enum.game_status.completed',
+    interrupted: 'admin.inspection.enum.game_status.interrupted',
+};
+
+export const INSPECTION_GAME_MODE_KEYS: Record<
+    InspectionGameMode,
+    TranslationKey
+> = {
+    multiplayer: 'admin.inspection.enum.game_mode.multiplayer',
+    solo: 'admin.inspection.enum.game_mode.solo',
+};
+
+export const INSPECTION_DIFFICULTY_KEYS: Record<
+    InspectionInputDifficulty,
+    TranslationKey
+> = {
+    easy: 'admin.inspection.enum.input_difficulty.easy',
+    normal: 'admin.inspection.enum.input_difficulty.normal',
+    expert: 'admin.inspection.enum.input_difficulty.expert',
+};
+
+export const INSPECTION_ROUND_STATUS_KEYS: Record<
+    InspectionRoundStatus,
+    TranslationKey
+> = {
+    pending: 'admin.inspection.enum.round_status.pending',
+    running: 'admin.inspection.enum.round_status.running',
+    revealing: 'admin.inspection.enum.round_status.revealing',
+    completed: 'admin.inspection.enum.round_status.completed',
+    cancelled: 'admin.inspection.enum.round_status.cancelled',
+};
+
+export const INSPECTION_INPUT_STATE_KEYS: Record<
+    InspectionInputState,
+    TranslationKey
+> = {
+    open: 'admin.inspection.enum.input_state.open',
+    text_exhausted: 'admin.inspection.enum.input_state.text_exhausted',
+    locked: 'admin.inspection.enum.input_state.locked',
+    qcm_wrong: 'admin.inspection.enum.input_state.qcm_wrong',
+    attempts_exhausted: 'admin.inspection.enum.input_state.attempts_exhausted',
+    revealed: 'admin.inspection.enum.input_state.revealed',
+    skipped: 'admin.inspection.enum.input_state.skipped',
+};
+
+export const INSPECTION_SEAT_STATUS_KEYS: Record<
+    InspectionSeatStatus,
+    TranslationKey
+> = {
+    playing: 'admin.inspection.enum.seat_status.playing',
+    left: 'admin.inspection.enum.seat_status.left',
+    kicked: 'admin.inspection.enum.seat_status.kicked',
+};
+
+export const INSPECTION_CONNECTION_KEYS: Record<
+    InspectionConnectionState,
+    TranslationKey
+> = {
+    connected: 'admin.inspection.enum.connection_state.connected',
+    disconnected: 'admin.inspection.enum.connection_state.disconnected',
+    left: 'admin.inspection.enum.connection_state.left',
+};
+
+export const INSPECTION_SOURCE_KEYS: Record<
+    InspectionAnswerSource,
+    TranslationKey
+> = {
+    text: 'admin.inspection.enum.source.text',
+    choice: 'admin.inspection.enum.source.choice',
+};
+
+export const INSPECTION_MATCH_KIND_KEYS: Record<
+    InspectionMatchKind,
+    TranslationKey
+> = {
+    title: 'admin.inspection.enum.match_kind.title',
+    alias: 'admin.inspection.enum.match_kind.alias',
+    prefix: 'admin.inspection.enum.match_kind.prefix',
+    subtitle: 'admin.inspection.enum.match_kind.subtitle',
+    choice: 'admin.inspection.enum.match_kind.choice',
+};
+
+export const INSPECTION_INCIDENT_KEYS: Record<
+    InspectionIncidentReason,
+    TranslationKey
+> = {
+    frame_unavailable: 'admin.inspection.enum.incident.frame_unavailable',
+    no_variant_available: 'admin.inspection.enum.incident.no_variant_available',
+    movie_withdrawn: 'admin.inspection.enum.incident.movie_withdrawn',
+    choices_unavailable: 'admin.inspection.enum.incident.choices_unavailable',
 };

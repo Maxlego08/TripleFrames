@@ -3,7 +3,10 @@
 namespace App\Http\Controllers\Room\Concerns;
 
 use App\Avatars\AvatarPresetCatalog;
+use App\Avatars\SeatAvatar;
+use App\Enums\AvatarKind;
 use App\Enums\Locale;
+use App\Models\User;
 use App\Support\I18n\Translations;
 use App\Support\Identity\NicknameNormalizer;
 use App\Support\Identity\PlayerToken;
@@ -24,18 +27,27 @@ use Illuminate\Support\Facades\App;
 trait PresentsSeatForm
 {
     /**
-     * `{ options, taken, suggested }` : la revendication `avatar` du jeton
-     * courant, lu sans jamais être frappé, sert de préférence.
+     * `{ options, taken, suggested, account }` : la revendication `avatar` du
+     * jeton courant, lu sans jamais être frappé, sert de préférence. Un compte
+     * qui porte une image visible reçoit en plus `account` (« Mon avatar »,
+     * spec 40 § 11.4), présélectionné quand c'est son avatar effectif.
      *
      * @param  list<string>  $taken  Avatars des sièges tenus du salon.
-     * @return array{options: list<array{key: string, url: string, labelKey: string}>, taken: list<string>, suggested: string}
+     * @return array{options: list<array{key: string, url: string, labelKey: string}>, taken: list<string>, suggested: string, account: array{url: string}|null}
      */
     private function avatarProps(?PlayerToken $token, array $taken): array
     {
+        $user = request()->user();
+        $user = $user instanceof User ? $user : null;
+        $account = SeatAvatar::accountOption($user);
+
         return [
             'options' => AvatarPresetCatalog::options(),
             'taken' => $taken,
-            'suggested' => AvatarPresetCatalog::suggest($token?->avatar, $taken),
+            'suggested' => $account !== null && $user?->avatar_kind === AvatarKind::Upload
+                ? SeatAvatar::ACCOUNT
+                : AvatarPresetCatalog::suggest($token?->avatar, $taken),
+            'account' => $account,
         ];
     }
 

@@ -41,7 +41,7 @@ class JoinRoomRequest extends FormRequest
 
         return [
             'nickname' => $this->nicknameRules(),
-            'avatar' => $this->avatarPresetRules(),
+            'avatar' => $this->seatAvatarRules($this->authenticatedUser()),
         ];
     }
 

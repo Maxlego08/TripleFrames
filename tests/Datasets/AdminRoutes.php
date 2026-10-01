@@ -5,11 +5,16 @@ use App\Enums\FrameLevel;
 use App\Enums\Locale;
 use App\Models\AdminAction;
 use App\Models\Alias;
+use App\Models\AudienceDaily;
 use App\Models\Frame;
 use App\Models\FrameReview;
+use App\Models\Game;
 use App\Models\ImportRun;
 use App\Models\Movie;
 use App\Models\MovieTitle;
+use App\Models\NearMiss;
+use App\Models\PerfSample;
+use App\Models\Player;
 use App\Models\Theme;
 use App\Models\User;
 use App\Settings\PlatformLimits;
@@ -354,6 +359,49 @@ function adminRoutesMatrix(): array
             redirect: fn (array $parameters): string => route('admin.catalog.show', ['movie' => $parameters['movie']]),
         ),
 
+        // Ligne 27 — file agrégée de suggestions, reconstruction idempotente,
+        // promotion en alias curé et rejet sans auteur.
+        'admin.near_misses.index' => adminRoutesRow(
+            row: 27,
+            method: 'GET',
+            guards: ['can:viewAny,'.NearMiss::class],
+            curator: 200,
+            admin: 200,
+        ),
+
+        'admin.near_misses.refresh' => adminRoutesRow(
+            row: 27,
+            method: 'POST',
+            guards: ['can:viewAny,'.NearMiss::class],
+            curator: 302,
+            admin: 302,
+            redirect: fn (array $parameters): string => route('admin.near_misses.index'),
+        ),
+
+        'admin.near_misses.promote' => adminRoutesRow(
+            row: 27,
+            method: 'POST',
+            guards: ['can:promote,nearMiss'],
+            curator: 302,
+            admin: 302,
+            parameters: fn (): array => ['nearMiss' => NearMiss::factory()->create()->id],
+            payload: fn (): array => [
+                'locale' => Locale::French->value,
+                'alias' => 'Alias suggéré par la matrice',
+            ],
+            redirect: fn (array $parameters): string => route('admin.near_misses.index'),
+        ),
+
+        'admin.near_misses.dismiss' => adminRoutesRow(
+            row: 27,
+            method: 'POST',
+            guards: ['can:dismiss,nearMiss'],
+            curator: 302,
+            admin: 302,
+            parameters: fn (): array => ['nearMiss' => NearMiss::factory()->create()->id],
+            redirect: fn (array $parameters): string => route('admin.near_misses.index'),
+        ),
+
         // Ligne 23 — regrouper deux films sans groupe : le groupe naît.
         'admin.catalog.group.update' => adminRoutesRow(
             row: 23,
@@ -693,6 +741,102 @@ function adminRoutesMatrix(): array
             guards: ['can:viewAny,'.AdminAction::class],
             curator: 403,
             admin: 200,
+        ),
+
+        // Ligne 36 — les parties et la fiche d'une partie (D46 du 01/10) :
+        // administrateur seul.
+        'admin.games.index' => adminRoutesRow(
+            row: 36,
+            method: 'GET',
+            guards: ['can:viewAny,'.Game::class],
+            curator: 403,
+            admin: 200,
+        ),
+
+        'admin.games.show' => adminRoutesRow(
+            row: 36,
+            method: 'GET',
+            guards: ['can:view,game'],
+            curator: 403,
+            admin: 200,
+            parameters: fn (): array => ['game' => Game::factory()->create()->getKey()],
+        ),
+
+        // Ligne 42 — l'annuaire des sièges et la fiche d'un siège (D46 du
+        // 01/10) : administrateur seul, `{player}` lié par `public_id`.
+        'admin.players.index' => adminRoutesRow(
+            row: 42,
+            method: 'GET',
+            guards: ['can:viewAny,'.Player::class],
+            curator: 403,
+            admin: 200,
+        ),
+
+        'admin.players.show' => adminRoutesRow(
+            row: 42,
+            method: 'GET',
+            guards: ['can:view,player'],
+            curator: 403,
+            admin: 200,
+            parameters: fn (): array => ['player' => Player::factory()->create()->public_id],
+        ),
+
+        // Ligne 43 — les performances (D47 du 01/10) : administrateur seul.
+        'admin.performance.index' => adminRoutesRow(
+            row: 43,
+            method: 'GET',
+            guards: ['can:viewAny,'.PerfSample::class],
+            curator: 403,
+            admin: 200,
+        ),
+
+        // Ligne 44 — l'audience (D48 du 01/10) : administrateur seul.
+        'admin.audience.index' => adminRoutesRow(
+            row: 44,
+            method: 'GET',
+            guards: ['can:viewAny,'.AudienceDaily::class],
+            curator: 403,
+            admin: 200,
+        ),
+
+        // Ligne 45 — les avatars téléversés (D49 du 01/10) : administrateur
+        // seul, l'image servie même masquée, deux gestes consignés.
+        'admin.avatars.index' => adminRoutesRow(
+            row: 45,
+            method: 'GET',
+            guards: ['can:moderateAvatars,'.User::class],
+            curator: 403,
+            admin: 200,
+        ),
+
+        'admin.avatars.image' => adminRoutesRow(
+            row: 45,
+            method: 'GET',
+            guards: ['can:moderateAvatar,user'],
+            curator: 403,
+            admin: 200,
+            parameters: fn (): array => ['user' => User::factory()->uploadedAvatarHidden()->create()->getKey()],
+        ),
+
+        'admin.avatars.unhide' => adminRoutesRow(
+            row: 45,
+            method: 'POST',
+            guards: ['can:moderateAvatar,user'],
+            curator: 403,
+            admin: 302,
+            parameters: fn (): array => ['user' => User::factory()->uploadedAvatarHidden()->create()->getKey()],
+            redirect: fn (array $parameters): string => route('admin.avatars.index'),
+        ),
+
+        'admin.avatars.remove' => adminRoutesRow(
+            row: 45,
+            method: 'POST',
+            guards: ['can:moderateAvatar,user'],
+            curator: 403,
+            admin: 302,
+            parameters: fn (): array => ['user' => User::factory()->withUploadedAvatar()->create()->getKey()],
+            payload: fn (): array => ['reason' => 'Retrait matrice'],
+            redirect: fn (array $parameters): string => route('admin.avatars.index'),
         ),
     ];
 }

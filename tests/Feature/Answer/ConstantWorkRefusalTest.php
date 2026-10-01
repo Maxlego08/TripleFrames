@@ -88,7 +88,7 @@ function constantWorkDistance(Movie $movie, string $typed): int
         ->all());
 }
 
-it('le refus d\'une chaîne à distance 1 et celui d\'une chaîne à distance 12 exécutent le même nombre de requêtes, dont exactement un UPDATE de round_player, et n\'insèrent aucune ligne', function (): void {
+it('le refus d\'une chaîne à distance 1 et celui d\'une chaîne à distance 12 exécutent le même nombre de requêtes, dont exactement un UPDATE de round_player puis une seule insertion de wrong_answer', function (): void {
     // « Heat » : quatre caractères compacts, tolérance nulle — une faute
     // d'une lettre est refusée, comme une saisie sans rapport.
     $target = SubmissionFixtures::movie('Heat');
@@ -113,11 +113,13 @@ it('le refus d\'une chaîne à distance 1 et celui d\'une chaîne à distance 12
     foreach ([$nearQueries, $farQueries] as $queries) {
         $writes = SubmissionFixtures::writes($queries);
 
-        // Exactement une écriture, l'`UPDATE` de `round_player` ; aucune insertion.
-        expect($writes)->toHaveCount(1)
+        // Exactement deux écritures : l'`UPDATE` de `round_player`, puis le
+        // journal des réponses fausses (D46 du 01/10), pour tout refus compté.
+        expect($writes)->toHaveCount(2)
             ->and(SubmissionFixtures::touches($writes[0], 'round_player'))->toBeTrue()
             ->and(preg_match('/^\s*update\b/i', $writes[0]))->toBe(1)
-            ->and(array_filter($writes, static fn (string $sql): bool => preg_match('/^\s*insert\b/i', $sql) === 1))->toBe([]);
+            ->and(SubmissionFixtures::touches($writes[1], 'wrong_answer'))->toBeTrue()
+            ->and(preg_match('/^\s*insert\b/i', $writes[1]))->toBe(1);
     }
 
     // Aucun job poussé par un refus : la frontière suivante était déjà en file.

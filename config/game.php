@@ -36,6 +36,7 @@ return [
         'history_window_months' => PlatformLimits::DEFAULT_HISTORY_WINDOW_MONTHS,
         'success_rate_min_rounds' => PlatformLimits::DEFAULT_SUCCESS_RATE_MIN_ROUNDS,
         'frame_upload_max_kilobytes' => PlatformLimits::DEFAULT_FRAME_UPLOAD_MAX_KILOBYTES,
+        'avatar_upload_max_kilobytes' => PlatformLimits::DEFAULT_AVATAR_UPLOAD_MAX_KILOBYTES,
 
         // Tirage et mémoire (valeurs déclarées par la spec 30).
         'draw_substitute_margin' => PlatformLimits::DEFAULT_DRAW_SUBSTITUTE_MARGIN,

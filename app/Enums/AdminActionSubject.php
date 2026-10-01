@@ -39,13 +39,22 @@ enum AdminActionSubject: string
 
     case Theme = 'theme';
 
+    /** Une partie inspectée (D46 du 01/10). */
+    case Game = 'game';
+
+    /** L'ensemble des parties que montre la liste d'inspection (D46 du 01/10). */
+    case Games = 'games';
+
+    /** L'ensemble des sièges que montre l'annuaire des joueurs (D46 du 01/10). */
+    case Players = 'players';
+
     /** Préfixe des libellés du back-office, un par cas. */
     public const string LABEL_PREFIX = 'admin.enum.admin_action_subject.';
 
-    /** Faux pour les deux sujets qui ne désignent aucune ligne : le site et l'ensemble des comptes. */
+    /** Faux pour les sujets qui ne désignent aucune ligne : le site et les ensembles de comptes, de parties et de sièges. */
     public function hasIdentifier(): bool
     {
-        return ! in_array($this, [self::Site, self::Accounts], true);
+        return ! in_array($this, [self::Site, self::Accounts, self::Games, self::Players], true);
     }
 
     /** Clé du libellé au back-office. */

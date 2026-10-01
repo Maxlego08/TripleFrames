@@ -166,6 +166,8 @@ it("n'expose aux visiteurs sans siège ni pseudo ni identifiant interne", functi
             // d'un siège parti est libre.
             'taken' => [SeatEntry::avatar(5), SeatEntry::avatar(9)],
             'suggested' => SeatEntry::avatar(1),
+            // « Mon avatar » : aucun pour un visiteur sans compte (spec 40 § 11.4).
+            'account' => null,
         ])
         ->and($props['nickname'])->toBe(['min' => NicknameNormalizer::MIN_LENGTH, 'max' => NicknameNormalizer::MAX_LENGTH]);
 

@@ -12,6 +12,7 @@ use App\Models\Round;
 use App\Models\RoundChoiceSet;
 use App\Models\RoundPlayer;
 use App\Models\RoundTier;
+use App\Models\WrongAnswer;
 use App\Support\Room\RoomCode;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
@@ -276,6 +277,7 @@ class LoadTestForgetCommand extends Command
         // d'abord. Un autre ordre échouerait sur une contrainte, et la
         // transaction entière serait annulée.
         Guess::query()->whereIn('round_id', $roundIds)->delete();
+        WrongAnswer::query()->whereIn('round_id', $roundIds)->delete();
         RoundChoiceSet::query()->whereIn('round_id', $roundIds)->delete();
         RoundTier::query()->whereIn('round_id', $roundIds)->delete();
         RoundPlayer::query()->whereIn('round_id', $roundIds)->delete();

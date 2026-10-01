@@ -2,7 +2,7 @@
 
 namespace App\Actions\Game;
 
-use App\Enums\AvatarKind;
+use App\Avatars\SeatAvatar;
 use App\Enums\GameMode;
 use App\Enums\GameStatus;
 use App\Enums\Locale;
@@ -14,6 +14,7 @@ use App\Enums\SoloRefusal;
 use App\Models\Game;
 use App\Models\Player;
 use App\Models\Round;
+use App\Models\User;
 use App\Support\Deploy\DeployDrain;
 use App\Support\Draw\PoolTooSmallException;
 use App\Support\Game\GameJournal;
@@ -189,7 +190,8 @@ final readonly class StartSoloGame
         $created = false;
 
         if ($seat === null) {
-            [$seat, $created] = $this->seat($token, $nickname, $avatarPreset, $locale, $now);
+            $account = $request->user() instanceof User ? $request->user() : null;
+            [$seat, $created] = $this->seat($token, $account, $nickname, $avatarPreset, $current?->avatar, $locale, $now);
         }
 
         // 7. La partie solo en cours du siège : interrompue.
@@ -204,8 +206,9 @@ final readonly class StartSoloGame
         }
 
         // 9. Après la validation : l'avatar choisi rejoint le jeton (I4.5).
-        if ($created && $avatarPreset !== null) {
-            DB::afterCommit(fn (): PlayerToken => $this->tokens->resign($request, $token->withAvatar($avatarPreset)));
+        if ($created && $seat->avatar_preset !== null) {
+            $chosen = $seat->avatar_preset;
+            DB::afterCommit(fn (): PlayerToken => $this->tokens->resign($request, $token->withAvatar($chosen)));
         }
 
         return SoloStartOutcome::started($game, $seat, $choice->notice());
@@ -229,11 +232,21 @@ final readonly class StartSoloGame
      * @throws UniqueConstraintViolationException Une collision qu'aucun siège
      *                                            solo de ce jeton n'explique.
      */
-    private function seat(PlayerToken $token, ?string $nickname, ?string $avatarPreset, Locale $locale, CarbonImmutable $now): array
-    {
+    private function seat(
+        PlayerToken $token,
+        ?User $account,
+        ?string $nickname,
+        ?string $avatarPreset,
+        ?string $preferred,
+        Locale $locale,
+        CarbonImmutable $now,
+    ): array {
         if ($nickname === null || $avatarPreset === null) {
             throw new LogicException('StartSoloGame : un siège solo neuf exige un pseudo et un avatar validés.');
         }
+
+        // L'avatar, relu sur le compte (spec 40 § 11.4) ; aucun avatar pris en solo.
+        $avatar = SeatAvatar::resolve($avatarPreset, $account, $preferred, []);
 
         $seat = new Player;
 
@@ -246,9 +259,10 @@ final readonly class StartSoloGame
                 'player_token_hash' => $token->hash(),
                 // E10-N3 : le créneau d'unicité, dans la même écriture.
                 'solo_token_hash' => $token->hash(),
+                'user_id' => $account?->id,
                 'locale' => $locale,
-                'avatar_kind' => AvatarKind::Preset,
-                'avatar_preset' => $avatarPreset,
+                'avatar_kind' => $avatar->kind,
+                'avatar_preset' => $avatar->preset,
                 'joined_at' => $now,
                 'last_seen_at' => $now,
                 'connection_state' => PlayerConnectionState::Connected,

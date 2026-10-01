@@ -126,6 +126,53 @@ final class SetMovieThemeMembership
     }
 
     /**
+     * Ajoute un film à plusieurs thèmes dans une seule transaction : le film
+     * et l'autorisation ne sont relus qu'une fois, puis chaque changement
+     * garde sa propre ligne `movie.theme_set`.
+     *
+     * @param  iterable<Theme>  $themes
+     * @return int Nombre d'exceptions effectivement ajoutées.
+     *
+     * @throws AuthorizationException le film ne se cure plus (retiré)
+     * @throws Throwable
+     */
+    public function handleAdditions(User $curator, Movie $movie, iterable $themes): int
+    {
+        $orderedThemes = collect($themes)
+            ->unique(static fn (Theme $theme): int => $theme->id)
+            ->sortBy(static fn (Theme $theme): int => $theme->id)
+            ->values();
+
+        return DB::transaction(function () use ($curator, $movie, $orderedThemes): int {
+            $locked = Movie::query()->whereKey($movie->id)->lockForUpdate()->firstOrFail();
+
+            Gate::forUser($curator)->authorize('curate', $locked);
+
+            $changed = 0;
+            $at = CarbonImmutable::now();
+
+            foreach ($orderedThemes as $theme) {
+                $state = ThemeMembershipState::Added;
+                $previous = $this->apply($locked, $theme, $state, $curator->id, $at);
+
+                if ($previous === $state) {
+                    continue;
+                }
+
+                $this->journal->record(
+                    $curator,
+                    AdminActionType::MovieThemeSet,
+                    $locked->id,
+                    details: AdminActionDetails::movieThemeSet($theme->key, $previous?->value, $state->value),
+                );
+                $changed++;
+            }
+
+            return $changed;
+        }, self::DEADLOCK_ATTEMPTS);
+    }
+
+    /**
      * Écrit l'exception `$state` — sans verrou du film, sans autorisation ni
      * journal : l'appelant les porte, dans sa transaction ouverte.
      *

@@ -128,6 +128,11 @@ const WATCHED = [
     'resources/js/lib/room-settings.ts',
     'resources/js/lib/frame-geometry.ts',
     'resources/js/types/legal.ts',
+    // L40-8 (spec 40 § 11, D49 du 01/10) : l'écran « Avatar » des réglages et
+    // son recadreur.
+    'resources/js/pages/settings/avatar.tsx',
+    'resources/js/components/account',
+    'resources/js/layouts/settings/layout.tsx',
 
     // Fichiers hérités PROPRES que retouche un lot (spec 90 § 9.3, règle
     // d'entrée n° 2) : ils entrent dans le commit qui les modifie.
@@ -216,7 +221,6 @@ const EXEMPT = [
     'resources/js/layouts/auth/auth-card-layout.tsx',
     'resources/js/layouts/auth/auth-simple-layout.tsx',
     'resources/js/layouts/auth/auth-split-layout.tsx',
-    'resources/js/layouts/settings/layout.tsx',
     'resources/js/lib/i18n.ts',
     'resources/js/lib/utils.ts',
     'resources/js/pages/auth/forgot-password.tsx',

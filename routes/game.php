@@ -11,6 +11,7 @@ use App\Http\Controllers\Game\SoloGameController;
 use App\Http\Controllers\Game\SoloHeartbeatController;
 use App\Http\Controllers\Game\SoloRoundController;
 use App\Http\Controllers\Game\SoloStateController;
+use App\Http\Controllers\Room\AvatarReportController;
 use App\Http\Controllers\Room\HostTransferController;
 use App\Http\Controllers\Room\KickController;
 use App\Http\Controllers\Room\LaunchController;
@@ -227,6 +228,11 @@ Route::middleware(['seat.active', 'throttle:game-write'])->group(function (): vo
     // courant doit tenir — celui de l'hôte ne tient jamais la cible.
     Route::post('r/{room}/players/{target}/kick', [KickController::class, 'store'])
         ->name('room.players.kick');
+
+    // Signalement de l'avatar téléversé d'un autre siège (spec 40 § 11.6,
+    // D49 du 01/10) : tout siège actif, aucune autorité d'hôte.
+    Route::post('r/{room}/players/{target}/report-avatar', [AvatarReportController::class, 'store'])
+        ->name('room.players.report_avatar');
 
     Route::post('r/{room}/host', [HostTransferController::class, 'store'])
         ->name('room.host.transfer');

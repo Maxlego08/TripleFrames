@@ -3,6 +3,8 @@
 namespace App\Concerns;
 
 use App\Avatars\AvatarPresetCatalog;
+use App\Avatars\SeatAvatar;
+use App\Models\User;
 use App\Rules\ValidNickname;
 use App\Support\Identity\NicknameNormalizer;
 use Illuminate\Contracts\Validation\ValidationRule;
@@ -45,6 +47,35 @@ trait PlayerIdentityValidationRules
     protected function avatarPresetRules(): array
     {
         return ['required', 'string', Rule::in(AvatarPresetCatalog::keys())];
+    }
+
+    /**
+     * L'avatar d'un siège (spec 40 § 11.4, D49 du 01/10) : une clé du
+     * catalogue, ou `account` (« Mon avatar ») pour un compte qui porte une
+     * image visible — jamais pour un invité ni pour une image masquée.
+     *
+     * @return array<int, mixed>
+     */
+    protected function seatAvatarRules(?User $user): array
+    {
+        $allowed = AvatarPresetCatalog::keys();
+
+        if (SeatAvatar::accountChoiceAvailable($user)) {
+            $allowed[] = SeatAvatar::ACCOUNT;
+        }
+
+        return ['required', 'string', Rule::in($allowed)];
+    }
+
+    /**
+     * Le compte connecté de la requête, ou `null` : seul un `User` ouvre le
+     * choix « Mon avatar ».
+     */
+    protected function authenticatedUser(): ?User
+    {
+        $user = request()->user();
+
+        return $user instanceof User ? $user : null;
     }
 
     /**

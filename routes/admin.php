@@ -1,6 +1,8 @@
 <?php
 
 use App\Http\Controllers\Admin\AccessController;
+use App\Http\Controllers\Admin\AudienceController;
+use App\Http\Controllers\Admin\AvatarModerationController;
 use App\Http\Controllers\Admin\CatalogController;
 use App\Http\Controllers\Admin\CurationHeartbeatController;
 use App\Http\Controllers\Admin\CurationQueueController;
@@ -15,6 +17,7 @@ use App\Http\Controllers\Admin\FrameReviewController;
 use App\Http\Controllers\Admin\FrameReviewQueueController;
 use App\Http\Controllers\Admin\FrameTmdbController;
 use App\Http\Controllers\Admin\FrameUnpublishController;
+use App\Http\Controllers\Admin\GameInspectionController;
 use App\Http\Controllers\Admin\GuideController;
 use App\Http\Controllers\Admin\ImportController;
 use App\Http\Controllers\Admin\ImportDiscoverController;
@@ -32,16 +35,24 @@ use App\Http\Controllers\Admin\MoviePublishController;
 use App\Http\Controllers\Admin\MovieThemeController;
 use App\Http\Controllers\Admin\MovieTitleController;
 use App\Http\Controllers\Admin\MovieUnpublishController;
+use App\Http\Controllers\Admin\NearMissController;
+use App\Http\Controllers\Admin\PerformanceController;
+use App\Http\Controllers\Admin\PlayerInspectionController;
 use App\Http\Controllers\Admin\ThemeController;
 use App\Http\Controllers\Admin\ThemePublishController;
 use App\Http\Controllers\Admin\ThroughputController;
 use App\Http\Controllers\Admin\TwoFactorRequiredController;
 use App\Http\Controllers\Admin\UserDirectoryController;
 use App\Models\AdminAction;
+use App\Models\AudienceDaily;
 use App\Models\Frame;
 use App\Models\FrameReview;
+use App\Models\Game;
 use App\Models\ImportRun;
 use App\Models\Movie;
+use App\Models\NearMiss;
+use App\Models\PerfSample;
+use App\Models\Player;
 use App\Models\Theme;
 use App\Models\User;
 use Illuminate\Support\Facades\Route;
@@ -393,6 +404,24 @@ Route::middleware(['auth', 'verified', 'role:curator', 'admin.2fa', 'admin.local
             ->middleware(['can:create,'.ImportRun::class, 'throttle:admin-import'])
             ->name('import.seed_list');
 
+        // Les formulations fausses récurrentes, agrégées sans aucun lien vers
+        // un joueur : lecture, reconstruction, promotion en alias et rejet.
+        Route::get('near-misses', [NearMissController::class, 'index'])
+            ->middleware('can:viewAny,'.NearMiss::class)
+            ->name('near_misses.index');
+
+        Route::post('near-misses/refresh', [NearMissController::class, 'refresh'])
+            ->middleware(['can:viewAny,'.NearMiss::class, 'throttle:admin-curation'])
+            ->name('near_misses.refresh');
+
+        Route::post('near-misses/{nearMiss}/promote', [NearMissController::class, 'promote'])
+            ->middleware(['can:promote,nearMiss', 'throttle:admin-curation'])
+            ->name('near_misses.promote');
+
+        Route::post('near-misses/{nearMiss}/dismiss', [NearMissController::class, 'dismiss'])
+            ->middleware(['can:dismiss,nearMiss', 'throttle:admin-curation'])
+            ->name('near_misses.dismiss');
+
         // Les écrans de l'administrateur seul (§ 2.8, lignes 34 et 40) :
         // une seconde porte, `role:admin`, en plus de la garde `can:` de
         // chaque route. Elle n'autorise rien de plus que les policies ; elle
@@ -439,5 +468,55 @@ Route::middleware(['auth', 'verified', 'role:curator', 'admin.2fa', 'admin.local
             Route::get('journal', [JournalController::class, 'index'])
                 ->middleware('can:viewAny,'.AdminAction::class)
                 ->name('journal.index');
+
+            // L'inspection des parties et des sièges (lignes 36 et 42, D46 du
+            // 01/10) : quatre lectures, chacune consignée. `{game}` est lié
+            // par `id`, `{player}` par `public_id`.
+            Route::get('games', [GameInspectionController::class, 'index'])
+                ->middleware('can:viewAny,'.Game::class)
+                ->name('games.index');
+
+            Route::get('games/{game}', [GameInspectionController::class, 'show'])
+                ->middleware('can:view,game')
+                ->name('games.show');
+
+            Route::get('players', [PlayerInspectionController::class, 'index'])
+                ->middleware('can:viewAny,'.Player::class)
+                ->name('players.index');
+
+            Route::get('players/{player}', [PlayerInspectionController::class, 'show'])
+                ->middleware('can:view,player')
+                ->name('players.show');
+
+            // Les performances (ligne 43, D47 du 01/10) : routes, jobs, SQL
+            // lentes et retards du moteur. Aucune donnée personnelle.
+            Route::get('performance', [PerformanceController::class, 'index'])
+                ->middleware('can:viewAny,'.PerfSample::class)
+                ->name('performance.index');
+
+            // L'audience (ligne 44, D48 du 01/10) : compteurs quotidiens sans
+            // cookie, temps réel, entonnoir de jeu. Aucune donnée personnelle.
+            Route::get('audience', [AudienceController::class, 'index'])
+                ->middleware('can:viewAny,'.AudienceDaily::class)
+                ->name('audience.index');
+
+            // Les avatars téléversés (ligne 45, D49 du 01/10) : la liste,
+            // l'image même masquée, et deux gestes consignés — lever, retirer
+            // (motif obligatoire). `{user}` est lié par `id`.
+            Route::get('avatars', [AvatarModerationController::class, 'index'])
+                ->middleware('can:moderateAvatars,'.User::class)
+                ->name('avatars.index');
+
+            Route::get('avatars/{user}/image', [AvatarModerationController::class, 'image'])
+                ->middleware('can:moderateAvatar,user')
+                ->name('avatars.image');
+
+            Route::post('avatars/{user}/unhide', [AvatarModerationController::class, 'unhide'])
+                ->middleware(['can:moderateAvatar,user', 'throttle:admin-curation'])
+                ->name('avatars.unhide');
+
+            Route::post('avatars/{user}/remove', [AvatarModerationController::class, 'remove'])
+                ->middleware(['can:moderateAvatar,user', 'throttle:admin-curation'])
+                ->name('avatars.remove');
         });
     });

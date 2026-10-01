@@ -37,9 +37,11 @@ abstract class TablePurgeHandler implements PurgeHandler
     /**
      * La borne à l'instant `$asOf` : est éligible toute ligne dont la colonne
      * pilote lui est strictement antérieure. Durée lue dans
-     * {@see RetentionWindows}, jamais écrite ici.
+     * {@see RetentionWindows}, jamais écrite ici. Une chaîne pour une colonne
+     * pilote de type date (`Y-m-d`) : comparée à un instant complet, un jour
+     * nu serait, en SQLite, strictement antérieur à sa propre minuit.
      */
-    abstract protected function cutoff(CarbonImmutable $asOf): int|CarbonImmutable;
+    abstract protected function cutoff(CarbonImmutable $asOf): int|string|CarbonImmutable;
 
     public function connection(): ConnectionInterface
     {

@@ -62,6 +62,7 @@ class UserDirectoryController extends Controller
         AdminActionType::UserRealNameChanged,
         AdminActionType::AvatarHidden,
         AdminActionType::AvatarUnhidden,
+        AdminActionType::AvatarRemoved,
     ];
 
     /**

@@ -414,3 +414,41 @@ it('un clic faux traité après la révélation de sa manche répond saisie clos
 
     Event::assertNotDispatched(InputClosed::class);
 });
+
+it('un texte faux traité après la révélation de sa manche répond saisie close sans rien compter', function (): void {
+    Event::fake([InputClosed::class]);
+
+    $token = PlayerToken::mint(Locale::French);
+    $target = SubmissionFixtures::movie('Harbour Lights', 'Les Feux du port');
+    [$game, $round, [$seat]] = SubmissionFixtures::openedRound([$token], SubmissionFixtures::settings(InputDifficulty::Expert), $target);
+
+    $closesAt = EngineFixtures::durationEnd($round)->addMilliseconds($game->tier_grace_ms);
+
+    // Reçu dans la fenêtre, le texte est ralenti : la révélation est validée
+    // pendant ses lectures de clés (S6), avant la transaction du refus. Les
+    // titres sont partis : la révélation l'emporte (spec 70 § 7.3, E107-5).
+    $revealed = false;
+
+    DB::listen(static function (QueryExecuted $query) use (&$revealed, $round, $closesAt): void {
+        if ($revealed || ! SubmissionFixtures::touches($query->sql, 'answer_key')) {
+            return;
+        }
+
+        $revealed = true;
+        app(RevealRound::class)->handle(Round::query()->findOrFail($round->id), $closesAt);
+    });
+
+    SubmissionFixtures::submit($this, $seat, $token, SubmissionFixtures::WRONG, $closesAt->subMillisecond())
+        ->assertStatus(Response::HTTP_CONFLICT)
+        ->assertExactJson(SubmissionFixtures::closedBody(Locale::French));
+
+    $participation = SubmissionFixtures::participation($round, $seat);
+
+    expect($revealed)->toBeTrue()
+        ->and(Round::query()->whereKey($round->id)->value('status'))->toBe(RoundStatus::Revealing)
+        ->and($participation->input_state)->toBe(RoundPlayerInputState::Open)
+        ->and($participation->wrong_attempts)->toBe(0)
+        ->and($participation->input_closed_at)->toBeNull();
+
+    Event::assertNotDispatched(InputClosed::class);
+});

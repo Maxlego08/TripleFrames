@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Avatars\AvatarRef;
+use App\Avatars\UploadedAvatars;
 use App\Enums\AvatarKind;
 use App\Enums\GamePlayerStatus;
 use Carbon\CarbonImmutable;
@@ -122,10 +123,37 @@ class GamePlayer extends Model
     {
         $initials = AvatarRef::initialsFrom($this->display_nickname);
 
-        if ($this->display_avatar_kind === AvatarKind::Preset && $this->display_avatar_preset !== null) {
+        // Nature gelée `upload` (spec 40 § 11.5) : la nature et le repli sont
+        // gelés, l'image se lit VIVANTE sur le compte du siège.
+        if ($this->display_avatar_kind === AvatarKind::Upload) {
+            $path = UploadedAvatars::visiblePath($this->seatUserId());
+
+            if ($path !== null) {
+                return AvatarRef::upload($path, $initials);
+            }
+        }
+
+        if (in_array($this->display_avatar_kind, [AvatarKind::Preset, AvatarKind::Upload], true) && $this->display_avatar_preset !== null) {
             return AvatarRef::preset($this->display_avatar_preset, $initials);
         }
 
         return AvatarRef::initials($initials);
+    }
+
+    /**
+     * Le compte du siège : par la relation chargée (`FROZEN_SEAT_COLUMNS`
+     * porte `user_id`), sinon une lecture par clé primaire.
+     */
+    private function seatUserId(): ?int
+    {
+        if ($this->relationLoaded('player')) {
+            $seat = $this->getRelation('player');
+
+            return $seat instanceof Player ? $seat->user_id : null;
+        }
+
+        $userId = Player::query()->whereKey($this->player_id)->value('user_id');
+
+        return is_int($userId) ? $userId : null;
     }
 }

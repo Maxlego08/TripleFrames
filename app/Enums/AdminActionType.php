@@ -9,7 +9,7 @@ use App\Support\Admin\AdminJournal;
  * Liste FERMÉE des gestes consignés au journal d'administration : cast de
  * `admin_action.action` (spec 10 § 8.3, contrat C14).
  *
- * **Quarante-sept cas.** Les vingt-deux gestes engageants du jalon 1 — les
+ * **Cinquante-deux cas.** Les vingt-deux gestes engageants du jalon 1 — les
  * vingt et un du contrat C14, dont six entrés le 23/09 (`movie.published`,
  * `frame.unpublished`, `frame.grid_unpublished`, `frame.unsuspended`,
  * `site.closed`, `site.reopened`), plus `user.real_name_changed` (28/09,
@@ -32,6 +32,9 @@ use App\Support\Admin\AdminJournal;
  *   et `theme.unpublished`, sujet {@see AdminActionSubject::Theme} — l'écran
  *   des thèmes du back-office, avancé au J1 —, et `movie.theme_set`, sujet le
  *   film, le geste du bloc « Thèmes » de la fiche film.
+ *
+ * - un cas entré par **D49 du 01/10** (spec 40 § 11.7) : `avatar.removed`,
+ *   le retrait d'une image téléversée par l'administrateur, motif obligatoire.
  *
  * Tous sans migration de colonne : `action` reste un `string(40)`. `10`
  * possède la liste ; un cas nouveau s'y demande en exigence, jamais par un
@@ -81,6 +84,9 @@ enum AdminActionType: string
     case AvatarHidden = 'avatar.hidden';
 
     case AvatarUnhidden = 'avatar.unhidden';
+
+    /** Retrait d'une image téléversée par l'admin, motif obligatoire (D49 du 01/10, spec 40 § 11.7). */
+    case AvatarRemoved = 'avatar.removed';
 
     case NicknameMasked = 'nickname.masked';
 
@@ -185,6 +191,20 @@ enum AdminActionType: string
     /** La fiche d'un compte. */
     case UserViewed = 'user.viewed';
 
+    // --- D46 du 01/10 : inspection des parties et des sièges ---------------
+
+    /** La liste des parties, en cours ou terminées. */
+    case GamesDirectoryViewed = 'games.directory_viewed';
+
+    /** La fiche d'une partie : participants, réponses justes et fausses. */
+    case GameViewed = 'game.viewed';
+
+    /** L'annuaire des sièges, invités compris. */
+    case PlayersDirectoryViewed = 'players.directory_viewed';
+
+    /** La fiche d'un siège : ses parties et ses réponses. */
+    case PlayerViewed = 'player.viewed';
+
     /** Préfixe des libellés du back-office, un par cas. */
     public const string LABEL_PREFIX = 'admin.enum.admin_action.';
 
@@ -205,11 +225,13 @@ enum AdminActionType: string
             self::UserRealNameChanged,
             self::AvatarHidden,
             self::AvatarUnhidden,
+            self::AvatarRemoved,
             self::NicknameMasked,
             self::NicknameUnmasked,
             self::NicknameBanned,
             self::UserLookedUp,
             self::UserViewed,
+            self::PlayerViewed,
         ], true);
 
         if ($alwaysPermanent) {
@@ -223,7 +245,10 @@ enum AdminActionType: string
             AdminActionSubject::Site,
             AdminActionSubject::ImportRun,
             AdminActionSubject::Theme,
-            AdminActionSubject::Accounts => AdminActionRetention::Permanent,
+            AdminActionSubject::Accounts,
+            AdminActionSubject::Game,
+            AdminActionSubject::Games,
+            AdminActionSubject::Players => AdminActionRetention::Permanent,
             AdminActionSubject::User,
             AdminActionSubject::Player => AdminActionRetention::Rolling12m,
         };
@@ -266,11 +291,16 @@ enum AdminActionType: string
             self::UserRealNameChanged,
             self::AvatarHidden,
             self::AvatarUnhidden,
+            self::AvatarRemoved,
             self::UserLookedUp,
             self::UserViewed => AdminActionSubject::User,
             self::NicknameMasked,
             self::NicknameUnmasked,
-            self::NicknameBanned => AdminActionSubject::Player,
+            self::NicknameBanned,
+            self::PlayerViewed => AdminActionSubject::Player,
+            self::GamesDirectoryViewed => AdminActionSubject::Games,
+            self::GameViewed => AdminActionSubject::Game,
+            self::PlayersDirectoryViewed => AdminActionSubject::Players,
             self::TakedownDecided => AdminActionSubject::TakedownRequest,
             self::SiteClosed,
             self::SiteReopened => AdminActionSubject::Site,
@@ -302,6 +332,10 @@ enum AdminActionType: string
             self::AccountsAccessViewed,
             self::UserLookedUp,
             self::UserViewed,
+            self::GamesDirectoryViewed,
+            self::GameViewed,
+            self::PlayersDirectoryViewed,
+            self::PlayerViewed,
         ], true);
     }
 
@@ -357,6 +391,7 @@ enum AdminActionType: string
             self::MovieWithdrawn,
             self::FrameGridUnpublished,
             self::FrameWithdrawn,
+            self::AvatarRemoved,
             self::TakedownDecided,
             self::SiteClosed,
         ], true);

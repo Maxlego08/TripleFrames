@@ -2,10 +2,13 @@
 
 namespace App\Support\Retention;
 
+use App\Support\Retention\Handlers\AudienceHandler;
 use App\Support\Retention\Handlers\FrameworkFailedJobsHandler;
 use App\Support\Retention\Handlers\FrameworkResetTokensHandler;
 use App\Support\Retention\Handlers\FrameworkSessionsHandler;
+use App\Support\Retention\Handlers\GameTraceHandler;
 use App\Support\Retention\Handlers\OrphanPlayerHandler;
+use App\Support\Retention\Handlers\PerfSampleHandler;
 use App\Support\Retention\Handlers\PurgeRunHandler;
 use App\Support\Retention\Handlers\StaleRoomHandler;
 use Illuminate\Contracts\Container\Container;
@@ -35,6 +38,9 @@ final readonly class PurgeHandlers
     public const array CLASSES = [
         StaleRoomHandler::class,
         OrphanPlayerHandler::class,
+        PerfSampleHandler::class,
+        GameTraceHandler::class,
+        AudienceHandler::class,
         FrameworkSessionsHandler::class,
         FrameworkFailedJobsHandler::class,
         FrameworkResetTokensHandler::class,

@@ -79,6 +79,32 @@ return [
             'report' => false,
         ],
 
+        /*
+        |--------------------------------------------------------------------------
+        | Avatars téléversés — disque privé, servi par une route applicative
+        |--------------------------------------------------------------------------
+        |
+        | Spec 40 § 11.3, D49 du 01/10. `'serve' => false` et aucun `storage:link` :
+        | les octets passent par `GET /a/{file}` (`avatar.show`), qui ne sert un
+        | fichier que s'il est l'image COURANTE et VISIBLE d'un compte — un
+        | masquage s'applique donc aussi à une URL déjà vue. Aucune frame sur ce
+        | disque, jamais.
+        |
+        | `AVATARS_DISK_ROOT` laissée vide vaut `storage/app/avatars`, chemin
+        | ABSOLU. En production, la racine se pose hors du répertoire de
+        | déploiement, comme celle de `frames`.
+        |
+        */
+
+        'avatars' => [
+            'driver' => 'local',
+            'root' => ((string) env('AVATARS_DISK_ROOT', '')) ?: storage_path('app/avatars'),
+            'serve' => false,
+            'visibility' => 'private',
+            'throw' => true,
+            'report' => false,
+        ],
+
         's3' => [
             'driver' => 's3',
             'key' => env('AWS_ACCESS_KEY_ID'),

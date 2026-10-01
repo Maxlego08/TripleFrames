@@ -18,6 +18,7 @@ use App\Models\Player;
 use App\Models\Round;
 use App\Models\RoundPlayer;
 use App\Models\RoundTier;
+use App\Models\WrongAnswer;
 use App\Support\Identity\PlayerToken;
 use App\ValueObjects\Answers\SeatInputView;
 use Carbon\CarbonImmutable;
@@ -199,20 +200,22 @@ it('chaque refus compte, même répété', function (): void {
     $t1 = EngineFixtures::opensAt($round, 1);
 
     // La même saisie fausse, trois fois : aucune n'est reconnue comme déjà
-    // soumise, puisqu'aucune saisie fausse n'est mémorisée (décision 19).
+    // soumise — le journal `wrong_answer` (D46 du 01/10) n'est jamais relu
+    // par la validation.
     foreach ([1, 2, 3] as $attempt) {
         $queries = SubmissionFixtures::queries(fn () => SubmissionFixtures::submit($this, $seat, $token, SubmissionFixtures::WRONG, $t1->addMilliseconds($attempt * $cadence))
             ->assertOk()
             ->assertExactJson(SubmissionFixtures::rejectedBody(attemptsCap($game) - $attempt)));
 
-        // Une seule écriture par refus : l'instruction unique de `round_player`.
-        expect(SubmissionFixtures::writes($queries))->toHaveCount(1)
+        // L'instruction unique de `round_player`, puis une ligne du journal.
+        expect(SubmissionFixtures::writes($queries))->toHaveCount(2)
             ->and(attemptsRoundPlayerWrites($queries))->toHaveCount(1)
             ->and(SubmissionFixtures::participation($round, $seat)->wrong_attempts)->toBe($attempt);
     }
 
-    // Comptées, jamais stockées : ni texte, ni ligne.
-    expect(Guess::query()->count())->toBe(0)
+    // Comptées, et journalisées une fois chacune (D46 du 01/10).
+    expect(WrongAnswer::query()->where('player_id', $seat->id)->orderBy('id')->pluck('attempt_number')->all())->toBe([1, 2, 3])
+        ->and(Guess::query()->count())->toBe(0)
         ->and(NearMiss::query()->count())->toBe(0)
         ->and(SubmissionFixtures::participation($round, $seat)->input_state)->toBe(RoundPlayerInputState::Open);
 });

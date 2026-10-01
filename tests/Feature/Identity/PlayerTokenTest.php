@@ -722,7 +722,7 @@ it("re-signe le player_token avec l'avatar choisi sous le même tid, que suggest
         ->and(Player::query()->where('player_token_hash', hash('sha256', (string) $claims['tid']))->count())->toBe(2);
 });
 
-it("prend le siège d'un compte connecté sous le pseudo saisi, sans user_id au jalon 1", function () {
+it("prend le siège d'un compte connecté sous le pseudo saisi et le rattache au compte", function () {
     $user = User::factory()->create(['name' => 'Alice Martin']);
     $room = Room::factory()->create();
 
@@ -732,7 +732,8 @@ it("prend le siège d'un compte connecté sous le pseudo saisi, sans user_id au 
     $seat = Player::query()->sole();
 
     expect($seat->nickname)->toBe('Zoé')
-        ->and($seat->user_id)->toBeNull()
+        // I4.10 amendé par D49 du 01/10 : la prise de siège rattache le compte.
+        ->and($seat->user_id)->toBe($user->id)
         ->and($seat->avatar_kind)->toBe(AvatarKind::Preset)
         ->and($seat->avatar_preset)->toBe('preset-04')
         // Le compte ne passe jamais dans le jeton : quatre revendications, aucune du compte.

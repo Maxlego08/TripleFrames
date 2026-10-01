@@ -47,7 +47,7 @@ class SoloStartRequest extends FormRequest
 
         if ($this->requiresIdentity()) {
             $rules['nickname'] = $this->nicknameRules();
-            $rules['avatar'] = $this->avatarPresetRules();
+            $rules['avatar'] = $this->seatAvatarRules($this->authenticatedUser());
         }
 
         return $rules;

@@ -348,6 +348,7 @@ export default function Lobby({
                 selfPublicId={state.self.publicId}
                 capacity={settings.settings.capacity}
                 actions={isHost ? gestures : null}
+                reports={gestures}
             />
 
             <div>
@@ -521,6 +522,7 @@ export default function Lobby({
                                     selfPublicId={state.self.publicId}
                                     capacity={settings.settings.capacity}
                                     actions={isHost ? gestures : null}
+                                    reports={gestures}
                                 />
 
                                 <div>

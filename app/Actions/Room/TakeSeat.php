@@ -2,7 +2,7 @@
 
 namespace App\Actions\Room;
 
-use App\Enums\AvatarKind;
+use App\Avatars\SeatAvatar;
 use App\Enums\GamePlayerStatus;
 use App\Enums\JoinRefusal;
 use App\Enums\Locale;
@@ -14,6 +14,7 @@ use App\Models\GamePlayer;
 use App\Models\Player;
 use App\Models\Room;
 use App\Models\Round;
+use App\Models\User;
 use App\Rules\ValidNickname;
 use App\Support\Game\CurrentGame;
 use App\Support\Game\SeatViewPresenter;
@@ -88,8 +89,10 @@ use LogicException;
  * désormais (double envoi) : reprise ; sinon `validation.nickname.taken`.
  * Jamais une 1062 brute (10 § 7.1).
  *
- * Au J1, `player.user_id` n'est jamais écrit (C4 I4.10) : un compte connecté
- * prend un siège comme un invité.
+ * Un compte connecté prend un siège comme un invité, mais la prise de siège
+ * écrit `player.user_id` (C4 I4.10, amendé par D49 du 01/10) : c'est ce lien
+ * qui affiche son image téléversée (spec 40 § 11.4). Une reprise ne le
+ * réécrit pas.
  */
 final readonly class TakeSeat
 {
@@ -103,7 +106,8 @@ final readonly class TakeSeat
      *                            et du jeton frappé à l'écriture du siège.
      * @param  string|null  $nickname  Forme canonique validée ; nulle seulement
      *                                 quand le jeton tient déjà un siège (reprise).
-     * @param  string|null  $avatarPreset  Clé du catalogue validée ; même règle.
+     * @param  string|null  $avatarPreset  Clé du catalogue validée, ou
+     *                                     `SeatAvatar::ACCOUNT` ; même règle.
      * @param  Locale  $locale  Locale effective de la requête (`SetLocale`).
      * @return Player|JoinRefusal le siège pris ou repris, ou le refus
      *
@@ -188,7 +192,16 @@ final readonly class TakeSeat
             throw self::nicknameTaken();
         }
 
-        // S6 — la frappe, seulement maintenant, puis l'écriture du siège.
+        // S6 — l'avatar, relu sur le compte sous le verrou (spec 40 § 11.4),
+        // la frappe, seulement maintenant, puis l'écriture du siège.
+        $account = $request->user() instanceof User ? $request->user() : null;
+        $avatar = SeatAvatar::resolve(
+            $avatarPreset,
+            $account,
+            $current?->avatar,
+            self::takenPresets($locked),
+        );
+
         $token = $this->tokens->ensure($request);
 
         $seat = new Player;
@@ -198,9 +211,10 @@ final readonly class TakeSeat
             'nickname' => $nickname,
             'nickname_normalized' => $normalized,
             'player_token_hash' => $token->hash(),
+            'user_id' => $account?->id,
             'locale' => $locale,
-            'avatar_kind' => AvatarKind::Preset,
-            'avatar_preset' => $avatarPreset,
+            'avatar_kind' => $avatar->kind,
+            'avatar_preset' => $avatar->preset,
             'joined_at' => $now,
             'last_seen_at' => $now,
             'connection_state' => PlayerConnectionState::Connected,
@@ -221,7 +235,7 @@ final readonly class TakeSeat
         Room::query()->whereKey($locked->id)->update(['last_activity_at' => $now]);
 
         // S10 — après la validation.
-        $this->afterCommit($locked, $seat, $request, $token, $avatarPreset);
+        $this->afterCommit($locked, $seat, $request, $token, $avatar->preset);
 
         return $seat;
     }
@@ -337,6 +351,23 @@ final readonly class TakeSeat
 
             $this->tokens->resign($request, $token->withAvatar($avatarPreset));
         });
+    }
+
+    /**
+     * Les prédéfinis des sièges tenus du salon : la suggestion d'un repli évite
+     * un avatar déjà pris (I5.8).
+     *
+     * @return list<string>
+     */
+    private static function takenPresets(Room $room): array
+    {
+        return array_values(Player::query()
+            ->whereBelongsTo($room)
+            ->holdingSeat()
+            ->whereNotNull('avatar_preset')
+            ->pluck('avatar_preset')
+            ->map(static fn (mixed $key): string => (string) $key)
+            ->all());
     }
 
     /** Le siège de ce jeton dans ce salon, expulsé compris : c'est S3 qui le refuse. */

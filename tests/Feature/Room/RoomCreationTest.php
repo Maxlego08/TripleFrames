@@ -107,8 +107,9 @@ it("crée le salon avec les réglages par défaut et fait du créateur l'hôte",
             ->where('state.self.publicId', $seat->public_id)
             ->where('state.self.isHost', true));
 
-    // Un compte connecté crée comme un invité : aucun `user_id` au J1 (C4
-    // I4.10), le pseudo saisi et jamais le nom du compte (I5.11).
+    // Un compte connecté crée comme un invité, mais son siège est rattaché au
+    // compte (C4 I4.10, amendé par D49 du 01/10) ; le pseudo saisi, jamais le
+    // nom du compte (I5.11).
     $user = User::factory()->create(['name' => 'Nom du compte']);
 
     $this->flushSession();
@@ -118,7 +119,7 @@ it("crée le salon avec les réglages par défaut et fait du créateur l'hôte",
 
     $accountSeat = Player::query()->where('nickname', 'Invitée')->sole();
 
-    expect($accountSeat->user_id)->toBeNull()
+    expect($accountSeat->user_id)->toBe($user->id)
         ->and(Room::query()->whereKey($accountSeat->room_id)->value('host_player_id'))->toBe($accountSeat->id);
 });
 

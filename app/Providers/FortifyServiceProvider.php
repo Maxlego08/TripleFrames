@@ -137,6 +137,12 @@ class FortifyServiceProvider extends ServiceProvider
             return Limit::perMinute(5)->by($throttleKey);
         });
 
+        // Le téléversement d'un avatar de compte (spec 40 § 11.2) : il décode
+        // une image dans la requête, d'où un plafond par compte.
+        RateLimiter::for('avatar-upload', function (Request $request) {
+            return Limit::perHour(10)->by((string) $request->user()?->getAuthIdentifier());
+        });
+
         RateLimiter::for('passkeys', function (Request $request) {
             return Limit::perMinute(10)->by(
                 ($request->input('credential.id') ?: $request->session()->getId()).'|'.$request->ip(),

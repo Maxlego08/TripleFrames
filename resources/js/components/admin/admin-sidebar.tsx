@@ -3,13 +3,19 @@ import {
     BookOpen,
     Clapperboard,
     DownloadCloud,
+    Activity,
+    BarChart3,
+    CircleUserRound,
+    Gamepad2,
     Gauge,
     LayoutDashboard,
     ListChecks,
     ListOrdered,
     ScrollText,
     ShieldCheck,
+    Sparkles,
     Tags,
+    UserRound,
     Users,
 } from 'lucide-react';
 import { useEffect, useRef } from 'react';
@@ -42,10 +48,16 @@ import {
     guide as adminGuide,
 } from '@/routes/admin';
 import { index as accessIndex } from '@/routes/admin/access';
+import { index as audienceIndex } from '@/routes/admin/audience';
+import { index as avatarsIndex } from '@/routes/admin/avatars';
 import { index as catalogIndex } from '@/routes/admin/catalog';
 import { index as curationIndex } from '@/routes/admin/curation';
+import { index as gamesIndex } from '@/routes/admin/games';
 import { index as importIndex } from '@/routes/admin/import';
 import { index as journalIndex } from '@/routes/admin/journal';
+import { index as nearMissesIndex } from '@/routes/admin/near_misses';
+import { index as performanceIndex } from '@/routes/admin/performance';
+import { index as playersIndex } from '@/routes/admin/players';
 import { index as reviewIndex } from '@/routes/admin/review';
 import { index as themesIndex } from '@/routes/admin/themes';
 import { index as throughputIndex } from '@/routes/admin/throughput';
@@ -130,6 +142,11 @@ export function AdminSidebar() {
             href: catalogIndex(),
             icon: Clapperboard,
         },
+        {
+            title: t('admin.nav.near_misses'),
+            href: nearMissesIndex(),
+            icon: Sparkles,
+        },
         // L'écran des thèmes (spec 20 § 9.6, D43 du 01/10) : créer, corriger,
         // publier sous seuil.
         {
@@ -184,6 +201,46 @@ export function AdminSidebar() {
             title: t('admin.nav.journal'),
             href: journalIndex(),
             icon: ScrollText,
+            minRole: 'admin',
+            prefetch: false,
+        },
+        // L'inspection des parties et des sièges (lignes 36 et 42, D46 du
+        // 01/10) : chaque visite est consignée, donc jamais préchargée.
+        {
+            title: t('admin.nav.games'),
+            href: gamesIndex(),
+            icon: Gamepad2,
+            minRole: 'admin',
+            prefetch: false,
+        },
+        {
+            title: t('admin.nav.players'),
+            href: playersIndex(),
+            icon: UserRound,
+            minRole: 'admin',
+            prefetch: false,
+        },
+        // Les performances (ligne 43, D47 du 01/10).
+        {
+            title: t('admin.nav.performance'),
+            href: performanceIndex(),
+            icon: Activity,
+            minRole: 'admin',
+            prefetch: false,
+        },
+        // L'audience (ligne 44, D48 du 01/10).
+        {
+            title: t('admin.nav.audience'),
+            href: audienceIndex(),
+            icon: BarChart3,
+            minRole: 'admin',
+            prefetch: false,
+        },
+        // Les avatars téléversés (ligne 45, D49 du 01/10).
+        {
+            title: t('admin.nav.avatars'),
+            href: avatarsIndex(),
+            icon: CircleUserRound,
             minRole: 'admin',
             prefetch: false,
         },

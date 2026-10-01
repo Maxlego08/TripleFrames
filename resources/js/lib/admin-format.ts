@@ -59,6 +59,24 @@ export function formatDay(
     return new Intl.DateTimeFormat(locale, { dateStyle: 'short' }).format(date);
 }
 
+/** Un mois `YYYY-MM-01`, sans suggérer que le jour exact est conservé. */
+export function formatMonth(
+    month: string | null | undefined,
+    locale: string,
+): string | null {
+    const date = parseMoment(month);
+
+    if (date === null) {
+        return null;
+    }
+
+    return new Intl.DateTimeFormat(locale, {
+        month: 'long',
+        year: 'numeric',
+        timeZone: 'UTC',
+    }).format(date);
+}
+
 /**
  * Une durée entre deux instants, en unités de la locale — jamais en chaîne
  * composée à la main, qui serait un texte en dur déguisé.

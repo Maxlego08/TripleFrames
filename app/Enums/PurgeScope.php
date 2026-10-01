@@ -19,6 +19,15 @@ enum PurgeScope: string
 
     case NearMiss = 'near_miss';
 
+    // D47 du 01/10 : la mesure des performances et la chronologie technique
+    // des parties, 14 jours (spec 10 § 11.1).
+    case Perf = 'perf';
+
+    case GameTrace = 'game_trace';
+
+    // D48 du 01/10 : les compteurs quotidiens d'audience, 13 mois.
+    case Audience = 'audience';
+
     case Report = 'report';
 
     case AdminAction = 'admin_action';
@@ -68,6 +77,9 @@ enum PurgeScope: string
         return [
             self::StaleRoom,
             self::OrphanPlayer,
+            self::Perf,
+            self::GameTrace,
+            self::Audience,
             self::FrameworkSessions,
             self::FrameworkFailedJobs,
             self::FrameworkResetTokens,
