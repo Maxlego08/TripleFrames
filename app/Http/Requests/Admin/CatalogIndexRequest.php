@@ -97,6 +97,9 @@ class CatalogIndexRequest extends FormRequest
             'missing_title' => ['nullable', Rule::enum(Locale::class)],
             // Prêts à publier, incomplets, écartés (§ 4.2, § 6.6, § 8.6).
             'curation_status' => ['nullable', Rule::enum(CurationStatus::class)],
+            // Les films ACTIFS dans un thème, publié ou non (spec 20 § 9.6,
+            // option de L20-28 ; D43 du 01/10).
+            'theme_id' => ['nullable', 'integer', 'min:1'],
             'sort' => ['nullable', Rule::in(self::SORTS)],
             'direction' => ['nullable', Rule::in(self::DIRECTIONS)],
             'page' => ['nullable', 'integer', 'min:1'],
@@ -119,6 +122,7 @@ class CatalogIndexRequest extends FormRequest
             'playable_at' => __('admin.validation.playable_at'),
             'missing_title' => __('admin.validation.missing_title'),
             'curation_status' => __('admin.validation.curation_status'),
+            'theme_id' => __('admin.validation.catalog_theme'),
             'sort' => __('admin.validation.sort'),
             'direction' => __('admin.validation.direction'),
         ];
@@ -137,6 +141,7 @@ class CatalogIndexRequest extends FormRequest
      *     playable_at: int|null,
      *     missing_title: string|null,
      *     curation_status: string|null,
+     *     theme_id: int|null,
      *     sort: string,
      *     direction: string,
      * }
@@ -152,6 +157,7 @@ class CatalogIndexRequest extends FormRequest
             'playable_at' => $this->playableAt(),
             'missing_title' => $this->missingTitle()?->value,
             'curation_status' => $this->curationStatus()?->value,
+            'theme_id' => $this->themeId(),
             'sort' => $this->sort(),
             'direction' => $this->direction(),
         ];
@@ -189,6 +195,21 @@ class CatalogIndexRequest extends FormRequest
     public function curationStatus(): ?CurationStatus
     {
         return CurationStatus::tryFrom(trim((string) $this->string('curation_status')));
+    }
+
+    /**
+     * Le thème filtré, ou `null`. Un identifiant sans thème ne filtre pas en
+     * erreur : il ne rend simplement aucun film.
+     */
+    public function themeId(): ?int
+    {
+        if (! $this->filled('theme_id')) {
+            return null;
+        }
+
+        $value = $this->integer('theme_id');
+
+        return $value >= 1 ? $value : null;
     }
 
     public function sort(): string

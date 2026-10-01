@@ -90,6 +90,28 @@ it('lit une fiche dépouillée sans rien recopier ni rien deviner', function ():
         ->and($movie->titles)->toBe([]);
 });
 
+it('les noms des sociétés de production sont lus avec leur identifiant', function (): void {
+    $movie = TmdbMovie::fromArray(TmdbFixture::array('movie-987654'));
+
+    expect($movie->productionCompanyNames)->toBe([7711 => 'Atelier Kaze', 7712 => 'Studio Quintane']);
+
+    expect(TmdbMovie::fromArray(TmdbFixture::array('movie-987655-minimal'))->productionCompanyNames)->toBe([]);
+});
+
+it('une société sans nom n\'apparaît que par son identifiant', function (): void {
+    $data = TmdbFixture::array('movie-987654');
+    $data['production_companies'] = [
+        ['id' => 7711, 'logo_path' => null, 'name' => '   ', 'origin_country' => 'JP'],
+        ['id' => 7712, 'logo_path' => null, 'origin_country' => 'FR'],
+        ['id' => 7713, 'logo_path' => null, 'name' => 'Kaze Films', 'origin_country' => 'JP'],
+    ];
+
+    $movie = TmdbMovie::fromArray($data);
+
+    expect($movie->productionCompanyIds)->toBe([7711, 7712, 7713])
+        ->and($movie->productionCompanyNames)->toBe([7713 => 'Kaze Films']);
+});
+
 it('distingue un visuel sans langue d’un visuel qui en porte une', function (): void {
     $images = TmdbImageSet::fromArray(TmdbFixture::array('movie-987654-images'));
 

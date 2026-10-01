@@ -9,8 +9,10 @@ use App\Enums\ImportRunKind;
 use App\Enums\ImportRunStatus;
 use App\Enums\Locale;
 use App\Enums\ReviewDecision;
+use App\Enums\TmdbTagKind;
 use App\Models\Alias;
 use App\Models\AnswerKey;
+use App\Models\Collection;
 use App\Models\Frame;
 use App\Models\FrameReview;
 use App\Models\ImportRun;
@@ -21,6 +23,7 @@ use App\Models\MovieProjection;
 use App\Models\MovieTheme;
 use App\Models\MovieTitle;
 use App\Models\MovieTmdbTag;
+use App\Models\Theme;
 use App\Models\ThemeLabel;
 use App\Settings\RoomSettingsBounds;
 use App\Support\Curation\ExclusionGrid;
@@ -359,43 +362,95 @@ final class AdminCatalogPresenter
     }
 
     /**
-     * Une étiquette TMDB **brute** : le schéma ne stocke aucun libellé, et la
-     * fiche le dit (§ 3.6).
+     * Une étiquette TMDB **brute**, et le nom TMDB de la société quand
+     * `tmdb_company` le connaît (§ 3.6 bis, D43 du 01/10). Un genre n'a jamais
+     * de nom : son libellé est celui de son thème (§ 3.6).
      *
-     * @return array{tag_kind: string, tmdb_tag_id: int}
+     * @return array{tag_kind: string, tmdb_tag_id: int, name: string|null}
      */
-    public static function movieTag(MovieTmdbTag $tag): array
+    public static function movieTag(MovieTmdbTag $tag, ?string $name): array
     {
         return [
             'tag_kind' => $tag->tag_kind->value,
             'tmdb_tag_id' => $tag->tmdb_tag_id,
+            'name' => $tag->tag_kind === TmdbTagKind::Company ? $name : null,
         ];
     }
 
     /**
      * Une appartenance thématique : la règle automatique, l'exception manuelle
-     * et l'appartenance **effective**, séparées (§ 3.7).
+     * et l'appartenance **effective**, séparées (§ 3.7), avec ce qu'il faut au
+     * bloc « Thèmes » de la fiche pour porter un geste (spec 20 § 9.6, D43 du
+     * 01/10) : l'identifiant du thème, sa nature et sa publication.
      *
-     * Le libellé est celui de la locale du back-office — le français, forcé par
-     * `ForceAdminLocale` — et retombe sur la clé technique du thème quand le
-     * libellé manque : un thème sans libellé n'est de toute façon pas publiable.
+     * Le thème est passé à part, pris dans la liste des thèmes disponibles
+     * déjà chargée avec ses libellés : aucune requête par appartenance.
      *
-     * @return array{key: string, label: string, is_auto: bool, manual_state: string|null, is_active: bool}
+     * @return array{theme_id: int, key: string, label: string, kind: string, is_published: bool, is_auto: bool, manual_state: string|null, is_active: bool}
      */
-    public static function movieTheme(MovieTheme $membership): array
+    public static function movieTheme(MovieTheme $membership, Theme $theme): array
     {
-        $theme = $membership->theme;
-
-        $label = $theme->labels
-            ->first(fn (ThemeLabel $themeLabel): bool => $themeLabel->locale === Locale::French);
-
         return [
+            'theme_id' => $theme->id,
             'key' => $theme->key,
-            'label' => $label instanceof ThemeLabel ? $label->label : $theme->key,
+            'label' => self::themeLabel($theme),
+            'kind' => $theme->theme_kind->value,
+            'is_published' => $theme->is_published,
             'is_auto' => $membership->is_auto,
             'manual_state' => $membership->manual_state?->value,
             'is_active' => $membership->is_active,
         ];
+    }
+
+    /**
+     * Un thème du sélecteur « Ajouter un thème » de la fiche : tous, publiés
+     * ou non (spec 20 § 9.6).
+     *
+     * @return array{id: int, key: string, label: string, kind: string, is_published: bool}
+     */
+    public static function availableTheme(Theme $theme): array
+    {
+        return [
+            'id' => $theme->id,
+            'key' => $theme->key,
+            'label' => self::themeLabel($theme),
+            'kind' => $theme->theme_kind->value,
+            'is_published' => $theme->is_published,
+        ];
+    }
+
+    /**
+     * La collection TMDB du film, et le thème de saga qui la désigne s'il
+     * existe : sans lui, la fiche offre « Créer la saga depuis cette
+     * collection » (spec 20 § 9.6).
+     *
+     * @return array{id: int, name: string, saga: array{id: int, key: string, label: string, is_published: bool}|null}
+     */
+    public static function movieCollection(Collection $collection, ?Theme $saga): array
+    {
+        return [
+            'id' => $collection->id,
+            'name' => $collection->name,
+            'saga' => $saga === null ? null : [
+                'id' => $saga->id,
+                'key' => $saga->key,
+                'label' => self::themeLabel($saga),
+                'is_published' => $saga->is_published,
+            ],
+        ];
+    }
+
+    /**
+     * Le libellé d'un thème dans la locale du back-office — le français,
+     * forcé par `ForceAdminLocale` —, ou sa clé technique quand il manque :
+     * un thème sans libellé n'est de toute façon pas publiable.
+     */
+    private static function themeLabel(Theme $theme): string
+    {
+        $label = $theme->labels
+            ->first(fn (ThemeLabel $themeLabel): bool => $themeLabel->locale === Locale::French);
+
+        return $label instanceof ThemeLabel ? $label->label : $theme->key;
     }
 
     /**
@@ -669,7 +724,41 @@ final class AdminCatalogPresenter
             ...self::importRunRow($run),
             'tmdb_page_cursor' => $run->tmdb_page_cursor,
             'last_request_at' => self::moment($run->last_request_at),
+            'added_themes' => self::importRunThemes($run),
+            'total_themes_applied' => $run->total_themes_applied,
+            'total_themes_kept_removed' => $run->total_themes_kept_removed,
         ];
+    }
+
+    /**
+     * Les thèmes choisis au collage (D43 du 01/10), dans l'ordre écrit sur la
+     * ligne — une requête pour les thèmes et leurs libellés, `[]` sans
+     * sélection. Un thème disparu est ignoré. Le libellé suit la règle de
+     * {@see self::themeLabel()} : la locale du back-office, sinon la clé.
+     *
+     * @return list<array{id: int, key: string, label: string, kind: string, is_published: bool}>
+     */
+    public static function importRunThemes(ImportRun $run): array
+    {
+        $ids = $run->addedThemeIds();
+
+        if ($ids === []) {
+            return [];
+        }
+
+        $themes = Theme::query()->with('labels')->whereKey($ids)->get()->keyBy('id');
+
+        $rows = [];
+
+        foreach ($ids as $id) {
+            $theme = $themes->get($id);
+
+            if ($theme instanceof Theme) {
+                $rows[] = self::availableTheme($theme);
+            }
+        }
+
+        return $rows;
     }
 
     /**

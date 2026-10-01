@@ -171,6 +171,34 @@ final class TmdbClient
     }
 
     /**
+     * Le nom TMDB d'une société de production (`GET /company/{id}`), non
+     * localisé — aucun paramètre `language` n'est envoyé. Sert le seul
+     * rattrapage `catalog:company-names` (spec 10 § 3.6 bis, D43 du 01/10) :
+     * l'import, lui, lit les noms dans l'appel de détail, sans appel de plus.
+     *
+     * Rend `null` sur un 404 ou sur un nom vide : une société inconnue reste
+     * désignée par son identifiant. Tous les autres échecs lèvent.
+     *
+     * @throws TmdbException
+     */
+    public function company(int $tmdbId): ?string
+    {
+        $this->assertIdentifier($tmdbId);
+
+        try {
+            $payload = $this->get('/company/'.$tmdbId, [], 'company/'.$tmdbId);
+        } catch (TmdbException $exception) {
+            if ($exception->kind === TmdbErrorKind::NotFound) {
+                return null;
+            }
+
+            throw $exception;
+        }
+
+        return TmdbData::optionalText($payload, 'name', 'company/'.$tmdbId);
+    }
+
+    /**
      * Les visuels d'un film. Aucun paramètre `language` n'est envoyé : TMDB
      * filtrerait alors les visuels et déciderait à la place du curateur.
      *

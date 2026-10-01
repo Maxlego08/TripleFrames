@@ -9,6 +9,8 @@ use App\Enums\ContentAvailability;
 use App\Enums\ContentFlag;
 use App\Enums\ImportSource;
 use App\Enums\Locale;
+use App\Enums\ThemeKind;
+use App\Enums\TmdbTagKind;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\CatalogIndexRequest;
 use App\Http\Requests\Admin\MovieTitleUpdateRequest;
@@ -24,6 +26,8 @@ use App\Models\MovieProjection;
 use App\Models\MovieTheme;
 use App\Models\MovieTitle;
 use App\Models\MovieTmdbTag;
+use App\Models\Theme;
+use App\Models\TmdbCompany;
 use App\Models\User;
 use App\Settings\RoomSettingsBounds;
 use App\Support\Admin\AdminCatalogPresenter;
@@ -33,6 +37,7 @@ use App\Support\Catalog\TextTarget;
 use App\Support\Curation\CurationStatus;
 use App\Support\Curation\ReviewQueue;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Gate;
@@ -105,6 +110,8 @@ class CatalogController extends Controller
             'filters' => $request->filters(),
             'facets' => $this->facets($request),
             'options' => self::options(),
+            // Le filtre « thème » (§ 9.6) : tous les thèmes, publiés ou non.
+            'theme_options' => $this->themeOptions(),
         ]);
     }
 
@@ -167,7 +174,10 @@ class CatalogController extends Controller
             ),
             'certifications' => $this->certifications($movie),
             'tags' => $this->tags($movie),
-            'themes' => $this->themes($movie),
+            // Le bloc « Thèmes » (§ 9.6, D43 du 01/10) : appartenances, tous
+            // les thèmes pour un ajout manuel, et la collection du film avec
+            // la saga qui la désigne.
+            ...$this->themeBlock($movie),
             'frames' => $this->frames($movie),
             // La validation en lot des images en attente de revue (D42 du
             // 30/09, § 7.9) : `null` s'il n'y a rien à valider, ou si le
@@ -200,6 +210,10 @@ class CatalogController extends Controller
                 // Le lien « Historique » vers le journal filtré sur ce film
                 // (ligne 41, D41 du 30/09) : administrateur seul.
                 'viewJournal' => Gate::allows('viewAny', AdminAction::class),
+                // « Créer la saga depuis cette collection » (§ 4.3, § 9.6) :
+                // le seul lien que cette capacité masque ; les gestes
+                // d'appartenance suivent `curate`.
+                'editThemes' => Gate::allows('create', Theme::class),
             ],
             // La cadence du battement de débit (§ 10.1) : la fiche est une
             // page du film, où le temps actif se mesure.
@@ -315,6 +329,21 @@ class CatalogController extends Controller
             [$condition, $bindings] = $curationStatus->condition();
 
             $query->whereRaw($condition, $bindings);
+        }
+
+        $themeId = $request->themeId();
+
+        if ($themeId !== null) {
+            // Les films ACTIFS dans le thème, servis par `movie_theme_pool_idx
+            // (theme_id, is_active, movie_id)` ; une sous-requête, jamais une
+            // jointure : la liste reste à une ligne par film.
+            $query->whereExists(static function (QueryBuilder $membership) use ($themeId): void {
+                $membership->selectRaw('1')
+                    ->from('movie_theme')
+                    ->whereColumn('movie_theme.movie_id', 'movie.id')
+                    ->where('movie_theme.theme_id', $themeId)
+                    ->where('movie_theme.is_active', true);
+            });
         }
 
         if ($applyException) {
@@ -694,36 +723,101 @@ class CatalogController extends Controller
             ->orderBy('tmdb_tag_id')
             ->get();
 
+        // Les noms des sociétés en UNE requête, quel que soit leur nombre : la
+        // fiche garde un nombre de requêtes constant (D43 du 01/10).
+        $companyIds = $tags
+            ->where('tag_kind', TmdbTagKind::Company)
+            ->pluck('tmdb_tag_id')
+            ->all();
+
+        /** @var array<int, string> $names */
+        $names = TmdbCompany::query()->whereIn('tmdb_id', $companyIds)->pluck('name', 'tmdb_id')->all();
+
         $rows = [];
 
         foreach ($tags as $tag) {
-            $rows[] = AdminCatalogPresenter::movieTag($tag);
+            $rows[] = AdminCatalogPresenter::movieTag($tag, $names[$tag->tmdb_tag_id] ?? null);
         }
 
         return $rows;
     }
 
     /**
-     * Les appartenances thématiques, thème et libellés chargés d'avance : une
-     * fiche qui irait chercher le libellé d'un thème par ligne serait un N+1
-     * sur un écran ouvert toute la journée.
+     * Les thèmes du filtre de la liste, dans l'ordre du back-office : deux
+     * requêtes, thèmes et libellés.
      *
-     * @return list<array<string, mixed>>
+     * @return list<array{id: int, key: string, label: string, kind: string, is_published: bool}>
      */
-    private function themes(Movie $movie): array
+    private function themeOptions(): array
     {
-        $memberships = MovieTheme::query()
-            ->with(['theme:id,key', 'theme.labels'])
-            ->where('movie_id', $movie->id)
-            ->get();
+        $options = [];
 
-        $rows = [];
-
-        foreach ($memberships as $membership) {
-            $rows[] = AdminCatalogPresenter::movieTheme($membership);
+        foreach (Theme::query()->with('labels')->orderBy('sort_order')->orderBy('key')->get() as $theme) {
+            $options[] = AdminCatalogPresenter::availableTheme($theme);
         }
 
-        return $rows;
+        return $options;
+    }
+
+    /**
+     * Le bloc « Thèmes » de la fiche (spec 20 § 9.6, D43 du 01/10) : les
+     * appartenances du film, tous les thèmes pour le sélecteur « Ajouter un
+     * thème », et la collection du film avec la saga qui la désigne.
+     *
+     * Un nombre FIXE de requêtes, quel que soit le nombre de thèmes et
+     * d'appartenances : les thèmes et leurs libellés une fois (deux
+     * requêtes), les appartenances une fois ; chaque appartenance retrouve
+     * son thème dans la liste déjà chargée, et la saga de la collection s'y
+     * lit aussi, sans requête de plus.
+     *
+     * @return array{
+     *     themes: list<array<string, mixed>>,
+     *     available_themes: list<array<string, mixed>>,
+     *     collection: array<string, mixed>|null,
+     * }
+     */
+    private function themeBlock(Movie $movie): array
+    {
+        $themes = Theme::query()
+            ->with('labels')
+            ->orderBy('sort_order')
+            ->orderBy('key')
+            ->get(['id', 'key', 'theme_kind', 'rule_value', 'is_published', 'sort_order']);
+
+        $memberships = MovieTheme::query()
+            ->where('movie_id', $movie->id)
+            ->get()
+            ->keyBy('theme_id');
+
+        $rows = [];
+        $available = [];
+        $saga = null;
+        $collection = $movie->collection;
+
+        foreach ($themes as $theme) {
+            $available[] = AdminCatalogPresenter::availableTheme($theme);
+
+            $membership = $memberships->get($theme->id);
+
+            if ($membership instanceof MovieTheme) {
+                $rows[] = AdminCatalogPresenter::movieTheme($membership, $theme);
+            }
+
+            if ($collection !== null
+                && $saga === null
+                && $theme->theme_kind === ThemeKind::Saga
+                && $theme->rule_value === (string) $collection->id) {
+                $saga = $theme;
+            }
+        }
+
+        return [
+            'themes' => $rows,
+            'available_themes' => $available,
+            'collection' => $collection === null
+                ? null
+                : AdminCatalogPresenter::movieCollection($collection, $saga),
+        ];
     }
 
     /**

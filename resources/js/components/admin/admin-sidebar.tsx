@@ -9,6 +9,7 @@ import {
     ListOrdered,
     ScrollText,
     ShieldCheck,
+    Tags,
     Users,
 } from 'lucide-react';
 import { useEffect, useRef } from 'react';
@@ -46,6 +47,7 @@ import { index as curationIndex } from '@/routes/admin/curation';
 import { index as importIndex } from '@/routes/admin/import';
 import { index as journalIndex } from '@/routes/admin/journal';
 import { index as reviewIndex } from '@/routes/admin/review';
+import { index as themesIndex } from '@/routes/admin/themes';
 import { index as throughputIndex } from '@/routes/admin/throughput';
 import { index as usersIndex } from '@/routes/admin/users';
 import type { AdminNavItem } from '@/types/navigation';
@@ -127,6 +129,13 @@ export function AdminSidebar() {
             title: t('admin.nav.catalog'),
             href: catalogIndex(),
             icon: Clapperboard,
+        },
+        // L'écran des thèmes (spec 20 § 9.6, D43 du 01/10) : créer, corriger,
+        // publier sous seuil.
+        {
+            title: t('admin.nav.themes'),
+            href: themesIndex(),
+            icon: Tags,
         },
         {
             title: t('admin.nav.review'),

@@ -8,6 +8,7 @@ use App\Http\Controllers\Admin\ImportController;
 use App\Jobs\Catalog\RunCatalogImport;
 use App\Models\AdminAction;
 use App\Models\ImportRun;
+use App\Models\Theme;
 use App\Models\User;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Config;
@@ -89,6 +90,30 @@ test('coller des identifiants écrit import.paste_started, les identifiants gard
         ->and($line->details?->values)->toBe(['tmdb_ids' => [550, 27205]]);
 
     Bus::assertDispatched(RunCatalogImport::class, fn (RunCatalogImport $job): bool => $job->runId === $run->id);
+});
+
+test('les thèmes choisis apparaissent dans le journal du collage', function (): void {
+    $nineties = Theme::factory()->decade(1990)->unpublished()->create();
+    $eighties = Theme::factory()->decade(1980)->create();
+
+    $this->actingAs($this->curator)
+        ->post(route('admin.import.ids'), [
+            'ids' => '550',
+            'theme_ids' => [$nineties->id, $eighties->id],
+        ])
+        ->assertSessionHasNoErrors();
+
+    $run = ImportRun::query()->sole();
+    $line = importJournalLine(AdminActionType::ImportPasteStarted);
+
+    // Une seule ligne pour le geste, jamais une par film (spec 20 § 2.7) ;
+    // le run porte la même sélection, que la reprise relira.
+    expect($line->details?->values)->toBe([
+        'tmdb_ids' => [550],
+        'theme_ids' => [$nineties->id, $eighties->id],
+    ])
+        ->and($run->addedThemeIds())->toBe([$nineties->id, $eighties->id])
+        ->and(AdminAction::query()->count())->toBe(1);
 });
 
 test('importer la liste d\'amorçage écrit import.seed_list_started, le lot gardé', function (): void {

@@ -29,8 +29,11 @@ use App\Http\Controllers\Admin\MovieContentVerifiedController;
 use App\Http\Controllers\Admin\MovieFramesReviewController;
 use App\Http\Controllers\Admin\MovieGroupController;
 use App\Http\Controllers\Admin\MoviePublishController;
+use App\Http\Controllers\Admin\MovieThemeController;
 use App\Http\Controllers\Admin\MovieTitleController;
 use App\Http\Controllers\Admin\MovieUnpublishController;
+use App\Http\Controllers\Admin\ThemeController;
+use App\Http\Controllers\Admin\ThemePublishController;
 use App\Http\Controllers\Admin\ThroughputController;
 use App\Http\Controllers\Admin\TwoFactorRequiredController;
 use App\Http\Controllers\Admin\UserDirectoryController;
@@ -39,6 +42,7 @@ use App\Models\Frame;
 use App\Models\FrameReview;
 use App\Models\ImportRun;
 use App\Models\Movie;
+use App\Models\Theme;
 use App\Models\User;
 use Illuminate\Support\Facades\Route;
 
@@ -151,6 +155,27 @@ Route::middleware(['auth', 'verified', 'role:curator', 'admin.2fa', 'admin.local
             ->middleware('can:view,movie')
             ->name('catalog.show');
 
+        // L'écran des thèmes (§ 9.6, ligne 28 ; J1 depuis D43 du 01/10) : la
+        // liste, puis trois gestes qui n'écrivent qu'en base — créer toute
+        // nature ou un thème manuel, corriger règle, libellés et ordre,
+        // publier sous seuil ou dépublier. Aucune suppression. La nature
+        // `difficulty` est refusée en validation, jamais par un 403.
+        Route::get('themes', [ThemeController::class, 'index'])
+            ->middleware('can:viewAny,'.Theme::class)
+            ->name('themes.index');
+
+        Route::post('themes', [ThemeController::class, 'store'])
+            ->middleware(['can:create,'.Theme::class, 'throttle:admin-curation'])
+            ->name('themes.store');
+
+        Route::patch('themes/{theme}', [ThemeController::class, 'update'])
+            ->middleware(['can:update,theme', 'throttle:admin-curation'])
+            ->name('themes.update');
+
+        Route::post('themes/{theme}/publish', [ThemePublishController::class, 'store'])
+            ->middleware(['can:publish,theme', 'throttle:admin-curation'])
+            ->name('themes.publish');
+
         // La file de curation et « film suivant » (§ 4.1, ligne 3) : deux
         // lectures, la seconde une simple redirection vers l'éditeur du
         // premier film de la file autre que le courant — ou vers la file,
@@ -229,6 +254,12 @@ Route::middleware(['auth', 'verified', 'role:curator', 'admin.2fa', 'admin.local
         Route::patch('catalog/{movie}/group', [MovieGroupController::class, 'update'])
             ->middleware(['can:curate,movie', 'throttle:admin-curation'])
             ->name('catalog.group.update');
+
+        // L'appartenance manuelle d'un film à un thème (§ 9.6, ligne 28 ; D43
+        // du 01/10) : tout thème, publié ou non ; journalisé `movie.theme_set`.
+        Route::patch('catalog/{movie}/themes', [MovieThemeController::class, 'update'])
+            ->middleware(['can:curate,movie', 'throttle:admin-curation'])
+            ->name('catalog.themes.update');
 
         // L'éditeur de la banque d'images (§ 6, ligne 4) : `MoviePolicy::curate`,
         // refusé sur un film retiré. Il n'écrit rien : chaque geste qu'il

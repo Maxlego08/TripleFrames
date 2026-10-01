@@ -26,7 +26,9 @@ use InvalidArgumentException;
  * - **vivier du salon** ({@see self::forRoom()}, {@see self::forGame()}) : thèmes,
  *   `N` et non-répétition du salon, mémoire du salon ;
  * - **vivier catalogue** ({@see self::catalogue()}) : thèmes et `N` seulement,
- *   **aucune clause de salon** — supervision, sélecteur et solo.
+ *   **aucune clause de salon** — supervision, sélecteur et solo ;
+ * - **mesure d'un thème** ({@see self::themeProbe()}) : vivier catalogue d'un
+ *   seul thème, publié ou non — l'écran des thèmes du back-office seul.
  *
  * Invariants gardés au constructeur, jamais écrêtés : `memorySince` et
  * `playedUntil` sont non nuls si et seulement si `roomId` l'est ; la
@@ -45,6 +47,8 @@ final readonly class PoolScope
      * @param  bool  $noRepeatMovies  Clause de non-répétition active (exige `roomId`).
      * @param  list<int>  $excludedMovieIds  Films exclus, croissants et sans doublon.
      * @param  list<int>  $excludedGroupIds  `movie_group` exclus, croissants et sans doublon.
+     * @param  bool  $themesUnpublishedIncluded  Vrai pour {@see self::themeProbe()} seul : les thèmes
+     *                                           demandés ne sont PAS intersectés avec les publiés (§ 3.3 clause 3).
      *
      * @throws InvalidArgumentException Un invariant du périmètre est violé.
      */
@@ -57,6 +61,7 @@ final readonly class PoolScope
         public bool $noRepeatMovies,
         public array $excludedMovieIds,
         public array $excludedGroupIds,
+        public bool $themesUnpublishedIncluded = false,
     ) {
         if ($framesPerRound !== null
             && ($framesPerRound < RoomSettingsBounds::MIN_FRAMES_PER_ROUND
@@ -79,6 +84,12 @@ final readonly class PoolScope
 
         if ($noRepeatMovies && ! $roomAxis) {
             throw new InvalidArgumentException('PoolScope : la non-répétition exige un salon.');
+        }
+
+        if ($themesUnpublishedIncluded && ($roomAxis || count($themeIds) !== 1)) {
+            throw new InvalidArgumentException(
+                'PoolScope : les thèmes non publiés ne sont comptés que par la mesure d’un thème seul, hors salon.',
+            );
         }
     }
 
@@ -183,6 +194,31 @@ final readonly class PoolScope
     }
 
     /**
+     * Mesure d'un thème avant sa publication (§ 12.3, L30-11a, J1 depuis D43 du
+     * 01/10) : vivier catalogue restreint à **ce seul thème, publié ou non**, au
+     * `N` par défaut, sans clause de salon ni exclusion.
+     *
+     * Seule entrée qui ne s'intersecte pas avec les thèmes publiés : un appel à
+     * {@see self::catalogue()} avec un thème non publié retomberait sur la branche
+     * sans thème et compterait tout le catalogue. Supervision seule — aucun
+     * salon, aucun tirage ni aucun leurre ne construit ce périmètre.
+     */
+    public static function themeProbe(int $themeId): self
+    {
+        return new self(
+            themeIds: [$themeId],
+            framesPerRound: RoomSettingsBounds::DEFAULT_FRAMES_PER_ROUND,
+            roomId: null,
+            memorySince: null,
+            playedUntil: null,
+            noRepeatMovies: false,
+            excludedMovieIds: [],
+            excludedGroupIds: [],
+            themesUnpublishedIncluded: true,
+        );
+    }
+
+    /**
      * Même périmètre, autres thèmes demandés (`[]` = branche sans thème).
      *
      * @param  list<int>  $themeIds
@@ -206,6 +242,7 @@ final readonly class PoolScope
             noRepeatMovies: $this->noRepeatMovies,
             excludedMovieIds: $this->excludedMovieIds,
             excludedGroupIds: $this->excludedGroupIds,
+            themesUnpublishedIncluded: $this->themesUnpublishedIncluded,
         );
     }
 
@@ -255,6 +292,7 @@ final readonly class PoolScope
             noRepeatMovies: $noRepeatMovies ?? $this->noRepeatMovies,
             excludedMovieIds: $excludedMovieIds ?? $this->excludedMovieIds,
             excludedGroupIds: $excludedGroupIds ?? $this->excludedGroupIds,
+            themesUnpublishedIncluded: $this->themesUnpublishedIncluded,
         );
     }
 

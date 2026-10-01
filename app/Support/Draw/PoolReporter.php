@@ -34,7 +34,9 @@ use InvalidArgumentException;
  * au plus `N − MIN_FRAMES_PER_ROUND` pour le `N` jouable le plus proche, tous
  * indexés. Aucun littéral de jeu : bornes dans {@see RoomSettingsBounds}.
  *
- * Au J2 s'ajoutent `themeSelectorVisible()` et `themeWorks()` (lot L30-11).
+ * La mesure d'un thème avant sa publication, {@see self::themeWorks()}, est
+ * livrée au J1 (L30-11a, D43 du 01/10) ; `themeSelectorVisible()` reste au J2
+ * (lot L30-11) : le sélecteur du lobby reste masqué au J1.
  */
 final readonly class PoolReporter
 {
@@ -159,6 +161,17 @@ final readonly class PoolReporter
         }
 
         return $works;
+    }
+
+    /**
+     * Mesure d'un thème avant sa publication (§ 12.3, L30-11a) : le vivier
+     * catalogue restreint à **ce seul thème, publié ou non**, au `N` par défaut,
+     * compté en œuvres — `countWorks(PoolScope::themeProbe($themeId))`. Lue par
+     * l'écran des thèmes et rejouée par le geste de publication (spec 20 § 9.6).
+     */
+    public function themeWorks(int $themeId): int
+    {
+        return $this->pool->countWorks(PoolScope::themeProbe($themeId));
     }
 
     /**

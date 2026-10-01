@@ -15,6 +15,9 @@ namespace App\Enums;
  *
  * `import_run` (D41 du 30/09) : le balayage d'import qu'un curateur a lancé
  * ou repris depuis le back-office.
+ *
+ * `theme` (D43 du 01/10) : un thème de l'écran des thèmes du back-office —
+ * création, correction, publication.
  */
 enum AdminActionSubject: string
 {
@@ -33,6 +36,8 @@ enum AdminActionSubject: string
     case ImportRun = 'import_run';
 
     case Accounts = 'accounts';
+
+    case Theme = 'theme';
 
     /** Préfixe des libellés du back-office, un par cas. */
     public const string LABEL_PREFIX = 'admin.enum.admin_action_subject.';

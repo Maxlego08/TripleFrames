@@ -141,6 +141,34 @@ trait CatalogImportValidationRules
         );
     }
 
+    /**
+     * Les thèmes choisis au collage (spec 20 § 3.3, D43 du 01/10) : facultatifs,
+     * des thèmes existants, publiés ou non, sans doublon, au plus
+     * {@see self::pasteMaxThemes()}.
+     *
+     * @return array<string, array<int, string>>
+     */
+    protected function themeIdsRules(): array
+    {
+        return [
+            'theme_ids' => ['nullable', 'array', 'max:'.self::pasteMaxThemes()],
+            'theme_ids.*' => ['integer', 'distinct', 'exists:theme,id'],
+        ];
+    }
+
+    /**
+     * Plafond de thèmes par collage web (`catalog.import.paste_max_themes`),
+     * borné à [1, 20] : la sélection est écrite jointe par des virgules dans
+     * `import_run.added_theme_ids` (string(255)), où vingt identifiants de
+     * dix chiffres tiennent encore — une configuration plus haute ferait
+     * échouer l'insertion du balayage en erreur SQL au lieu d'un refus
+     * traduit.
+     */
+    public static function pasteMaxThemes(): int
+    {
+        return min(20, max(1, Config::integer('catalog.import.paste_max_themes', 10)));
+    }
+
     /** Plafond d'identifiants par collage web. */
     public static function pasteMaxIds(): int
     {

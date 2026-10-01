@@ -10,6 +10,7 @@ use App\Models\FrameReview;
 use App\Models\ImportRun;
 use App\Models\Movie;
 use App\Models\MovieTitle;
+use App\Models\Theme;
 use App\Models\User;
 use App\Settings\PlatformLimits;
 use App\Support\Catalog\AmbiguityPreview;
@@ -20,6 +21,7 @@ use App\Support\Frames\FrameGeometry;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Str;
 use Tests\Fixtures\TmdbFixture;
 use Tests\Support\Frames\FrameBank;
 use Tests\Support\Frames\SourceImages;
@@ -137,6 +139,54 @@ function adminRoutesMatrix(): array
             guards: ['can:viewAny,'.Movie::class],
             curator: 200,
             admin: 200,
+        ),
+
+        // Ligne 28 — l'écran des thèmes (§ 9.6, J1 depuis D43 du 01/10). Sans
+        // paramètre, l'index rend 200 : le préremplissage est facultatif et
+        // n'émet jamais de 422 (C23).
+        'admin.themes.index' => adminRoutesRow(
+            row: 28,
+            method: 'GET',
+            guards: ['can:viewAny,'.Theme::class],
+            curator: 200,
+            admin: 200,
+        ),
+
+        // La création s'éprouve sur une nature sans dépendance au catalogue
+        // (une décennie), sous un libellé anglais neuf à chaque visiteur :
+        // la clé en dérive et ne se crée qu'une fois (C22).
+        'admin.themes.store' => adminRoutesRow(
+            row: 28,
+            method: 'POST',
+            guards: ['can:create,'.Theme::class],
+            curator: 302,
+            admin: 302,
+            payload: fn (): array => adminRoutesThemePayload(['theme_kind' => 'decade', 'rule_value' => 1990]),
+            redirect: fn (array $parameters): string => route('admin.themes.index'),
+        ),
+
+        'admin.themes.update' => adminRoutesRow(
+            row: 28,
+            method: 'PATCH',
+            guards: ['can:update,theme'],
+            curator: 302,
+            admin: 302,
+            parameters: fn (): array => ['theme' => Theme::factory()->create()->id],
+            payload: fn (): array => adminRoutesThemePayload(['rule_value' => 28, 'sort_order' => 150]),
+            redirect: fn (array $parameters): string => route('admin.themes.index'),
+        ),
+
+        // Le 302 de la publication s'éprouve par une DÉPUBLICATION d'un thème
+        // publié : une publication sous le seuil serait refusée (C21).
+        'admin.themes.publish' => adminRoutesRow(
+            row: 28,
+            method: 'POST',
+            guards: ['can:publish,theme'],
+            curator: 302,
+            admin: 302,
+            parameters: fn (): array => ['theme' => Theme::factory()->published()->create()->id],
+            payload: fn (): array => ['is_published' => false],
+            redirect: fn (array $parameters): string => route('admin.themes.index'),
         ),
 
         'admin.catalog.show' => adminRoutesRow(
@@ -313,6 +363,19 @@ function adminRoutesMatrix(): array
             admin: 302,
             parameters: fn (): array => adminRoutesMovieGestureParameters(Movie::factory()->create()),
             payload: fn (): array => ['with_movie_id' => Movie::factory()->create()->id],
+            redirect: fn (array $parameters): string => route('admin.catalog.show', $parameters),
+        ),
+
+        // Ligne 28 — l'appartenance manuelle d'un film à un thème (§ 9.6,
+        // D43 du 01/10) : `MoviePolicy::curate`, tout thème, publié ou non.
+        'admin.catalog.themes.update' => adminRoutesRow(
+            row: 28,
+            method: 'PATCH',
+            guards: ['can:curate,movie'],
+            curator: 302,
+            admin: 302,
+            parameters: fn (): array => adminRoutesMovieGestureParameters(Movie::factory()->create()),
+            payload: fn (): array => ['theme_id' => Theme::factory()->create()->id, 'manual_state' => 'added'],
             redirect: fn (array $parameters): string => route('admin.catalog.show', $parameters),
         ),
 
@@ -631,6 +694,24 @@ function adminRoutesMatrix(): array
             curator: 403,
             admin: 200,
         ),
+    ];
+}
+
+/**
+ * Un thème valide pour la création ou la correction : un libellé dans chaque
+ * locale activée, l'anglais neuf à chaque appel — la clé en dérive.
+ *
+ * @param  array<string, mixed>  $fields
+ * @return array<string, mixed>
+ */
+function adminRoutesThemePayload(array $fields): array
+{
+    return [
+        'labels' => [
+            'fr' => 'Thème matrice',
+            'en' => 'Matrix theme '.Str::lower(Str::random(10)),
+        ],
+        ...$fields,
     ];
 }
 

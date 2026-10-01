@@ -8,11 +8,14 @@ namespace App\Support\Tmdb;
  * Périmètre volontairement fermé : **aucun champ que ne lit aucune règle** — ni
  * `vote_average`, ni `runtime`, ni synopsis, ni affiche, ni casting (§ 3.1).
  * Ce qui est ici alimente exactement `movie`, `movie_tmdb_tag`,
- * `movie_certification`, `movie_title` et `alias`.
+ * `tmdb_company`, `movie_certification`, `movie_title` et `alias`.
  *
  * `genreIds` et `productionCompanyIds` sont des identifiants TMDB **bruts**,
  * jamais des libellés : le nom d'un genre est du contenu traduit et n'a rien à
  * faire en base (§ 3.6) ; le libellé montré au joueur est un `theme_label`.
+ * Le nom d'une **société**, lui, est un nom propre non localisé : il est
+ * conservé dans `productionCompanyNames` pour nommer la société en back-office
+ * (`tmdb_company`, § 3.6 bis, D43 du 01/10), jamais pour un joueur.
  *
  * La collection est une COLONNE et non un pivot : la cardinalité TMDB est 0..1
  * (§ 3.3). `collectionName` est le nom TMDB non localisé, jamais affiché à un
@@ -38,6 +41,7 @@ final readonly class TmdbMovie
     /**
      * @param  list<int>  $genreIds  Étiquettes TMDB brutes, `tag_kind = 'genre'`.
      * @param  list<int>  $productionCompanyIds  Étiquettes TMDB brutes, `tag_kind = 'company'`.
+     * @param  array<int, string>  $productionCompanyNames  Nom TMDB non localisé par identifiant de société ; une société sans nom en est absente.
      * @param  list<TmdbReleaseDate>  $releaseDates  Toutes les sorties classées, tous pays.
      * @param  list<TmdbTitle>  $titles  Traductions et titres alternatifs, non triés.
      */
@@ -53,6 +57,7 @@ final readonly class TmdbMovie
         public ?string $collectionName,
         public array $genreIds,
         public array $productionCompanyIds,
+        public array $productionCompanyNames,
         public array $releaseDates,
         public array $titles,
     ) {}
@@ -81,6 +86,7 @@ final readonly class TmdbMovie
                 : TmdbData::optionalText($collection, 'name', $context.'.belongs_to_collection'),
             genreIds: self::identifiers($data, 'genres', $context),
             productionCompanyIds: self::identifiers($data, 'production_companies', $context),
+            productionCompanyNames: self::companyNames($data, $context),
             releaseDates: self::releaseDates($data, $context),
             titles: self::titles($data, $context),
         );
@@ -141,6 +147,33 @@ final readonly class TmdbMovie
         }
 
         return $identifiers;
+    }
+
+    /**
+     * Le nom de chaque société de production, indexé par son identifiant. Un
+     * nom absent ou vide n'écrit aucune entrée : la société reste désignée par
+     * son seul identifiant, jamais par un nom inventé.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<int, string>
+     */
+    private static function companyNames(array $data, string $context): array
+    {
+        $names = [];
+        $index = 0;
+
+        foreach (TmdbData::objectsAt($data, 'production_companies', $context) as $entry) {
+            $entryContext = $context.'.production_companies['.$index.']';
+            $index++;
+
+            $name = TmdbData::optionalText($entry, 'name', $entryContext);
+
+            if ($name !== null) {
+                $names[TmdbData::integer($entry, 'id', $entryContext)] = $name;
+            }
+        }
+
+        return $names;
     }
 
     /**

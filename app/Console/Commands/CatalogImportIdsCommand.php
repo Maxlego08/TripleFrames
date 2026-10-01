@@ -6,6 +6,7 @@ use App\Enums\ImportRunKind;
 use App\Enums\ImportRunStatus;
 use App\Models\ImportRun;
 use App\Support\Admin\PastePreview;
+use App\Support\Catalog\ImportDecision;
 use App\Support\Catalog\ImportOutcome;
 use App\Support\Catalog\TmdbIdentifierList;
 use App\Support\Tmdb\TmdbErrorKind;
@@ -42,6 +43,14 @@ use Illuminate\Support\Facades\File;
  * `PreviewCatalogPaste` : le sort de chaque identifiant — titre original,
  * année, motifs d'exception, motif de refus — part dans le cache de
  * {@see PastePreview}, sous la clé de son auteur (`--actor`, obligatoire ici).
+ *
+ * **Thèmes du collage** (D43 du 01/10, spec 20 § 3.3) : ils sont lus sur la
+ * ligne `import_run.added_theme_ids`, écrite par le back-office à l'ouverture,
+ * et relus par la reprise. Ils s'appliquent aux films importés (dans la
+ * transaction de leur import) et aux films déjà présents (issue `duplicate`,
+ * ici), jamais aux refusés, aux retirés ni en simulation. **Aucune option
+ * `--theme`** : poser une exception hors du back-office échapperait au
+ * journal (critique C9).
  */
 class CatalogImportIdsCommand extends CatalogImportCommand
 {
@@ -200,6 +209,7 @@ class CatalogImportIdsCommand extends CatalogImportCommand
                 $outcome = $this->importer->outcomeForExisting($known, $run);
 
                 if ($outcome !== null) {
+                    $this->applyThemesToDuplicate($run, $outcome);
                     $this->settle($run, $outcome, null);
                     $bar->advance();
 
@@ -226,6 +236,9 @@ class CatalogImportIdsCommand extends CatalogImportCommand
                 ? ImportOutcome::notFound($identifier)
                 : $this->importer->import($detail, $run, $filter, $this->simulation);
 
+            // Un film entré entre la déduplication en lot et l'appel de
+            // détail revient `duplicate` d'`import()` : même traitement.
+            $this->applyThemesToDuplicate($run, $outcome);
             $this->settle($run, $outcome, $detail);
             $bar->advance();
 
@@ -242,6 +255,21 @@ class CatalogImportIdsCommand extends CatalogImportCommand
         $bar->finish();
 
         return ImportRunStatus::Completed;
+    }
+
+    /**
+     * Les thèmes du collage sur un film déjà présent (spec 20 § 3.3) : issue
+     * `duplicate` seulement — un film retiré revient `refused_withdrawn` et
+     * ne reçoit rien —, jamais en simulation. Les règles de non-écrasement
+     * (critique C6) sont celles de `MovieImporter::applyRunThemes()`.
+     */
+    private function applyThemesToDuplicate(ImportRun $run, ImportOutcome $outcome): void
+    {
+        if ($this->simulation || $outcome->decision !== ImportDecision::Duplicate || $outcome->movie === null) {
+            return;
+        }
+
+        $this->importer->applyRunThemesToExisting($outcome->movie, $run);
     }
 
     /**

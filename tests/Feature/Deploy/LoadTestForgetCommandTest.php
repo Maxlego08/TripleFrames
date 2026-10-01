@@ -13,6 +13,7 @@ use App\Models\RoundChoiceSet;
 use App\Models\RoundPlayer;
 use App\Models\RoundTier;
 use App\Models\SeenFrame;
+use App\Models\TmdbCompany;
 use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
@@ -147,7 +148,7 @@ function loadTestCatalogueTables(): array
 {
     return [
         'movie', 'movie_projection', 'movie_group', 'collection', 'movie_title', 'alias', 'answer_key',
-        'movie_certification', 'movie_tmdb_tag', 'theme', 'theme_label', 'movie_theme', 'import_run',
+        'movie_certification', 'movie_tmdb_tag', 'tmdb_company', 'theme', 'theme_label', 'movie_theme', 'import_run',
         'frame', 'frame_review',
     ];
 }
@@ -238,6 +239,9 @@ it('supprime les faits de ces salons dans l’ordre imposé par les restrict', f
 
 it('ne touche aucune table du catalogue', function (): void {
     $room = loadTestRoom([loadTestNickname(1), loadTestNickname(2)]);
+    // `tmdb_company` est au périmètre interdit (10 § 11.2, D43 du 01/10) :
+    // une ligne au moins, pour que son compte prouve quelque chose.
+    TmdbCompany::factory()->create();
     $count = static fn (): array => array_combine(
         loadTestCatalogueTables(),
         array_map(static fn (string $table): int => DB::table($table)->count(), loadTestCatalogueTables()),
@@ -245,7 +249,8 @@ it('ne touche aucune table du catalogue', function (): void {
     $catalogue = $count();
 
     expect($catalogue['movie'])->toBeGreaterThan(0)
-        ->and($catalogue['frame'])->toBeGreaterThan(0);
+        ->and($catalogue['frame'])->toBeGreaterThan(0)
+        ->and($catalogue['tmdb_company'])->toBeGreaterThan(0);
 
     $writes = loadTestWrites(function () use ($room): void {
         $this->artisan('loadtest:forget', ['file' => loadTestCodesFile($this->codesFile, $room)])

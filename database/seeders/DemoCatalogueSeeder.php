@@ -7,23 +7,18 @@ use App\Enums\FrameLevel;
 use App\Enums\ImportSource;
 use App\Enums\Locale;
 use App\Enums\MovieDifficulty;
-use App\Enums\ThemeKind;
-use App\Enums\TmdbTagKind;
 use App\Enums\UserRole;
 use App\Models\Collection;
 use App\Models\Frame;
 use App\Models\FrameReview;
 use App\Models\Movie;
-use App\Models\MovieTheme;
-use App\Models\MovieTmdbTag;
-use App\Models\Theme;
 use App\Models\User;
 use App\Settings\RoomSettingsBounds;
 use App\Support\Admin\AdminJournal;
+use App\Support\Catalog\ThemeEvaluator;
 use App\ValueObjects\Catalog\FrameLevelCoverage;
 use Database\Factories\FrameFactory;
 use Database\Factories\MovieFactory;
-use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
@@ -63,8 +58,8 @@ use RuntimeException;
  * 2. **`import_source = 'demo'` et `tmdb_id = NULL` sur tous.** Ils sont ainsi
  *    exclus, définitivement, de la resynchronisation TMDB et des deux
  *    statistiques de débit de curation.
- * 3. **Trois films entrés par exception**, avec leur motif : un pour l'âge d'or
- *    antérieur à 1970 (`exception_for_release_year`) et deux pour une langue hors
+ * 3. **Des films entrés par exception**, avec leur motif : les classiques
+ *    antérieurs à 1970 (`exception_for_release_year`) et deux pour une langue hors
  *    filtre (`exception_for_language`). Sans eux, le filtre back-office « entrés
  *    par exception » et le comptage **par motif** n'ont aucune donnée, et le
  *    marquage devient silencieux — ce que la décision 11 interdit nommément.
@@ -89,7 +84,7 @@ class DemoCatalogueSeeder extends Seeder
      * d'être des nombres littéraux. Vérifiée contre `movieDefinitions()` au
      * démarrage : un film ajouté sans toucher à cette constante lève ici.
      */
-    public const int DEMO_MOVIE_COUNT = 16;
+    public const int DEMO_MOVIE_COUNT = 21;
 
     /**
      * Niveaux dupliqués sur le premier film, pour qu'au moins un film du
@@ -142,12 +137,6 @@ class DemoCatalogueSeeder extends Seeder
             );
         }
 
-        // Une seule lecture des thèmes pour tout le catalogue : la refaire par film
-        // coûtait autant de requêtes que de films, sur le chemin le plus rejoué de
-        // la suite de tests.
-        /** @var EloquentCollection<int, Theme> $themes */
-        $themes = Theme::query()->where('is_published', true)->get();
-
         /** @var list<string> $sagas */
         $sagas = [];
 
@@ -163,7 +152,7 @@ class DemoCatalogueSeeder extends Seeder
         $movies = [];
 
         foreach ($definitions as $index => $definition) {
-            $movies[] = $this->seedMovie($definition, $curator, $themes, $collections, $index === 0);
+            $movies[] = $this->seedMovie($definition, $curator, $collections, $index === 0);
         }
 
         // La garde de cardinalité ci-dessus rend la liste non vide par construction :
@@ -201,11 +190,16 @@ class DemoCatalogueSeeder extends Seeder
      * Les sagas citées par le catalogue — « même saga », jamais « même œuvre ».
      *
      * Sans une seule ligne `collection`, la distinction que le § 3.3 désigne comme
-     * ce qui rend la révélation compréhensible n'a aucune donnée de démonstration,
-     * et `theme_kind = saga` — dont `rule_value` porte un `collection.id` local —
-     * ne peut être publié en back-office sur rien.
+     * ce qui rend la révélation compréhensible n'a aucune donnée de démonstration.
      *
-     * @param  list<string>  $sagas
+     * Chaque film de saga est rattaché à la collection **livrée** par
+     * {@see PlatformDataSeeder} (par son `tmdb_id`, prise ou insérée au `name`
+     * littéral du seeder de plateforme), jamais à une collection de démonstration
+     * sans `tmdb_id` : le thème de saga livré désigne cette ligne, et une saga de
+     * démonstration détachée le laisserait vide (spec 30 L30-9, critique C16).
+     * Les films, eux, restent `tmdb_id = NULL` : seule la collection est partagée.
+     *
+     * @param  list<string>  $sagas  clés des sagas livrées (`saga.toy-story`)
      * @return array<string, Collection>
      */
     private function seedCollections(array $sagas): array
@@ -214,7 +208,7 @@ class DemoCatalogueSeeder extends Seeder
         $collections = [];
 
         foreach ($sagas as $saga) {
-            $collections[$saga] = Collection::factory()->demo()->named($saga)->createOne();
+            $collections[$saga] = PlatformDataSeeder::deliveredSagaCollection($saga);
         }
 
         return $collections;
@@ -251,20 +245,17 @@ class DemoCatalogueSeeder extends Seeder
      *     exception_release_year: bool,
      *     exception_language: bool,
      * }  $definition
-     * @param  EloquentCollection<int, Theme>  $themes
      * @param  array<string, Collection>  $collections
      */
     private function seedMovie(
         array $definition,
         User $curator,
-        EloquentCollection $themes,
         array $collections,
         bool $withExtraVariants,
     ): Movie {
         return DB::transaction(function () use (
             $definition,
             $curator,
-            $themes,
             $collections,
             $withExtraVariants,
         ): Movie {
@@ -320,7 +311,14 @@ class DemoCatalogueSeeder extends Seeder
                 ->has($this->frames($curator, $withExtraVariants), 'frames')
                 ->createOne();
 
-            $this->linkThemes($movie, $themes);
+            // Les appartenances aux thèmes sont ÉVALUÉES, jamais déclarées :
+            // chaque film porte au moins une étiquette `movie_tmdb_tag`, et c'est
+            // elle — pas une liste écrite dans ce fichier — qui décide de son
+            // appartenance à un thème de genre ou de studio. L'évaluateur est
+            // l'unique du dépôt (spec 30 § 13.1) : il évalue tous les thèmes,
+            // publiés ou non, et passe `is_active` par
+            // `MovieTheme::resolveIsActive()`.
+            app(ThemeEvaluator::class)->syncMovie($movie);
 
             return $movie;
         });
@@ -389,90 +387,6 @@ class DemoCatalogueSeeder extends Seeder
     }
 
     /**
-     * Les appartenances aux thèmes de base, **évaluées** et non déclarées.
-     *
-     * C'est la contrepartie de l'exigence 2 : chaque film porte au moins une
-     * étiquette `movie_tmdb_tag`, et c'est cette étiquette — pas une liste écrite
-     * à la main dans ce fichier — qui décide de son appartenance à un thème de
-     * genre ou de studio. Un catalogue dont les appartenances seraient déclarées
-     * ne prouverait rien de la règle automatique.
-     *
-     * Les étiquettes du film sont lues **une fois** et évaluées en mémoire : une
-     * requête d'existence par couple (film, thème) coûtait quatorze requêtes par
-     * film pour un ensemble qui tient dans un tableau.
-     *
-     * **Provisoire et non normatif** : l'évaluateur de règle appartient à
-     * `docs/specs/30-themes-vivier-et-tirage-des-variantes.md`, qui n'est pas
-     * écrite. Ces quelques lignes disparaissent avec elle ; ce qui ne disparaît
-     * pas, c'est que `is_active` passe par {@see MovieTheme::resolveIsActive()} et
-     * jamais par une écriture indépendante — une ligne dont `is_active` ne
-     * découlerait pas de `manual_state` et `is_auto` mettrait dans le vivier un
-     * film que la fiche de curation affiche comme retiré.
-     *
-     * @param  EloquentCollection<int, Theme>  $themes
-     */
-    private function linkThemes(Movie $movie, EloquentCollection $themes): void
-    {
-        /** @var array<string, true> $tags */
-        $tags = [];
-
-        /** @var EloquentCollection<int, MovieTmdbTag> $rows */
-        $rows = MovieTmdbTag::query()->where('movie_id', $movie->id)->get();
-
-        foreach ($rows as $row) {
-            $tags[$row->tag_kind->value.':'.$row->tmdb_tag_id] = true;
-        }
-
-        foreach ($themes as $theme) {
-            $matches = $this->ruleMatches($movie, $theme, $tags);
-
-            if ($theme->rule_negated) {
-                $matches = ! $matches;
-            }
-
-            if (! $matches) {
-                continue;
-            }
-
-            $link = new MovieTheme;
-            $link->movie_id = $movie->id;
-            $link->theme_id = $theme->id;
-            $link->is_auto = true;
-            $link->manual_state = null;
-            $link->is_active = MovieTheme::resolveIsActive(true, null);
-            $link->assigned_by_id = null;
-            $link->assigned_at = null;
-            $link->save();
-        }
-    }
-
-    /**
-     * La règle automatique d'un thème, évaluée LOCALEMENT — aucun appel réseau,
-     * jamais, et encore moins pendant une partie (règle non négociable n° 6).
-     *
-     * @param  array<string, true>  $tags
-     */
-    private function ruleMatches(Movie $movie, Theme $theme, array $tags): bool
-    {
-        $rule = $theme->rule_value;
-
-        if ($rule === null) {
-            return false;
-        }
-
-        return match ($theme->theme_kind) {
-            ThemeKind::Genre => isset($tags[TmdbTagKind::Genre->value.':'.(int) $rule]),
-            ThemeKind::Studio => isset($tags[TmdbTagKind::Company->value.':'.(int) $rule]),
-            ThemeKind::Decade => $movie->release_year !== null
-                && $movie->release_year >= (int) $rule
-                && $movie->release_year < (int) $rule + 10,
-            ThemeKind::Language => $movie->original_language === $rule,
-            ThemeKind::Difficulty => $movie->movie_difficulty?->value === $rule,
-            ThemeKind::Saga => $movie->collection_id !== null && $movie->collection_id === (int) $rule,
-        };
-    }
-
-    /**
      * Les lignes `admin_action` **permanentes** du catalogue de démonstration,
      * écrites par l'écrivain unique du journal, dans une transaction.
      *
@@ -528,10 +442,13 @@ class DemoCatalogueSeeder extends Seeder
      *
      * Trois propriétés sont tenues par cette liste, et par elle seule :
      *
-     * 1. **Les années couvrent toutes les décennies publiées** par
-     *    {@see PlatformDataSeeder}, et les étiquettes tous les thèmes de genre et
-     *    de studio — un thème publié qui rendrait « 0 film » au lobby serait un
-     *    thème que le site propose sans pouvoir le servir.
+     * 1. **Les années couvrent toutes les décennies livrées** par
+     *    {@see PlatformDataSeeder}, 1930 à 2020 sans trou, les étiquettes tous les
+     *    thèmes de genre et de studio — Marvel et DC compris —, les langues le
+     *    thème des animés, et au moins une saga livrée a ses films — un thème
+     *    publié qui rendrait « 0 film » au lobby serait un thème que le site
+     *    propose sans pouvoir le servir, et les thèmes nés non publiés par L30-9
+     *    doivent pouvoir être publiés en développement sans être vides.
      * 2. **Deux films d'une même saga portent un titre à sous-titre partagé**
      *    (« Star Wars: … »). C'est la seule donnée qui exerce la nature
      *    `answer_key.key_kind = prefix`, la règle de collision du § 3.5 et
@@ -601,6 +518,9 @@ class DemoCatalogueSeeder extends Seeder
                 genres: [16, 10_751, 12], companies: [3],
                 titles: ['en' => 'Toy Story', 'fr' => 'Toy Story'],
                 aliases: ['fr' => ['Histoire de jouets']],
+                // Rattaché à la collection LIVRÉE (tmdb_id 10194) : sans lui, la
+                // saga par défaut `saga.toy-story` n'aurait aucun film (C16).
+                saga: 'saga.toy-story',
             ),
             $this->movie(
                 'Finding Nemo', 2003, MovieDifficulty::VeryEasy,
@@ -664,7 +584,7 @@ class DemoCatalogueSeeder extends Seeder
                 // sur laquelle « un alias ne produit jamais de clé dérivée »
                 // (décision 13, D23 du 23/09) s'exerce dans FAIT 9.
                 aliases: ['fr' => ['La Guerre des étoiles', 'La Guerre des étoiles : Épisode IV']],
-                saga: 'Star Wars',
+                saga: 'saga.star-wars',
             ),
             $this->movie(
                 'Star Wars: The Empire Strikes Back', 1980, MovieDifficulty::Medium,
@@ -674,7 +594,48 @@ class DemoCatalogueSeeder extends Seeder
                     'fr' => 'Star Wars : L’Empire contre-attaque',
                 ],
                 aliases: ['fr' => ['L’Empire contre-attaque']],
-                saga: 'Star Wars',
+                saga: 'saga.star-wars',
+            ),
+            // Les décennies 1940, 1950 et 1960, livrées non publiées par L30-9
+            // (spec 30 § 12.3) : publiées en développement, elles ne doivent pas
+            // être vides. Antérieurs à 1970, ces films n'entrent au catalogue que
+            // par exception au filtre d'année, comme Blanche-Neige.
+            $this->movie(
+                'Pinocchio', 1940, MovieDifficulty::Easy,
+                genres: [16, 10_751, 14], companies: [2],
+                titles: ['en' => 'Pinocchio', 'fr' => 'Pinocchio'],
+                aliases: ['fr' => []],
+                exceptionReleaseYear: true,
+            ),
+            $this->movie(
+                'Singin\' in the Rain', 1952, MovieDifficulty::Hard,
+                genres: [35, 10_749], companies: [21],
+                titles: ['en' => 'Singin\' in the Rain', 'fr' => 'Chantons sous la pluie'],
+                aliases: ['en' => ['Singing in the Rain']],
+                exceptionReleaseYear: true,
+            ),
+            $this->movie(
+                'Psycho', 1960, MovieDifficulty::Medium,
+                genres: [27, 53], companies: [4],
+                titles: ['en' => 'Psycho', 'fr' => 'Psychose'],
+                aliases: ['fr' => []],
+                exceptionReleaseYear: true,
+            ),
+            // Marvel (société 420) et DC (128064, « DC Films »), livrés non publiés
+            // par L30-9 : un film chacun, pour que ni l'un ni l'autre ne soit vide en
+            // développement. Iron Man est aussi rattaché à sa collection livrée.
+            $this->movie(
+                'Iron Man', 2008, MovieDifficulty::Easy,
+                genres: [28, 878, 12], companies: [420],
+                titles: ['en' => 'Iron Man', 'fr' => 'Iron Man'],
+                aliases: ['fr' => []],
+                saga: 'saga.iron-man',
+            ),
+            $this->movie(
+                'Wonder Woman', 2017, MovieDifficulty::Medium,
+                genres: [28, 12, 14], companies: [128_064, 174],
+                titles: ['en' => 'Wonder Woman', 'fr' => 'Wonder Woman'],
+                aliases: ['fr' => []],
             ),
             // Le sous-titre NON partagé, la décennie 2020, et la voie de la
             // certification plutôt que celle de la coche de curateur.

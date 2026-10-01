@@ -7,6 +7,7 @@ use App\Enums\ContentOrigin;
 use App\Enums\FrameLevel;
 use App\Enums\FrameProcessingFailure;
 use App\Enums\FrameSourceKind;
+use App\Enums\ThemeKind;
 use App\Models\AdminAction;
 use App\Models\FrameReview;
 use App\Support\Frames\CropRect;
@@ -110,6 +111,20 @@ final readonly class AdminActionDetails implements JsonSerializable
         ]);
     }
 
+    /**
+     * `movie.theme_set` : la clé du thème — stable, immuable après création —
+     * et l'exception avant et après (`added`, `removed`, ou `null` quand la
+     * règle décide seule).
+     */
+    public static function movieThemeSet(string $themeKey, ?string $from, ?string $to): self
+    {
+        return new self([
+            'theme_key' => $themeKey,
+            'from' => $from,
+            'to' => $to,
+        ]);
+    }
+
     /** `frame.added` : la voie et le niveau au moment de l'ajout. */
     public static function frameAdded(FrameSourceKind $sourceKind, FrameLevel $level): self
     {
@@ -180,14 +195,63 @@ final readonly class AdminActionDetails implements JsonSerializable
 
     /**
      * `import.paste_started` et `import.seed_list_started` : les identifiants
-     * TMDB confiés au job, que rien d'autre ne conserve.
+     * TMDB confiés au job, que rien d'autre ne conserve — et, pour un collage
+     * avec thèmes (D43 du 01/10, spec 20 § 2.7), les thèmes choisis. La clé
+     * `theme_ids` n'est présente que si la sélection n'est pas vide : le
+     * geste est journalisé une fois, jamais par film.
      *
      * @param  list<int>  $tmdbIds
+     * @param  list<int>  $themeIds
      */
-    public static function importIds(array $tmdbIds): self
+    public static function importIds(array $tmdbIds, array $themeIds = []): self
     {
         return new self([
             'tmdb_ids' => $tmdbIds,
+            ...($themeIds === [] ? [] : ['theme_ids' => $themeIds]),
+        ]);
+    }
+
+    /**
+     * `theme.created` (D43 du 01/10) : la clé générée, la nature, la règle
+     * (NULL pour un thème manuel), sa négation et les libellés par locale —
+     * des données de catalogue, jamais une donnée personnelle.
+     *
+     * @param  array<string, string>  $labels  locale => libellé
+     */
+    public static function themeCreated(string $key, ThemeKind $kind, ?string $ruleValue, bool $ruleNegated, array $labels): self
+    {
+        ksort($labels);
+
+        return new self([
+            'key' => $key,
+            'kind' => $kind->value,
+            'rule_value' => $ruleValue,
+            'rule_negated' => $ruleNegated,
+            'labels' => $labels,
+        ]);
+    }
+
+    /**
+     * `theme.updated` : l'avant et l'après des seuls champs changés parmi
+     * `rule_value`, `rule_negated`, `labels` et `sort_order` — l'écriture
+     * écrase en place, la ligne garde ce qui a été écrasé.
+     *
+     * @param  array<string, mixed>  $before
+     * @param  array<string, mixed>  $after
+     */
+    public static function themeUpdated(array $before, array $after): self
+    {
+        return new self([
+            'before' => $before,
+            'after' => $after,
+        ]);
+    }
+
+    /** `theme.published` et `theme.unpublished` : le nombre d'œuvres relu dans la transaction du geste. */
+    public static function themePublication(int $works): self
+    {
+        return new self([
+            'works' => $works,
         ]);
     }
 

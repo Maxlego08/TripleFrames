@@ -15,12 +15,18 @@ import {
     MISSING_TITLE_KEYS,
 } from '@/lib/admin-enum-keys';
 import { index as catalogIndex } from '@/routes/admin/catalog';
-import type { AdminCatalogFilters, AdminCatalogOptions } from '@/types/admin';
+import type {
+    AdminAvailableTheme,
+    AdminCatalogFilters,
+    AdminCatalogOptions,
+} from '@/types/admin';
 import type { TranslationKey } from '@/types/translations';
 
 type Props = {
     filters: AdminCatalogFilters;
     options: AdminCatalogOptions;
+    /** Les thèmes du filtre « thème », publiés ou non (spec 20 § 9.6). */
+    themeOptions: AdminAvailableTheme[];
 };
 
 type LabelKeys = Partial<Record<string, TranslationKey>>;
@@ -46,7 +52,11 @@ type Translate = (
  * `sort` et `direction` voyagent en champs cachés : filtrer ne doit pas
  * réinitialiser un tri choisi trois clics plus tôt.
  */
-export function AdminCatalogFiltersForm({ filters, options }: Props) {
+export function AdminCatalogFiltersForm({
+    filters,
+    options,
+    themeOptions,
+}: Props) {
     const { t } = useTranslations();
 
     return (
@@ -205,6 +215,32 @@ export function AdminCatalogFiltersForm({ filters, options }: Props) {
                 >
                     {t('admin.catalog.filters.missing_title.hint')}
                 </p>
+            </div>
+
+            <div className="space-y-1.5">
+                <Label htmlFor="catalog-theme">
+                    {t('admin.catalog.filters.theme.label')}
+                </Label>
+                <AdminSelect
+                    id="catalog-theme"
+                    name="theme_id"
+                    defaultValue={
+                        filters.theme_id === null
+                            ? ''
+                            : String(filters.theme_id)
+                    }
+                    options={[
+                        { value: '', label: t('admin.common.all') },
+                        ...themeOptions.map((theme) => ({
+                            value: String(theme.id),
+                            label: theme.is_published
+                                ? theme.label
+                                : t('admin.catalog.filters.theme.unpublished', {
+                                      label: theme.label,
+                                  }),
+                        })),
+                    ]}
+                />
             </div>
 
             <div className="flex flex-wrap items-end gap-2 md:col-span-2 xl:col-span-3">

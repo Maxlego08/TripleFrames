@@ -3,14 +3,21 @@
 use App\Enums\Locale;
 use App\Enums\SettingPresetKey;
 use App\Enums\ThemeKind;
+use App\Jobs\Catalog\SyncThemeMembership;
+use App\Models\Collection;
+use App\Models\Movie;
+use App\Models\MovieTheme;
 use App\Models\SettingPreset;
 use App\Models\Theme;
 use App\Models\ThemeLabel;
+use App\Models\TmdbCompany;
 use App\Settings\RoomSettings;
 use App\Settings\SettingPresetCatalog;
 use Database\Seeders\PlatformDataSeeder;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Queue;
 
 /*
 |--------------------------------------------------------------------------
@@ -57,7 +64,7 @@ function platformSeederSnapshot(): array
 {
     $snapshot = [];
 
-    foreach (['theme', 'theme_label', 'collection'] as $table) {
+    foreach (['theme', 'theme_label', 'collection', 'tmdb_company'] as $table) {
         $snapshot[$table] = DB::table($table)
             ->orderBy('id')
             ->get()
@@ -102,6 +109,27 @@ test('rejouer le seeder de plateforme ne réécrit ni un thème, ni un libellé,
     $label->label = 'Ghibli, édité en back-office';
     $label->save();
 
+    // Une saga livrée éditée : publiée, déplacée, libellé repris, et le nom de
+    // sa collection réécrit par une resynchronisation TMDB.
+    $saga = Theme::query()->where('key', 'saga.toy-story')->sole();
+    $saga->is_published = true;
+    $saga->sort_order = 650;
+    $saga->save();
+
+    $sagaLabel = ThemeLabel::query()
+        ->where('theme_id', $saga->id)
+        ->where('locale', Locale::English->value)
+        ->sole();
+    $sagaLabel->label = 'Toy Story saga';
+    $sagaLabel->save();
+
+    $collection = Collection::query()->where('tmdb_id', 10_194)->sole();
+    $collection->name = 'Toy Story — renamed by TMDB';
+    $collection->save();
+
+    // Un nom de société réécrit par l'importeur.
+    TmdbCompany::query()->where('tmdb_id', 420)->update(['name' => 'Marvel Studios, LLC']);
+
     $before = platformSeederSnapshot();
 
     // Une heure plus tard : une réécriture, même à l'identique, changerait `updated_at`.
@@ -117,9 +145,13 @@ test('rejouer le seeder de plateforme ne réécrit ni un thème, ni un libellé,
     expect($theme->rule_negated)->toBeTrue();
     expect($label->fresh()?->label)->toBe('Ghibli, édité en back-office');
 
-    // Aucune saga n'est livrée au jalon 1 : l'assertion sur une saga livrée
-    // arrive avec la liste par défaut de S4 (lot L30-9). La photographie couvre
-    // déjà `collection`, que ce passage n'a pas touchée.
+    $saga->refresh();
+    expect($saga->is_published)->toBeTrue();
+    expect($saga->sort_order)->toBe(650);
+    expect($saga->rule_value)->toBe((string) $collection->id);
+    expect($sagaLabel->fresh()?->label)->toBe('Toy Story saga');
+    expect($collection->fresh()?->name)->toBe('Toy Story — renamed by TMDB');
+    expect(TmdbCompany::query()->where('tmdb_id', 420)->sole()->name)->toBe('Marvel Studios, LLC');
 });
 
 test('rejouer le seeder de plateforme réconcilie les quatre presets', function (): void {
@@ -241,12 +273,29 @@ test('un thème livré naît dans le bloc de sa famille', function (): void {
     expect($sortOrder('genre.animation'))->toBe(101);
     expect($sortOrder('studio.disney'))->toBe(201);
     expect($sortOrder('studio.ghibli'))->toBe(203);
+    expect($sortOrder('studio.marvel'))->toBe(204);
+    expect($sortOrder('studio.dc'))->toBe(205);
     expect($sortOrder('decade.1930'))->toBe(301);
+    expect($sortOrder('decade.1940'))->toBe(302);
+    expect($sortOrder('decade.1950'))->toBe(303);
+    expect($sortOrder('decade.1960'))->toBe(304);
     expect($sortOrder('decade.1970'))->toBe(305);
     expect($sortOrder('decade.2020'))->toBe(310);
     expect($sortOrder('language.international'))->toBe(401);
+    expect($sortOrder('language.anime'))->toBe(402);
     expect($sortOrder('difficulty.very_easy'))->toBe(501);
     expect($sortOrder('difficulty.very_hard'))->toBe(505);
+
+    // Les douze sagas, dans l'ordre du tableau de la spec 30 § 12.4.
+    $sagas = [
+        'saga.star-wars', 'saga.harry-potter', 'saga.lord-of-the-rings', 'saga.james-bond',
+        'saga.indiana-jones', 'saga.back-to-the-future', 'saga.jurassic-park', 'saga.toy-story',
+        'saga.pirates-of-the-caribbean', 'saga.shrek', 'saga.avatar', 'saga.iron-man',
+    ];
+
+    foreach ($sagas as $index => $key) {
+        expect($sortOrder($key))->toBe(601 + $index, "La saga [{$key}] n'est pas à son rang du tableau.");
+    }
 
     // Les décennies ajoutées plus tard ont déjà leur place, entre 1930 et 1970.
     expect(PlatformDataSeeder::sortOrderFor('decade.1940'))->toBe(302);
@@ -306,6 +355,184 @@ test('un thème livré inséré après coup se range dans le bloc de sa famille,
 
     // Le thème inséré se range entre le dernier studio et la décennie suivante.
     $position = array_search('decade.1930', $displayed, true);
-    expect($displayed[$position - 1])->toBe('studio.ghibli');
-    expect($displayed[$position + 1])->toBe('decade.1970');
+    expect($displayed[$position - 1])->toBe('studio.dc');
+    expect($displayed[$position + 1])->toBe('decade.1940');
+});
+
+/*
+|--------------------------------------------------------------------------
+| Thèmes ajoutés par L30-9 — spec 30 § 12.3-12.5 et § 13.2 (D43 du 01/10)
+|--------------------------------------------------------------------------
+*/
+
+test('le seeder de plateforme n\'émet aucune requête HTTP', function (): void {
+    Http::preventStrayRequests();
+    Http::fake();
+
+    $this->seed(PlatformDataSeeder::class);
+    $this->seed(PlatformDataSeeder::class);
+
+    Http::assertNothingSent();
+    expect(Theme::query()->where('theme_kind', ThemeKind::Saga)->count())->toBe(12);
+});
+
+test('le rejeu n\'insère aucune saga en double', function (): void {
+    $this->seed(PlatformDataSeeder::class);
+    $this->seed(PlatformDataSeeder::class);
+
+    $sagas = Theme::query()->where('theme_kind', ThemeKind::Saga)->get();
+
+    expect($sagas)->toHaveCount(12);
+    expect($sagas->pluck('rule_value')->unique())->toHaveCount(12);
+    expect(Collection::query()->count())->toBe(12);
+    expect(Theme::query()->count())->toBe(count(PlatformDataSeeder::deliveredThemeKeys()));
+});
+
+test('une collection déjà créée par l\'importeur n\'est pas réécrite', function (): void {
+    $imported = Collection::factory()->create(['tmdb_id' => 10, 'name' => 'Star Wars - Saga']);
+    $row = (array) DB::table('collection')->where('id', $imported->id)->first();
+
+    $this->travel(1)->hours();
+    $this->seed(PlatformDataSeeder::class);
+
+    expect((array) DB::table('collection')->where('id', $imported->id)->first())->toBe($row);
+    expect(Collection::query()->where('tmdb_id', 10)->count())->toBe(1);
+    expect(Theme::query()->where('key', 'saga.star-wars')->sole()->rule_value)->toBe((string) $imported->id);
+});
+
+test('n\'insère pas une saga livrée dont la collection est déjà désignée par une saga créée en back-office', function (): void {
+    Queue::fake();
+
+    // La collection importée, puis une saga créée en back-office sous une autre clé.
+    $collection = Collection::factory()->create(['tmdb_id' => 10_194, 'name' => 'Toy Story Collection']);
+    $backOffice = Theme::factory()->saga($collection->id, 'toy-story-films')->unpublished()->create();
+    $before = (array) DB::table('theme')->where('id', $backOffice->id)->first();
+
+    $this->seed(PlatformDataSeeder::class);
+
+    expect(Theme::query()->where('key', 'saga.toy-story')->exists())->toBeFalse();
+    expect(Theme::query()
+        ->where('theme_kind', ThemeKind::Saga)
+        ->where('rule_value', (string) $collection->id)
+        ->count())->toBe(1);
+    expect((array) DB::table('theme')->where('id', $backOffice->id)->first())->toBe($before);
+    expect(Theme::query()->where('theme_kind', ThemeKind::Saga)->count())->toBe(12);
+
+    Queue::assertNotPushed(
+        SyncThemeMembership::class,
+        static fn (SyncThemeMembership $job): bool => $job->themeId === $backOffice->id,
+    );
+});
+
+test('une société déjà désignée par un thème studio n\'est pas désignée une seconde fois', function (): void {
+    Queue::fake();
+
+    // « DC Films » désignée en back-office, seule et sous une autre clé.
+    $dcFilms = Theme::factory()->studio(128_064, 'dc-films')->unpublished()->create();
+    // 42 n'est pas 420 : la garde découpe les listes, elle ne cherche pas une sous-chaîne.
+    Theme::factory()->studio(42, 'forty-two')->unpublished()->create();
+
+    $this->seed(PlatformDataSeeder::class);
+
+    expect(Theme::query()->where('key', 'studio.dc')->exists())->toBeFalse();
+    expect(Theme::query()->where('key', 'studio.marvel')->sole()->rule_value)->toBe('420');
+    expect($dcFilms->fresh()?->rule_value)->toBe('128064');
+
+    Queue::assertNotPushed(
+        SyncThemeMembership::class,
+        static fn (SyncThemeMembership $job): bool => $job->themeId === $dcFilms->id,
+    );
+});
+
+test('chaque thème inséré dispatche sa synchronisation et le rejeu n\'en dispatche aucune', function (): void {
+    Queue::fake();
+
+    $this->seed(PlatformDataSeeder::class);
+
+    $themeIds = Theme::query()->orderBy('id')->pluck('id')->all();
+
+    expect($themeIds)->toHaveCount(count(PlatformDataSeeder::deliveredThemeKeys()));
+    Queue::assertPushed(SyncThemeMembership::class, count($themeIds));
+
+    $pushed = Queue::pushed(SyncThemeMembership::class)
+        ->map(static fn (SyncThemeMembership $job): int => $job->themeId)
+        ->sort()
+        ->values()
+        ->all();
+
+    expect($pushed)->toBe($themeIds);
+
+    // Un thème supprimé est réinséré au passage suivant : lui seul est dispatché.
+    Theme::query()->where('key', 'decade.1950')->sole()->delete();
+
+    $this->seed(PlatformDataSeeder::class);
+
+    $reinserted = Theme::query()->where('key', 'decade.1950')->sole();
+
+    Queue::assertPushed(SyncThemeMembership::class, count($themeIds) + 1);
+    Queue::assertPushed(
+        SyncThemeMembership::class,
+        static fn (SyncThemeMembership $job): bool => $job->themeId === $reinserted->id,
+    );
+
+    // Rejeu sans thème absent : aucun dispatch.
+    $this->seed(PlatformDataSeeder::class);
+
+    Queue::assertPushed(SyncThemeMembership::class, count($themeIds) + 1);
+});
+
+test('un thème livré inséré par le seeder reçoit ses appartenances sans geste manuel, après commit', function (): void {
+    // Des films importés AVANT le déploiement qui livre Marvel, DC, les animés et 1950.
+    $ironMan = Movie::factory()->withCompany(420)->create(['release_year' => 2008]);
+    $wonderWoman = Movie::factory()->withCompany(128_064)->create(['release_year' => 2017]);
+    $classic = Movie::factory()->create(['release_year' => 1954, 'original_language' => 'ja']);
+
+    $membership = static fn (Movie $movie, string $key): ?MovieTheme => MovieTheme::query()
+        ->where('movie_id', $movie->id)
+        ->where('theme_id', Theme::query()->where('key', $key)->sole()->id)
+        ->first();
+
+    // Le seeder dans une transaction encore ouverte : rien n'est évalué avant son commit.
+    DB::transaction(function () use ($membership, $ironMan): void {
+        $this->seed(PlatformDataSeeder::class);
+
+        expect($membership($ironMan, 'studio.marvel'))->toBeNull();
+    });
+
+    foreach ([
+        [$ironMan, 'studio.marvel'],
+        [$wonderWoman, 'studio.dc'],
+        [$classic, 'decade.1950'],
+        [$classic, 'language.anime'],
+    ] as [$movie, $key]) {
+        $row = $membership($movie, $key);
+
+        expect($row?->is_active)->toBeTrue("Le film #{$movie->id} n'est pas actif dans [{$key}].");
+        expect($row?->is_auto)->toBeTrue();
+        expect($row?->manual_state)->toBeNull();
+    }
+
+    expect($membership($ironMan, 'studio.dc'))->toBeNull();
+});
+
+test('le seeder nomme les sociétés désignées et celles de la correction Disney sans réécrire un nom présent', function (): void {
+    TmdbCompany::factory()->create(['tmdb_id' => 429, 'name' => 'DC Comics']);
+
+    $this->seed(PlatformDataSeeder::class);
+
+    expect(TmdbCompany::query()->orderBy('tmdb_id')->pluck('name', 'tmdb_id')->all())->toBe([
+        2 => 'Walt Disney Pictures',
+        3 => 'Pixar',
+        420 => 'Marvel Studios',
+        429 => 'DC Comics',
+        6125 => 'Walt Disney Animation Studios',
+        10_342 => 'Studio Ghibli',
+        128_064 => 'DC Films',
+        171_656 => 'Walt Disney Feature Animation',
+        184_898 => 'DC Studios',
+    ]);
+
+    // La correction de Disney est un geste du porteur en back-office : le seeder
+    // nomme 6125 et 171656, il ne réécrit jamais la règle livrée (C20).
+    expect(Theme::query()->where('key', 'studio.disney')->sole()->rule_value)->toBe('2');
 });

@@ -12,6 +12,7 @@ use App\Models\Movie;
 use App\Models\MovieGroup;
 use App\Models\MovieProjection;
 use App\Models\MovieTitle;
+use App\Models\Theme;
 use App\Models\User;
 use App\Support\Catalog\AnswerKeyProjector;
 use Illuminate\Support\Facades\Event;
@@ -22,7 +23,8 @@ use Illuminate\Testing\TestResponse;
 | Journal des gestes de catalogue — D41 du 30/09
 |--------------------------------------------------------------------------
 |
-| Titres, alias et groupes « même œuvre » écrivent désormais leur ligne
+| Titres, alias, groupes « même œuvre » et exceptions de thème (D43 du
+| 01/10) écrivent désormais leur ligne
 | `admin_action`, dans la transaction du geste, signée du nom réel ; un
 | refus ou une annulation n'en écrit aucune. `details` garde ce que le
 | geste détruit ou écrase en place.
@@ -248,4 +250,75 @@ test('le geste d\'un administrateur est tracé comme celui d\'un curateur', func
 
     expect($line->actor_id)->toBe($admin->id)
         ->and($line->actor_name)->toBe($admin->real_name);
+});
+
+test('le geste de thème écrit movie.theme_set avec l\'état avant et après', function (): void {
+    $movie = Movie::factory()->create();
+    $theme = Theme::factory()->create(['rule_value' => null]);
+
+    catalogJournalSend('patch', 'admin.catalog.themes.update', ['movie' => $movie->id], [
+        'theme_id' => $theme->id,
+        'manual_state' => 'added',
+    ])->assertSessionHasNoErrors();
+
+    catalogJournalSend('patch', 'admin.catalog.themes.update', ['movie' => $movie->id], [
+        'theme_id' => $theme->id,
+        'manual_state' => 'removed',
+    ])->assertSessionHasNoErrors();
+
+    catalogJournalSend('patch', 'admin.catalog.themes.update', ['movie' => $movie->id], [
+        'theme_id' => $theme->id,
+        'manual_state' => null,
+    ])->assertSessionHasNoErrors();
+
+    $lines = AdminAction::query()->where('action', AdminActionType::MovieThemeSet->value)->orderBy('id')->get();
+
+    expect($lines)->toHaveCount(3)
+        ->and($lines->pluck('subject_id')->unique()->all())->toBe([$movie->id])
+        ->and($lines[0]->subject_type)->toBe(AdminActionSubject::Movie)
+        ->and($lines[0]->retention_class)->toBe(AdminActionRetention::Permanent)
+        ->and($lines[0]->actor_id)->toBe($this->curator->id)
+        ->and($lines[0]->actor_name)->toBe($this->curator->real_name)
+        // `toEqual` : MySQL réordonne les clés d'une colonne JSON.
+        ->and($lines->map(fn (AdminAction $line): ?array => $line->details?->values)->all())->toEqual([
+            ['theme_key' => $theme->key, 'from' => null, 'to' => 'added'],
+            ['theme_key' => $theme->key, 'from' => 'added', 'to' => 'removed'],
+            ['theme_key' => $theme->key, 'from' => 'removed', 'to' => null],
+        ]);
+});
+
+test('un geste de thème sans changement n\'écrit rien au journal', function (): void {
+    $movie = Movie::factory()->create();
+    $theme = Theme::factory()->create();
+
+    // Annuler une exception qui n'existe pas : rien ne change.
+    catalogJournalSend('patch', 'admin.catalog.themes.update', ['movie' => $movie->id], [
+        'theme_id' => $theme->id,
+        'manual_state' => null,
+    ])->assertSessionHasNoErrors();
+
+    catalogJournalSend('patch', 'admin.catalog.themes.update', ['movie' => $movie->id], [
+        'theme_id' => $theme->id,
+        'manual_state' => 'removed',
+    ])->assertSessionHasNoErrors();
+
+    // Le même retrait renvoyé : une seule ligne en tout.
+    catalogJournalSend('patch', 'admin.catalog.themes.update', ['movie' => $movie->id], [
+        'theme_id' => $theme->id,
+        'manual_state' => 'removed',
+    ])->assertSessionHasNoErrors();
+
+    expect(AdminAction::query()->where('action', AdminActionType::MovieThemeSet->value)->count())->toBe(1);
+});
+
+test('un geste de thème refusé n\'écrit rien au journal', function (): void {
+    $movie = Movie::factory()->withdrawn()->create();
+    $theme = Theme::factory()->create();
+
+    catalogJournalSend('patch', 'admin.catalog.themes.update', ['movie' => $movie->id], [
+        'theme_id' => $theme->id,
+        'manual_state' => 'added',
+    ])->assertForbidden();
+
+    expect(AdminAction::query()->count())->toBe(0);
 });

@@ -5,6 +5,7 @@ use App\Enums\PurgeScope;
 use App\Models\Frame;
 use App\Models\PurgeRun;
 use App\Models\SavedConfig;
+use App\Models\TmdbCompany;
 use App\Support\Frames\FrameStoragePrefix;
 use Carbon\CarbonImmutable;
 use Database\Seeders\DatabaseSeeder;
@@ -43,7 +44,7 @@ function purgePerimeterSnapshot(): array
     $tables = [
         // Catalogue.
         'movie', 'movie_projection', 'movie_group', 'collection', 'movie_title', 'alias', 'answer_key',
-        'movie_certification', 'movie_tmdb_tag', 'theme', 'theme_label', 'movie_theme', 'import_run',
+        'movie_certification', 'movie_tmdb_tag', 'tmdb_company', 'theme', 'theme_label', 'movie_theme', 'import_run',
         // Images.
         'frame', 'frame_review',
         // Actifs du compte.
@@ -121,6 +122,8 @@ it('une frame de 13 mois survit à la purge', function (): void {
     $this->travelTo($now->subMonths(13));
     $this->seed(DatabaseSeeder::class);
     $frame = Frame::factory()->published()->create();
+    // `tmdb_company` est au périmètre interdit (10 § 11.2, D43 du 01/10).
+    TmdbCompany::factory()->create();
     $this->travelTo($now);
 
     $frame = $frame->fresh() ?? throw new LogicException('Frame introuvable.');
@@ -129,7 +132,8 @@ it('une frame de 13 mois survit à la purge', function (): void {
     $before = purgePerimeterSnapshot();
 
     expect($frame->created_at->lessThan($now->subMonths(12)))->toBeTrue()
-        ->and($before['frame'])->toBeGreaterThan(1);
+        ->and($before['frame'])->toBeGreaterThan(1)
+        ->and($before['tmdb_company'])->toBeGreaterThan(0);
 
     purgePerimeterRunAll();
 

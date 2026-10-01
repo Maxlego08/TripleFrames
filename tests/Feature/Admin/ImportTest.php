@@ -6,6 +6,7 @@ use App\Http\Controllers\Admin\ImportController;
 use App\Jobs\Catalog\RunCatalogImport;
 use App\Models\ImportRun;
 use App\Models\Movie;
+use App\Models\Theme;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Bus;
@@ -50,6 +51,7 @@ test('l’écran d’import rend ses deux voies, ses défauts et son historique'
             ->where('defaults.pages_max', 5)
             ->where('defaults.pages_default', 1)
             ->where('defaults.paste_max_ids', config('catalog.import.paste_max_ids'))
+            ->where('defaults.paste_max_themes', config('catalog.import.paste_max_themes'))
             ->has('defaults.language_choices')
             ->where('resumable', null)
             ->where('tmdb_configured', true));
@@ -183,6 +185,64 @@ test('le collage lit les identifiants et les URL TMDB, et n’est jamais marqué
         fn (RunCatalogImport $job): bool => $job->identifiers === [550, 129]
             && $job->kind === ImportRunKind::Paste,
     );
+});
+
+test('le collage sans thème reste valide', function (): void {
+    Bus::fake();
+
+    $this->actingAs($this->curator)
+        ->post(route('admin.import.ids'), ['ids' => '550'])
+        ->assertSessionHasNoErrors();
+
+    $run = ImportRun::query()->sole();
+
+    // NULL, jamais une chaîne vide : un collage sans thème n'en relit aucun.
+    expect($run->added_theme_ids)->toBeNull()
+        ->and($run->addedThemeIds())->toBe([]);
+});
+
+test('l\'écran d\'import propose la liste des thèmes', function (): void {
+    $published = Theme::factory()->decade(1990)->create();
+    $unpublished = Theme::factory()->decade(1940)->unpublished()->create();
+
+    $this->actingAs($this->curator)
+        ->get(route('admin.import.index'))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('themes', 2)
+            ->where('themes', fn ($themes): bool => collect($themes)->pluck('id')->sort()->values()->all()
+                === collect([$published->id, $unpublished->id])->sort()->values()->all())
+            ->has('themes.0', fn (Assert $theme) => $theme
+                ->has('id')
+                ->has('key')
+                ->has('label')
+                ->has('kind')
+                ->has('is_published')));
+});
+
+test('le détail d\'un collage avec thèmes rend les thèmes appliqués et ses deux compteurs', function (): void {
+    $theme = Theme::factory()->decade(1990)->unpublished()->create();
+    $missing = Theme::factory()->decade(1980)->create();
+    $missingId = $missing->id;
+    $missing->labels()->delete();
+    $missing->delete();
+
+    $run = ImportRun::factory()->paste()->create([
+        'added_theme_ids' => $theme->id.','.$missingId,
+        'total_themes_applied' => 3,
+        'total_themes_kept_removed' => 1,
+    ]);
+
+    $this->actingAs($this->curator)
+        ->get(route('admin.import.show', $run))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            // Un thème disparu entre-temps est ignoré à la lecture.
+            ->has('run.added_themes', 1)
+            ->where('run.added_themes.0.id', $theme->id)
+            ->where('run.added_themes.0.is_published', false)
+            ->where('run.total_themes_applied', 3)
+            ->where('run.total_themes_kept_removed', 1));
 });
 
 test('un collage illisible et un collage trop long sont refusés séparément', function (): void {

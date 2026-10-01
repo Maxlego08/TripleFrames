@@ -608,8 +608,9 @@ it('FAIT 8 — chaque film porte ses étiquettes TMDB, et chaque thème publié 
     $themes = Theme::query()->where('is_published', true)->get();
 
     foreach ($themes as $theme) {
-        // Un thème de saga se publie en back-office sur un `collection.id` local :
-        // le site n'en livre aucun, et aucun film de démonstration n'a à en porter.
+        // Les sagas livrées naissent non publiées ; une saga publiée en
+        // back-office sur une collection importée n'a aucun film de démonstration
+        // à porter. Les sagas que la démonstration couvre sont vérifiées plus bas.
         if ($theme->theme_kind === ThemeKind::Saga) {
             continue;
         }
@@ -624,6 +625,55 @@ it('FAIT 8 — chaque film porte ses étiquettes TMDB, et chaque thème publié 
             .'rend « 0 film » à l’hôte qui le sélectionne.',
         );
     }
+
+    // Les thèmes nés NON publiés par L30-9 (spec 30 § 12.3) : publiés en
+    // développement, ils ne doivent pas être vides — et les trois sagas de la
+    // démonstration désignent la collection LIVRÉE, jamais une collection de
+    // démonstration sans `tmdb_id` (C16).
+    $expectedNonEmpty = [
+        'studio.marvel', 'studio.dc', 'decade.1940', 'decade.1950', 'decade.1960', 'language.anime',
+        'saga.star-wars', 'saga.toy-story', 'saga.iron-man',
+    ];
+
+    foreach ($expectedNonEmpty as $key) {
+        $theme = Theme::query()->where('key', $key)->sole();
+
+        $this->assertFalse($theme->is_published, "FAIT 8 — le thème [{$key}] devait naître non publié.");
+        $this->assertGreaterThan(
+            0,
+            MovieTheme::query()
+                ->where('theme_id', $theme->id)
+                ->where('is_active', true)
+                ->count(),
+            "FAIT 8 — le thème [{$key}] n'a aucun film de démonstration actif : le publier en développement "
+            .'le ferait rendre « 0 film ».',
+        );
+    }
+
+    // Les deux seeders partagent les collections livrées, sans doublon ni
+    // collection de démonstration détachée (C16) : une par saga livrée, chacune
+    // par son `tmdb_id`, et chaque film de saga de la démonstration sur l'une d'elles.
+    $this->assertFalse(
+        DB::table('collection')->whereNull('tmdb_id')->exists(),
+        'FAIT 8 — le catalogue de démonstration a créé une collection sans `tmdb_id`, détachée des sagas livrées.',
+    );
+    $this->assertSame(
+        DB::table('collection')->count(),
+        DB::table('collection')->distinct()->count('tmdb_id'),
+        'FAIT 8 — une collection livrée existe en double.',
+    );
+    $this->assertSame(
+        0,
+        Movie::query()
+            ->whereNotNull('collection_id')
+            ->whereNotIn('collection_id', Theme::query()
+                ->where('theme_kind', ThemeKind::Saga)
+                ->pluck('rule_value')
+                ->map(static fn (?string $rule): int => (int) $rule)
+                ->all())
+            ->count(),
+        'FAIT 8 — un film de saga de la démonstration n\'est rattaché à aucune collection désignée par une saga livrée.',
+    );
 });
 
 it('FAIT 9 — chaque chaîne acceptée du catalogue a sa clé, préfixes, sous-titres et ambiguïté compris', function () {

@@ -145,12 +145,20 @@ final readonly class PoolQuery
      * Exposé pour le rapport de vivier, dont la cause `themeKeys` exige
      * `effective ≠ []` (§ 4.3) : la règle d'intersection reste écrite ici seule.
      *
+     * **Seule exception** (J1 depuis D43 du 01/10, L30-11a) : la mesure d'un
+     * thème ({@see PoolScope::themeProbe()}) rend ses thèmes tels quels, **sans
+     * lire les thèmes publiés** — un thème non publié s'y mesure.
+     *
      * @return list<int>
      */
     public function effectiveThemeIds(PoolScope $scope): array
     {
         if ($scope->themeIds === []) {
             return [];
+        }
+
+        if ($scope->themesUnpublishedIncluded) {
+            return $scope->themeIds;
         }
 
         return array_values(array_filter(
@@ -168,7 +176,7 @@ final readonly class PoolQuery
      */
     public function themesPruned(PoolScope $scope): bool
     {
-        if ($scope->themeIds === []) {
+        if ($scope->themeIds === [] || $scope->themesUnpublishedIncluded) {
             return false;
         }
 

@@ -37,10 +37,12 @@ use App\Jobs\Game\AdvanceRound;
 use App\Jobs\Game\InterruptPausedGame;
 use App\Models\Alias;
 use App\Models\AnswerKey;
+use App\Models\Collection;
 use App\Models\Frame;
 use App\Models\Game;
 use App\Models\GamePlayer;
 use App\Models\Movie;
+use App\Models\MovieTheme;
 use App\Models\MovieTitle;
 use App\Models\Player;
 use App\Models\Room;
@@ -48,6 +50,7 @@ use App\Models\Round;
 use App\Models\RoundChoiceSet;
 use App\Models\RoundPlayer;
 use App\Models\RoundTier;
+use App\Models\Theme;
 use App\Settings\EngineConstants;
 use App\Settings\PlatformLimits;
 use App\Settings\RoomSettings;
@@ -602,6 +605,44 @@ it("aucune charge d'événement ni aucun paquet ne contient de clé d'identifian
     foreach (['drawSeed', 'activeSeatToken', 'playerTokenHash', 'choice_1', 'id'] as $key) {
         expect(fn () => new GameEnded($scene->room, $scene->game, ['podium' => ['gameStatus' => 'completed', 'nested' => [$key => 'x']]]))
             ->toThrow(LogicException::class);
+    }
+});
+
+it("aucune charge de manche ne porte l'appartenance d'un film à un thème, une saga ou une collection", function (): void {
+    // Spec 30 § 13.3 (D43 du 01/10, critique C14) : une clé `saga.iron-man`
+    // désigne presque un titre. Chaque film de la scène est rangé dans une
+    // saga publiée et un thème manuel, avec des clés et un nom reconnaissables.
+    $recorder = RecordingBroadcaster::install();
+    $scene = WireFixtures::scene();
+
+    $values = [];
+
+    foreach (Round::query()->pluck('movie_id')->unique() as $index => $movieId) {
+        $collection = Collection::factory()->named("Sentinel Saga {$index} Collection")->create();
+        Movie::query()->whereKey($movieId)->update(['collection_id' => $collection->id]);
+        $saga = Theme::factory()->saga($collection->id, "sentinel-saga-{$index}")->published()->create();
+        $manual = Theme::factory()->withKey("manual.sentinel-{$index}")->published()->create();
+
+        MovieTheme::factory()->auto()->create(['movie_id' => $movieId, 'theme_id' => $saga->id]);
+        MovieTheme::factory()->manualAdded()->create(['movie_id' => $movieId, 'theme_id' => $manual->id]);
+
+        array_push($values, $collection->name, $saga->key, $manual->key);
+    }
+
+    foreach (WireFixtures::events($scene) as $event) {
+        event($event);
+    }
+
+    $forbidden = ['theme', 'themes', 'themeId', 'theme_id', 'collection', 'collections', 'collectionId', 'collection_id', 'saga'];
+
+    foreach ($recorder->sent as $sent) {
+        foreach (eventPayloadKeys($sent['payload']) as $key) {
+            expect(in_array($key, $forbidden, true))->toBeFalse("[{$sent['event']}] porte la clé d'appartenance [{$key}].");
+        }
+
+        foreach ($values as $value) {
+            expect($sent['json'])->not->toContain($value);
+        }
     }
 });
 

@@ -20,6 +20,7 @@ import { AdminPageHeading } from '@/components/admin/admin-page-heading';
 import { AdminPagination } from '@/components/admin/admin-pagination';
 import { AdminStatTile } from '@/components/admin/admin-stat-tile';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { AdminCardTitle } from '@/components/admin/admin-card-title';
 import {
@@ -353,6 +354,65 @@ export default function AdminImportShow({
                         </div>
                     </CardContent>
                 </Card>
+
+                {/* Thèmes du collage (D43 du 01/10, spec 20 § 3.3) */}
+                {run.run_kind === 'paste' && (
+                    <Card>
+                        <CardHeader>
+                            <AdminCardTitle>
+                                {t('admin.import.run.themes.heading')}
+                            </AdminCardTitle>
+                            <CardDescription>
+                                {t('admin.import.run.themes.description')}
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                            {run.added_themes.length === 0 ? (
+                                <p className="text-sm text-muted-foreground">
+                                    {t('admin.import.run.themes.none')}
+                                </p>
+                            ) : (
+                                <>
+                                    <ul className="flex flex-wrap gap-2">
+                                        {run.added_themes.map((theme) => (
+                                            <li
+                                                key={theme.id}
+                                                className="flex items-center gap-1.5 text-sm"
+                                            >
+                                                <Badge variant="secondary">
+                                                    {theme.label}
+                                                </Badge>
+                                                {!theme.is_published && (
+                                                    <Badge variant="outline">
+                                                        {t(
+                                                            'admin.import.run.themes.unpublished',
+                                                        )}
+                                                    </Badge>
+                                                )}
+                                            </li>
+                                        ))}
+                                    </ul>
+                                    <div className="grid gap-3 sm:grid-cols-2">
+                                        <AdminStatTile
+                                            label={t(
+                                                'admin.import.run.themes.applied',
+                                            )}
+                                            value={run.total_themes_applied}
+                                        />
+                                        <AdminStatTile
+                                            label={t(
+                                                'admin.import.run.themes.kept_removed',
+                                            )}
+                                            value={
+                                                run.total_themes_kept_removed
+                                            }
+                                        />
+                                    </div>
+                                </>
+                            )}
+                        </CardContent>
+                    </Card>
+                )}
 
                 {/* Ce que CE balayage a fait entrer */}
                 <Card>
