@@ -16,6 +16,7 @@ use App\Models\AdminAction;
 use App\Models\Alias;
 use App\Models\AnswerKey;
 use App\Models\Frame;
+use App\Models\FrameReview;
 use App\Models\Movie;
 use App\Models\MovieCertification;
 use App\Models\MovieGroup;
@@ -30,6 +31,7 @@ use App\Support\Catalog\AmbiguityPreview;
 use App\Support\Catalog\AnswerKeyNormalizer;
 use App\Support\Catalog\TextTarget;
 use App\Support\Curation\CurationStatus;
+use App\Support\Curation\ReviewQueue;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Config;
@@ -167,6 +169,12 @@ class CatalogController extends Controller
             'tags' => $this->tags($movie),
             'themes' => $this->themes($movie),
             'frames' => $this->frames($movie),
+            // La validation en lot des images en attente de revue (D42 du
+            // 30/09, § 7.9) : `null` s'il n'y a rien à valider, ou si le
+            // compte ne peut pas revoir — le bouton est alors absent.
+            'review_batch' => Gate::allows('create', FrameReview::class)
+                ? AdminCatalogPresenter::reviewBatch(ReviewQueue::batchOf($movie))
+                : null,
             'import_run' => $movie->importRun === null
                 ? null
                 : AdminCatalogPresenter::importRunRow($movie->importRun),

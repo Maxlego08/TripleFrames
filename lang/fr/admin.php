@@ -399,6 +399,7 @@ return [
             'frame_processing_retried' => 'Traitement de l’image relancé',
             'frame_level_changed' => 'Niveau de l’image changé',
             'frame_reviewed' => 'Image revue',
+            'movie_frames_reviewed' => 'Images du film validées en lot',
             'import_discover_started' => 'Balayage TMDB lancé',
             'import_paste_started' => 'Collage d’identifiants lancé',
             'import_seed_list_started' => 'Lot de la liste d’amorçage lancé',
@@ -1878,6 +1879,28 @@ return [
         'level_changed' => 'Le niveau de l’image a changé depuis son affichage, et les points de la grille avec lui : aucune revue n’a été enregistrée. Revoyez-la à son nouveau niveau.',
         'already_reviewed' => 'Cette image a déjà été jugée, ou n’attend plus de revue : aucune nouvelle revue n’a été enregistrée.',
         'answers_invalid' => 'Les réponses envoyées ne correspondent pas à la grille d’exclusion : aucune revue n’a été enregistrée. Revoyez l’image depuis la file à jour.',
+
+        /*
+        | Validation en lot des images d’un film (D42 du 30/09, § 7.9), depuis
+        | la fiche du film ou un groupe de la file. `:count` : le nombre
+        | d’images du lot ; `:version` : la version courante de la grille ;
+        | `:title` : le titre original du film. Les refus (`empty`,
+        | `stale_list`, `stale`) sont relus sous le verrou et n’écrivent rien.
+        */
+        'batch' => [
+            'action' => 'Tout valider (:count)',
+            'action_label' => 'Valider en une fois les :count images en attente de revue du film :title',
+            'title' => 'Valider toutes les images en attente ?',
+            'description' => ':count image sera validée et publiée.|:count images seront validées et publiées.',
+            'grid_notice' => 'Pour chacune, la grille d’exclusion (version :version) est enregistrée comme « rien à signaler » à son niveau, sous votre nom réel : une revue conforme par image, comme en revue individuelle.',
+            'excluded_notice' => 'Les images en traitement, en échec, rejetées ou hors jeu ne font pas partie du lot : elles restent en revue individuelle.',
+            'publish_notice' => 'Le film, lui, n’est jamais publié automatiquement : la fiche proposera « Publier » si ses conditions sont remplies.',
+            'submit' => 'Tout valider',
+            'flash' => ':count image validée et publiée.|:count images validées et publiées.',
+            'empty' => 'Ce film n’a plus aucune image en attente de revue à valider en lot : rien n’a été enregistré.',
+            'stale_list' => 'Les images en attente de ce film ont changé depuis l’affichage : aucune revue n’a été enregistrée. Rechargez la page et vérifiez le nouveau lot.',
+            'stale' => 'Une image du lot a changé depuis son affichage, un nouveau rendu l’a remplacée : aucune revue n’a été enregistrée. Rechargez la page et vérifiez le nouveau lot.',
+        ],
     ],
 
     /*
@@ -2461,6 +2484,7 @@ return [
             'review_id' => 'Revue n°',
             'decision' => 'Décision',
             'grid_version' => 'Version de la grille',
+            'frame_ids' => 'Images n°',
             'pages' => 'Pages TMDB',
             'tmdb_ids' => 'Identifiants TMDB',
         ],
@@ -2515,6 +2539,7 @@ return [
         'reason' => 'motif',
         'grid_version' => 'version de la grille',
         'reviewed_hash' => 'empreinte de l’image revue',
+        'frames' => 'images du lot',
         'answers' => 'réponses de la grille',
         'declared_source_reference' => 'source déclarée',
         'movie_title' => 'titre',

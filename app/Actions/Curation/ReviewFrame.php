@@ -13,6 +13,7 @@ use App\Models\User;
 use App\Support\Admin\AdminJournal;
 use App\Support\Catalog\MovieProjector;
 use App\Support\Curation\ExclusionGrid;
+use App\Support\Curation\FrameReviewWriter;
 use App\Support\Curation\ReviewList;
 use App\Support\Curation\ReviewQueue;
 use App\ValueObjects\Admin\AdminActionDetails;
@@ -21,7 +22,6 @@ use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\ValidationException;
-use LogicException;
 use Throwable;
 
 /**
@@ -71,6 +71,10 @@ use Throwable;
  * 30/09, toute revue, passante ou rejetée, écrit en plus sa ligne
  * `frame.reviewed` dans la même transaction — un index dans le journal
  * unifié, qui pointe la preuve (`details.review_id`) sans la dupliquer.
+ *
+ * L'écriture de la preuve et la publication sont partagées avec la
+ * validation en lot d'un film ({@see FrameReviewWriter}, D42 du 30/09) ; la
+ * revue unitaire garde ses gardes, sa ligne `frame.reviewed` et ses refus.
  */
 final class ReviewFrame
 {
@@ -111,7 +115,7 @@ final class ReviewFrame
 
             $now = Date::now()->toImmutable()->startOfSecond();
 
-            $review = $this->record($locked, $reviewer, $gridVersion, $decision, $answers, $now);
+            $review = FrameReviewWriter::record($locked, $reviewer, $gridVersion, $decision, $answers, $now);
 
             $this->journal->record(
                 $reviewer,
@@ -192,68 +196,11 @@ final class ReviewFrame
     }
 
     /**
-     * La preuve, en ajout seul : instantanés du relecteur et de la source.
-     *
-     * @param  array<string, bool>  $answers
-     */
-    private function record(
-        Frame $frame,
-        User $reviewer,
-        int $gridVersion,
-        ReviewDecision $decision,
-        array $answers,
-        CarbonImmutable $now,
-    ): FrameReview {
-        $realName = trim((string) $reviewer->real_name);
-
-        if ($realName === '') {
-            // Inatteignable : la garde `User::saving` interdit un rôle de
-            // curation sans nom réel (D12 du 23/09). Une preuve anonyme ne
-            // s'écrit jamais.
-            throw new LogicException("Le compte #{$reviewer->id} n'a pas de nom réel : il ne peut pas signer une revue.");
-        }
-
-        $source = ReviewQueue::declaredSource($frame);
-
-        $review = new FrameReview;
-        $review->forceFill([
-            'frame_id' => $frame->id,
-            'reviewer_id' => $reviewer->id,
-            'reviewer_name' => $realName,
-            'reviewer_role' => $reviewer->role,
-            'grid_version' => $gridVersion,
-            'decision' => $decision,
-            'reviewed_hash' => $frame->published_hash,
-            'declared_source_kind' => $frame->source_kind,
-            'declared_source_reference' => $source['reference'],
-            'answers' => $answers,
-            'reviewed_at' => $now,
-        ])->save();
-
-        return $review;
-    }
-
-    /**
      * Revue passante = publication, dans la transaction de la preuve.
      */
     private function publish(Frame $frame, Movie $movie, FrameReview $review, CarbonImmutable $now): void
     {
-        $attributes = [
-            'published_review_id' => $review->id,
-            'reviewed_at' => $now,
-            'review_grid_version' => $review->grid_version,
-        ];
-
-        if ($frame->availability !== ContentAvailability::Published) {
-            $attributes['availability'] = ContentAvailability::Published;
-            $attributes['availability_changed_at'] = $now;
-        }
-
-        if ($frame->first_published_at === null) {
-            $attributes['first_published_at'] = $now;
-        }
-
-        $frame->forceFill($attributes)->save();
+        FrameReviewWriter::publish($frame, $review, $now);
 
         // Synchrone, dans la transaction du geste (spec 10 § 3.2, règle 2).
         $this->projector->recompute($movie);

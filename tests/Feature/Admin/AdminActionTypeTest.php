@@ -78,8 +78,8 @@ function adminJournalRawLine(AdminActionType $action, array $overrides = []): Ad
     return $line;
 }
 
-test('la liste fermée compte exactement quarante et un cas', function (): void {
-    expect(AdminActionType::cases())->toHaveCount(41)
+test('la liste fermée compte exactement quarante-deux cas', function (): void {
+    expect(AdminActionType::cases())->toHaveCount(42)
         ->and(array_map(static fn (AdminActionType $case): string => $case->value, AdminActionType::cases()))
         ->toEqualCanonicalizing([
             'role.changed',
@@ -120,6 +120,8 @@ test('la liste fermée compte exactement quarante et un cas', function (): void 
             'import.paste_started',
             'import.seed_list_started',
             'import.resumed',
+            // D42 du 30/09 : validation en lot des images d'un film.
+            'movie.frames_reviewed',
             // D41 du 30/09 : lectures sensibles.
             'accounts.directory_viewed',
             'accounts.access_viewed',

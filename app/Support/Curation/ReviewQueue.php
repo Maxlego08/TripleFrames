@@ -9,6 +9,7 @@ use App\Enums\ReviewDecision;
 use App\Models\Frame;
 use App\Models\FrameReview;
 use App\Models\Movie;
+use App\ValueObjects\Admin\AdminActionDetails;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
@@ -51,6 +52,17 @@ use Illuminate\Database\Query\Builder as QueryBuilder;
  */
 final class ReviewQueue
 {
+    /**
+     * Plafond d'un lot validé en une fois (D42 du 30/09, spec 20 § 7.9) :
+     * bien au-delà de la banque d'un film, et sous la borne de
+     * {@see AdminActionDetails::MAX_BYTES}, qui garde
+     * la liste des identifiants validés dans la ligne du journal. Au-delà, le
+     * bouton « Tout valider » est absent (l'envoi serait toujours refusé) et
+     * les images restent en revue individuelle — choix à valider par le
+     * porteur.
+     */
+    public const int BATCH_MAX_FRAMES = 200;
+
     /** @var array<string, list<Frame>>|null les images de chaque liste, dans l'ordre de l'écran */
     private ?array $lists = null;
 
@@ -123,6 +135,83 @@ final class ReviewQueue
         }
 
         return $lists;
+    }
+
+    /**
+     * Vrai si l'image entre dans la VALIDATION EN LOT de son film (D42 du
+     * 30/09, spec 20 § 7.9) : elle attend une revue — « À revoir » ou
+     * « À re-revoir » —, n'est PAS dans « Rejetées » (un rejet se lève image
+     * par image, jamais en lot), et porte une source déclarée exploitable.
+     * Une image en traitement, en échec, écartée, suspendue ou retirée n'est
+     * dans aucune liste, donc jamais dans le lot : elle reste en revue
+     * individuelle.
+     */
+    public static function isBatchable(Frame $frame, Movie $movie, ?ReviewDecision $judging): bool
+    {
+        $lists = self::listsOf($frame, $movie, $judging);
+
+        return $lists !== []
+            && ! in_array(ReviewList::Rejected, $lists, true)
+            && $frame->published_hash !== null
+            && self::declaredSource($frame)['reference'] !== '';
+    }
+
+    /**
+     * Le lot d'un film, relu en base, par identifiant croissant : ses images
+     * {@see self::isBatchable()}. Avec `$lock`, chaque image du film est lue
+     * sous verrou — l'appelant a verrouillé le film avant, dans l'ordre des
+     * autres gestes de curation.
+     *
+     * @return list<Frame>
+     */
+    public static function batchOf(Movie $movie, bool $lock = false): array
+    {
+        $query = Frame::query()->where('movie_id', $movie->id)->orderBy('id');
+
+        if ($lock) {
+            $query->lockForUpdate();
+        }
+
+        $frames = $query->get();
+        $judging = self::judgingReviews($frames);
+
+        return array_values($frames
+            ->filter(static fn (Frame $frame): bool => self::isBatchable($frame, $movie, ($judging[$frame->id] ?? null)?->decision))
+            ->all());
+    }
+
+    /**
+     * Les lots de la file, par film, dans l'ordre de l'écran — sans aucune
+     * requête de plus que la file elle-même. Un film sans image à valider en
+     * lot n'a pas d'entrée.
+     *
+     * @return array<int, list<Frame>>
+     */
+    public function batches(): array
+    {
+        $batches = [];
+        $seen = [];
+
+        foreach ([ReviewList::ToReview, ReviewList::ToReReview] as $list) {
+            foreach ($this->frames($list) as $frame) {
+                if (isset($seen[$frame->id])) {
+                    continue;
+                }
+
+                $seen[$frame->id] = true;
+
+                if (self::isBatchable($frame, $frame->movie, $this->judgingReviewOf($frame)?->decision)) {
+                    $batches[$frame->movie_id][] = $frame;
+                }
+            }
+        }
+
+        foreach ($batches as $movieId => $frames) {
+            usort($frames, static fn (Frame $a, Frame $b): int => $a->id <=> $b->id);
+            $batches[$movieId] = $frames;
+        }
+
+        return $batches;
     }
 
     /**

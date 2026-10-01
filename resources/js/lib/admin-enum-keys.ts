@@ -312,6 +312,7 @@ export const ADMIN_ACTION_KEYS: Record<AdminActionTypeValue, TranslationKey> = {
         'admin.enum.admin_action.frame_processing_retried',
     'frame.level_changed': 'admin.enum.admin_action.frame_level_changed',
     'frame.reviewed': 'admin.enum.admin_action.frame_reviewed',
+    'movie.frames_reviewed': 'admin.enum.admin_action.movie_frames_reviewed',
     'import.discover_started':
         'admin.enum.admin_action.import_discover_started',
     'import.paste_started': 'admin.enum.admin_action.import_paste_started',
@@ -376,6 +377,7 @@ export const JOURNAL_DETAIL_KEYS: Partial<Record<string, TranslationKey>> = {
     review_id: 'admin.journal.details.review_id',
     decision: 'admin.journal.details.decision',
     grid_version: 'admin.journal.details.grid_version',
+    frame_ids: 'admin.journal.details.frame_ids',
     pages: 'admin.journal.details.pages',
     tmdb_ids: 'admin.journal.details.tmdb_ids',
 };

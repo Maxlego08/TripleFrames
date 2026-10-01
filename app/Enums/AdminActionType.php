@@ -9,7 +9,7 @@ use App\Support\Admin\AdminJournal;
  * Liste FERMÉE des gestes consignés au journal d'administration : cast de
  * `admin_action.action` (spec 10 § 8.3, contrat C14).
  *
- * **Quarante et un cas.** Les vingt-deux gestes engageants du jalon 1 — les
+ * **Quarante-deux cas.** Les vingt-deux gestes engageants du jalon 1 — les
  * vingt et un du contrat C14, dont six entrés le 23/09 (`movie.published`,
  * `frame.unpublished`, `frame.grid_unpublished`, `frame.unsuspended`,
  * `site.closed`, `site.reopened`), plus `user.real_name_changed` (28/09,
@@ -22,6 +22,10 @@ use App\Support\Admin\AdminJournal;
  * - quatre LECTURES SENSIBLES ({@see self::isRead()}) — l'annuaire, la fiche
  *   d'un compte, l'écran des accès et sa recherche par adresse —, écrites par
  *   la seule porte {@see AdminJournal::recordRead()}, sans transaction.
+ *
+ * - un cas entré par **D42 du 30/09** : `movie.frames_reviewed`, la
+ *   validation en lot des images d'un film — UNE ligne pour le lot, sujet le
+ *   film, quand chaque image garde sa propre preuve `frame_review`.
  *
  * Tous sans migration de colonne : `action` reste un `string(40)`. `10`
  * possède la liste ; un cas nouveau s'y demande en exigence, jamais par un
@@ -120,6 +124,15 @@ enum AdminActionType: string
      */
     case FrameReviewed = 'frame.reviewed';
 
+    /**
+     * Validation en lot des images d'un film en attente de revue (D42 du
+     * 30/09) : UNE ligne pour le lot, sujet le film. Chaque image garde sa
+     * preuve `frame_review`, seule opposable ; le lot n'écrit AUCUNE ligne
+     * `frame.reviewed` (`details` : les images validées, la version de la
+     * grille).
+     */
+    case MovieFramesReviewed = 'movie.frames_reviewed';
+
     case ImportDiscoverStarted = 'import.discover_started';
 
     /** Collage manuel ; `details` porte les identifiants collés, stockés nulle part ailleurs. */
@@ -207,7 +220,8 @@ enum AdminActionType: string
             self::MovieAliasAdded,
             self::MovieAliasRemoved,
             self::MovieGrouped,
-            self::MovieUngrouped => AdminActionSubject::Movie,
+            self::MovieUngrouped,
+            self::MovieFramesReviewed => AdminActionSubject::Movie,
             self::FrameUnpublished,
             self::FrameGridUnpublished,
             self::FrameSuspended,
@@ -277,6 +291,7 @@ enum AdminActionType: string
             self::FrameProcessingRetried,
             self::FrameLevelChanged,
             self::FrameReviewed,
+            self::MovieFramesReviewed,
             self::ImportDiscoverStarted,
             self::ImportPasteStarted,
             self::ImportSeedListStarted,

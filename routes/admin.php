@@ -26,6 +26,7 @@ use App\Http\Controllers\Admin\ImportSeedListController;
 use App\Http\Controllers\Admin\JournalController;
 use App\Http\Controllers\Admin\MovieAliasController;
 use App\Http\Controllers\Admin\MovieContentVerifiedController;
+use App\Http\Controllers\Admin\MovieFramesReviewController;
 use App\Http\Controllers\Admin\MovieGroupController;
 use App\Http\Controllers\Admin\MoviePublishController;
 use App\Http\Controllers\Admin\MovieTitleController;
@@ -307,6 +308,14 @@ Route::middleware(['auth', 'verified', 'role:curator', 'admin.2fa', 'admin.local
             Route::post('catalog/{movie}/frames/{frame}/review', [FrameReviewController::class, 'store'])
                 ->middleware(['can:create,'.FrameReview::class, 'throttle:admin-curation'])
                 ->name('catalog.frames.review.store');
+
+            // Valider en lot les images du film en attente de revue (D42 du
+            // 30/09, § 7.9) : même capacité et même limiteur que la revue
+            // unitaire. Une ligne `frame_review` par image ; tout ou rien,
+            // relu sous le verrou — les refus sont des erreurs traduites.
+            Route::post('catalog/{movie}/frames/review-all', [MovieFramesReviewController::class, 'store'])
+                ->middleware(['can:create,'.FrameReview::class, 'throttle:admin-curation'])
+                ->name('catalog.frames.review_all');
         });
 
         // La file de revue (§ 7.3, ligne 6) : même garde que la revue — lire

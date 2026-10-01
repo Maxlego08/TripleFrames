@@ -1102,6 +1102,7 @@ Index `admin_action_subject_idx (subject_type, subject_id, created_at)` · **`ad
 | `frame.processing_retried` | frame | `failure` effacé par la relance |
 | `frame.level_changed` | frame | `from`, `to` — seulement si le niveau change |
 | `frame.reviewed` | frame | `review_id`, `decision`, `grid_version` — index de la ligne `frame_review`, qui reste la preuve (§ 4.2) |
+| `movie.frames_reviewed` | movie | `frame_ids` (images validées, croissants), `grid_version` — validation en lot (D42 du 30/09) : **une** ligne pour le lot, chaque image gardant sa ligne `frame_review` ; aucune `frame.reviewed` n'est écrite par le lot — amendé le 30/09 |
 | `import.discover_started` | import_run | `pages` |
 | `import.paste_started` | import_run | `tmdb_ids` (au plus `catalog.import.paste_max_ids`) |
 | `import.seed_list_started` | import_run | `tmdb_ids` du lot — distingue un lot de la liste d'amorçage d'un collage, que `run_kind = paste` confond |
@@ -1110,6 +1111,8 @@ Index `admin_action_subject_idx (subject_type, subject_id, created_at)` · **`ad
 | `accounts.access_viewed` | **accounts** | — (NULL ; l'adresse cherchée n'est jamais recopiée) |
 | `user.looked_up` | user | — (NULL ; le sujet est le compte trouvé par la recherche exacte de l'écran des accès) |
 | `user.viewed` | user | — (NULL) |
+
+**Quarante-deuxième cas, inscrit le 30/09 (D42 du 30/09)** : `movie.frames_reviewed` (sujet `movie`, classe `permanent`, sans motif, `details` obligatoire), écrit par la validation en lot des images d'un film en attente de revue (`20` § 7.9). La liste compte donc **42 cas**, sans migration (`movie.frames_reviewed` fait 21 caractères) — amendé le 30/09.
 
 Un geste qui recadre ou change le niveau d'une frame **publiée** écrit **deux** lignes dans la même transaction : son cas propre et `frame.unpublished` (inchangé, motif écrit par le serveur). Même niveau, même titre ou groupe inchangé : aucune écriture, aucune ligne. Les quatre derniers cas sont des **lectures** (`AdminActionType::isRead()`), écrites par la seule porte `AdminJournal::recordRead()`, hors transaction (invariants ci-dessous).
 

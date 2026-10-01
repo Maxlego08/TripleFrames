@@ -762,6 +762,20 @@ export type AdminReviewList = 'to_review' | 'to_rereview' | 'rejected';
 
 export type AdminReviewQueue = Record<AdminReviewList, AdminReviewGroup[]>;
 
+/**
+ * Le lot d'un film à valider en une fois (D42 du 30/09, spec 20 § 7.9) —
+ * miroir de `AdminCatalogPresenter::reviewBatch()`. Chaque image
+ * `{ id, hash }` repart telle quelle : le serveur refuse tout le lot si la
+ * liste ou une empreinte a changé depuis l'affichage.
+ */
+export type AdminReviewBatch = {
+    grid_version: number;
+    frames: { id: number; hash: string }[];
+};
+
+/** Un lot de la file de revue, pour le groupe de son film. */
+export type AdminQueueReviewBatch = AdminReviewBatch & { movie_id: number };
+
 /** Les gestes de la fiche film, pour l'affichage seulement. */
 export type AdminMovieAbilities = {
     curate: boolean;
@@ -1202,6 +1216,7 @@ export type AdminActionTypeValue =
     | 'frame.processing_retried'
     | 'frame.level_changed'
     | 'frame.reviewed'
+    | 'movie.frames_reviewed'
     | 'import.discover_started'
     | 'import.paste_started'
     | 'import.seed_list_started'

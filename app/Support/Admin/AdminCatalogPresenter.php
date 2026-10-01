@@ -573,6 +573,37 @@ final class AdminCatalogPresenter
     }
 
     /**
+     * Le lot d'un film à valider en une fois (D42 du 30/09, spec 20 § 7.9),
+     * ou `null` s'il n'y a rien à valider — le bouton est alors absent —, ou
+     * si le lot dépasse {@see ReviewQueue::BATCH_MAX_FRAMES} : l'envoi serait
+     * toujours refusé, le bouton n'est donc pas proposé.
+     *
+     * - `frames` : chaque image du lot, `{ id, hash }` — l'identifiant et
+     *   l'empreinte des octets affichés, **admin seulement**, que l'envoi
+     *   rend tels quels : le serveur refuse tout le lot si la liste ou une
+     *   empreinte a changé ;
+     * - `grid_version` : {@see ExclusionGrid::CURRENT_VERSION}, la grille dont
+     *   chaque item sera enregistré « rien à signaler ».
+     *
+     * @param  list<Frame>  $frames
+     * @return array{grid_version: int, frames: list<array{id: int, hash: string}>}|null
+     */
+    public static function reviewBatch(array $frames): ?array
+    {
+        if ($frames === [] || count($frames) > ReviewQueue::BATCH_MAX_FRAMES) {
+            return null;
+        }
+
+        return [
+            'grid_version' => ExclusionGrid::CURRENT_VERSION,
+            'frames' => array_map(static fn (Frame $frame): array => [
+                'id' => $frame->id,
+                'hash' => (string) $frame->published_hash,
+            ], $frames),
+        ];
+    }
+
+    /**
      * Une ligne de journal d'import.
      *
      * `is_queued` n'est **pas** une valeur d'enum — `import_run.status` n'en a

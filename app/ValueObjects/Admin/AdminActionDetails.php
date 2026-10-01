@@ -155,6 +155,21 @@ final readonly class AdminActionDetails implements JsonSerializable
         ]);
     }
 
+    /**
+     * `movie.frames_reviewed` (D42 du 30/09) : les images validées en lot, et
+     * la version de la grille appliquée à chacune. Chaque preuve reste sa
+     * ligne `frame_review`, jamais dupliquée ici.
+     *
+     * @param  list<int>  $frameIds
+     */
+    public static function framesReviewed(array $frameIds, int $gridVersion): self
+    {
+        return new self([
+            'frame_ids' => $frameIds,
+            'grid_version' => $gridVersion,
+        ]);
+    }
+
     /** `import.discover_started` et `import.resumed` : le budget de pages confié au job. */
     public static function importPages(int $pages): self
     {

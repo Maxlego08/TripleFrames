@@ -46,7 +46,7 @@ Elles conditionnent la porte du pilote (étape 56) :
 | 5 | [Partie multijoueur : lancement, révélation, podium, présence et robustesse](#5-partie-multijoueur--lancement-révélation-podium-présence-et-robustesse) | 95 | 28 |
 | 6 | [Mode solo](#6-mode-solo) | 67 | 14 |
 | 7 | [Back-office : accès, import TMDB et catalogue](#7-back-office--accès-import-tmdb-et-catalogue) | 110 | 40 |
-| 8 | [Back-office : banque d’images, recadreur, capture, revue et publication](#8-back-office--banque-dimages-recadreur-capture-revue-et-publication) | 108 | 28 |
+| 8 | [Back-office : banque d’images, recadreur, capture, revue et publication](#8-back-office--banque-dimages-recadreur-capture-revue-et-publication) | 109 | 29 |
 | 9 | [Administration des comptes, commandes artisan et exploitation](#9-administration-des-comptes-commandes-artisan-et-exploitation) | 121 | 21 |
 
 ## 0. Avant de commencer
@@ -3624,6 +3624,10 @@ Cette section couvre l’éditeur de la banque d’un film (/admin/catalog/{id}/
   - Faire : Cliquer « Non conforme » et tenter « Rejeter » sans rien cocher. Cocher « Pas de logo de studio », puis cliquer « Rejeter ».
   - Attendu : Des cases apparaissent, avec « Cochez chaque point en défaut, puis rejetez l’image. ». Sans case cochée, « Rejeter » est inactif et la page affiche « Cochez au moins un point en défaut pour rejeter l’image. » ; « Annuler » revient en arrière. Après le rejet, un toast dit « Revue non conforme enregistrée : l’image rejoint les rejetées. ». L’image apparaît dans « Rejetées » avec « En défaut : Pas de logo de studio », et en « Rejetée en revue » dans la banque.
   - Réf. : 20 § 7.4, § 7.5 · ExclusionGrid::decisionFor
+- [ ] **Valider en une fois toutes les images en attente d’un film** ⭐
+  - Faire : Sur un film dont trois images traitées attendent leur revue (niveaux 1, 3 et 5) et dont une quatrième est rejetée, ouvrir sa fiche (/admin/catalog/{id}) : cliquer « Tout valider (3) », lire la confirmation, puis cliquer « Tout valider ». Recommencer depuis /admin/review, en tête du groupe d’un autre film, onglet « À revoir ». Enfin, onglet A : ouvrir la confirmation ; onglet B : re-recadrer une des images du lot ; onglet A : confirmer.
+  - Attendu : La boîte « Valider toutes les images en attente ? » dit « 3 images seront validées et publiées. », que la grille d’exclusion (version 1) est enregistrée comme « rien à signaler » pour chacune sous votre nom réel, que les images en traitement, en échec, rejetées ou hors jeu restent en revue individuelle, et que le film n’est jamais publié automatiquement. Après confirmation, un toast dit « 3 images validées et publiées. » ; le bouton disparaît ; l’image rejetée reste dans « Rejetées » ; si le contenu est vérifié, « Publier le film » devient actif, mais le film reste en brouillon. /admin/journal montre UNE ligne « Images du film validées en lot » (sujet le film, « Images n° » listés) et aucune ligne « Image revue » pour ces images ; « Revues d’image » augmente de 3. Dans la file, le bouton n’apparaît jamais dans « Rejetées ». Le troisième essai affiche en rouge « Une image du lot a changé depuis son affichage… » (ou « Les images en attente de ce film ont changé… ») et n’enregistre rien.
+  - Réf. : 20 § 7.9 · ReviewMovieFrames, review-batch-button.tsx, D42 du 30/09
 - [ ] **Utiliser les gestes de l’onglet « Rejetées »**
   - Faire : Dans « Rejetées », cliquer l’image « Niveau 2 — Cryptique » de Snow White pour l’afficher. Essayer « Re-recadrer dans la banque ». Revenir, cliquer « Écarter » et confirmer « Écarter l’image ».
   - Attendu : Le panneau dit « Rejetée à la dernière revue, en défaut : Ni affiche ni jaquette. Seule une revue conforme peut encore partir. » et n’offre que « Conforme, publier ». « Re-recadrer dans la banque » ouvre l’éditeur du film. La boîte « Écarter l’image » s’ouvre avec le champ « Motif (facultatif) » pré-rempli par « Rejetée en revue, en défaut : Ni affiche ni jaquette. ». Après confirmation, l’image quitte « Rejetées ».

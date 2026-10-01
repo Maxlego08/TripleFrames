@@ -38,6 +38,9 @@ class FrameReviewQueueController extends Controller
 
         return Inertia::render('admin/review/index', [
             'queue' => fn (): array => $this->queue($queue),
+            // Les lots de validation en une fois, un par film qui en a un
+            // (D42 du 30/09, § 7.9) — lus sur la file déjà chargée.
+            'review_batches' => fn (): array => $this->batches($queue),
             'unpublish_preview' => Inertia::optional(fn (): ?array => $this->unpublishPreview($request, $coverageLoss)),
             // La cadence du battement de débit (§ 10.1) : la revue d'une image
             // est une page de son film, où le temps actif se mesure.
@@ -75,6 +78,26 @@ class FrameReviewQueueController extends Controller
         }
 
         return $lists;
+    }
+
+    /**
+     * Les lots de la file, un par film, dans l'ordre de l'écran.
+     *
+     * @return list<array{movie_id: int, grid_version: int, frames: list<array{id: int, hash: string}>}>
+     */
+    private function batches(ReviewQueue $queue): array
+    {
+        $batches = [];
+
+        foreach ($queue->batches() as $movieId => $frames) {
+            $batch = AdminCatalogPresenter::reviewBatch($frames);
+
+            if ($batch !== null) {
+                $batches[] = ['movie_id' => $movieId, ...$batch];
+            }
+        }
+
+        return $batches;
     }
 
     /**

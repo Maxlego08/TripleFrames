@@ -455,6 +455,20 @@ function adminRoutesMatrix(): array
             redirect: fn (array $parameters): string => route('admin.review.index'),
         ),
 
+        // Ligne 17 — valider en lot les images en attente d'un film (D42 du
+        // 30/09, § 7.9) : même garde que la revue unitaire. Le 302 est le
+        // lot validé, retour à la fiche d'où il est posté.
+        'admin.catalog.frames.review_all' => adminRoutesRow(
+            row: 17,
+            method: 'POST',
+            guards: ['can:create,'.FrameReview::class],
+            curator: 302,
+            admin: 302,
+            parameters: fn (): array => adminRoutesBatchReviewParameters(),
+            payload: fn (): array => adminRoutesBatchReviewPayload(),
+            redirect: fn (array $parameters): string => route('admin.catalog.show', ['movie' => $parameters['movie']]),
+        ),
+
         // Ligne 7 — l'écran d'import et le détail d'un balayage.
         'admin.import.index' => adminRoutesRow(
             row: 7,
@@ -716,6 +730,39 @@ function adminRoutesReviewParameters(): array
     test()->from(route('admin.review.index'));
 
     return ['movie' => $movie->id, 'frame' => $frame->id];
+}
+
+/**
+ * Un film dont une image prête attend sa revue : le lot de « Tout valider »,
+ * posté depuis la fiche du film.
+ *
+ * @return array<string, int>
+ */
+function adminRoutesBatchReviewParameters(): array
+{
+    $movie = Movie::factory()->create();
+    Frame::factory()->for($movie)->level(FrameLevel::Level3)->withFiles()->create();
+
+    test()->from(route('admin.catalog.show', ['movie' => $movie->id]));
+
+    return ['movie' => $movie->id];
+}
+
+/**
+ * Le lot du dernier film créé, tel que la confirmation l'enverrait.
+ *
+ * @return array<string, mixed>
+ */
+function adminRoutesBatchReviewPayload(): array
+{
+    $movie = Movie::query()->latest('id')->firstOrFail();
+
+    return [
+        'frames' => array_map(static fn (Frame $frame): array => [
+            'id' => $frame->id,
+            'hash' => (string) $frame->published_hash,
+        ], ReviewQueue::batchOf($movie)),
+    ];
 }
 
 /**

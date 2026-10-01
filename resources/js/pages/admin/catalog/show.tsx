@@ -37,6 +37,7 @@ import {
     usePublicationPreview,
 } from '@/components/admin/publish-dialog';
 import { ReasonDialog } from '@/components/admin/reason-dialog';
+import { ReviewBatchButton } from '@/components/admin/review-batch-button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -94,6 +95,7 @@ import type {
     AdminMovieTitle,
     AdminPublication,
     AdminPublicationPreview,
+    AdminReviewBatch,
     AdminTextPreview,
     AdminTitleLocale,
     ContentFlag,
@@ -126,6 +128,11 @@ type Props = {
     tags: AdminMovieTag[];
     themes: AdminMovieTheme[];
     frames: AdminMovieFrameRow[];
+    /**
+     * Le lot des images en attente de revue, à valider en une fois (D42 du
+     * 30/09, spec 20 § 7.9) ; `null` s'il n'y a rien à valider.
+     */
+    review_batch: AdminReviewBatch | null;
     import_run: AdminImportRunRow | null;
     publication: AdminPublication;
     /** Prop facultative : servie au seul rechargement qui ouvre la publication. */
@@ -199,6 +206,7 @@ export default function AdminCatalogShow({
     tags,
     themes,
     frames,
+    review_batch,
     import_run,
     publication,
     publication_preview,
@@ -406,6 +414,9 @@ export default function AdminCatalogShow({
 
                         <MovieGestures
                             sectionRef={gesturesRef}
+                            movieId={movie.id}
+                            movieTitle={movie.title_original}
+                            reviewBatch={review_batch}
                             availability={movie.availability}
                             contentFlag={movie.content_flag}
                             publication={publication}
@@ -1060,6 +1071,9 @@ AdminCatalogShow.layout = { breadcrumbs };
  */
 function MovieGestures({
     sectionRef,
+    movieId,
+    movieTitle,
+    reviewBatch,
     availability,
     contentFlag,
     publication,
@@ -1067,6 +1081,9 @@ function MovieGestures({
     onOpen,
 }: {
     sectionRef: RefObject<HTMLElement | null>;
+    movieId: number;
+    movieTitle: string;
+    reviewBatch: AdminReviewBatch | null;
     availability: AdminMovieDetail['availability'];
     contentFlag: ContentFlag;
     publication: AdminPublication;
@@ -1078,6 +1095,7 @@ function MovieGestures({
     const canUnpublish = abilities.unpublish && availability === 'published';
     const canSetAside = abilities.unpublish && availability === 'draft';
     const any =
+        reviewBatch !== null ||
         abilities.publish ||
         canUnpublish ||
         canSetAside ||
@@ -1112,6 +1130,20 @@ function MovieGestures({
 
             {any && (
                 <div className="flex flex-wrap items-start gap-3">
+                    {/*
+                     * Valider en lot les images en attente (D42 du 30/09,
+                     * § 7.9) : avant « Publier », qui en dépend. La
+                     * publication du film reste un geste distinct.
+                     */}
+                    {reviewBatch !== null && (
+                        <ReviewBatchButton
+                            movieId={movieId}
+                            movieTitle={movieTitle}
+                            batch={reviewBatch}
+                            fallbackFocusRef={sectionRef}
+                        />
+                    )}
+
                     {abilities.publish && (
                         <PublishButton
                             publication={publication}
