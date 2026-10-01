@@ -11,6 +11,7 @@ use App\Http\Middleware\ForceGameAppearance;
 use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\MeasureRequest;
+use App\Http\Middleware\RecordVisit;
 use App\Http\Middleware\RobotsDirectives;
 use App\Http\Middleware\SelectTranslationDomains;
 use App\Http\Middleware\SetLocale;
@@ -166,6 +167,9 @@ return Application::configure(basePath: dirname(__DIR__))
             HandleAppearance::class,
             HandleInertiaRequests::class,
             AddLinkHeadersForPreloadedAssets::class,
+            // La mesure d'audience (spec 100 § 10.12, D48 du 01/10) :
+            // terminable, elle ne lit la réponse qu'une fois envoyée.
+            RecordVisit::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

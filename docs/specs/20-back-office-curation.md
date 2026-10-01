@@ -114,6 +114,7 @@ Cette matrice est la table de vérité des écrans et de la famille de tests d'a
 | 41 | Journal d'administration : liste filtrée de `admin_action`, historique d'un film ou d'un compte (§ 2.10) | `admin.journal.index` (sous-groupe `role:admin`) | `can:viewAny,App\Models\AdminAction` (`AdminActionPolicy`) | **403** | 200 | — (l'écran d'audit lui-même, § 2.7) | D41 du 30/09 — amendé le 30/09 |
 | 42 | Annuaire des sièges, invités compris ; fiche d'un siège (§ 12.2) | `admin.players.index`, `admin.players.show` (sous-groupe `role:admin`) | `PlayerPolicy::viewAny`, `view` | **403** | 200 | lecture : `players.directory_viewed` ; `player.viewed` | J1 (D46 du 01/10 — amendé le 01/10) |
 | 43 | Performances : requêtes, jobs, SQL lentes, retards du moteur (§ 12.3) | `admin.performance.index` (sous-groupe `role:admin`) | `PerfSamplePolicy::viewAny` | **403** | 200 | — (aucune donnée personnelle) | J1 (D47 du 01/10 — amendé le 01/10) |
+| 44 | Audience : visiteurs, pages, entrées et sorties, provenance, temps réel, entonnoir de jeu (§ 12.4) | `admin.audience.index` (sous-groupe `role:admin`) | `AudienceDailyPolicy::viewAny` | **403** | 200 | — (agrégats, aucune donnée personnelle) | J1 (D48 du 01/10 — amendé le 01/10) |
 
 ### 2.3 La porte `/admin` [J1]
 
@@ -1609,6 +1610,10 @@ Amendé le 30/09. Règle et écrans : § 7.9 ; schéma : `10` § 8.3.
 ### 12.3 Performances [J1, D47 du 01/10]
 
 Amendé le 01/10. Page `admin/performance/index` (`PerformanceController@index`, `PerfSamplePolicy::viewAny`, **administrateur seul**), fenêtre de 1 h, 24 h ou 7 jours : par route et par job, volume, p50, p95, maximum, requêtes SQL moyennes, erreurs (statut ≥ 500 ou job en échec) ; requêtes lentes regroupées par empreinte (volume, maximum, dernière occurrence, contexte) ; retards des diffusions de frontière du moteur (p50, p95, maximum, par événement). Aucune donnée personnelle : la consultation n'est pas une lecture sensible. Règle complète : `100` § 10.11.
+
+### 12.4 Audience [J1, D48 du 01/10]
+
+Amendé le 01/10. Page `admin/audience/index` (`AudienceController@index`, `AudienceDailyPolicy::viewAny`, **administrateur seul**), fenêtre de 7, 30 ou 90 jours : totaux (visiteurs, visites, pages vues, pages par visite), courbe quotidienne en tableau, pages les plus vues, pages d'entrée et de sortie, provenances, langues, appareils ; **temps réel** (visiteurs des 5 dernières minutes et leurs pages, salons et parties en cours) ; **entonnoir de jeu** (salons créés, parties lancées en salon et en solo, parties terminées, joueurs par partie). Règle complète : `100` § 10.12.
 
 ### L20-36 — Parties, sièges et réponses [D46 du 01/10]
 

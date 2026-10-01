@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Admin\AccessController;
+use App\Http\Controllers\Admin\AudienceController;
 use App\Http\Controllers\Admin\CatalogController;
 use App\Http\Controllers\Admin\CurationHeartbeatController;
 use App\Http\Controllers\Admin\CurationQueueController;
@@ -41,6 +42,7 @@ use App\Http\Controllers\Admin\ThroughputController;
 use App\Http\Controllers\Admin\TwoFactorRequiredController;
 use App\Http\Controllers\Admin\UserDirectoryController;
 use App\Models\AdminAction;
+use App\Models\AudienceDaily;
 use App\Models\Frame;
 use App\Models\FrameReview;
 use App\Models\Game;
@@ -470,5 +472,11 @@ Route::middleware(['auth', 'verified', 'role:curator', 'admin.2fa', 'admin.local
             Route::get('performance', [PerformanceController::class, 'index'])
                 ->middleware('can:viewAny,'.PerfSample::class)
                 ->name('performance.index');
+
+            // L'audience (ligne 44, D48 du 01/10) : compteurs quotidiens sans
+            // cookie, temps réel, entonnoir de jeu. Aucune donnée personnelle.
+            Route::get('audience', [AudienceController::class, 'index'])
+                ->middleware('can:viewAny,'.AudienceDaily::class)
+                ->name('audience.index');
         });
     });

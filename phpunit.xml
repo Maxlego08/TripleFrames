@@ -85,6 +85,9 @@
              `Config::set`. `off` et non `false` : PHPUnit réécrit `false` en
              chaîne vide, que `config/perf.php` lit comme « active ». -->
         <env name="PERF_ENABLED" value="off" force="true"/>
+        <!-- La mesure d'audience (spec 100 § 10.12, D48 du 01/10), coupée pour
+             la même raison ; ses tests l'activent par `Config::set`. -->
+        <env name="AUDIENCE_ENABLED" value="off" force="true"/>
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
         <env name="NIGHTWATCH_ENABLED" value="false"/>

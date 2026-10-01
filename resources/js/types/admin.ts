@@ -1712,3 +1712,47 @@ export type InspectionTraceLine = {
     query_count: number | null;
     details: Record<string, string | number | boolean | null>;
 };
+
+/*
+ * --- Audience (spec 20 § 12.4, D48 du 01/10) ---
+ *
+ * Miroir de `App\Support\Audience\AudienceReport` : des compteurs, jamais
+ * une visite ni un visiteur.
+ */
+
+export type AudienceRanked = { name: string; total: number };
+
+export type AudienceDay = {
+    day: string;
+    visitors: number;
+    visits: number;
+    pageviews: number;
+};
+
+export type AudienceReport = {
+    since: string;
+    totals: { visitors: number; visits: number; pageviews: number };
+    daily: AudienceDay[];
+    pages: AudienceRanked[];
+    entries: AudienceRanked[];
+    exits: AudienceRanked[];
+    referrers: AudienceRanked[];
+    locales: AudienceRanked[];
+    devices: AudienceRanked[];
+    live: {
+        visitors: number;
+        pages: AudienceRanked[];
+        open_rooms: number;
+        running_games: number;
+        running_solo: number;
+    };
+    funnel: {
+        rooms_created: number;
+        games_multiplayer: number;
+        games_solo: number;
+        games_completed: number;
+        players_per_game: number | null;
+    };
+};
+
+export type AudienceWindow = '7d' | '30d' | '90d';

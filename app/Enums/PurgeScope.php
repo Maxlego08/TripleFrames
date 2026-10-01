@@ -25,6 +25,9 @@ enum PurgeScope: string
 
     case GameTrace = 'game_trace';
 
+    // D48 du 01/10 : les compteurs quotidiens d'audience, 13 mois.
+    case Audience = 'audience';
+
     case Report = 'report';
 
     case AdminAction = 'admin_action';
@@ -76,6 +79,7 @@ enum PurgeScope: string
             self::OrphanPlayer,
             self::Perf,
             self::GameTrace,
+            self::Audience,
             self::FrameworkSessions,
             self::FrameworkFailedJobs,
             self::FrameworkResetTokens,

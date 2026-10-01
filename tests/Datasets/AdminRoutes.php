@@ -5,6 +5,7 @@ use App\Enums\FrameLevel;
 use App\Enums\Locale;
 use App\Models\AdminAction;
 use App\Models\Alias;
+use App\Models\AudienceDaily;
 use App\Models\Frame;
 use App\Models\FrameReview;
 use App\Models\Game;
@@ -741,6 +742,15 @@ function adminRoutesMatrix(): array
             row: 43,
             method: 'GET',
             guards: ['can:viewAny,'.PerfSample::class],
+            curator: 403,
+            admin: 200,
+        ),
+
+        // Ligne 44 — l'audience (D48 du 01/10) : administrateur seul.
+        'admin.audience.index' => adminRoutesRow(
+            row: 44,
+            method: 'GET',
+            guards: ['can:viewAny,'.AudienceDaily::class],
             curator: 403,
             admin: 200,
         ),

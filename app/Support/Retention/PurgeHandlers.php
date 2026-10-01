@@ -2,6 +2,7 @@
 
 namespace App\Support\Retention;
 
+use App\Support\Retention\Handlers\AudienceHandler;
 use App\Support\Retention\Handlers\FrameworkFailedJobsHandler;
 use App\Support\Retention\Handlers\FrameworkResetTokensHandler;
 use App\Support\Retention\Handlers\FrameworkSessionsHandler;
@@ -39,6 +40,7 @@ final readonly class PurgeHandlers
         OrphanPlayerHandler::class,
         PerfSampleHandler::class,
         GameTraceHandler::class,
+        AudienceHandler::class,
         FrameworkSessionsHandler::class,
         FrameworkFailedJobsHandler::class,
         FrameworkResetTokensHandler::class,

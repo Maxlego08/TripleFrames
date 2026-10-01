@@ -30,6 +30,12 @@ final class RetentionWindows
     public const int PERF_DAYS = 14;
 
     /**
+     * `audience_daily` : 13 mois, limite de l'exemption de consentement de la
+     * CNIL pour la mesure d'audience (périmètre `audience`, D48 du 01/10).
+     */
+    public const int AUDIENCE_MONTHS = 13;
+
+    /**
      * `purge_run` : 13 mois, auto-purgé par le même job — une fenêtre de plus
      * que la plus longue qu'il atteste (périmètre `purge_run`).
      */

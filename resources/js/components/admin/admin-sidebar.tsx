@@ -4,6 +4,7 @@ import {
     Clapperboard,
     DownloadCloud,
     Activity,
+    BarChart3,
     Gamepad2,
     Gauge,
     LayoutDashboard,
@@ -45,6 +46,7 @@ import {
     guide as adminGuide,
 } from '@/routes/admin';
 import { index as accessIndex } from '@/routes/admin/access';
+import { index as audienceIndex } from '@/routes/admin/audience';
 import { index as catalogIndex } from '@/routes/admin/catalog';
 import { index as curationIndex } from '@/routes/admin/curation';
 import { index as gamesIndex } from '@/routes/admin/games';
@@ -214,6 +216,14 @@ export function AdminSidebar() {
             title: t('admin.nav.performance'),
             href: performanceIndex(),
             icon: Activity,
+            minRole: 'admin',
+            prefetch: false,
+        },
+        // L'audience (ligne 44, D48 du 01/10).
+        {
+            title: t('admin.nav.audience'),
+            href: audienceIndex(),
+            icon: BarChart3,
             minRole: 'admin',
             prefetch: false,
         },

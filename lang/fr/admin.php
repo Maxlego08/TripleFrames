@@ -60,6 +60,8 @@ return [
         'players' => 'Joueurs',
         // Les performances (ligne 43, D47 du 01/10).
         'performance' => 'Performances',
+        // L'audience (ligne 44, D48 du 01/10).
+        'audience' => 'Audience',
         'back_to_site' => 'Retour au site',
         'role' => [
             'curator' => 'Curateur',
@@ -2771,6 +2773,73 @@ return [
     ],
 
     /*
+    | Audience (spec 20 § 12.4, D48 du 01/10) : compteurs quotidiens sans
+    | cookie, administrateur seul.
+    */
+    'audience' => [
+        'title' => 'Audience',
+        'heading' => 'Audience',
+        'description' => 'Visiteurs mesurés sans cookie ni outil tiers : compteurs par jour, temps réel, entonnoir de jeu.',
+        'disabled' => 'La mesure d’audience est coupée sur ce serveur : rien de nouveau n’est compté.',
+        'empty' => 'Aucune donnée sur cette fenêtre.',
+        'window' => [
+            'label' => 'Fenêtre',
+            '7d' => '7 jours',
+            '30d' => '30 jours',
+            '90d' => '90 jours',
+        ],
+        'live' => [
+            'heading' => 'En ce moment',
+            'description' => 'Visiteurs des 5 dernières minutes et leur dernière page ; salons ouverts et parties en cours.',
+            'visitors' => 'Visiteurs présents',
+            'open_rooms' => 'Salons ouverts',
+            'running_games' => 'Parties en salon',
+            'running_solo' => 'Parties solo',
+        ],
+        'totals' => [
+            'visitors' => 'Visiteurs',
+            'visits' => 'Visites',
+            'pageviews' => 'Pages vues',
+            'per_visit' => 'Pages par visite',
+            'note' => 'Visiteurs = somme des visiteurs de chaque jour : sans identifiant durable, un visiteur revenu deux jours compte deux fois.',
+        ],
+        'funnel' => [
+            'heading' => 'Entonnoir de jeu',
+            'description' => 'Sur la fenêtre, depuis les tables du jeu : du visiteur à la partie terminée.',
+            'visitors' => 'Visiteurs',
+            'rooms_created' => 'Salons créés',
+            'games_multiplayer' => 'Parties lancées en salon',
+            'games_solo' => 'Parties solo lancées',
+            'games_completed' => 'Parties terminées',
+            'players_per_game' => 'Joueurs par partie',
+        ],
+        'daily' => [
+            'heading' => 'Jour par jour',
+        ],
+        'pages' => ['heading' => 'Pages les plus vues'],
+        'entries' => ['heading' => 'Pages d’entrée'],
+        'exits' => ['heading' => 'Pages de sortie'],
+        'referrers' => ['heading' => 'Provenance'],
+        'locales' => ['heading' => 'Langues'],
+        'devices' => ['heading' => 'Appareils'],
+        'device' => [
+            'mobile' => 'Mobile',
+            'tablet' => 'Tablette',
+            'desktop' => 'Ordinateur',
+        ],
+        'column' => [
+            'day' => 'Jour',
+            'visitors' => 'Visiteurs',
+            'visits' => 'Visites',
+            'pageviews' => 'Pages vues',
+            'page' => 'Page',
+            'referrer' => 'Site d’origine',
+            'locale' => 'Langue',
+            'device' => 'Appareil',
+        ],
+    ],
+
+    /*
     | Performances (spec 20 § 12.3, D47 du 01/10) : administrateur seul,
     | aucune donnée personnelle.
     */
@@ -2778,7 +2847,7 @@ return [
         'title' => 'Performances',
         'heading' => 'Performances',
         'description' => 'Durée des requêtes et des jobs, requêtes SQL lentes, retards du moteur de partie.',
-        'disabled' => 'La mesure est coupée (PERF_ENABLED=false) : rien de nouveau n’est enregistré.',
+        'disabled' => 'La mesure est coupée sur ce serveur : rien de nouveau n’est enregistré.',
         'settings' => 'Seuil de requête lente : :ms ms · échantillonnage : :rate',
         'window' => [
             'label' => 'Fenêtre',

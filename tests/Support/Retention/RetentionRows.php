@@ -3,8 +3,11 @@
 namespace Tests\Support\Retention;
 
 use App\Enums\PurgeScope;
+use App\Models\AudienceDaily;
 use App\Models\Game;
 use App\Models\GamePlayer;
+use App\Models\GameTrace;
+use App\Models\PerfSample;
 use App\Models\Player;
 use App\Models\PurgeRun;
 use App\Models\Room;
@@ -97,6 +100,8 @@ final class RetentionRows
             PurgeScope::FrameworkFailedJobs => $now->subDays(RetentionWindows::FAILED_JOBS_DAYS),
             PurgeScope::FrameworkResetTokens => $now->subMinutes(RetentionWindows::resetTokenMinutes()),
             PurgeScope::PurgeRun => $now->subMonthsNoOverflow(RetentionWindows::PURGE_RUN_MONTHS),
+            PurgeScope::Perf, PurgeScope::GameTrace => $now->subDays(RetentionWindows::PERF_DAYS),
+            PurgeScope::Audience => $now->startOfDay()->subMonthsNoOverflow(RetentionWindows::AUDIENCE_MONTHS),
             default => throw new LogicException("Aucun jeu de lignes de test pour le périmètre {$scope->value}."),
         };
     }
@@ -113,6 +118,9 @@ final class RetentionRows
             PurgeScope::FrameworkFailedJobs => self::failedJob($at),
             PurgeScope::FrameworkResetTokens => self::resetToken($key.'@example.com', $at),
             PurgeScope::PurgeRun => self::purgeRun($at),
+            PurgeScope::Perf => self::perfSample($key, $at),
+            PurgeScope::GameTrace => self::gameTrace($key, $at),
+            PurgeScope::Audience => self::audienceCounter($key, $at),
             default => throw new LogicException("Aucun jeu de lignes de test pour le périmètre {$scope->value}."),
         };
     }
@@ -152,6 +160,15 @@ final class RetentionRows
                 ->count(),
             PurgeScope::PurgeRun => PurgeRun::query()
                 ->where('scope', self::PURGE_RUN_MARKER->value)
+                ->count(),
+            PurgeScope::Perf => PerfSample::query()
+                ->where('name', 'like', self::MARKER.'%')
+                ->count(),
+            PurgeScope::GameTrace => GameTrace::query()
+                ->where('event', 'like', self::MARKER.'%')
+                ->count(),
+            PurgeScope::Audience => AudienceDaily::query()
+                ->where('dimension', 'like', self::MARKER.'%')
                 ->count(),
             default => throw new LogicException("Aucun jeu de lignes de test pour le périmètre {$scope->value}."),
         };
@@ -253,6 +270,28 @@ final class RetentionRows
     private static function resetTokenTable(): string
     {
         return Config::string('auth.passwords.'.RetentionWindows::passwordBroker().'.table');
+    }
+
+    /** Un échantillon de mesure marqué par son nom (périmètre `perf`, D47 du 01/10). */
+    public static function perfSample(string $key, CarbonImmutable $recordedAt): void
+    {
+        PerfSample::factory()->create(['name' => $key, 'recorded_at' => $recordedAt]);
+    }
+
+    /** Une ligne de chronologie marquée par son événement (périmètre `game_trace`). */
+    public static function gameTrace(string $key, CarbonImmutable $recordedAt): void
+    {
+        GameTrace::factory()->create(['event' => $key, 'recorded_at' => $recordedAt]);
+    }
+
+    /**
+     * Un compteur d'audience marqué par sa dimension (périmètre `audience`).
+     * La colonne pilote est un jour : une borne au jour près, et deux lignes
+     * du même jour se distinguent par leur dimension.
+     */
+    public static function audienceCounter(string $key, CarbonImmutable $day): void
+    {
+        AudienceDaily::factory()->counter($day->toDateString(), 'pageviews', $key, 1)->create();
     }
 
     public static function purgeRun(CarbonImmutable $ranAt): void

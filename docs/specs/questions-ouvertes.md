@@ -527,6 +527,25 @@ Le 01/10/2026, le porteur a demandé de pouvoir donner à chaque film ses thème
 |---|---|---|---|---|
 | D47 | Mesure des performances et chronologie technique des parties | **oui** : maison, écran admin, `game_trace` en base, actif partout et coupable, 14 jours | **oui** — « aucun outil de mesure de performance externe » reste vrai ; une mesure interne s'ajoute | `100` § 10.11 ; `10` § 7.11, § 11.1 ; `20` ligne 43, § 12.2, § 12.3 ; `CLAUDE.md` § 4 |
 
+### D48. Le projet mesure-t-il son audience ? — **oui : mesure maison sans cookie, agrégats quotidiens 13 mois, entonnoir de jeu, pages d'entrée et de sortie, temps réel**
+
+**Demande du porteur.** « Il faut maintenant ajouter un outil pour mesurer les visiteurs. » Options présentées le 01/10 ; choix du porteur : outil maison sans cookie (recommandé), entonnoir de jeu, pages d'entrée et de sortie, temps réel, agrégats seuls conservés 13 mois (recommandé).
+
+**Ce que la décision arrête** (règle complète : `100` § 10.12, schéma : `10` § 7.12) :
+
+1. **Côté serveur, sans cookie, sans script, sans tiers** : `RecordVisit`, middleware terminable, compte les **pages vues** (réponse 200 d'une page, chargement complet ou visite Inertia, jamais un rechargement partiel, un préchargement, une soumission, le back-office ni un robot déclaré).
+2. **Visiteur** : empreinte `HMAC-SHA256(adresse | navigateur, sel du jour)`, tronquée ; le sel est tiré au hasard chaque jour et ne vit **qu'en cache**, 48 h au plus, **jamais en base** : deux jours ne se relient pas, et l'adresse n'est jamais écrite. **Visite** : suite de pages d'un même visiteur sans pause de plus de 30 minutes (état en cache seulement).
+3. **En base, des compteurs quotidiens seulement** (`audience_daily`) : pages vues par route, visiteurs, visites, pages d'entrée, pages de sortie, provenance (domaine du référent externe seul), langue d'interface, type d'appareil (mobile, tablette, ordinateur). Conservés **13 mois** (limite de l'exemption CNIL), périmètre de purge `audience`.
+4. **Temps réel** : `audience_presence`, une ligne par empreinte du jour vue dans les 10 dernières minutes, effacée au-delà ; plus les salons et parties en cours, lus dans les tables du jeu.
+5. **Entonnoir de jeu**, calculé à la lecture depuis les tables du jeu, sans donnée nouvelle : salons créés, parties lancées (salon, solo), parties terminées, joueurs par partie.
+6. **Écran « Audience »** (`20` ligne 44, administrateur seul) ; interrupteur `AUDIENCE_ENABLED` (vide = active).
+
+**Conséquences assumées.** Une mesure d'audience exemptée de consentement au sens de la CNIL, si elle reste limitée à cette liste, sans recoupement ni export individuel ; la page de confidentialité (`90`, J2) doit la décrire. Un visiteur derrière la même adresse et le même navigateur qu'un autre compte une fois ; un visiteur qui change de réseau compte deux fois : ordre de grandeur, pas un recensement. Une décision : elle se cite « D48 du 01/10 ».
+
+| # | Décision | Réponse retenue | Écart | Inscrite dans |
+|---|---|---|---|---|
+| D48 | Mesure d'audience | **oui** : maison, sans cookie, empreinte quotidienne salée en cache, compteurs quotidiens 13 mois, entonnoir, entrées et sorties, temps réel | **oui** — première mesure d'audience du projet ; la page de confidentialité du J2 doit la décrire | `100` § 10.12 ; `10` § 7.12, § 11.1 ; `20` ligne 44, § 12.4 ; `90` (J2, confidentialité) |
+
 ---
 
 ## Seule question encore ouverte — le nom de domaine (décision 5)
