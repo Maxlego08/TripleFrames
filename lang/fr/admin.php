@@ -2937,6 +2937,12 @@ return [
             'snapshot_unsafe_dir' => 'Répertoire d’instantanés refusé : BACKUP_SNAPSHOT_DIR doit être un chemin absolu situé hors du répertoire de déploiement. Aucun instantané n’a été pris.',
             'snapshot_driver' => 'Instantané impossible : la connexion par défaut emploie le pilote :driver, et seul un vidage MySQL est pris en charge. Aucun instantané n’a été pris.',
             'pruned' => 'Élagage des instantanés terminé. Instantanés supprimés : :count.',
+            // Tier froid et restauration jouée (spec 100 § 13.3 et § 13.5).
+            'manifest_unreadable' => 'Manifeste incomplet : :count fichier(s) du disque frames illisible(s). Les autres fichiers sont listés ; la sauvegarde est en échec.',
+            'manifest_missing' => 'Tier froid incomplet : :count fichier(s) du périmètre introuvable(s) sur le disque frames. Les fichiers présents sont listés ; lancez backup:verify pour les dérivés publiés.',
+            'manifest_altered' => 'Tier froid incomplet : :count dérivé(s) publié(s) dont le condensat diffère de published_hash, non listé(s). Lancez backup:verify.',
+            'verify_ok' => 'Vérification réussie : les :count frame(s) publiée(s) ont leur fichier de jeu présent, au condensat publié.',
+            'verify_failed' => 'Vérification en échec : :count fichier(s) de jeu manquant(s) ou altéré(s) sur :checked frame(s) publiée(s) (manquants : :missing ; altérés : :altered). Ne rouvrez pas le trafic.',
         ],
 
         /*
