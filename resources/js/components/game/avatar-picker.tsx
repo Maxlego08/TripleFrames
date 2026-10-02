@@ -2,7 +2,7 @@ import { useId } from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { isAvatarPresetKey } from '@/lib/game/avatar-keys';
-import { ACCOUNT_AVATAR_CHOICE } from '@/types/player';
+import { ACCOUNT_AVATAR_CHOICE, PROVIDER_AVATAR_CHOICE } from '@/types/player';
 import type { AvatarPresetKey, SeatAvatarChoice } from '@/types/player';
 
 /** Une option du sélecteur, déjà traduite par l'appelant. */
@@ -23,6 +23,8 @@ export type AvatarPickerOption = {
 export type AvatarPickerAccountOption = {
     url: string;
     label: string;
+    /** `account` (image personnelle) par défaut ; `provider` à l'écran « Avatar ». */
+    value?: typeof ACCOUNT_AVATAR_CHOICE | typeof PROVIDER_AVATAR_CHOICE;
 };
 
 export type AvatarPickerProps = {
@@ -31,6 +33,8 @@ export type AvatarPickerProps = {
     options: AvatarPickerOption[];
     /** « Mon avatar », ou `null` : invité, ou compte sans image visible. */
     account?: AvatarPickerAccountOption | null;
+    /** Tuiles de compte supplémentaires (« Ma photo Google »). */
+    extraAccounts?: AvatarPickerAccountOption[];
     value: SeatAvatarChoice;
     onValueChange: (value: SeatAvatarChoice) => void;
     /** Déjà traduit : `common.avatar.picker.label`. */
@@ -65,6 +69,7 @@ export function AvatarPicker({
     name,
     options,
     account = null,
+    extraAccounts = [],
     value,
     onValueChange,
     legend,
@@ -76,12 +81,27 @@ export function AvatarPicker({
     function handleValueChange(next: string): void {
         if (isAvatarPresetKey(next)) {
             onValueChange(next);
-        } else if (account !== null && next === ACCOUNT_AVATAR_CHOICE) {
-            onValueChange(ACCOUNT_AVATAR_CHOICE);
+
+            return;
+        }
+
+        const tile = accounts.find((option) => option.value === next);
+
+        if (tile?.value !== undefined) {
+            onValueChange(tile.value);
         }
     }
 
-    const accountId = `${id}-${ACCOUNT_AVATAR_CHOICE}`;
+    const accounts: Array<
+        AvatarPickerAccountOption & {
+            value: typeof ACCOUNT_AVATAR_CHOICE | typeof PROVIDER_AVATAR_CHOICE;
+        }
+    > = [...(account === null ? [] : [account]), ...extraAccounts].map(
+        (option) => ({
+            ...option,
+            value: option.value ?? ACCOUNT_AVATAR_CHOICE,
+        }),
+    );
 
     return (
         <div className="grid gap-3">
@@ -95,32 +115,37 @@ export function AvatarPicker({
                 aria-labelledby={legendId}
                 className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6"
             >
-                {account !== null && (
-                    <label
-                        htmlFor={accountId}
-                        className="relative flex min-h-11 min-w-11 cursor-pointer flex-col items-center gap-1 rounded-md border border-border p-2 text-center has-focus-visible:border-ring has-data-[state=checked]:border-primary has-data-[state=checked]:bg-accent"
-                    >
-                        <Avatar aria-hidden="true" className="size-12">
-                            <AvatarImage
-                                src={account.url}
-                                alt=""
-                                draggable={false}
-                            />
-                            <AvatarFallback />
-                        </Avatar>
-                        <span
-                            id={`${accountId}-label`}
-                            className="text-xs wrap-break-word"
+                {accounts.map((option) => {
+                    const accountId = `${id}-${option.value}`;
+
+                    return (
+                        <label
+                            key={option.value}
+                            htmlFor={accountId}
+                            className="relative flex min-h-11 min-w-11 cursor-pointer flex-col items-center gap-1 rounded-md border border-border p-2 text-center has-focus-visible:border-ring has-data-[state=checked]:border-primary has-data-[state=checked]:bg-accent"
                         >
-                            {account.label}
-                        </span>
-                        <RadioGroupItem
-                            id={accountId}
-                            value={ACCOUNT_AVATAR_CHOICE}
-                            aria-labelledby={`${accountId}-label`}
-                        />
-                    </label>
-                )}
+                            <Avatar aria-hidden="true" className="size-12">
+                                <AvatarImage
+                                    src={option.url}
+                                    alt=""
+                                    draggable={false}
+                                />
+                                <AvatarFallback />
+                            </Avatar>
+                            <span
+                                id={`${accountId}-label`}
+                                className="text-xs wrap-break-word"
+                            >
+                                {option.label}
+                            </span>
+                            <RadioGroupItem
+                                id={accountId}
+                                value={option.value}
+                                aria-labelledby={`${accountId}-label`}
+                            />
+                        </label>
+                    );
+                })}
                 {options.map((option) => {
                     const itemId = `${id}-${option.key}`;
                     const labelId = `${itemId}-label`;

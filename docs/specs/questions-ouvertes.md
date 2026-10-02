@@ -578,7 +578,56 @@ Le 01/10/2026, le porteur a demandé de pouvoir donner à chaque film ses thème
 |---|---|---|---|---|
 | D50 | Suggestions d’alias depuis les réponses refusées | **oui, J1** : trois manches distinctes, fenêtre de 90 jours, job horaire + actualisation manuelle, validation ou rejet par un curateur | **oui** — révise D24 ; `near_miss` devient une file de formulations récurrentes, pas seulement de fautes proches | `70` § 11 ; `20` § 9.5 et L20-26 ; `10` § 7.9 et § 11.1 ; `CLAUDE.md` § 5 |
 
+
+### D51. La connexion par Discord et Google entre-t-elle au jalon 1 ? — **oui, complète, photo comprise, ouverte dès que les clés sont posées**
+
+**Demande du porteur.** « Est-ce que l'implémentation de l'auth par Discord et Google est active ? » puis « on fait ça ». Options présentées le 01/10 ; choix du porteur : périmètre **complet, photo comprise** (recommandé : sans la photo), **OAuth ouvert dès maintenant** (recommandé : même interrupteur que l'inscription), preuve du consentement par **une ligne `user_consent` par fournisseur** (recommandé), **ré-authentification OAuth** pour confirmer un compte sans mot de passe (recommandé).
+
+**Ce que la décision arrête** (règle complète : `40` § 12) :
+
+1. **Connexion, création de compte, liaison et déliaison** par Discord et Google, `laravel/socialite` + `socialiteproviders/discord`, chemins `/auth/{provider}/redirect` et `/auth/{provider}/callback`. Un fournisseur est **actif dès que ses deux clés sont posées** dans l'environnement ; aucune clé dans le dépôt.
+2. **Ouvert indépendamment de `ACCOUNTS_REGISTRATION_OPEN`** : la création d'un compte par fournisseur ne lit pas l'interrupteur d'inscription, qui continue de gouverner la seule inscription par mot de passe. L'en-tête public montre « Se connecter » dès qu'un fournisseur est actif.
+3. **Écran « Finaliser l'inscription »** : pseudo du compte prérempli par la suggestion du fournisseur et validé, acceptation des CGU et déclaration d'âge (15 ans), datées dans `user_consent` dans la transaction de création.
+4. **Consentement fournisseur** : `ConsentKind::ProviderDiscord` et `ProviderGoogle`, une ligne datée et versionnée à chaque liaison, qui survit à la déliaison.
+5. **Compte sans mot de passe** : « confirmer » renvoie au fournisseur lié, dont le retour pose la confirmation fraîche ; l'écran Sécurité lui propose alors de **définir** un mot de passe sans en saisir un ancien.
+6. **Copie locale de la photo** à la première liaison seulement, jamais par-dessus un avatar choisi ; signalable et masquée comme l'image téléversée ; supprimée à la déliaison du fournisseur d'origine.
+
+**Conséquences assumées.** Des comptes publics peuvent naître en production **avant** les pages légales opposables du J2 : ils acceptent la version provisoire des CGU (`legal.terms_version`), et la ré-acceptation déjà décidée (Q40-6) leur redemandera l'accord sur la version définitive. Le site reste `noindex`. Une décision : elle se cite « D51 du 01/10 ».
+
+| # | Décision | Réponse retenue | Écart | Inscrite dans |
+|---|---|---|---|---|
+| D51 | Connexion Discord et Google | **oui, J1, complète** : connexion, création finalisée (CGU, âge), liaison, déliaison, ré-authentification, photo ; ouverte dès que les clés sont posées | **oui** — avance au J1 les sujets 2, 3 et 4 de `40` § 10 ; la création par fournisseur échappe à `ACCOUNTS_REGISTRATION_OPEN` ; `ConsentKind` gagne deux cas | `40` § 10, § 12 ; `10` § 5.1, § 5.4 ; `00` § Comptes & profils ; `CLAUDE.md` § 1, § 3, § 8 |
+
 ---
+
+## Décisions du 02/10/2026
+
+Le porteur signale que « le QCM n'apparaît pas pour certains films », sans corrélation apparente. Diagnostic (02/10) : `DecoyPicker::pick()` rendait le cas terminal, silencieux en Normal, pour deux causes indépendantes — le catalogue fragmenté par `title_locale_mask` (aucun `movie_title` dans la langue originale d'un film, donc des profils de titre isolés, Parasite n'ayant aucun partenaire), et l'épuisement du vivier des leurres (non-répétition et manches démarrées exclues à tous les rangs, D21 du 23/09). Options présentées ; choix du porteur : D52, D53 (étendue à sa demande aux films non publiés) et D54 ; la garde de lancement « vivier ≥ M + 3 » proposée n'est **pas** retenue.
+
+### D52. L'import écrit-il le titre de la langue originale d'un film ? — **oui, pour une langue originale activée, égal à `title_original`, et rien d'autre**
+
+**Ce que la décision arrête.** Quand `movie.original_language` est une locale activée (`en`, `fr`) et qu'aucun `movie_title` n'existe pour elle après l'écriture des traductions TMDB (TMDB rend vide la traduction de la langue originale), une ligne est créée avec `title = title_original`, `origin = tmdb` — à l'import, à la resynchronisation et par le rattrapage `catalog:original-titles`, dans la transaction qui recalcule `movie_projection` et `answer_key`. Écrivain unique : `App\Support\Catalog\OriginalLanguageTitle`. Une ligne existante (TMDB non vide ou `curator`) n'est jamais écrasée ; une langue originale non activée (`ko`, `ja`) ne reçoit rien. Le rattrapage écrit `movie_title` (règle 12) : `backup:snapshot` en tête, arrêt sans écriture sur échec, `--dry-run`, idempotent, jamais en CI.
+
+**Écart assumé.** Exception étroite à « aucun titre n'est jamais recopié d'une langue vers une autre » (`10` § 3.4, `05`) : le titre original est le titre dans sa propre langue, pas une recopie. Effet de bord voulu : un joueur EN ne voit plus « Le Monde de Dory » pour *Finding Dory*. Une décision : elle se cite « D52 du 02/10 ».
+
+### D53. Que faire quand R1-R4 ne fournissent pas trois leurres ? — **deux rangs de dernier recours : R5 publiés sans non-répétition, R6 films non publiés**
+
+**Ce que la décision arrête** (règle complète : `70` § 10.3). L'ordre antérieur (affinité, R1-R2, affinité au titre original, R3-R4) et ses tirages sont **inchangés**. Seulement quand R4 échoue : R5 = catalogue publié, thèmes et `N` levés, **sans** la non-répétition du salon ; R6 = films `draft` ou `unpublished` (écartés compris), `content_flag = clear`, jamais `suspended` ni `withdrawn` (`Movie::inDecoyReserve()`, périmètre `PoolScope::asDecoyReserve()` refusé partout ailleurs, jamais compté ni tiré comme film de manche). D'abord au profil normal, puis au titre original, sur deux contextes nommés (`decoysLastResort`, `decoysLastResortOriginal`). Les leurres partiels déjà retenus par R1-R4 sont conservés ; les exclusions de `forDecoys` (cible, `movie_group`, manches démarrées) tiennent toujours ; la réserve est lue par identifiants puis hydratée par lots bornés. Après R6, cas terminal.
+
+**Motifs et écart assumé.** Révise D21 du 23/09 (« aucun rang ne lève la non-répétition ») : elle rendait le cas terminal certain dans les dernières manches et après « Rejouer ». Les non publiés sont demandés par le porteur « pour gagner des dizaines ou centaines de titres ». Ces leurres sont **faibles** — un film déjà joué sous non-répétition, ou non publié, ne peut pas être la cible, et un joueur qui connaît l'historique du salon ou le catalogue publié peut les éliminer —, d'où leur place après tous les rangs existants, là seulement où il n'y aurait eu aucun QCM (fuite assumée, `30` § 11). Conséquence : `round.decoy_movie_id_1..3` référence désormais des films non publiés ; une future purge des `draft` devra en tenir compte. Une décision : elle se cite « D53 du 02/10 ».
+
+### D54. Le cas terminal du QCM est-il tracé et signalé ? — **oui : une ligne de journal à chaque cas terminal, un message aux joueurs en Normal**
+
+**Ce que la décision arrête** (règle complète : `70` § 10.7). À chaque cas terminal, une ligne `game.choices_unavailable` (warning, après commit) au journal `game` — `gameRef`, `mode`, `inputDifficulty`, `sequenceIndex`, `roundNumber`, `tierIndex`, `cause` = `no_decoys` | `compute_failed`, **jamais** un titre ni un identifiant de film —, doublée dans `game_trace` (`choices.unavailable`). En Normal, booléen `choicesUnavailable` sur `tier.opened` (champ ajouté, aucun événement nouveau) et dans le `RoundState` de resynchronisation (dérivé, aucune colonne) ; message `game.choices.unavailable` à la place de la grille pour tout siège non verrouillé, à réception de l'information serveur seulement (règle 8) ; un siège `text_exhausted` se resynchronise aussitôt. Facile (annulation `choices_unavailable`) et Expert inchangés.
+
+**Écart assumé.** Le booléen est diffusé au salon : il ne révèle rien de la réponse, l'absence de `seat.choices` le disait déjà à chaque siège. La fréquence du cas terminal devient mesurable en production. Une décision : elle se cite « D54 du 02/10 ».
+
+| # | Décision | Réponse retenue | Écart | Inscrite dans |
+|---|---|---|---|---|
+| D52 | Titre de la langue originale | **oui, J1** : `movie_title` de la langue originale activée = `title_original`, `origin = tmdb`, à l'import, à la resynchronisation et par `catalog:original-titles` ; jamais pour une langue non activée ni par-dessus une ligne existante | **oui** — exception étroite à « aucun titre recopié » ; aucune migration | `10` § 3.2, § 3.4, A4 ; `05` ; `20` question 15 ; `CLAUDE.md` § 4 |
+| D53 | Leurres de dernier recours | **oui, J1** : après R4, R5 publiés sans non-répétition puis R6 non publiés `clear` (jamais `suspended`/`withdrawn`), profil normal puis titre original, leurres partiels conservés | **oui** — révise D21 du 23/09 ; fuite assumée « leurres éliminables » | `70` § 10.2-10.4, § 10.7 ; `30` § 3, § 5.3-5.4, § 10, § 11 ; `CLAUDE.md` § 2 |
+| D54 | Cas terminal du QCM tracé et signalé | **oui, J1** : `game.choices_unavailable` au journal `game` et à `game_trace` ; en Normal, `choicesUnavailable` sur `tier.opened` et dans `RoundState`, message à la place de la grille | **oui** — `tier.opened` gagne un champ ; l'exigence 17 de `70` devient un filet | `70` § 10.7, exigence 17, § 17 ; `60` § 4.7, § 6.3, § 11.3, § 11.5, § 12 ; `90` § 7.4, § 10 |
+
 
 ## Seule question encore ouverte — le nom de domaine (décision 5)
 

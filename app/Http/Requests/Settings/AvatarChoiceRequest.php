@@ -23,13 +23,20 @@ class AvatarChoiceRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'avatar' => ['required', 'string', Rule::in([...AvatarPresetCatalog::keys(), SeatAvatar::ACCOUNT])],
+            'avatar' => ['required', 'string', Rule::in([...AvatarPresetCatalog::keys(), SeatAvatar::ACCOUNT, self::PROVIDER])],
         ];
     }
 
+    /** La photo du fournisseur (spec 40 § 12.6, D51 du 01/10). */
+    public const string PROVIDER = 'provider';
+
     public function kind(): AvatarKind
     {
-        return $this->validated('avatar') === SeatAvatar::ACCOUNT ? AvatarKind::Upload : AvatarKind::Preset;
+        return match ($this->validated('avatar')) {
+            SeatAvatar::ACCOUNT => AvatarKind::Upload,
+            self::PROVIDER => AvatarKind::Provider,
+            default => AvatarKind::Preset,
+        };
     }
 
     /** La clé validée, seulement pour un prédéfini. */
@@ -37,6 +44,6 @@ class AvatarChoiceRequest extends FormRequest
     {
         $avatar = $this->validated('avatar');
 
-        return is_string($avatar) && $avatar !== SeatAvatar::ACCOUNT ? $avatar : null;
+        return is_string($avatar) && AvatarPresetCatalog::has($avatar) ? $avatar : null;
     }
 }

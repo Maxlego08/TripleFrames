@@ -129,7 +129,9 @@ export interface RoundTimeline {
  * dérivée côté serveur. `images` : au plus deux URL pendant la manche
  * (palier courant, palier suivant dans sa fenêtre de préchargement) ; en
  * révélation, les paliers ouverts. `reveal` n'est non nul qu'à partir de
- * `revealStartsAt` : avant, aucun titre ne voyage.
+ * `revealStartsAt` : avant, aucun titre ne voyage. `choicesUnavailable` :
+ * le palier du QCM est ouvert sans propositions — cas terminal en Normal
+ * (70 § 10.7, D54 du 02/10) —, booléen de manche identique pour tous.
  */
 export interface RoundState extends RoundTimeline {
     phase: 'scheduled' | 'running' | 'closed' | 'revealing' | 'cancelled';
@@ -140,6 +142,7 @@ export interface RoundState extends RoundTimeline {
     revealStartsAt: IsoMs | null;
     revealEndsAt: IsoMs | null;
     reveal: { movie: RevealMovie; finders: RoundFinder[] } | null;
+    choicesUnavailable: boolean;
 }
 
 /**
@@ -263,13 +266,18 @@ export interface GameEventPayloads {
     'room.archived': EmptyPayload;
     /** La manche programmée et l'image de son palier 1. */
     'round.scheduled': { round: RoundTimeline; image: TierImageRef };
-    /** `opensAt` = `Tᵢ` théorique ; `next` = palier `i + 1`, nul au dernier. */
+    /**
+     * `opensAt` = `Tᵢ` théorique ; `next` = palier `i + 1`, nul au dernier ;
+     * `choicesUnavailable` : vrai au seul palier du QCM d'une manche Normal
+     * sans propositions (cas terminal, D54 du 02/10).
+     */
     'tier.opened': {
         sequenceIndex: number;
         roundNumber: number;
         tierIndex: number;
         opensAt: IsoMs;
         next: TierImageRef | null;
+        choicesUnavailable: boolean;
     };
     'player.locked': {
         sequenceIndex: number;

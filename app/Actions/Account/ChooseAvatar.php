@@ -2,6 +2,7 @@
 
 namespace App\Actions\Account;
 
+use App\Avatars\AccountImage;
 use App\Enums\AvatarKind;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
@@ -24,8 +25,10 @@ final class ChooseAvatar
         DB::transaction(function () use ($user, $kind, $preset): void {
             $locked = User::query()->lockForUpdate()->findOrFail($user->id);
 
-            if ($kind === AvatarKind::Upload) {
-                if (! $locked->hasVisibleUploadedAvatar()) {
+            $image = AccountImage::fromKind($kind);
+
+            if ($image !== null) {
+                if (! $image->isVisible($locked)) {
                     $message = __('account.avatar.errors.unavailable');
 
                     throw ValidationException::withMessages([
@@ -33,7 +36,7 @@ final class ChooseAvatar
                     ]);
                 }
 
-                $locked->forceFill(['avatar_kind' => AvatarKind::Upload])->save();
+                $locked->forceFill(['avatar_kind' => $kind])->save();
 
                 return;
             }

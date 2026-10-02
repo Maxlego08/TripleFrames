@@ -9,6 +9,7 @@ use App\Support\I18n\LangVersion;
 use App\Support\I18n\TranslationDomains;
 use App\Support\I18n\Translations;
 use App\Support\Identity\AccountSwitches;
+use App\Support\Identity\OAuthProviders;
 use App\Support\Realtime\RealtimeClientConfig;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\App;
@@ -71,6 +72,11 @@ class HandleInertiaRequests extends Middleware
             // absents tant que l'inscription est fermée, donc en production
             // au jalon 1. Le porteur atteint `/login` par son adresse.
             'accountsOpen' => AccountSwitches::registrationOpen(),
+
+            // Les fournisseurs de connexion actifs (spec 40 § 12.1, D51 du
+            // 01/10) : boutons de connexion, et lien « Se connecter » de
+            // l'en-tête public même inscription fermée.
+            'oauthProviders' => OAuthProviders::values(),
 
             // Format fixe de la frame servable (spec 90 § 7.1, contrat C16 ;
             // C9) : deux entiers, globaux et identiques pour tous, sans

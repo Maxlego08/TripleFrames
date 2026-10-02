@@ -1,4 +1,5 @@
-import { Form, Head } from '@inertiajs/react';
+import { Form, Head, usePage } from '@inertiajs/react';
+import { OAuthButtons } from '@/components/account/oauth-buttons';
 import InputError from '@/components/input-error';
 import PasswordInput from '@/components/password-input';
 import TextLink from '@/components/text-link';
@@ -18,9 +19,20 @@ type Props = {
 export default function Register({ passwordRules }: Props) {
     const { t } = useTranslations();
 
+    const { oauthProviders } = usePage().props;
+
     return (
         <>
             <Head title={t('account.register.title')} />
+            {oauthProviders.length > 0 && (
+                <div className="flex flex-col gap-4">
+                    <OAuthButtons providers={oauthProviders} intent="login" />
+                    <p className="text-center text-sm text-muted-foreground">
+                        {t('account.oauth.separator')}
+                    </p>
+                </div>
+            )}
+
             <Form
                 {...store.form()}
                 resetOnSuccess={['password', 'password_confirmation']}

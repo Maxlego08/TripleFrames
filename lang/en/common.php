@@ -102,6 +102,12 @@ return [
         'label' => 'Language',
     ],
 
+    // Noms des fournisseurs de connexion (spec 40 § 12), noms propres.
+    'provider' => [
+        'discord' => 'Discord',
+        'google' => 'Google',
+    ],
+
     // Avatars (spec 40 § 6.7). `alt` n'est lu que loin d'un pseudo affiché :
     // à côté d'un pseudo, l'image est décorative (I5.9). Un libellé de
     // prédéfini n'est que le nom accessible d'une option du sélecteur ; ses

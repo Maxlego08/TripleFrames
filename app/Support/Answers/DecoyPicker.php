@@ -30,9 +30,11 @@ use stdClass;
  * **toujours** la cible, son `movie_group` et les films des manches déjà
  * démarrées de la partie (`started_at <= $at`), et **jamais** ceux des manches
  * futures, programmées comprises : les exclure prouverait qu'un film vu en
- * leurre n'est pas dans la suite du tirage. Chaque candidat est `published` et
- * `clear` ; la non-répétition du salon, quand elle est active, est conservée à
- * **tous** les rangs, groupes d'affinité compris.
+ * leurre n'est pas dans la suite du tirage. Jusqu'à R4, chaque candidat est
+ * `published` et `clear`, et la non-répétition du salon, quand elle est
+ * active, est conservée à **tous** les rangs, groupes d'affinité compris ;
+ * seuls les rangs de dernier recours R5-R6 (D53 du 02/10) la lèvent puis
+ * puisent dans les films non publiés — amendé le 02/10.
  *
  * **Affinité d'abord** (D44 du 01/10, spec 70 § 10.3 bis) : avant chaque mode,
  * les leurres sont cherchés dans le **catalogue publié entier** (le périmètre
@@ -46,7 +48,8 @@ use stdClass;
  * Pixar », où la cible se lirait dans la paire de la saga. Le premier groupe
  * qui suffit l'emporte ; sinon l'échelle ci-dessous, **inchangée** et reprise
  * de zéro. Ordre complet : affinité (normal), R1-R2, affinité (dégradé),
- * R3-R4.
+ * R3-R4, puis le dernier recours R5-R6 (normal, puis dégradé) — amendé le
+ * 02/10.
  *
  * **Échelle** :
  *
@@ -56,13 +59,38 @@ use stdClass;
  * | R2 | catalogue publié (`withThemeIds([])`, `withFramesPerRound(null)`) moins R1 | idem | `decoys(s)` | normal |
  * | R3 | vivier du salon | même forme de titre original | `decoysOriginal(s)`, repris à zéro | dégradé |
  * | R4 | catalogue publié moins R3 | idem | `decoysOriginal(s)` | dégradé |
+ * | R5 | catalogue publié **sans non-répétition** ({@see PoolScope::withoutNoRepeat()}), moins les leurres repris | profil normal | `decoysLastResort(s)`, leurres partiels de R1-R2 repris | normal |
+ * | R6 | réserve non publiée ({@see PoolScope::asDecoyReserve()}) | idem | `decoysLastResort(s)` | normal |
+ * | R5 | idem | forme de titre original | `decoysLastResortOriginal(s)`, leurres partiels de R3-R4 repris | dégradé |
+ * | R6 | idem | idem | `decoysLastResortOriginal(s)` | dégradé |
  *
  * Le mode dégradé (`useOriginalTitle`, pour **tout** le salon) n'est pris que
  * si ni l'affinité ni R1-R2 ne fournissent trois leurres, si le masque de la
  * cible n'est pas à la version courante, ou si les quatre films n'atteignent
  * pas la même locale pour une même locale de rendu (masque périmé) : l'échec
- * tombe du côté visible, jamais du côté silencieux (spec 10 § 3.2). Aucun rang
- * ne lève la non-répétition : après R4, c'est le cas terminal (NULL).
+ * tombe du côté visible, jamais du côté silencieux (spec 10 § 3.2).
+ *
+ * **Dernier recours** (D53 du 02/10, spec 70 § 10.3) : seulement quand R4
+ * échoue, là où l'on rendait le cas terminal. R5 lève la non-répétition du
+ * salon ; R6 puise dans les films `draft` ou `unpublished` (écartés compris),
+ * `clear`, jamais `suspended` ni `withdrawn`. Les exclusions de
+ * {@see PoolScope::forDecoys()} — cible, son `movie_group`, manches démarrées
+ * — tiennent toujours. D'abord au profil normal (masque de la cible à la
+ * version courante, mêmes contrôles qu'en R1-R2), puis au titre original. Ces
+ * leurres sont **faibles** : un film déjà joué sous non-répétition, ou non
+ * publié, ne peut pas être la cible, et un joueur qui connaît le catalogue ou
+ * l'historique du salon peut les éliminer — d'où leur place après tous les
+ * autres rangs, là seulement où il n'y aurait eu aucun QCM. Après R6, c'est
+ * le cas terminal (NULL) — amendé le 02/10.
+ *
+ * **Reprise et lecture bornée** (revue du 02/10, spec 70 § 10.3) : R5 reprend
+ * les leurres que le dernier rang du même profil avait retenus sans atteindre
+ * trois (non joués et publiés, donc plus forts que tout leurre de dernier
+ * recours) au lieu de les jeter. R5 et R6 sont lus en identifiants seuls
+ * ({@see self::rankIds()}) et hydratés par lots de
+ * {@see self::LAST_RESORT_BATCH} dans l'ordre de la permutation
+ * ({@see self::walkLazily()}) : la réserve non publiée peut compter des
+ * milliers de brouillons, et ce tirage tourne sous les verrous d'`OpenTier`.
  *
  * **Tirage dans un rang ou un groupe** : uniforme, sans remise — les candidats,
  * triés par `movie.id`, sont parcourus dans l'ordre de
@@ -82,6 +110,14 @@ use stdClass;
  */
 final readonly class DecoyPicker
 {
+    /**
+     * Films hydratés (avec leurs titres) par lecture au dernier recours : un
+     * lot suffit presque toujours, les rejets (`movie_group`, collision de
+     * formes) étant rares. Taille de lecture, jamais une valeur de jeu : le
+     * résultat ne dépend pas d'elle.
+     */
+    public const int LAST_RESORT_BATCH = 8;
+
     public function __construct(
         private PoolQuery $pool,
         private DisplayTitleResolver $titles,
@@ -89,7 +125,7 @@ final readonly class DecoyPicker
 
     /**
      * Les trois leurres de la manche à l'instant théorique `$at`, ou NULL dans
-     * le cas terminal (moins de trois leurres après R4).
+     * le cas terminal (moins de trois leurres après R6, D53 du 02/10).
      *
      * @throws InvalidArgumentException La manche n'appartient pas à la partie.
      */
@@ -109,13 +145,16 @@ final readonly class DecoyPicker
         $sequenceIndex = $round->sequence_index;
         $themes = $this->affinityThemes($target);
         $projection = $target->projection;
+        $mask = $projection !== null && $projection->hasCurrentTitleMask()
+            ? $projection->title_locale_mask
+            : null;
+        // Sans titre dans aucune locale activée, les quatre chaînes sortent du
+        // titre original : sa forme entre dans le profil.
+        $profileForm = $mask === 0 ? $form : null;
+        // Leurres partiels de R1-R2, repris par R5 au profil normal.
+        $normalPartial = [];
 
-        if ($projection !== null && $projection->hasCurrentTitleMask()) {
-            $mask = $projection->title_locale_mask;
-            // Sans titre dans aucune locale activée, les quatre chaînes sortent
-            // du titre original : sa forme entre dans le profil.
-            $profileForm = $mask === 0 ? $form : null;
-
+        if ($mask !== null) {
             $related = $this->affinity(
                 $target,
                 $this->rank($catalogue, $mask, $profileForm),
@@ -129,10 +168,28 @@ final readonly class DecoyPicker
                 return new DecoyPick(self::ids($related), false);
             }
 
-            $normal = $this->normalMode($target, $mask, $profileForm, $roomPool, $prf, $sequenceIndex);
+            $normal = $this->ladder(
+                $roomPool,
+                $mask,
+                $profileForm,
+                DrawContext::decoys($sequenceIndex),
+                $prf,
+                $target,
+                false,
+            );
 
-            if ($normal !== null) {
+            if (count($normal) === DecoyPick::COUNT && $this->reachSameLocales($target, $normal)) {
                 return new DecoyPick(self::ids($normal), false);
+            }
+
+            // Trois leurres qui n'atteignent pas ensemble la même locale ne se
+            // reprennent pas ; d'un tirage partiel, seuls ceux qui atteignent
+            // les locales de la cible.
+            if (count($normal) < DecoyPick::COUNT) {
+                $normalPartial = array_values(array_filter(
+                    $normal,
+                    fn (Movie $movie): bool => $this->reachSameLocales($target, [$movie]),
+                ));
             }
         }
 
@@ -162,9 +219,90 @@ final readonly class DecoyPicker
             true,
         );
 
-        return count($degraded) === DecoyPick::COUNT
-            ? new DecoyPick(self::ids($degraded), true)
+        if (count($degraded) === DecoyPick::COUNT) {
+            return new DecoyPick(self::ids($degraded), true);
+        }
+
+        // Dernier recours (D53 du 02/10) : seulement là où il n'y aurait eu
+        // aucun QCM. R5 = catalogue publié sans non-répétition, R6 = réserve
+        // non publiée ; exclusions de `forDecoys` conservées aux deux. R5
+        // reprend les leurres partiels du même profil (revue du 02/10).
+        $published = $catalogue->withoutNoRepeat();
+        $reserve = $roomPool->asDecoyReserve();
+
+        if ($mask !== null) {
+            $normal = $this->lastResort(
+                $published,
+                $reserve,
+                $mask,
+                $profileForm,
+                DrawContext::decoysLastResort($sequenceIndex),
+                $prf,
+                $target,
+                $normalPartial,
+                false,
+            );
+
+            if (count($normal) === DecoyPick::COUNT && $this->reachSameLocales($target, $normal)) {
+                return new DecoyPick(self::ids($normal), false);
+            }
+        }
+
+        $original = $this->lastResort(
+            $published,
+            $reserve,
+            null,
+            $form,
+            DrawContext::decoysLastResortOriginal($sequenceIndex),
+            $prf,
+            $target,
+            $degraded,
+            true,
+        );
+
+        return count($original) === DecoyPick::COUNT
+            ? new DecoyPick(self::ids($original), true)
             : null;
+    }
+
+    /**
+     * R5 puis R6 sur un même contexte : le catalogue publié sans
+     * non-répétition, moins les leurres repris, puis la réserve non publiée
+     * (disjointe du premier par construction). Les leurres repris sont
+     * conservés en tête, ceux de R5 en R6, mêmes règles de rejet
+     * (`movie_group` pris, collision de forme normalisée par locale). Lecture
+     * bornée : identifiants d'abord, films hydratés par lots.
+     *
+     * @param  int|null  $mask  Masque de locales exigé à la version courante ; NULL = aucun (mode dégradé).
+     * @param  OriginalTitleForm|null  $form  Forme de titre original exigée ; NULL = aucune.
+     * @param  list<Movie>  $carried  Leurres partiels du dernier rang de même profil (R1-R2 ou R3-R4).
+     * @return list<Movie>
+     */
+    private function lastResort(
+        PoolScope $published,
+        PoolScope $reserve,
+        ?int $mask,
+        ?OriginalTitleForm $form,
+        DrawContext $context,
+        SeededPrf $prf,
+        Movie $target,
+        array $carried,
+        bool $original,
+    ): array {
+        $retained = $this->walkLazily(
+            $this->rankIds($published->excluding(self::ids($carried), []), $mask, $form),
+            $context,
+            $prf,
+            $target,
+            $carried,
+            $original,
+        );
+
+        if (count($retained) === DecoyPick::COUNT) {
+            return $retained;
+        }
+
+        return $this->walkLazily($this->rankIds($reserve, $mask, $form), $context, $prf, $target, $retained, $original);
     }
 
     /**
@@ -440,39 +578,6 @@ final readonly class DecoyPicker
     }
 
     /**
-     * R1 puis R2, au profil de titre de la cible (masque à la version courante,
-     * vérifié par l'appelant) ; NULL quand le mode normal n'est pas tenable
-     * (moins de trois leurres, ou quatre films qui n'atteignent pas la même
-     * locale).
-     *
-     * @return list<Movie>|null
-     */
-    private function normalMode(
-        Movie $target,
-        int $mask,
-        ?OriginalTitleForm $form,
-        PoolScope $roomPool,
-        SeededPrf $prf,
-        int $sequenceIndex,
-    ): ?array {
-        $decoys = $this->ladder(
-            $roomPool,
-            $mask,
-            $form,
-            DrawContext::decoys($sequenceIndex),
-            $prf,
-            $target,
-            false,
-        );
-
-        if (count($decoys) !== DecoyPick::COUNT || ! $this->reachSameLocales($target, $decoys)) {
-            return null;
-        }
-
-        return $decoys;
-    }
-
-    /**
      * Deux rangs sur un même contexte : le vivier du salon, puis le catalogue
      * publié moins les candidats du premier rang, tous examinés quand on y
      * arrive. Les leurres du premier rang sont conservés.
@@ -538,6 +643,98 @@ final readonly class DecoyPicker
     }
 
     /**
+     * Les identifiants d'un rang de dernier recours, triés par `movie.id`
+     * croissant — la même liste que {@see self::rank()}, sans hydrater un seul
+     * modèle : identifiant et colonnes du titre original seulement, forme
+     * classée en PHP par {@see OriginalTitleForm::fromColumns()}.
+     *
+     * @return list<int>
+     */
+    private function rankIds(PoolScope $scope, ?int $mask, ?OriginalTitleForm $form): array
+    {
+        $query = $this->pool->movies($scope);
+
+        if ($mask !== null) {
+            $query->where('movie_projection.title_mask_version', Locale::MASK_VERSION)
+                ->where('movie_projection.title_locale_mask', $mask);
+        }
+
+        $rows = $query->toBase()
+            ->select(['movie.id', 'movie.title_original', 'movie.title_original_latin'])
+            ->get()
+            ->all();
+
+        $ids = [];
+
+        foreach ($rows as $row) {
+            /** @var stdClass $row */
+            if ($form !== null) {
+                $latin = $row->title_original_latin;
+                $rowForm = OriginalTitleForm::fromColumns(
+                    (string) $row->title_original,
+                    $latin === null ? null : (string) $latin,
+                );
+
+                if ($rowForm !== $form) {
+                    continue;
+                }
+            }
+
+            $ids[] = (int) $row->id;
+        }
+
+        return $ids;
+    }
+
+    /**
+     * Parcours d'un rang lu en identifiants ({@see self::rankIds()}) dans
+     * l'ordre de la permutation du contexte : les films ne sont hydratés, avec
+     * leurs titres, que par lots de {@see self::LAST_RESORT_BATCH}, jusqu'au
+     * troisième leurre. Même résultat que {@see self::walk()} sur le rang
+     * entier ; un film disparu entre les deux lectures est sauté.
+     *
+     * @param  list<int>  $ids
+     * @param  list<Movie>  $retained  Leurres déjà retenus.
+     * @return list<Movie>
+     */
+    private function walkLazily(
+        array $ids,
+        DrawContext $context,
+        SeededPrf $prf,
+        Movie $target,
+        array $retained,
+        bool $original,
+    ): array {
+        if (count($retained) >= DecoyPick::COUNT || $ids === []) {
+            return $retained;
+        }
+
+        $order = $prf->permutation($context, count($ids));
+
+        foreach (array_chunk($order, self::LAST_RESORT_BATCH) as $chunk) {
+            $batchIds = array_map(static fn (int $index): int => $ids[$index], $chunk);
+            $loaded = Movie::query()->with('titles')->whereKey($batchIds)->get()->keyBy('id');
+            $batch = [];
+
+            foreach ($batchIds as $id) {
+                $movie = $loaded->get($id);
+
+                if ($movie instanceof Movie) {
+                    $batch[] = $movie;
+                }
+            }
+
+            $retained = $this->walkOrdered($batch, $target, $retained, $original);
+
+            if (count($retained) === DecoyPick::COUNT) {
+                break;
+            }
+        }
+
+        return $retained;
+    }
+
+    /**
      * Parcours d'un rang dans l'ordre de la permutation du contexte, jusqu'au
      * troisième leurre retenu.
      *
@@ -557,6 +754,28 @@ final readonly class DecoyPicker
             return $retained;
         }
 
+        return $this->walkOrdered(
+            array_map(static fn (int $index): Movie => $rank[$index], $prf->permutation($context, count($rank))),
+            $target,
+            $retained,
+            $original,
+        );
+    }
+
+    /**
+     * Examen de candidats déjà rangés dans l'ordre de la permutation, jusqu'au
+     * troisième leurre retenu (rejets du § 10.4).
+     *
+     * @param  list<Movie>  $candidates
+     * @param  list<Movie>  $retained
+     * @return list<Movie>
+     */
+    private function walkOrdered(array $candidates, Movie $target, array $retained, bool $original): array
+    {
+        if (count($retained) >= DecoyPick::COUNT) {
+            return $retained;
+        }
+
         $forms = [$this->forms($target, $original)];
         $groups = [];
 
@@ -568,9 +787,7 @@ final readonly class DecoyPicker
             }
         }
 
-        foreach ($prf->permutation($context, count($rank)) as $index) {
-            $candidate = $rank[$index];
-
+        foreach ($candidates as $candidate) {
             if ($candidate->group_id !== null && isset($groups[$candidate->group_id])) {
                 continue;
             }

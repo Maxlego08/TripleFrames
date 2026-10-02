@@ -145,7 +145,7 @@ function eventPayloadClosedList(): array
         'game.launched' => [GameLaunched::class, 'room', ['mode', 'roundsCount', 'framesPerRound', 'inputDifficulty', 'revealDurationMs', 'speedBonus', 'seats']],
         'room.archived' => [RoomArchived::class, 'room', []],
         'round.scheduled' => [RoundScheduled::class, 'room', ['round', 'image']],
-        'tier.opened' => [TierOpened::class, 'room', ['sequenceIndex', 'roundNumber', 'tierIndex', 'opensAt', 'next']],
+        'tier.opened' => [TierOpened::class, 'room', ['sequenceIndex', 'roundNumber', 'tierIndex', 'opensAt', 'next', 'choicesUnavailable']],
         'player.locked' => [PlayerLocked::class, 'room', ['sequenceIndex', 'publicId', 'lockRank']],
         'round.closed' => [RoundClosed::class, 'room', ['sequenceIndex', 'roundNumber', 'endedAt', 'revealStartsAt', 'revealEndsAt']],
         'round.revealed' => [RoundRevealed::class, 'room', ['sequenceIndex', 'roundNumber', 'revealEndsAt', 'movie', 'images', 'finders', 'leaderboard']],
@@ -1247,6 +1247,7 @@ it('un passage de rattrapage ne libère que l\'état courant de chaque manche et
         'tierIndex' => 2,
         'opensAt' => WireTime::iso(CarbonImmutable::parse('2026-09-23 14:05:13.000')),
         'next' => null,
+        'choicesUnavailable' => false,
     ]);
 
     app(TransitionBroadcasts::class)->coalesce(static function () use ($events, $laterTier): void {

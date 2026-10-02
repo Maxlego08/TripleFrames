@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Avatar;
 
+use App\Avatars\AccountImage;
 use App\Avatars\UploadedAvatars;
 use App\Http\Controllers\Controller;
 use App\Models\User;
@@ -24,18 +25,26 @@ class AvatarFileController extends Controller
 
     public function show(string $file): Response
     {
-        $path = UploadedAvatars::pathOf($file);
+        // Un nom aléatoire ne désigne jamais deux fichiers : l'image téléversée
+        // et la copie de la photo du fournisseur partagent la même URL.
+        foreach (AccountImage::cases() as $image) {
+            $path = UploadedAvatars::pathOf($file, $image);
 
-        $user = User::query()
-            ->select(['id', 'avatar_upload_path', 'avatar_upload_hidden_at', 'anonymized_at'])
-            ->where('avatar_upload_path', $path)
-            ->first();
+            $user = User::query()
+                ->select(AccountImage::columns())
+                ->where($image->pathColumn(), $path)
+                ->first();
 
-        if ($user === null || ! $user->hasVisibleUploadedAvatar()) {
-            throw new NotFoundHttpException;
+            if ($user !== null) {
+                if (! $image->isVisible($user)) {
+                    break;
+                }
+
+                return self::respond($path, 'public, max-age='.self::MAX_AGE_SECONDS.', immutable');
+            }
         }
 
-        return self::respond($path, 'public, max-age='.self::MAX_AGE_SECONDS.', immutable');
+        throw new NotFoundHttpException;
     }
 
     /**

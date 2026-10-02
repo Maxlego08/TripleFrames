@@ -132,6 +132,10 @@ const WATCHED = [
     // son recadreur.
     'resources/js/pages/settings/avatar.tsx',
     'resources/js/components/account',
+    // L40-9 (spec 40 § 12, D51 du 01/10) : finalisation d'inscription et
+    // comptes liés.
+    'resources/js/pages/auth/oauth-finish.tsx',
+    'resources/js/pages/settings/accounts.tsx',
     'resources/js/layouts/settings/layout.tsx',
 
     // Fichiers hérités PROPRES que retouche un lot (spec 90 § 9.3, règle

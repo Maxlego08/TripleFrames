@@ -37,14 +37,6 @@ final readonly class AvatarRef
     public const string DEFAULT_PRESET_EXTENSION = 'webp';
 
     /**
-     * Base publique du disque `avatars` (driver `local`, visibilité publique, racine
-     * `storage/app/public/avatar`, exposé par `storage:link`). Les avatars sont publics
-     * et cacheables : ils ne passent JAMAIS par la route d'images de jeu, dont
-     * `ServeFile` émet `Cache-Control: no-store`. Aucune frame sur le disque public.
-     */
-    public const string DEFAULT_PROVIDER_BASE = '/storage/avatar';
-
-    /**
      * Clés de traduction de l'attribut `alt`, une par branche de la chaîne.
      *
      * Domaine `common` (spec 40 § 6.5) : il n'existe aucun domaine `avatar`
@@ -107,15 +99,15 @@ final readonly class AvatarRef
     }
 
     /**
-     * Copie locale de la photo Discord/Google : chemin RELATIF en base, nommé par ULID.
+     * Copie locale de la photo Discord/Google : chemin RELATIF sur le disque
+     * `avatars`, servi par la route `avatar.show` comme l'image téléversée
+     * (spec 40 § 12.6, D51 du 01/10) — jamais par `storage:link`.
      */
     public static function provider(string $path, string $initials): self
     {
-        $base = rtrim(Config::string(self::CONFIG_PREFIX.'provider_base', self::DEFAULT_PROVIDER_BASE), '/');
-
         return new self(
             kind: AvatarKind::Provider,
-            url: $base.'/'.ltrim($path, '/'),
+            url: UploadedAvatars::url($path),
             altKey: self::ALT_KEY_PROVIDER,
             initials: $initials,
         );

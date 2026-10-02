@@ -4,10 +4,14 @@ namespace App\Providers;
 
 use App\Actions\Fortify\CreateNewUser;
 use App\Actions\Fortify\ResetUserPassword;
+use App\Enums\OAuthProvider;
 use App\Http\Middleware\EnsureActiveSeat;
+use App\Models\LinkedAccount;
+use App\Models\User;
 use App\Settings\EngineConstants;
 use App\Settings\RoomSettingsBounds;
 use App\Support\Identity\AccountSwitches;
+use App\Support\Identity\OAuthProviders;
 use App\Support\Identity\PlayerTokenManager;
 use App\Support\Room\RoomRateLimits;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -105,9 +109,36 @@ class FortifyServiceProvider extends ServiceProvider
 
         Fortify::twoFactorChallengeView(fn () => Inertia::render('auth/two-factor-challenge'));
 
-        Fortify::confirmPasswordView(fn () => Inertia::render('auth/confirm-password', [
+        // Un compte sans mot de passe confirme par un fournisseur lié (spec 40
+        // § 12.4, D51 du 01/10).
+        Fortify::confirmPasswordView(fn (Request $request) => Inertia::render('auth/confirm-password', [
             'canUsePasskeys' => $this->canUsePasskeys(),
+            'hasPassword' => $request->user()?->password !== null,
+            'confirmProviders' => $this->linkedProviders($request),
         ]));
+    }
+
+    /**
+     * Les fournisseurs ACTIFS liés au compte connecté, par lesquels il peut
+     * confirmer son identité.
+     *
+     * @return list<string>
+     */
+    private function linkedProviders(Request $request): array
+    {
+        $user = $request->user();
+
+        if (! $user instanceof User) {
+            return [];
+        }
+
+        $linked = LinkedAccount::query()
+            ->where('user_id', $user->id)
+            ->pluck('provider')
+            ->map(static fn (mixed $provider): string => $provider instanceof OAuthProvider ? $provider->value : (string) $provider)
+            ->all();
+
+        return array_values(array_intersect(OAuthProviders::values(), $linked));
     }
 
     /** Fonctionnalité Fortify activée ET inscription ouverte. */
@@ -139,6 +170,12 @@ class FortifyServiceProvider extends ServiceProvider
 
         // Le téléversement d'un avatar de compte (spec 40 § 11.2) : il décode
         // une image dans la requête, d'où un plafond par compte.
+        // L'aller-retour chez un fournisseur (spec 40 § 12.1) : par adresse,
+        // un invité n'ayant pas encore de compte.
+        RateLimiter::for('oauth', function (Request $request) {
+            return Limit::perMinute(10)->by((string) $request->ip());
+        });
+
         RateLimiter::for('avatar-upload', function (Request $request) {
             return Limit::perHour(10)->by((string) $request->user()?->getAuthIdentifier());
         });

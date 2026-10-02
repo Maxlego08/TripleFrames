@@ -44,11 +44,21 @@ enum OriginalTitleForm: string
      */
     public static function of(Movie $movie): self
     {
-        if (self::isLatin($movie->title_original)) {
+        return self::fromColumns($movie->title_original, $movie->title_original_latin);
+    }
+
+    /**
+     * La même règle, lue sur les deux colonnes brutes : le dernier recours des
+     * leurres classe la réserve non publiée sans hydrater un seul `Movie`
+     * (spec 70 § 10.3, lecture bornée).
+     */
+    public static function fromColumns(string $original, ?string $latin): self
+    {
+        if (self::isLatin($original)) {
             return self::Latin;
         }
 
-        return self::hasTransliteration($movie->title_original_latin)
+        return self::hasTransliteration($latin)
             ? self::Transliterated
             : self::Native;
     }

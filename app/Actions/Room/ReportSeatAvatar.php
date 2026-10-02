@@ -2,9 +2,8 @@
 
 namespace App\Actions\Room;
 
+use App\Avatars\AccountImage;
 use App\Enums\AdminActionType;
-use App\Enums\AvatarKind;
-use App\Enums\ReportTarget;
 use App\Models\GamePlayer;
 use App\Models\Player;
 use App\Models\Report;
@@ -22,7 +21,9 @@ use Illuminate\Validation\ValidationException;
  *
  * Ce qui est signalable : l'avatar AFFICHÉ du siège visé — la nature gelée de
  * sa participation à la partie affichée, sinon sa nature vivante — quand
- * c'est une image téléversée d'un compte rattaché. Un prédéfini ne l'est
+ * c'est une image personnelle d'un compte rattaché : téléversée, ou copie de
+ * la photo du fournisseur (§ 12.6, D51 du 01/10), chacune sur ses colonnes
+ * ({@see AccountImage}). Un prédéfini ne l'est
  * jamais (I5.9), ni son propre siège.
  *
  * Sous le verrou du compte visé : une ligne `report` par siège signaleur
@@ -47,9 +48,9 @@ final readonly class ReportSeatAvatar
      */
     public function handle(Room $room, Player $reporter, Player $target): void
     {
-        $userId = self::reportableUserId($room, $reporter, $target);
+        $reportable = self::reportable($room, $reporter, $target);
 
-        if ($userId === null) {
+        if ($reportable === null) {
             $message = __('common.avatar.report.not_reportable');
 
             throw ValidationException::withMessages([
@@ -57,13 +58,17 @@ final readonly class ReportSeatAvatar
             ]);
         }
 
-        DB::transaction(function () use ($reporter, $userId): void {
+        [$userId, $image] = $reportable;
+
+        DB::transaction(function () use ($reporter, $userId, $image): void {
             $user = User::query()->lockForUpdate()->find($userId);
 
-            if ($user === null || $user->avatar_upload_path === null) {
+            if ($user === null || $image->path($user) === null) {
                 return;
             }
 
+            // L'unique `(reporter_player_id, target_user_id)` vaut pour les deux
+            // images d'un compte : un siège ne signale un compte qu'une fois.
             $already = Report::query()
                 ->where('reporter_player_id', $reporter->id)
                 ->where('target_user_id', $user->id)
@@ -72,24 +77,24 @@ final readonly class ReportSeatAvatar
             if (! $already) {
                 $report = new Report;
                 $report->forceFill([
-                    'target_type' => ReportTarget::UploadedAvatar,
+                    'target_type' => $image->reportTarget(),
                     'reporter_player_id' => $reporter->id,
                     'target_player_id' => null,
                     'target_user_id' => $user->id,
                 ])->save();
             }
 
-            if ($user->avatar_upload_hidden_at !== null) {
+            if ($image->hiddenAt($user) !== null) {
                 return;
             }
 
-            $count = self::reportersSince($user);
+            $count = self::reportersSince($user, $image);
 
             if ($count < self::DISTINCT_REPORTERS) {
                 return;
             }
 
-            $user->forceFill(['avatar_upload_hidden_at' => Date::now()])->save();
+            $user->forceFill([$image->hiddenColumn() => Date::now()])->save();
             $this->journal->recordAutomatic(AdminActionType::AvatarHidden, $user->id, $count);
         });
     }
@@ -98,25 +103,26 @@ final readonly class ReportSeatAvatar
      * Les sièges distincts qui ont signalé l'image depuis le début de sa
      * fenêtre de comptage. Partagé par l'écran « Avatars » de l'admin.
      */
-    public static function reportersSince(User $user): int
+    public static function reportersSince(User $user, AccountImage $image = AccountImage::Upload): int
     {
+        $from = $image->reportsFrom($user);
+
         return Report::query()
-            ->where('target_type', ReportTarget::UploadedAvatar->value)
+            ->where('target_type', $image->reportTarget()->value)
             ->where('target_user_id', $user->id)
-            ->when(
-                $user->avatar_upload_reports_from !== null,
-                fn ($query) => $query->where('created_at', '>=', $user->avatar_upload_reports_from),
-            )
+            ->when($from !== null, fn ($query) => $query->where('created_at', '>=', $from))
             ->distinct()
             ->count('reporter_player_id');
     }
 
     /**
-     * Le compte dont l'image est affichée par le siège visé, ou `null` : autre
+     * Le compte et l'image affichés par le siège visé, ou `null` : autre
      * salon, son propre siège, aucun compte rattaché, ou un avatar qui n'est
-     * pas une image téléversée.
+     * pas une image personnelle.
+     *
+     * @return array{0: int, 1: AccountImage}|null
      */
-    private static function reportableUserId(Room $room, Player $reporter, Player $target): ?int
+    private static function reportable(Room $room, Player $reporter, Player $target): ?array
     {
         if ($target->room_id !== $room->id || $target->id === $reporter->id || $target->user_id === null) {
             return null;
@@ -136,6 +142,8 @@ final readonly class ReportSeatAvatar
             }
         }
 
-        return $kind === AvatarKind::Upload ? $target->user_id : null;
+        $image = AccountImage::fromKind($kind);
+
+        return $image === null ? null : [$target->user_id, $image];
     }
 }

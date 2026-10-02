@@ -15,8 +15,9 @@ use InvalidArgumentException;
  * qui empêche une sortie publique d'exposer le secret.
  *
  * **Aucune autre chaîne de contexte n'existe** : le constructeur est privé, et
- * les neuf fabriques ci-dessous sont les seules entrées (les deux contextes
- * d'affinité des leurres ajoutés le 01/10, D44 du 01/10). Deux écarts aux
+ * les onze fabriques ci-dessous sont les seules entrées (les deux contextes
+ * d'affinité des leurres ajoutés le 01/10, D44 du 01/10 ; les deux contextes
+ * de dernier recours des leurres le 02/10, D53 du 02/10). Deux écarts aux
  * exemples de la spec 10 § 7.2, qui n'étaient que des exemples (E10-40,
  * E10-54) :
  *
@@ -112,6 +113,26 @@ final readonly class DrawContext
     public static function decoysAffinityOriginal(int $sequenceIndex): self
     {
         return new self('draw:decoys:'.self::sequence($sequenceIndex).':affinity-original');
+    }
+
+    /**
+     * `draw:decoys:{s}:last-resort` — parcours des rangs de dernier recours
+     * R5-R6 des leurres (catalogue publié sans non-répétition, puis réserve
+     * non publiée), au profil de titre du mode normal (spec 70, § 10.3, D53 du
+     * 02/10).
+     */
+    public static function decoysLastResort(int $sequenceIndex): self
+    {
+        return new self('draw:decoys:'.self::sequence($sequenceIndex).':last-resort');
+    }
+
+    /**
+     * `draw:decoys:{s}:last-resort-original` — parcours des mêmes rangs R5-R6
+     * en mode dégradé, repris à zéro (spec 70, § 10.3, D53 du 02/10).
+     */
+    public static function decoysLastResortOriginal(int $sequenceIndex): self
+    {
+        return new self('draw:decoys:'.self::sequence($sequenceIndex).':last-resort-original');
     }
 
     /**

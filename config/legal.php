@@ -28,6 +28,13 @@ return [
 
     'contact_email' => env('LEGAL_CONTACT_EMAIL'),
 
+    // Version des CGU qu'accepte une inscription (spec 40 § 12.3, D51 du
+    // 01/10), écrite dans `user_consent.version` et `users.terms_version`
+    // (20 caractères au plus). Elle change dans le COMMIT qui change le texte
+    // des CGU, jamais par l'environnement : la ré-acceptation (Q40-6) se
+    // déclenche sur cette valeur.
+    'terms_version' => 'provisoire-1',
+
     'pages' => [
         'notice' => ['provisional' => true, 'updated_at' => null],
         'terms' => ['provisional' => true, 'updated_at' => null],

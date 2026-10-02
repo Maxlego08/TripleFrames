@@ -40,6 +40,8 @@ use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
 use RuntimeException;
+use SocialiteProviders\Discord\DiscordExtendSocialite;
+use SocialiteProviders\Manager\SocialiteWasCalled;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -83,6 +85,10 @@ class AppServiceProvider extends ServiceProvider
         // La date de dernière connexion (spec 10 § 5.1), lue par l'écran de
         // gestion des accès et, au jalon 2, par le balayage de dormance.
         Event::listen(Login::class, RecordLastLogin::class);
+
+        // Discord n'est pas un pilote natif de Socialite (spec 40 § 12.1) :
+        // le paquet communautaire s'enregistre par cet événement.
+        Event::listen(SocialiteWasCalled::class, [DiscordExtendSocialite::class, 'handle']);
 
         $this->registerGameListeners();
         $this->registerPlayerGuard();

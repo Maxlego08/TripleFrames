@@ -109,6 +109,7 @@ function round(
         revealStartsAt: null,
         revealEndsAt: null,
         reveal: null,
+        choicesUnavailable: false,
         ...extra,
     };
 }
@@ -330,6 +331,7 @@ describe('store', () => {
             tierIndex: 2,
             opensAt: iso(10_000),
             next: image(0, 3),
+            choicesUnavailable: false,
         });
 
         game.store.receive('tier.opened', opened);
@@ -485,6 +487,7 @@ describe('store', () => {
                 tierIndex: 1,
                 opensAt: iso(12_500),
                 next: null,
+                choicesUnavailable: false,
             }),
         );
 
@@ -556,6 +559,7 @@ describe('store', () => {
                 tierIndex: 2,
                 opensAt: iso(10_000),
                 next: image(0, 3),
+                choicesUnavailable: false,
             }),
         );
         await advanceTo(19_000);
@@ -685,6 +689,7 @@ describe('store', () => {
             tierIndex: 3,
             opensAt: iso(20_000),
             next: null,
+            choicesUnavailable: false,
         });
 
         // Cas terminal de C11 : `tier.opened` du palier du QCM, et rien.
@@ -782,6 +787,7 @@ describe('store', () => {
                 tierIndex: 1,
                 opensAt: iso(5_000),
                 next: image(5_000, 2),
+                choicesUnavailable: false,
             }),
         );
 
@@ -1317,6 +1323,7 @@ describe('store', () => {
                 tierIndex: 1,
                 opensAt: iso(48_300),
                 next: image(48_300, 2),
+                choicesUnavailable: false,
             }),
         );
 
@@ -1347,6 +1354,7 @@ describe('store', () => {
                     tierIndex: 3,
                     opensAt: iso(20_000),
                     next: null,
+                    choicesUnavailable: false,
                 }),
             );
             await advanceTo(30_000);
@@ -1383,6 +1391,7 @@ describe('store', () => {
                         opensAt: iso(opensAt),
                         next:
                             tierIndex < 3 ? image(38_300, tierIndex + 1) : null,
+                        choicesUnavailable: false,
                     }),
                 );
             }
@@ -1516,6 +1525,7 @@ describe('store', () => {
             tierIndex: 1,
             opensAt: iso(38_300),
             next: image(38_300, 2),
+            choicesUnavailable: false,
         });
         const quick = harness(
             packet(30_400, {
@@ -1604,6 +1614,7 @@ describe('store', () => {
                     tierIndex,
                     opensAt: iso(opensAt),
                     next: tierIndex < 3 ? image(38_300, tierIndex + 1) : null,
+                    choicesUnavailable: false,
                 }),
             );
         }
@@ -1763,5 +1774,101 @@ describe('store', () => {
                 .getState()
                 .rounds.find((each) => each.sequenceIndex === 2)?.images,
         ).toEqual([]);
+    });
+    it("retient choicesUnavailable de tier.opened du palier du QCM sans armer l'attente de seat.choices", async () => {
+        vi.setSystemTime(ORIGIN_MS + 19_000);
+
+        const game = harness(
+            packet(19_000, {
+                round: round(2, 0, 'running', {
+                    currentTierIndex: 2,
+                    images: [image(0, 2), image(0, 3)],
+                }),
+                nextTransitionAt: iso(20_000),
+            }),
+        );
+
+        expect(game.store.getState().rounds[0].choicesUnavailable).toBe(false);
+
+        await advanceTo(20_000);
+        game.store.receive(
+            'tier.opened',
+            event<'tier.opened'>(20_000, {
+                sequenceIndex: 2,
+                roundNumber: 2,
+                tierIndex: 3,
+                opensAt: iso(20_000),
+                next: null,
+                choicesUnavailable: true,
+            }),
+        );
+
+        // Le serveur l'a dit (D54 du 02/10) : aucune attente de seat.choices,
+        // donc aucune relecture `choices_missing` au délai.
+        expect(game.store.getState().rounds[0].choicesUnavailable).toBe(true);
+
+        await advanceTo(20_000 + HEARTBEAT_MS);
+        expect(game.resyncs).toEqual([]);
+        game.stop();
+    });
+
+    it('un siège text_exhausted se resynchronise aussitôt à tier.opened portant choicesUnavailable', async () => {
+        vi.setSystemTime(ORIGIN_MS + 19_000);
+
+        const game = harness(
+            packet(19_000, {
+                round: round(2, 0, 'running', {
+                    currentTierIndex: 2,
+                    images: [image(0, 2), image(0, 3)],
+                }),
+                self: {
+                    ...packet(0).self,
+                    input: {
+                        inputState: 'text_exhausted',
+                        attemptsLeft: 0,
+                        choices: null,
+                        locked: null,
+                    },
+                },
+                nextTransitionAt: iso(20_000),
+            }),
+        );
+
+        await advanceTo(20_000);
+        game.store.receive(
+            'tier.opened',
+            event<'tier.opened'>(20_000, {
+                sequenceIndex: 2,
+                roundNumber: 2,
+                tierIndex: 3,
+                opensAt: iso(20_000),
+                next: null,
+                choicesUnavailable: true,
+            }),
+        );
+
+        expect(game.resyncs).toEqual(['choices_unavailable']);
+        game.stop();
+    });
+
+    it("retient choicesUnavailable d'un paquet de resynchronisation reçu après T_N", async () => {
+        vi.setSystemTime(ORIGIN_MS + 21_000);
+
+        const game = harness(
+            packet(21_000, {
+                round: round(2, 0, 'running', {
+                    currentTierIndex: 3,
+                    images: [image(0, 3)],
+                    choicesUnavailable: true,
+                }),
+                nextTransitionAt: iso(30_000),
+            }),
+        );
+
+        expect(game.store.getState().rounds[0].choicesUnavailable).toBe(true);
+
+        await advanceTo(21_000 + HEARTBEAT_MS - 1);
+        expect(game.resyncs).toEqual([]);
+        game.stop();
     });
 });

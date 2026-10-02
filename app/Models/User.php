@@ -2,10 +2,12 @@
 
 namespace App\Models;
 
+use App\Avatars\AccountImage;
 use App\Avatars\AvatarRef;
 use App\Concerns\RealNameValidationRules;
 use App\Enums\AvatarKind;
 use App\Enums\Locale;
+use App\Enums\OAuthProvider;
 use App\Enums\Plan;
 use App\Enums\UserRole;
 use Carbon\CarbonImmutable;
@@ -68,6 +70,8 @@ use LogicException;
  * @property string|null $avatar_preset
  * @property string|null $avatar_provider_path
  * @property CarbonImmutable|null $avatar_provider_hidden_at
+ * @property OAuthProvider|null $avatar_provider_source
+ * @property CarbonImmutable|null $avatar_provider_reports_from
  * @property string|null $avatar_upload_path
  * @property CarbonImmutable|null $avatar_upload_hidden_at
  * @property CarbonImmutable|null $avatar_upload_reports_from
@@ -114,6 +118,8 @@ use LogicException;
     'plan',
     'avatar_provider_path',
     'avatar_provider_hidden_at',
+    'avatar_provider_source',
+    'avatar_provider_reports_from',
     // Image téléversée (D49 du 01/10) : le chemin ne quitte jamais le serveur,
     // l'URL passe par `avatarRef()`, et l'état de modération reste au serveur.
     'avatar_upload_path',
@@ -168,6 +174,8 @@ class User extends Authenticatable implements HasLocalePreference, MustVerifyEma
             'plan' => Plan::class,
             'avatar_kind' => AvatarKind::class,
             'avatar_provider_hidden_at' => 'datetime',
+            'avatar_provider_source' => OAuthProvider::class,
+            'avatar_provider_reports_from' => 'datetime',
             'avatar_upload_hidden_at' => 'datetime',
             'avatar_upload_reports_from' => 'datetime',
             'terms_accepted_at' => 'datetime',
@@ -430,15 +438,13 @@ class User extends Authenticatable implements HasLocalePreference, MustVerifyEma
             return AvatarRef::upload((string) $this->avatar_upload_path, $initials);
         }
 
-        if (in_array($this->avatar_kind, [AvatarKind::Preset, AvatarKind::Upload], true) && $this->avatar_preset !== null) {
-            return AvatarRef::preset($this->avatar_preset, $initials);
+        if ($this->avatar_kind === AvatarKind::Provider && $this->hasVisibleProviderAvatar()) {
+            return AvatarRef::provider((string) $this->avatar_provider_path, $initials);
         }
 
-        if ($this->avatar_kind === AvatarKind::Provider
-            && $this->avatar_provider_path !== null
-            && $this->avatar_provider_hidden_at === null
-        ) {
-            return AvatarRef::provider($this->avatar_provider_path, $initials);
+        // Le prédéfini : choisi, ou repli d'une image masquée ou retirée.
+        if ($this->avatar_kind !== null && $this->avatar_preset !== null) {
+            return AvatarRef::preset($this->avatar_preset, $initials);
         }
 
         return AvatarRef::initials($initials);
@@ -453,6 +459,37 @@ class User extends Authenticatable implements HasLocalePreference, MustVerifyEma
         return $this->avatar_upload_path !== null
             && $this->avatar_upload_hidden_at === null
             && $this->anonymized_at === null;
+    }
+
+    /**
+     * Vrai si le compte porte une copie de la photo du fournisseur affichable
+     * (spec 40 § 12.6, D51 du 01/10).
+     */
+    public function hasVisibleProviderAvatar(): bool
+    {
+        return AccountImage::Provider->isVisible($this);
+    }
+
+    /**
+     * L'image PERSONNELLE effective du compte — celle que « Mon avatar »
+     * montre au siège (spec 40 § 11.4, § 12.6) : la nature choisie si elle est
+     * visible, sinon l'autre image visible, sinon `null`.
+     */
+    public function personalImage(): ?AccountImage
+    {
+        $chosen = AccountImage::fromKind($this->avatar_kind);
+
+        if ($chosen !== null && $chosen->isVisible($this)) {
+            return $chosen;
+        }
+
+        foreach (AccountImage::cases() as $image) {
+            if ($image->isVisible($this)) {
+                return $image;
+            }
+        }
+
+        return null;
     }
 
     /**

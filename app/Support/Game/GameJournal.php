@@ -21,7 +21,8 @@ use Throwable;
  *
  * **Ce qui y part** (liste de 60, seul à choisir) : ouverture de manche
  * (`OpenTier(1)`) et clôture (`CloseRound`, avec sa cause : `D` ou fin
- * anticipée) ; substitutions (`MintTierServeToken`) ; annulations
+ * anticipée) ; substitutions (`MintTierServeToken`) ; cas terminal du QCM
+ * (`ComposeChoiceSets`, cause, D54 du 02/10) ; annulations
  * (`CancelRound`, motif, remplacée ou non) ; pauses et reprises ; clôtures de
  * partie décidées par 60 (issue) ; resynchronisations de partie (une ligne
  * par requête, rien du paquet) ; **retard réel de chaque diffusion de
@@ -57,6 +58,9 @@ final class GameJournal
 
     public const string ROUND_CANCELLED = 'game.round_cancelled';
 
+    /** Cas terminal du QCM (spec 70 § 10.7, D54 du 02/10). */
+    public const string CHOICES_UNAVAILABLE = 'game.choices_unavailable';
+
     public const string GAME_PAUSED = 'game.paused';
 
     public const string GAME_RESUMED = 'game.resumed';
@@ -76,6 +80,12 @@ final class GameJournal
 
     /** Cause d'une clôture : la fin anticipée (§ 9.2). */
     public const string CLOSE_CAUSE_EARLY_END = 'early_end';
+
+    /** Cause du cas terminal du QCM : moins de trois leurres après R4. */
+    public const string CHOICES_CAUSE_NO_DECOYS = 'no_decoys';
+
+    /** Cause du cas terminal du QCM : exception de la phase de calcul. */
+    public const string CHOICES_CAUSE_COMPUTE_FAILED = 'compute_failed';
 
     /**
      * La dernière diffusion préparée par une base d'événements — ce qu'une
@@ -128,6 +138,31 @@ final class GameJournal
         ]);
 
         GameTraceWriter::record($game->id, GameTraceWriter::TIER_SUBSTITUTED, $round->sequence_index, $tierIndex, details: ['reason' => $reason->value]);
+    }
+
+    /**
+     * Cas terminal du QCM (spec 70 § 10.7, D54 du 02/10) : aucune
+     * proposition composée au palier `$tierIndex`, pour la cause dite.
+     * Appelé par `ComposeChoiceSets` dans sa transaction : la ligne ne part
+     * qu'au commit de l'ouverture du palier. Ni titre, ni identifiant de film :
+     * la difficulté de saisie et la cause suffisent à la relecture.
+     *
+     * @param  string  $cause  {@see self::CHOICES_CAUSE_NO_DECOYS} ou {@see self::CHOICES_CAUSE_COMPUTE_FAILED}.
+     */
+    public static function choicesUnavailable(Game $game, Round $round, int $tierIndex, string $cause): void
+    {
+        self::write(LogLevel::WARNING, self::CHOICES_UNAVAILABLE, [
+            ...self::gameContext($game),
+            'inputDifficulty' => $game->input_difficulty->value,
+            ...self::roundContext($round),
+            'tierIndex' => $tierIndex,
+            'cause' => $cause,
+        ]);
+
+        GameTraceWriter::record($game->id, GameTraceWriter::CHOICES_UNAVAILABLE, $round->sequence_index, $tierIndex, details: [
+            'cause' => $cause,
+            'inputDifficulty' => $game->input_difficulty->value,
+        ]);
     }
 
     /**

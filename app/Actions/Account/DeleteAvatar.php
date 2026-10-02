@@ -2,6 +2,7 @@
 
 namespace App\Actions\Account;
 
+use App\Avatars\AccountImage;
 use App\Avatars\UploadedAvatars;
 use App\Enums\AvatarKind;
 use App\Models\User;
@@ -36,16 +37,27 @@ final class DeleteAvatar
     }
 
     /**
-     * La nature après la disparition de l'image : inchangée si l'image n'était
-     * pas la nature effective, sinon le prédéfini du compte, sinon les
-     * initiales (`null`). Partagée par le retrait de l'administrateur.
+     * La nature après la disparition d'une image : inchangée si l'image
+     * n'était pas la nature effective, sinon le prédéfini du compte, sinon
+     * l'autre image personnelle visible, sinon les initiales (`null`).
+     * Partagée par le retrait de l'administrateur et la déliaison.
      */
-    public static function fallbackKind(User $user): ?AvatarKind
+    public static function fallbackKind(User $user, AccountImage $image = AccountImage::Upload): ?AvatarKind
     {
-        if ($user->avatar_kind !== AvatarKind::Upload) {
+        if ($user->avatar_kind !== $image->kind()) {
             return $user->avatar_kind;
         }
 
-        return $user->avatar_preset !== null ? AvatarKind::Preset : null;
+        if ($user->avatar_preset !== null) {
+            return AvatarKind::Preset;
+        }
+
+        foreach (AccountImage::cases() as $other) {
+            if ($other !== $image && $other->isVisible($user)) {
+                return $other->kind();
+            }
+        }
+
+        return null;
     }
 }

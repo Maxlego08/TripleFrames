@@ -152,7 +152,8 @@ Elle sert aussi de jeu de données au test « select se replie sur les niveaux d
 `00` définit le vivier comme fonction du couple (thèmes, `N`) alors que la non-répétition le rend aussi fonction du salon (n° 24). Les deux notions sont donc nommées et servies par **la même requête** :
 
 - **vivier catalogue** (thèmes, `N`) : supervision back-office, seuil du sélecteur, solo ;
-- **vivier du salon** (thèmes, `N`, salon) : compteur du lobby, garde et tirage du lancement, leurres.
+- **vivier du salon** (thèmes, `N`, salon) : compteur du lobby, garde et tirage du lancement, leurres ;
+- **réserve non publiée des leurres** (`PoolScope::asDecoyReserve()`) : le seul rang R6 de dernier recours des leurres (`70` § 10.3), films `draft` ou `unpublished` et `clear` — ni compté, ni tiré comme film de manche — amendé le 02/10 (D53 du 02/10).
 
 `App\Support\Draw\PoolQuery` est **le** constructeur de requête du vivier : **aucun autre prédicat de vivier n'existe dans `app/`**. Pourquoi une seule fonction : le lobby qui annonce 47 films et la garde de lancement qui n'en trouve que 7, sans cause visible entre deux écrans, est exactement la panne que `10` § 12 point (1) décrit ; trois requêtes divergent déjà dans le dépôt (encadré).
 
@@ -161,8 +162,8 @@ final readonly class PoolQuery
 {
     public function movies(PoolScope $scope): Builder;   // Builder<Movie>, movie ⋈ movie_projection, trié par movie.id croissant ;
                                                          // sélectionne movie.* seulement (->select('movie.*')), tables non aliasées
-    public function countWorks(PoolScope $scope): int;
-    public function candidates(PoolScope $scope): array; // list<PoolCandidate>, triés par movieId croissant
+    public function countWorks(PoolScope $scope): int;    // refuse la réserve des leurres (D53 du 02/10)
+    public function candidates(PoolScope $scope): array; // list<PoolCandidate>, triés par movieId croissant ; refuse la réserve des leurres (D53 du 02/10)
     public function publishedThemeIds(): array;          // list<int> des thèmes is_published, croissants
     public function publishedThemeIdsByKey(): array;     // array<string, int> theme.key → theme.id, triés par sort_order puis key
     public function effectiveThemeIds(PoolScope $scope): array; // list<int> : themeIds ∩ publishedThemeIds(), croissants ; [] sans lecture si themeIds = []
@@ -192,6 +193,7 @@ final readonly class PoolScope
         public array $excludedMovieIds,          // list<int>
         public array $excludedGroupIds,          // list<int>
         public bool $themesUnpublishedIncluded = false, // J1 depuis D43 du 01/10 (L30-11a) : vrai pour themeProbe() seul (§ 3.3 clause 3, § 12.3)
+        public bool $decoyReserve = false,             // D53 du 02/10 : vrai pour asDecoyReserve() seul (§ 3.3 clause 1, 70 § 10.3)
     ) {}
     public static function forRoom(Room $room, RoomSettings $settings, CarbonImmutable $now): self;
     public static function forGame(Game $game, CarbonImmutable $now): self;
@@ -200,7 +202,8 @@ final readonly class PoolScope
     public static function themeProbe(int $themeId): self;   // J1 depuis D43 du 01/10 (L30-11a) : mesure d'un thème, publié ou non, supervision seule (§ 12.3)
     public function withThemeIds(array $themeIds): self;
     public function withFramesPerRound(?int $framesPerRound): self;
-    public function withoutNoRepeat(): self;
+    public function withoutNoRepeat(): self;                 // diagnostic du rapport (§ 4.3) et rang R5 des leurres (D53 du 02/10)
+    public function asDecoyReserve(): self;                  // D53 du 02/10 : rang R6 des leurres seul (70 § 10.3)
     public function excluding(array $movieIds, array $groupIds): self;
 }
 ```
@@ -214,12 +217,13 @@ Un `PoolScope` est construit **une fois** et passé tel quel : c'est ce qui gara
 | `forDecoys($round, $now)` | `forGame($round->game, $now)` | idem | leurres (§ 10), avec les exclusions de D21 du 23/09 |
 | `catalogue($themeIds, $N)` | fournis | aucun ; `noRepeatMovies` faux ; aucune exclusion | supervision, sélecteur, solo |
 | `themeProbe($themeId)` [J1 depuis D43 du 01/10] | `[$themeId]`, **sans intersection avec les thèmes publiés** (`themesUnpublishedIncluded` vrai) ; `N` = `RoomSettingsBounds::DEFAULT_FRAMES_PER_ROUND` ; `noRepeatMovies` faux | aucun ; aucune exclusion | mesure d'un thème avant sa publication par `20` (§ 12.3), jamais un salon ni un tirage |
+| `forDecoys(...)->asDecoyReserve()` [D53 du 02/10] | `[]`, `N` nul, `noRepeatMovies` faux ; clause de catalogue « `draft` ou `unpublished`, `clear` » (`decoyReserve` vrai) | celui de `forDecoys` ; exclusions de `forDecoys` conservées | rang R6 de dernier recours des leurres (`70` § 10.3), jamais un salon, un tirage de films ni un compteur — amendé le 02/10 |
 
 Les deux ajouts `themeProbe()` et `themesUnpublishedIncluded` étendent le contrat C2 sans en changer aucun nom ni aucun paramètre existant (paramètre final à valeur par défaut). Ils sont propres au J2, que C2 § 8 laisse à cette spec (« l'évaluateur de thèmes … au J2, hors de ce contrat »), et sont **signalés au porteur** — amendé le 01/10 (D43 du 01/10) : livrés au J1 par L30-11a, sans changer de forme. Pourquoi une entrée dédiée plutôt qu'un appel à `catalogue([$themeId], N)` : pour un thème non publié, la clause 3 intersecte avec les thèmes publiés, retombe sur la branche sans thème et compterait **tout** le catalogue.
 
 **Formes fixées par le code livré**, que le contrat C2 laissait libres — amendé le 25/09 (E35-4) :
 
-- le constructeur privé garde ses invariants et lève `InvalidArgumentException`, **jamais d'écrêtage** : `N` non nul dans les bornes de `RoomSettingsBounds` ; `memorySince` et `playedUntil` non nuls si et seulement si `roomId` l'est ; `noRepeatMovies` exige `roomId` ;
+- le constructeur privé garde ses invariants et lève `InvalidArgumentException`, **jamais d'écrêtage** : `N` non nul dans les bornes de `RoomSettingsBounds` ; `memorySince` et `playedUntil` non nuls si et seulement si `roomId` l'est ; `noRepeatMovies` exige `roomId` ; `decoyReserve` exige `themeIds = []`, `N` nul, `noRepeatMovies` faux, `themesUnpublishedIncluded` faux et au moins un film exclu (la cible) — amendé le 02/10 (D53 du 02/10) : la réserve non publiée ne devient jamais un vivier de salon, et `PoolQuery::countWorks()` et `candidates()` la refusent ;
 - `excluding()` **ajoute** aux exclusions déjà portées (union triée, sans doublon), pour que `forDecoys()` puis un appelant cumulent sans perdre la cible ;
 - `forGame()` d'une partie solo délègue à `catalogue()` sur l'instantané (thèmes, `N`) : aucune clause de salon, `noRepeatMovies` ignoré (§ 9), aucune lecture de `round` à la construction ;
 - `forDecoys()` fait deux lectures (films des manches démarrées de la partie, `started_at <= $now`, statut indifférent ; `group_id` de la cible), plus celles de `forGame()`.
@@ -228,7 +232,7 @@ Les deux ajouts `themeProbe()` et `themesUnpublishedIncluded` étendent le contr
 
 Toutes les clauses s'appliquent en ET ; aucune n'est optionnelle sauf mention.
 
-1. **Catalogue** : `movie.availability = 'published'` ET `movie.content_flag = 'clear'`, par le scope existant `Movie::inPool()`. `content_flag` y est parce qu'un film `published` + `blocked` doit sortir du vivier à la seconde, sans attendre le curateur (`10` A3, décision 12).
+1. **Catalogue** : `movie.availability = 'published'` ET `movie.content_flag = 'clear'`, par le scope existant `Movie::inPool()`. `content_flag` y est parce qu'un film `published` + `blocked` doit sortir du vivier à la seconde, sans attendre le curateur (`10` A3, décision 12). **Seule exception** — amendé le 02/10 (D53 du 02/10) : `decoyReserve` vrai (`PoolScope::asDecoyReserve()`) ⇒ `movie.availability IN ('draft', 'unpublished')` ET `movie.content_flag = 'clear'`, par `Movie::inDecoyReserve()` (même index `movie_pool_idx`) ; jamais `suspended` ni `withdrawn`, et le filtre de contenu n'est contourné par aucune voie. Ce périmètre ne sert que le rang R6 des leurres (`70` § 10.3) : un film non publié n'y est qu'un titre proposé, jamais une cible.
 2. **Éligibilité à `N`** (si `framesPerRound` non nul) : `movie_projection.levels_count >= N`. La jointure interne sur `movie_projection` est **toujours** présente, tables non aliasées. **Aucun `levels_mask & 21`** (§ 2.5, n° 4).
 3. **Thèmes** : `effective = themeIds ∩ publishedThemeIds()` ; `themeIds = []` ⇒ `effective = []` **sans lire les thèmes publiés** (le cas par défaut, le seul que l'écran du J1 produise, ne paie aucune lecture de `theme`).
    - `effective = []` : **branche sans thème**, jamais un `IN ()` — un `IN` vide rendrait un vivier de 0 et accuserait les thèmes alors qu'aucun n'a été choisi, sur le cas **par défaut** du réglage (`10` § 12 point (2)).
@@ -300,7 +304,7 @@ WHERE movie.availability = 'published' AND movie.content_flag = 'clear'         
 | Garde et tirage du lancement | même `PoolScope`, une fois, dans la transaction (§ 6.1) | 50 (contrat C6) |
 | Grisage des presets | `report(PoolScope::forRoom($room, $preset = SettingPresetCatalog::settingsFor($key), $now), $preset->roundsCount)` : le `N` et le `M` sont ceux du **preset** (chaque preset porte les siens, `00` § Réglages du salon : Rapide à 8 manches, Découverte à 5), la mémoire est celle du salon ; passer le `M` du salon griserait ou dégriserait un preset à tort | 50 |
 | Solo | `PoolScope::catalogue(...)` après l'ajustement D19 du 23/09 | 60 |
-| Leurres | `PoolQuery::movies(PoolScope::forDecoys($round, $at))` et son complément | 70 (§ 10) |
+| Leurres | `PoolQuery::movies(PoolScope::forDecoys($round, $at))`, son complément, et le dernier recours (`withoutNoRepeat()`, `asDecoyReserve()`, D53 du 02/10 — amendé le 02/10) | 70 (§ 10) |
 | Supervision « œuvres jouables à N » | `PoolReporter::catalogueWorksByFramesPerRound()` | 20 (affichage) |
 | Mesure d'un thème avant publication [J1 depuis D43 du 01/10] | `PoolReporter::themeWorks($themeId)` | 20 (affichage, geste de publication, § 12.3) |
 
@@ -439,6 +443,8 @@ final readonly class DrawContext
     public static function decoysOriginal(int $sequenceIndex): self;                    // 'draw:decoys:{s}:original'  (70, rangs R3-R4)
     public static function decoysAffinity(int $sequenceIndex): self;                    // 'draw:decoys:{s}:affinity'  (70 § 10.3 bis, D44)
     public static function decoysAffinityOriginal(int $sequenceIndex): self;            // 'draw:decoys:{s}:affinity-original' (idem, dégradé)
+    public static function decoysLastResort(int $sequenceIndex): self;                  // 'draw:decoys:{s}:last-resort' (70 § 10.3, rangs R5-R6, D53)
+    public static function decoysLastResortOriginal(int $sequenceIndex): self;          // 'draw:decoys:{s}:last-resort-original' (idem, dégradé)
     public static function qcmOrder(int $sequenceIndex, string $playerPublicId): self;  // 'draw:qcm:{s}:{publicId}'   (70)
 }
 ```
@@ -448,7 +454,7 @@ final readonly class DrawContext
 - **`{roundId}` devient `{sequenceIndex}`**, et `{playerId}` devient `{playerPublicId}`. `sequence_index` est unique par partie (`round_game_sequence_uq`) et connu **avant** l'insertion des lignes : le tirage devient une fonction pure, testable sans base et rejouable sans identifiant attribué par la base ; `player.public_id` est l'identité de siège stable (`10` § 7.1).
 - **Le contexte `tiebreak:{roundId}` est retiré** (contradiction n° 66). Il n'avait aucun usage assigné et se lisait comme un départage de **score**. La seule égalité que la graine départage est l'égalité **de variantes**, dans `draw:variant` (§ 7) et `draw:substitute` (§ 8) ; **aucune égalité de score n'est tranchée par la graine** — la chaîne de départage appartient à `80` (amendement A-19).
 
-**Gardes des fabriques** — amendé le 28/09 (E70-2) : `InvalidArgumentException` pour `sequenceIndex < 1`, `tierIndex < 1` et un `playerPublicId` vide, **jamais d'écrêtage** — un index nul désignerait un flux que le tirage matérialisé n'a jamais lu. Aucun nom, paramètre ni vecteur du contrat C3 ne change ; la réflexion de `SeededPrfTest` prouve la classe finale et `readonly`, le constructeur privé et les sept fabriques exactement. Amendé le 01/10 (D44 du 01/10) : **neuf fabriques**, `decoysAffinity` et `decoysAffinityOriginal` ajoutées pour les groupes d'affinité des leurres (`70` § 10.3 bis), mêmes gardes, chaînes distinctes de toutes les autres.
+**Gardes des fabriques** — amendé le 28/09 (E70-2) : `InvalidArgumentException` pour `sequenceIndex < 1`, `tierIndex < 1` et un `playerPublicId` vide, **jamais d'écrêtage** — un index nul désignerait un flux que le tirage matérialisé n'a jamais lu. Aucun nom, paramètre ni vecteur du contrat C3 ne change ; la réflexion de `SeededPrfTest` prouve la classe finale et `readonly`, le constructeur privé et les sept fabriques exactement. Amendé le 01/10 (D44 du 01/10) : **neuf fabriques**, `decoysAffinity` et `decoysAffinityOriginal` ajoutées pour les groupes d'affinité des leurres (`70` § 10.3 bis), mêmes gardes, chaînes distinctes de toutes les autres. Amendé le 02/10 (D53 du 02/10) : **onze fabriques**, `decoysLastResort` et `decoysLastResortOriginal` ajoutées pour le dernier recours R5-R6 des leurres (`70` § 10.3), mêmes gardes, chaînes distinctes de toutes les autres.
 
 ### 5.4 Vecteurs de référence
 
@@ -466,6 +472,8 @@ Calculés sur l'algorithme du § 5.2 et figés dans `SeededPrfTest` : **une impl
 | `permutation(DrawContext::qcmOrder(1, 'P3N8D5HB2C9F'), 4)` | `[1,0,3,2]` | figé par cette spec (deux sièges, deux ordres) |
 | `permutation(DrawContext::decoysAffinity(4), 5)` | `[2,3,1,0,4]` | figé le 01/10 (D44 du 01/10) |
 | `permutation(DrawContext::decoysAffinityOriginal(4), 5)` | `[4,1,0,2,3]` | figé le 01/10 (D44 du 01/10) |
+| `permutation(DrawContext::decoysLastResort(4), 5)` | `[4,1,2,0,3]` | figé le 02/10 (D53 du 02/10) |
+| `permutation(DrawContext::decoysLastResortOriginal(4), 5)` | `[1,4,2,3,0]` | figé le 02/10 (D53 du 02/10) |
 
 Les deux `public_id` d'exemple sont dans l'alphabet base32 de `SeatPublicId::ALPHABET` (ex-`PlayerFactory::PUBLIC_ID_ALPHABET`, déplacé par L50-3a — amendé le 28/09 (E100-3)). Les cinq vecteurs du contrat ont été recalculés avant d'être repris ici.
 
@@ -682,10 +690,12 @@ La règle des leurres — profil de titre, échelle des rangs, mode dégradé, c
 |---|---|---|
 | R1, R3 | `PoolQuery::movies(PoolScope::forDecoys($round, $at))` — vivier du salon : thèmes du snapshot, `levels_count ≥ N`, non-répétition si active | R1 : `DrawContext::decoys(s)` ; R3 : `decoysOriginal(s)` |
 | R2, R4 | `PoolQuery::movies(PoolScope::forDecoys($round, $at)->withThemeIds([])->withFramesPerRound(null))` — catalogue publié, **non-répétition conservée** | R2 : `decoys(s)` ; R4 : `decoysOriginal(s)` |
+| R5 [D53 du 02/10] | `PoolQuery::movies(PoolScope::forDecoys($round, $at)->withThemeIds([])->withFramesPerRound(null)->withoutNoRepeat())` — catalogue publié **sans non-répétition**, exclusions conservées | profil normal : `decoysLastResort(s)` ; dégradé : `decoysLastResortOriginal(s)` |
+| R6 [D53 du 02/10] | `PoolQuery::movies(PoolScope::forDecoys($round, $at)->asDecoyReserve())` — films `draft` ou `unpublished`, `clear`, exclusions conservées | idem |
 
 **Groupes d'affinité** — amendé le 01/10 (D44 du 01/10) : avant R1 et avant R3, `70` § 10.3 bis cherche les trois leurres parmi les films apparentés à la cible (même `collection_id`, puis thème studio, saga ou manuel, puis genre), dans la requête de R2 — catalogue publié, non-répétition et exclusions conservées —, contextes `decoysAffinity(s)` et `decoysAffinityOriginal(s)` ; un groupe n'est retenu que s'il fournit seul les trois leurres. Cette spec ne fournit toujours que le vivier, la PRF et les contextes.
 
-Chaque requête est triée par `movie.id` ; `70` y ajoute ses clauses `movie_projection.title_mask_version` / `title_locale_mask` et parcourt chaque rang dans l'ordre de `SeededPrf::forGame($game)->permutation($context, n)`. L'ordre du QCM par siège est `permutation(DrawContext::qcmOrder(s, player.public_id), 4)` (E10-54). **`withoutNoRepeat()` ne sert qu'au diagnostic du rapport, jamais aux leurres** : aucun rang ne lève la non-répétition, et un rang « catalogue sans non-répétition » serait une extension de D21 du 23/09 que seul le porteur pourrait ajouter (contrat C11, R-17).
+Chaque requête est triée par `movie.id` ; `70` y ajoute ses clauses `movie_projection.title_mask_version` / `title_locale_mask` et parcourt chaque rang dans l'ordre de `SeededPrf::forGame($game)->permutation($context, n)`. L'ordre du QCM par siège est `permutation(DrawContext::qcmOrder(s, player.public_id), 4)` (E10-54). ~~**`withoutNoRepeat()` ne sert qu'au diagnostic du rapport, jamais aux leurres**~~ — amendé le 02/10 (D53 du 02/10) : le porteur a ajouté l'extension de D21 du 23/09 que cette phrase lui réservait. `withoutNoRepeat()` sert le diagnostic du rapport (§ 4.3) et le seul rang R5 de dernier recours des leurres, après tous les rangs qui conservent la non-répétition, là seulement où il n'y aurait eu aucun QCM (`70` § 10.3).
 
 ### 10.2 Exclusions portées par `forDecoys`
 
@@ -699,12 +709,12 @@ Chaque requête est triée par `movie.id` ; `70` y ajoute ses clauses `movie_pro
 
 ### 10.3 Le cas terminal est plus probable au J1
 
-Le cas terminal — moins de trois leurres après R4 — est réglé par `70` (contrat C11 § 4). En **Facile**, `60` annule la manche (`choices_unavailable`, E10-07) par le mécanisme d'échec technique. En **Normal**, le QCM n'apparaît pas : les sièges `text_exhausted` passent `attempts_exhausted` à l'instant théorique de composition, et toute exhaustion ultérieure dans la manche mène à `attempts_exhausted` — l'état « texte épuisé, QCM attendu » de D20 du 23/09 n'a plus d'objet dans cette manche. **Il est nettement plus probable au J1**, pour deux raisons mécaniques qu'il faut connaître avant la première vraie partie :
+Le cas terminal — moins de trois leurres après R4, puis, depuis D53 du 02/10, après le dernier recours R5-R6 — est réglé par `70` (contrat C11 § 4) — amendé le 02/10. En **Facile**, `60` annule la manche (`choices_unavailable`, E10-07) par le mécanisme d'échec technique. En **Normal**, le QCM n'apparaît pas : les sièges `text_exhausted` passent `attempts_exhausted` à l'instant théorique de composition, et toute exhaustion ultérieure dans la manche mène à `attempts_exhausted` — l'état « texte épuisé, QCM attendu » de D20 du 23/09 n'a plus d'objet dans cette manche. **Il est nettement plus probable au J1**, pour deux raisons mécaniques qu'il faut connaître avant la première vraie partie :
 
 1. **Fin de mémoire d'un salon.** Quand le vivier du salon vaut `W` < `M` + 3 — trois étant le nombre de leurres, cardinalité fixée par le schéma (`10` § 7.4) et non la marge —, ce qui arrive à la dernière partie avant blocage (§ 6.6), les candidats aux leurres de la manche `k`, tous rangs confondus, se réduisent aux films non démarrés hors cible, soit `W − k` (la réserve jamais démarrée comprise). À `W = M`, il en reste moins de trois **dès la manche `M − 2`** (la 8ᵉ au réglage par défaut) : le cas terminal y est **certain**, quel que soit le profil de titre. En Facile, les trois dernières manches sont annulées sans remplaçant (réserve vide) ; en Normal, elles se jouent en texte libre seul, sans état « QCM attendu ». Avant même le cas terminal, chaque leurre de cette partie est la réponse d'une manche future (§ 11). Au J2, le même cas ne se produit qu'aux salons qui épuisent leur mémoire, bien plus rarement sur quelques centaines de films.
 2. **Petits effectifs par profil.** Sur 60 films, un film cible dont le profil de titre est rare (titre original non latin, profil de locales incomplet) trouve moins facilement trois pairs, même en mode dégradé où seule la forme du titre original doit coïncider.
 
-Aucun remède côté cette spec : D21 du 23/09 interdit de lever la non-répétition, et le remède « nouveau salon » (§ 4.5) remet la mémoire à zéro.
+~~Aucun remède côté cette spec : D21 du 23/09 interdit de lever la non-répétition~~ — amendé le 02/10 (D53 du 02/10) : le dernier recours de `70` § 10.3 lève la non-répétition (R5), puis puise dans les films non publiés `clear` (R6), toujours hors cible, `movie_group` et manches démarrées. Le cas 1 n'est donc plus certain : en fin de mémoire, les films déjà joués par le salon dans ses parties précédentes redeviennent des leurres (faibles), et la file de curation en ajoute. Le cas 2 se raréfie de même. Le remède « nouveau salon » (§ 4.5) reste celui du vivier.
 
 ---
 
@@ -716,8 +726,9 @@ Aucun remède côté cette spec : D21 du 23/09 interdit de lever la non-répéti
 |---|---|---|
 | **Repli de niveau déductible** de la lisibilité de l'image : `frame_level` est `#[Hidden]`, mais un palier 1 anormalement lisible trahit une banque maigre. | Refuser le repli rendrait le film injouable à ce `N` ; masquer l'image est impossible. | Signal « incomplet » de `20` et affichage du repli par `N` (`usesFallback()`, § 2.5), pour que le curateur complète la banque. |
 | **Élimination quand `W ≤ M + marge`** : tout le vivier est tiré, le compte est public (`00` § Déroulé d'une partie). En fin de mémoire d'un salon, un joueur qui retient les films déjà joués connaît les films restants. | Relever la borne de lancement au-delà de `M` rouvrirait un arbitrage verrouillé (`questions-ouvertes.md` § Arbitrages non rouverts). | Le jeu se joue entre amis (principe 3) ; « nouveau salon » remet le vivier plein. |
-| **Leurres pris dans le tirage quand `W ≤ M + marge`** : `K = W`, donc tout le vivier du salon est tiré, et tout leurre du rang R1 (vivier du salon, § 10.1) est le film d'une manche future ou de la réserve ; R2 n'y ajoute des films hors tirage que si les thèmes ou `N` restreignent le vivier du salon par rapport au catalogue publié sous non-répétition. À `W = M` — dernière partie d'un salon avant blocage au J1 (§ 6.6), sans thème et catalogue entier jouable à `N` = 3 —, les trois leurres de **chaque** QCM sont, **dès la manche 1**, des bonnes réponses de manches futures, poussées au client avant leur révélation : un joueur qui note les propositions connaît les réponses à venir, sans savoir à quelle manche chacune appartient. | Exclure les manches futures des leurres trahirait le tirage et est interdit par D21 du 23/09 ; lever la non-répétition pour trouver d'autres leurres l'est aussi (§ 10.1). **Tension entre la règle 3 et D21 du 23/09, signalée au porteur** : D21 du 23/09 prime (décisions du 23/09 en tête de la préséance). | La seule parade compatible avec D21 du 23/09 est le remède « nouveau salon » (§ 4.5), qui remet la mémoire à zéro ; le cas ne concerne que les parties à `W ≤ M + marge`. |
+| **Leurres pris dans le tirage quand `W ≤ M + marge`** : `K = W`, donc tout le vivier du salon est tiré, et tout leurre du rang R1 (vivier du salon, § 10.1) est le film d'une manche future ou de la réserve ; R2 n'y ajoute des films hors tirage que si les thèmes ou `N` restreignent le vivier du salon par rapport au catalogue publié sous non-répétition. À `W = M` — dernière partie d'un salon avant blocage au J1 (§ 6.6), sans thème et catalogue entier jouable à `N` = 3 —, les trois leurres de **chaque** QCM sont, **dès la manche 1**, des bonnes réponses de manches futures, poussées au client avant leur révélation : un joueur qui note les propositions connaît les réponses à venir, sans savoir à quelle manche chacune appartient. | Exclure les manches futures des leurres trahirait le tirage et est interdit par D21 du 23/09 ; lever la non-répétition pour trouver d'autres leurres l'était aussi (§ 10.1) ; depuis D53 du 02/10, elle n'est levée qu'au dernier recours, quand R1-R4 échouent, jamais pour remplacer des leurres que R1 fournit — amendé le 02/10. **Tension entre la règle 3 et D21 du 23/09, signalée au porteur** : D21 du 23/09 prime (décisions du 23/09 en tête de la préséance). | La seule parade compatible avec D21 du 23/09 est le remède « nouveau salon » (§ 4.5), qui remet la mémoire à zéro ; le cas ne concerne que les parties à `W ≤ M + marge`. |
 | **Groupe commun des propositions visible** — amendé le 01/10 (D44 du 01/10) : quand un groupe d'affinité fournit les trois leurres (`70` § 10.3 bis), les quatre propositions sont toutes des Toy Story, toutes des Marvel ou toutes de science-fiction ; le joueur apprend la saga, le studio ou le genre de la cible avant la révélation. | Demande explicite du porteur : des leurres apparentés rendent le QCM jouable, là où des titres sans rapport l'éliminent d'un coup d'œil. La règle « un seul groupe fournit les trois leurres » garantit que le groupe commun **n'identifie pas la cible** parmi les quatre : mélanger saga et studio la placerait dans la paire de la saga, une chance sur deux. La **cohérence de groupe** (`70` § 10.3 bis) empêche l'élimination : aucun leurre n'est d'un groupe plus prioritaire que celui retenu (jamais un Toy Story parmi des Pixar). **Résidus** : les effectifs de cohérence sont comptés sur l'éligibilité et non sur la validité du parcours, et l'échelle R1-R4 de repli, inchangée, peut tirer un leurre qui aurait eu son propre groupe — rare dès que les genres sont peuplés, le repli ne servant qu'à une cible sans groupe suffisant. | Aucun drapeau ni aucune clé de thème dans la charge (§ 13.3) ; l'appartenance se lit dans les titres, comme pour un joueur qui connaît la saga, jamais dans les données. |
+| **Leurres de dernier recours éliminables** — amendé le 02/10 (D53 du 02/10) : un leurre de R5 (film déjà joué par le salon sous non-répétition) ou de R6 (film non publié) ne peut pas être la cible ; un joueur qui retient l'historique du salon ou connaît le catalogue publié peut l'écarter. | Sans eux, la manche n'aurait aucun QCM (annulée en Facile, texte seul en Normal) : un QCM à leurres faibles vaut mieux. | Rangs placés **après** tous les autres (`70` § 10.3) : ils ne servent que là où R1-R4 échouent ; le catalogue publié n'est pas affiché aux joueurs. |
 | **Dictionnaire visuel appris en solo** : hachage des octets servis. | D16 du 23/09 : risque assumé ; aucun identifiant d'**adressage** n'est réutilisable (E10-58). | Nommée et bornée par `60`. |
 | **Taille du vivier** connue de tous au lobby. | Le compteur est une décision produit (`00` § Déroulé d'une partie). | `draw_pool_size` reste `#[Hidden]` par hygiène (§ 4.6). |
 

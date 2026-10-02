@@ -1,4 +1,5 @@
 import { Form, Head } from '@inertiajs/react';
+import { OAuthButtons } from '@/components/account/oauth-buttons';
 import {
     index as confirmOptions,
     store as confirmStore,
@@ -20,9 +21,17 @@ import type { AuthLayoutKeys } from '@/types';
  */
 type Props = {
     canUsePasskeys: boolean;
+    /** Faux pour un compte créé par un fournisseur (spec 40 § 12.4). */
+    hasPassword: boolean;
+    /** Fournisseurs actifs liés au compte, par lesquels il peut confirmer. */
+    confirmProviders: string[];
 };
 
-export default function ConfirmPassword({ canUsePasskeys }: Props) {
+export default function ConfirmPassword({
+    canUsePasskeys,
+    hasPassword,
+    confirmProviders,
+}: Props) {
     const { t } = useTranslations();
 
     return (
@@ -41,41 +50,53 @@ export default function ConfirmPassword({ canUsePasskeys }: Props) {
                 />
             )}
 
-            <Form {...store.form()} resetOnSuccess={['password']}>
-                {({ processing, errors }) => (
-                    <div className="space-y-6">
-                        <div className="grid gap-2">
-                            <Label htmlFor="password">
-                                {t('account.fields.password')}
-                            </Label>
-                            <PasswordInput
-                                id="password"
-                                name="password"
-                                placeholder={t('account.fields.password')}
-                                autoComplete="current-password"
-                                autoFocus
-                            />
+            {confirmProviders.length > 0 && (
+                <OAuthButtons
+                    providers={confirmProviders}
+                    intent="confirm"
+                    labelKey="account.oauth.confirm_with"
+                />
+            )}
 
-                            <InputError message={errors.password} />
-                        </div>
+            {hasPassword && (
+                <Form {...store.form()} resetOnSuccess={['password']}>
+                    {({ processing, errors }) => (
+                        <div className="space-y-6">
+                            <div className="grid gap-2">
+                                <Label htmlFor="password">
+                                    {t('account.fields.password')}
+                                </Label>
+                                <PasswordInput
+                                    id="password"
+                                    name="password"
+                                    placeholder={t('account.fields.password')}
+                                    autoComplete="current-password"
+                                    autoFocus
+                                />
 
-                        <div className="flex items-center">
-                            <Button
-                                className="w-full"
-                                disabled={processing}
-                                data-test="confirm-password-button"
-                            >
-                                {processing && (
-                                    <Spinner
-                                        aria-label={t('common.state.loading')}
-                                    />
-                                )}
-                                {t('account.confirm_password.submit')}
-                            </Button>
+                                <InputError message={errors.password} />
+                            </div>
+
+                            <div className="flex items-center">
+                                <Button
+                                    className="w-full"
+                                    disabled={processing}
+                                    data-test="confirm-password-button"
+                                >
+                                    {processing && (
+                                        <Spinner
+                                            aria-label={t(
+                                                'common.state.loading',
+                                            )}
+                                        />
+                                    )}
+                                    {t('account.confirm_password.submit')}
+                                </Button>
+                            </div>
                         </div>
-                    </div>
-                )}
-            </Form>
+                    )}
+                </Form>
+            )}
         </>
     );
 }

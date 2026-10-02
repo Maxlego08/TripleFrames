@@ -1,4 +1,5 @@
-import { Form, Head } from '@inertiajs/react';
+import { Form, Head, usePage } from '@inertiajs/react';
+import { OAuthButtons } from '@/components/account/oauth-buttons';
 import InputError from '@/components/input-error';
 import PasskeyVerify from '@/components/passkey-verify';
 import PasswordInput from '@/components/password-input';
@@ -33,12 +34,29 @@ export default function Login({
     canUsePasskeys,
 }: Props) {
     const { t } = useTranslations();
+    const { oauthProviders, errors } = usePage<{
+        errors: Partial<Record<string, string>>;
+    }>().props;
 
     return (
         <>
             <Head title={t('account.login.title')} />
 
             {canUsePasskeys && <PasskeyVerify />}
+
+            {/* Connexion et création de compte par fournisseur (spec 40
+                § 12, D51 du 01/10) : ouvertes dès qu'un fournisseur est
+                actif, inscription par mot de passe fermée ou non. */}
+            {oauthProviders.length > 0 && (
+                <div className="flex flex-col gap-4">
+                    <OAuthButtons providers={oauthProviders} intent="login" />
+                    <p className="text-center text-sm text-muted-foreground">
+                        {t('account.oauth.separator')}
+                    </p>
+                </div>
+            )}
+
+            <InputError message={errors.oauth} />
 
             <Form
                 {...store.form()}

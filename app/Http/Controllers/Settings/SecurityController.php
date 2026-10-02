@@ -44,6 +44,9 @@ class SecurityController extends Controller
                     ->all()
                 : [],
             'passwordRules' => Password::defaults()->toPasswordRulesString(),
+            // Sans mot de passe (compte créé par un fournisseur), l'écran
+            // propose d'en DÉFINIR un (spec 40 § 12.4).
+            'hasPassword' => $request->user()->password !== null,
         ];
 
         if (Features::canManageTwoFactorAuthentication()) {

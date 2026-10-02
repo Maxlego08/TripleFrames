@@ -15,6 +15,7 @@ use App\Models\RoundTier;
 use App\Support\Answers\ChoicesPresenter;
 use App\Support\Answers\DecoyPicker;
 use App\Support\Catalog\AnswerKeyNormalizer;
+use App\Support\Game\GameJournal;
 use App\Support\I18n\DisplayTitleResolver;
 use App\ValueObjects\Answers\ChoicesPayload;
 use App\ValueObjects\Answers\DecoyPick;
@@ -76,7 +77,12 @@ use Throwable;
  * faux. En Normal, les sièges `text_exhausted` passent `attempts_exhausted`
  * (`input_closed_at = $at`), avec `InputClosed` après commit ; en Facile, 60
  * annule la manche (`choices_unavailable`). Rappelée, la composition
- * recommence.
+ * recommence. **Toujours tracé** (D54 du 02/10) : une ligne
+ * `game.choices_unavailable` au journal `game` et à `game_trace`
+ * ({@see GameJournal::choicesUnavailable()}), cause `no_decoys` ou
+ * `compute_failed`, après commit seulement, jamais un titre ni un
+ * identifiant de film ; le signal aux joueurs (Normal) est la charge de 60
+ * (`tier.opened.choicesUnavailable`, `RoundState.choicesUnavailable`).
  *
  * `rendered_locale` = la locale atteinte par les quatre chaînes de la ligne
  * (rang 1 ou 2), NULL au rang 3 ou en mode dégradé. L'ordre d'affichage n'est
@@ -115,7 +121,13 @@ final readonly class ComposeChoiceSets
 
             $composition = $this->computeOrReport($locked, $game, $at);
 
-            if ($composition === null) {
+            if (is_string($composition)) {
+                GameJournal::choicesUnavailable(
+                    $game,
+                    $locked,
+                    (int) $game->input_difficulty->choicesOpenTierIndex($game->frames_per_round),
+                    $composition,
+                );
                 self::closeAwaitingSeats($locked, $game, $at);
 
                 return false;
@@ -176,12 +188,16 @@ final readonly class ComposeChoiceSets
      * d'origine, qui peuvent citer un titre : sa classe et son emplacement
      * suffisent à la retrouver.
      *
-     * @return array{decoys: DecoyPick, rows: list<array{locale: Locale, choices: list<string>, rendered: Locale|null}>}|null
+     * Rend la composition, ou, dans le cas terminal, sa cause pour le
+     * journal : {@see GameJournal::CHOICES_CAUSE_NO_DECOYS} (moins de trois
+     * leurres) ou {@see GameJournal::CHOICES_CAUSE_COMPUTE_FAILED}.
+     *
+     * @return array{decoys: DecoyPick, rows: list<array{locale: Locale, choices: list<string>, rendered: Locale|null}>}|string
      */
-    private function computeOrReport(Round $round, Game $game, CarbonImmutable $at): ?array
+    private function computeOrReport(Round $round, Game $game, CarbonImmutable $at): array|string
     {
         try {
-            return $this->compute($round, $game, $at);
+            return $this->compute($round, $game, $at) ?? GameJournal::CHOICES_CAUSE_NO_DECOYS;
         } catch (Throwable $exception) {
             if (self::isDatabaseFailure($exception)) {
                 throw $exception;
@@ -196,7 +212,7 @@ final readonly class ComposeChoiceSets
                 $exception->getLine(),
             )));
 
-            return null;
+            return GameJournal::CHOICES_CAUSE_COMPUTE_FAILED;
         }
     }
 

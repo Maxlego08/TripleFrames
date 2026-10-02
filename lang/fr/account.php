@@ -30,6 +30,7 @@ return [
         'nav' => [
             'appearance' => 'Apparence',
             'avatar' => 'Avatar',
+            'linked' => 'Comptes liés',
             'profile' => 'Profil',
             'security' => 'Sécurité',
         ],
@@ -189,6 +190,7 @@ return [
         'current' => 'Avatar actuel',
         'choice_legend' => 'Avatar affiché',
         'use_upload' => 'Utiliser mon image',
+        'use_provider' => 'Ma photo :provider',
         'use_preset' => 'Utiliser un avatar prédéfini',
         'presets' => 'Avatars prédéfinis',
         'save' => 'Enregistrer',
@@ -222,6 +224,61 @@ return [
         ],
     ],
 
+    // Connexion par Discord et Google (spec 40 § 12, D51 du 01/10).
+    // `:provider` : le nom du fournisseur, `common.provider.*`.
+    'oauth' => [
+        'continue_with' => 'Continuer avec :provider',
+        'confirm_with' => 'Confirmer avec :provider',
+        'separator' => 'ou',
+        'finish' => [
+            'title' => 'Finaliser l’inscription',
+            'heading' => 'Bienvenue !',
+            'description' => 'Votre compte :provider est presque prêt. Choisissez votre nom et acceptez les conditions.',
+            'email' => 'Adresse reçue de :provider : :email',
+            'no_email' => ':provider n’a transmis aucune adresse e-mail : vous pourrez en ajouter une dans votre profil.',
+            'name' => 'Nom du compte',
+            'terms' => 'J’accepte les conditions générales d’utilisation',
+            'terms_link' => 'Lire les conditions générales',
+            'age' => 'Je déclare avoir au moins 15 ans',
+            'submit' => 'Créer mon compte',
+            'terms_required' => 'Vous devez accepter les conditions générales pour créer un compte.',
+            'age_required' => 'Vous devez avoir au moins 15 ans pour créer un compte.',
+        ],
+        'errors' => [
+            'failed' => 'La connexion avec ce fournisseur n’a pas abouti. Réessayez.',
+            'two_factor_link' => 'Un compte protégé par la double authentification utilise cette adresse. Connectez-vous avec votre mot de passe, puis liez ce fournisseur depuis vos réglages.',
+            'email_taken' => 'Un compte utilise déjà cette adresse. Connectez-vous avec lui, puis liez ce fournisseur depuis vos réglages.',
+            'linked_elsewhere' => 'Ce compte est déjà lié à un autre compte TripleFrames.',
+            'provider_taken' => 'Un autre compte de ce fournisseur est déjà lié à votre compte.',
+            'confirm_mismatch' => 'Ce compte de fournisseur n’est pas lié au vôtre.',
+            'last_method' => 'C’est votre dernière méthode de connexion : définissez d’abord un mot de passe ou liez un autre fournisseur.',
+            'pending_expired' => 'L’inscription a expiré. Recommencez la connexion.',
+        ],
+    ],
+
+    // Les comptes liés (spec 40 § 12.5).
+    'linked' => [
+        'title' => 'Comptes liés',
+        'heading' => 'Comptes liés',
+        'description' => 'Connectez-vous avec Discord ou Google en plus de votre mot de passe.',
+        'linked_on' => 'Lié le :date',
+        'not_linked' => 'Non lié',
+        'link' => 'Lier',
+        'unlink' => 'Délier',
+        'unlink_title' => 'Délier :provider ?',
+        'unlink_body' => 'Vous ne pourrez plus vous connecter avec ce compte :provider. Une photo copiée depuis ce compte est supprimée.',
+        'code_label' => 'Code de double authentification',
+        'code_help' => 'Le code de votre application, ou un code de récupération.',
+        'cancel' => 'Annuler',
+        'linked' => 'Compte lié.',
+        'unlinked' => 'Compte délié.',
+        'none' => 'Aucun fournisseur de connexion n’est disponible pour le moment.',
+        'errors' => [
+            'not_linked' => 'Ce fournisseur n’est pas lié à votre compte.',
+            'code' => 'Code de double authentification manquant ou incorrect.',
+        ],
+    ],
+
     'profile' => [
         'description' => 'Modifiez votre nom et votre adresse e-mail',
         'heading' => 'Profil',
@@ -233,6 +290,8 @@ return [
     ],
 
     'security' => [
+        'set_heading' => 'Définir un mot de passe',
+        'set_description' => 'Votre compte n’a pas encore de mot de passe : définissez-en un pour vous connecter aussi sans Discord ni Google.',
         'description' => 'Utilisez un mot de passe long et aléatoire pour protéger votre compte',
         'heading' => 'Modifier le mot de passe',
         'submit' => 'Enregistrer',

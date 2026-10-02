@@ -10,8 +10,9 @@ use App\Models\User;
  *
  * Le formulaire de siège envoie une clé du catalogue, ou {@see self::ACCOUNT}
  * (« Mon avatar ») pour un compte qui porte une image visible. Sous le verrou
- * de la prise de siège, le compte est RELU : image toujours visible → nature
- * `upload` ; sinon prédéfini. Dans les deux cas le siège reçoit un prédéfini
+ * de la prise de siège, le compte est RELU : son image personnelle effective
+ * ({@see User::personalImage()}), téléversée ou photo du fournisseur, donne la
+ * nature `upload` ou `provider` ; sinon prédéfini. Dans les deux cas le siège reçoit un prédéfini
  * de REPLI — celui du compte, sinon la suggestion du salon —, que porte aussi
  * la re-signature du jeton (I4.5) et vers lequel un masquage fait redescendre
  * l'affichage (§ 11.5).
@@ -38,15 +39,15 @@ final readonly class SeatAvatar
             return new self(AvatarKind::Preset, $choice);
         }
 
-        $account = $user === null ? null : User::query()
-            ->select(['id', 'avatar_preset', 'avatar_upload_path', 'avatar_upload_hidden_at', 'anonymized_at'])
-            ->find($user->id);
+        $account = $user === null ? null : User::query()->select(AccountImage::columns())->find($user->id);
 
         $own = $account?->avatar_preset;
         $fallback = $own !== null && AvatarPresetCatalog::has($own) ? $own : AvatarPresetCatalog::suggest($preferred, $taken);
 
-        if ($account !== null && $account->hasVisibleUploadedAvatar()) {
-            return new self(AvatarKind::Upload, $fallback);
+        $image = $account?->personalImage();
+
+        if ($image !== null) {
+            return new self($image->kind(), $fallback);
         }
 
         return new self(AvatarKind::Preset, $fallback);
@@ -57,7 +58,7 @@ final readonly class SeatAvatar
      */
     public static function accountChoiceAvailable(?User $user): bool
     {
-        return $user !== null && $user->hasVisibleUploadedAvatar();
+        return $user?->personalImage() !== null;
     }
 
     /**
@@ -68,10 +69,12 @@ final readonly class SeatAvatar
      */
     public static function accountOption(?User $user): ?array
     {
-        if (! self::accountChoiceAvailable($user) || $user === null) {
+        if ($user === null) {
             return null;
         }
 
-        return ['url' => UploadedAvatars::url((string) $user->avatar_upload_path)];
+        $path = $user->personalImage()?->path($user);
+
+        return $path === null ? null : ['url' => UploadedAvatars::url($path)];
     }
 }

@@ -719,6 +719,8 @@ L'attribution de `curator` ou d'`admin` exige un **nom réel**, porté par la se
 
 ## 10. Jalon 2 — à écrire
 
+> **Amendé le 01/10 (D51 du 01/10)** : les sujets 2 (connexion sociale), 3 (comptes liés et déliaison, confirmation d'un compte sans mot de passe) et 4 (copie locale de la photo) sont rédigés et livrés au J1 au § 12 ; la question « preuve du consentement aux données provider » du § 10.2 est tranchée (un cas de `ConsentKind` par fournisseur).
+
 Cette section **liste** les sujets que la carte des specs de `00-overview.md` attribue à `40` pour l'ouverture publique ; elle ne les rédige pas. Le matériau cité est de trois natures : la première est déjà normative, la deuxième se confirme auprès du porteur, et de la troisième seules les trois questions du § 10.2 lui sont posées.
 
 - **Déjà décidé, à rédiger sans le rouvrir.** Les règles arrêtées par le corpus : 00 § Comptes & profils et § Avatars, 10 § 5.4, § 5.5, § 8 et § 11, `questions-ouvertes.md` § Déjà tranché (dont « Suppression de compte = anonymisation », « Signalement joueur », « Avatars prédéfinis »), les décisions 14, 15 et 19. Les défauts du rédacteur retenus par le porteur le 23/09, avec la résolution proposée par la pré-analyse : Q40-6, ré-acceptation des CGU (sujet 1) ; contradiction n° 11, règle de signalement à `40` et écran à `20` (sujet 6) ; n° 30, masquage du pseudo pour la vie du siège, levée par l'administrateur seul, « deux sièges distincts », garde-fou du siège présent dans le même salon, résidu multi-siège nommé (sujet 6) ; n° 31, résolution vivante de l'avatar par le compte, déliaison du fournisseur d'origine qui supprime le fichier et vide les colonnes — avec l'exigence d'une colonne de provenance nullable à `10` —, masquage qui réécrit `avatar_kind = preset` si `avatar_preset` existe (sujets 3, 4 et 6) ; n° 32, anonymisation et confirmation par ré-authentification OAuth des comptes sans mot de passe (sujets 3 et 9). S'y ajoutent deux résolutions de la pré-analyse déjà appliquées au corpus le 23/09, sans décision du porteur à prendre : n° 37, une passkey à vérification de l'utilisateur vaut second facteur, rôles privilégiés compris, et scopes minimaux Discord `identify`, `email`, Google `openid`, `email`, `profile` (00 § Comptes & profils, § Ouverture, conformité et gouvernance ; `questions-ouvertes.md` § 1 ; sujets 2 et 11) ; n° 38, balayage **quotidien** de dormance, anonymisation seulement 30 jours après un rappel réellement envoyé ou pour un compte sans e-mail, trace `users.dormancy_notified_at` [J2] (10 § 5.1, § 11.1, § 12 ; sujet 10). — amendé le 23/09
@@ -823,6 +825,81 @@ L'image et ses trois colonnes sont des **actifs du compte** : elles vivent tant 
 ### 11.10 Lot
 
 **L40-8 — Avatar téléversé** (J1, D49 du 01/10). Migration additive `users` (trois colonnes) ; `AvatarKind::Upload`, `ReportTarget::UploadedAvatar`, `AdminActionType::AvatarRemoved` ; disque `avatars` et route `avatar.show` ; `AvatarImage`, `UploadedAvatars`, `SeatAvatar` ; actions `Account\{UploadAvatar,ChooseAvatar,DeleteAvatar}`, `Room\ReportSeatAvatar`, `Admin\{UnhideAvatar,RemoveAvatar}` ; écrans `settings/avatar` et `admin/avatars/index` ; sélecteur et bouton de signalement. Tests : `tests/Feature/Identity/AvatarUploadTest.php`, `AvatarReportTest.php`, `tests/Feature/Admin/AvatarModerationTest.php`.
+
+---
+
+## 12. Connexion par Discord et Google [J1, D51 du 01/10]
+
+Ajoutée le 01/10 (D51 du 01/10). Avance au J1 les sujets 2, 3 et 4 du § 10, dans les règles déjà arrêtées par `00` § Comptes & profils, que cette section ne rouvre pas.
+
+### 12.1 Paquets, fournisseurs actifs, chemins
+
+- `laravel/socialite` et `socialiteproviders/discord` ; l'écouteur `SocialiteWasCalled` est posé dans `AppServiceProvider::boot()` (aucun `EventServiceProvider`). Blocs `google` et `discord` de `config/services.php` : `client_id`, `client_secret` lus dans l'environnement, `redirect` **relatif** (`/auth/google/callback`), résolu contre `APP_URL` : aucun nom de domaine dans le dépôt.
+- **Un fournisseur est actif si et seulement si ses deux clés sont posées** (`App\Support\Identity\OAuthProviders::enabled()`). Variables `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, vides dans `.env.example` (CI à zéro secret). Un fournisseur inactif répond 404 sur ses routes et n'a aucun bouton.
+- **Indépendant de `ACCOUNTS_REGISTRATION_OPEN`** (D51) : cet interrupteur ne gouverne plus que l'inscription par mot de passe. Prop partagée `oauthProviders: list<'google'|'discord'>` ; l'en-tête public rend « Se connecter » si `accountsOpen` **ou** si un fournisseur est actif, « Créer un compte » si `accountsOpen` seulement.
+- Scopes minimaux : Discord `identify email`, Google `openid email profile`.
+- Routes (`routes/auth.php`, `throttle:oauth`, 10 par minute et par adresse) :
+
+| Nom | Méthode et chemin | Garde | Rôle |
+|---|---|---|---|
+| `oauth.redirect` | `GET /auth/{provider}/redirect?intent=login\|link\|confirm` | `login` : invité ; `link`, `confirm` : `auth` | Pose l'intention en session, renvoie au fournisseur |
+| `oauth.callback` | `GET /auth/{provider}/callback` | aucune | Table du § 12.2 |
+| `oauth.finish` | `GET /auth/finish` | invité, inscription en attente | Écran « Finaliser l'inscription » |
+| `oauth.finish.store` | `POST /auth/finish` | idem | Création du compte (§ 12.3) |
+| `linked_accounts.edit` | `GET /settings/accounts` | `auth` | Écran « Comptes liés » |
+| `linked_accounts.destroy` | `DELETE /settings/accounts/{provider}` | `auth`, `password.confirm` | Déliaison (§ 12.5) |
+
+URI de redirection à déclarer chez chaque fournisseur : `https://<DOMAINE>/auth/google/callback` et `https://<DOMAINE>/auth/discord/callback` ; en développement, `https://dev.<DOMAINE>/…` ou `http://localhost:8000/…` (Google refuse `http` hors `localhost`). Google demande aussi l'origine JavaScript `https://<DOMAINE>`.
+
+### 12.2 Table de décision du retour
+
+L'identité du fournisseur (`ProviderIdentity`) porte : identifiant, e-mail ou `null`, e-mail **déclaré vérifié** (Google `email_verified`, Discord `verified`), pseudo suggéré (Discord `global_name` puis `username`, Google `given_name` puis `name`), URL de la photo. Un refus de l'utilisateur chez le fournisseur, un état invalide ou une erreur réseau ramènent à la connexion avec `account.oauth.errors.failed`.
+
+| Intention | Situation | Effet |
+|---|---|---|
+| `login` | Compte fournisseur déjà lié | Connexion de son titulaire ; **défi 2FA de Fortify** s'il a une 2FA confirmée (session `login.id`, redirection `two-factor.login`) ; compte anonymisé : refus |
+| `login` | Non lié, e-mail vérifié par le fournisseur = e-mail **vérifié** d'un compte sans 2FA | **Liaison automatique** (consentement daté, photo), puis connexion |
+| `login` | Idem, mais le compte a une 2FA confirmée | Refus `two_factor_link` : se connecter par mot de passe, puis lier depuis les réglages — jamais de liaison sans second facteur |
+| `login` | Non lié, e-mail déjà porté par un compte, sans les conditions ci-dessus | Refus `email_taken` |
+| `login` | Non lié, aucun compte | Inscription **en attente** en session (15 minutes), écran « Finaliser l'inscription » |
+| `link` | Lié à un autre compte | Refus `linked_elsewhere` ; la session courante ne change pas |
+| `link` | Ce compte a déjà un autre identifiant chez ce fournisseur | Refus `provider_taken` |
+| `link` | Sinon | Liaison (consentement daté ; photo si première liaison) |
+| `confirm` | Lié au compte connecté | Confirmation fraîche (`auth.password_confirmed_at`), retour à la page demandée |
+| `confirm` | Sinon | Refus `confirm_mismatch` |
+
+Un compte sans e-mail (Discord peut n'en rendre aucun) est valide et n'est jamais cible d'une liaison automatique.
+
+### 12.3 Finaliser l'inscription
+
+Écran `auth/oauth-finish` : fournisseur, adresse reçue (rien si absente), champ **nom** prérempli par la suggestion et validé par les règles du profil, cases **CGU** (lien vers `legal.terms`, nouvel onglet) et **âge** (15 ans au moins). Envoi : dans une transaction, relecture de l'identifiant (déjà lié → connexion de son titulaire) et de l'adresse (prise entre-temps → refus `email_taken`) ; `users` (mot de passe nul, `email_verified_at` posé si le fournisseur déclare l'adresse vérifiée, `locale` de la requête, projections `terms_*` et `age_confirmed_at`), `linked_account`, trois lignes `user_consent` (`terms`, `age`, `provider_<p>`) à la version courante `config('legal.terms_version')`. Après validation : copie de la photo (§ 12.6), e-mail de vérification si l'adresse n'est pas vérifiée (`Registered`), connexion, redirection vers `fortify.home`. **Aucun rôle** n'est attribué par cette voie.
+
+### 12.4 Compte sans mot de passe
+
+- La page de confirmation (`auth/confirm-password`) propose « Confirmer avec Google / Discord » pour chaque fournisseur lié ; un compte sans mot de passe n'y voit pas le champ mot de passe.
+- L'écran Sécurité d'un compte sans mot de passe propose **Définir un mot de passe** sans mot de passe actuel ; il est derrière `password.confirm`, donc après une ré-authentification fraîche.
+
+### 12.5 Comptes liés et déliaison
+
+Écran `settings/accounts` : par fournisseur actif, « Lié » avec la date, ou « Lier ». La déliaison :
+- exige une confirmation fraîche (`password.confirm`) et, si la 2FA est confirmée, un **code** (TOTP ou de récupération) ;
+- est refusée (`last_method`) si elle retire la dernière méthode de connexion — mot de passe, autre fournisseur lié, passkey ;
+- **supprime la ligne** `linked_account` (identifiant et e-mail fournisseur disparaissent) ; les lignes `user_consent` restent ;
+- délier le **fournisseur d'origine** de la photo supprime le fichier et vide `avatar_provider_path` et `avatar_provider_source` ; l'avatar redescend la chaîne. Un masquage (`avatar_provider_hidden_at`) survit.
+
+### 12.6 La copie locale de la photo
+
+Job `CopyProviderAvatar` sur la file **par défaut**, à la création et à la **première** liaison seulement (aucune copie existante, aucun masquage). Liste blanche d'hôtes (`cdn.discordapp.com`, `lh3`…`lh6.googleusercontent.com`), HTTPS seul, **aucune redirection suivie**, délai 5 s, 2 Mo au plus, puis la même normalisation qu'un avatar téléversé (`AvatarImage`), fichier `provider/<32 hex>.webp` sur le disque `avatars`, servi par `avatar.show`. Elle devient l'avatar effectif seulement si le compte n'en avait **aucun** (`avatar_kind` nul) : jamais par-dessus un choix. L'URL distante est effacée de `linked_account` après le téléchargement ; elle n'est jamais servie au client. Un échec est consigné et abandonné (aucun réessai) : la photo est un confort.
+
+Affichage, choix et modération suivent l'image téléversée (§ 11) : l'écran « Avatar » propose « Ma photo Google/Discord » ; le siège « Mon avatar » prend l'image personnelle **effective** du compte (téléversée ou photo, selon le dernier choix) ; deux sièges distincts depuis `avatar_provider_reports_from` la masquent (`report` cible `provider_avatar`, `avatar.hidden`) ; l'écran admin « Avatars » la lève ou la retire (`avatar.unhidden`, `avatar.removed`), filtre « nature ».
+
+### 12.7 Clés de traduction
+
+`account.oauth.*` (boutons, écran de finalisation, refus `failed`, `two_factor_link`, `email_taken`, `linked_elsewhere`, `provider_taken`, `confirm_mismatch`, `last_method`, `pending_expired`), `account.linked.*` (écran Comptes liés), `account.avatar.use_provider`, `common.provider.{google,discord}`. FR et EN dans le même commit.
+
+### 12.8 Lot
+
+**L40-9 — Connexion Discord et Google** (J1, D51 du 01/10). Paquets ; `config/services.php`, `.env.example` ; `routes/auth.php` ; `OAuthProviders`, `ProviderIdentity`, actions `Account\{HandleOAuthCallback,CreateOAuthAccount,LinkProvider,UnlinkProvider}`, job `CopyProviderAvatar` ; migration additive `users` (`avatar_provider_source`, `avatar_provider_reports_from`) ; `ConsentKind` (deux cas) ; écrans `auth/oauth-finish`, `settings/accounts`, boutons de connexion, d'inscription et de confirmation. Tests : `tests/Feature/Auth/OAuthLoginTest.php`, `OAuthLinkTest.php`, `tests/Feature/Identity/ProviderAvatarTest.php`. Socialite est simulé en test : aucune clé, aucun appel réseau (CI à zéro secret).
 
 ---
 

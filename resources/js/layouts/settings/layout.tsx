@@ -8,6 +8,7 @@ import { useTranslations } from '@/hooks/use-translations';
 import { cn, toUrl } from '@/lib/utils';
 import { edit as editAppearance } from '@/routes/appearance';
 import { edit as editAvatar } from '@/routes/avatar';
+import { edit as editLinkedAccounts } from '@/routes/linked_accounts';
 import { edit } from '@/routes/profile';
 import { edit as editSecurity } from '@/routes/security';
 import type { NavItem } from '@/types';
@@ -25,6 +26,11 @@ export default function SettingsLayout({ children }: PropsWithChildren) {
         {
             title: t('account.settings.nav.avatar'),
             href: editAvatar(),
+            icon: null,
+        },
+        {
+            title: t('account.settings.nav.linked'),
+            href: editLinkedAccounts(),
             icon: null,
         },
         {

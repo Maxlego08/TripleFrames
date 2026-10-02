@@ -24,21 +24,24 @@ final class UploadedAvatars
 
     public const string PREFIX = 'upload/';
 
+    /** Copie locale de la photo du fournisseur (spec 40 § 12.6, D51 du 01/10). */
+    public const string PROVIDER_PREFIX = 'provider/';
+
     public const string EXTENSION = 'webp';
 
     /** Motif du nom de fichier dans l'URL : 32 caractères hexadécimaux, extension comprise. */
     public const string FILE_PATTERN = '[0-9a-f]{32}\.webp';
 
-    /** Un chemin neuf, jamais réutilisé. */
-    public static function newPath(): string
+    /** Un chemin neuf, jamais réutilisé, sous le préfixe de cette image. */
+    public static function newPath(AccountImage $image = AccountImage::Upload): string
     {
-        return self::PREFIX.bin2hex(random_bytes(16)).'.'.self::EXTENSION;
+        return $image->prefix().bin2hex(random_bytes(16)).'.'.self::EXTENSION;
     }
 
-    /** Le chemin relatif d'un nom de fichier reçu dans l'URL. */
-    public static function pathOf(string $file): string
+    /** Le chemin relatif d'un nom de fichier reçu dans l'URL, pour cette image. */
+    public static function pathOf(string $file, AccountImage $image = AccountImage::Upload): string
     {
-        return self::PREFIX.$file;
+        return $image->prefix().$file;
     }
 
     /** URL RELATIVE de la route applicative : ni domaine, ni chemin de disque. */
@@ -54,20 +57,19 @@ final class UploadedAvatars
 
     /**
      * Le chemin de l'image VISIBLE d'un compte, lu par clé primaire — la
-     * résolution vivante d'un siège de nature `upload` (spec 40 § 11.5).
-     * `null` sans compte, sans image, image masquée ou compte anonymisé.
+     * résolution vivante d'un siège de nature `upload` ou `provider` (spec 40
+     * § 11.5, § 12.6). `null` sans compte, sans image, image masquée ou compte
+     * anonymisé.
      */
-    public static function visiblePath(?int $userId): ?string
+    public static function visiblePath(?int $userId, AccountImage $image = AccountImage::Upload): ?string
     {
         if ($userId === null) {
             return null;
         }
 
-        $user = User::query()
-            ->select(['id', 'avatar_upload_path', 'avatar_upload_hidden_at', 'anonymized_at'])
-            ->find($userId);
+        $user = User::query()->select(AccountImage::columns())->find($userId);
 
-        return $user !== null && $user->hasVisibleUploadedAvatar() ? $user->avatar_upload_path : null;
+        return $user !== null && $image->isVisible($user) ? $image->path($user) : null;
     }
 
     /**

@@ -25,7 +25,11 @@ const NAV_LINK_CLASS =
  */
 export function PublicHeader() {
     const { t } = useTranslations();
-    const { name, accountsOpen, auth } = usePage().props;
+    const { name, accountsOpen, oauthProviders, auth } = usePage().props;
+    // La connexion par fournisseur est ouverte dès que ses clés sont posées
+    // (spec 40 § 12.1, D51 du 01/10) ; l'inscription par mot de passe suit
+    // seule `accountsOpen`.
+    const canSignIn = accountsOpen || oauthProviders.length > 0;
 
     return (
         <header className="border-b border-border">
@@ -38,7 +42,7 @@ export function PublicHeader() {
                 </Link>
 
                 <div className="flex flex-wrap items-center gap-1">
-                    {accountsOpen &&
+                    {canSignIn &&
                         (auth.user ? (
                             <Link href={dashboard()} className={NAV_LINK_CLASS}>
                                 {t('common.nav.dashboard')}
@@ -48,12 +52,14 @@ export function PublicHeader() {
                                 <Link href={login()} className={NAV_LINK_CLASS}>
                                     {t('common.nav.log_in')}
                                 </Link>
-                                <Link
-                                    href={register()}
-                                    className={NAV_LINK_CLASS}
-                                >
-                                    {t('common.nav.register')}
-                                </Link>
+                                {accountsOpen && (
+                                    <Link
+                                        href={register()}
+                                        className={NAV_LINK_CLASS}
+                                    >
+                                        {t('common.nav.register')}
+                                    </Link>
+                                )}
                             </>
                         ))}
 

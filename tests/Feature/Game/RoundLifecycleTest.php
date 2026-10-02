@@ -1157,7 +1157,7 @@ test('journalise sur le canal game les transitions de la partie, sans aucune don
 
         foreach ($journal->lines() as $line) {
             expect(array_keys($line['context'] ?? []))->each->toBeIn([
-                'gameRef', 'mode', 'sequenceIndex', 'roundNumber', 'tierIndex', 'reason', 'replaced', 'cause',
+                'gameRef', 'mode', 'inputDifficulty', 'sequenceIndex', 'roundNumber', 'tierIndex', 'reason', 'replaced', 'cause',
                 'startedAt', 'closedAt', 'pausedAt', 'resumedAt', 'outcome', 'finalizedAt', 'event', 'delayMs',
             ]);
         }

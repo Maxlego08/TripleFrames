@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Admin;
 
+use App\Avatars\AccountImage;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -29,6 +30,7 @@ class AvatarModerationRequest extends FormRequest
     {
         return [
             'filter' => ['nullable', Rule::in(self::FILTERS)],
+            'image' => ['nullable', Rule::enum(AccountImage::class)],
             'page' => ['nullable', 'integer', 'min:1'],
         ];
     }
@@ -38,5 +40,11 @@ class AvatarModerationRequest extends FormRequest
         $value = trim((string) $this->string('filter'));
 
         return in_array($value, self::FILTERS, true) ? $value : null;
+    }
+
+    /** La nature d'image visée, `upload` par défaut (spec 40 § 12.6). */
+    public function accountImage(): AccountImage
+    {
+        return AccountImage::tryFrom((string) $this->string('image')) ?? AccountImage::Upload;
     }
 }

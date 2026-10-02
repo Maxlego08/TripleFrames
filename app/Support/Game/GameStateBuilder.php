@@ -94,7 +94,7 @@ use LogicException;
  * @phpstan-import-type RevealMoviePayload from RevealMovieBuilder
  *
  * @phpstan-type RoundPhase 'scheduled'|'running'|'closed'|'revealing'|'cancelled'
- * @phpstan-type RoundStatePayload array{sequenceIndex: int, roundNumber: int, roundsCount: int, startsAt: string, durationMs: int, tiers: list<array{tierIndex: int, startsAtOffsetMs: int, durationMs: int, points: int}>, choicesAtTierIndex: int|null, phase: RoundPhase, currentTierIndex: int|null, images: list<TierImageRefPayload>, locked: list<array{publicId: string, lockRank: int}>, endedAt: string|null, revealStartsAt: string|null, revealEndsAt: string|null, reveal: array{movie: RevealMoviePayload, finders: list<RoundFinderPayload>}|null}
+ * @phpstan-type RoundStatePayload array{sequenceIndex: int, roundNumber: int, roundsCount: int, startsAt: string, durationMs: int, tiers: list<array{tierIndex: int, startsAtOffsetMs: int, durationMs: int, points: int}>, choicesAtTierIndex: int|null, phase: RoundPhase, currentTierIndex: int|null, images: list<TierImageRefPayload>, locked: list<array{publicId: string, lockRank: int}>, endedAt: string|null, revealStartsAt: string|null, revealEndsAt: string|null, reveal: array{movie: RevealMoviePayload, finders: list<RoundFinderPayload>}|null, choicesUnavailable: bool}
  * @phpstan-type SelfStatePayload array{publicId: string, seatActive: bool, isHost: bool, member: bool, participates: bool, input: array<string, mixed>|null, ownScore: int}
  * @phpstan-type GameStatePacketPayload array{v: int, serverNow: string, gameRef: string|null, mode: 'multiplayer'|'solo', channels: array{room: string, seat: string}|null, status: string|null, roundsCount: int|null, roundsCompleted: int|null, framesPerRound: int|null, inputDifficulty: string|null, maxAnswerLength: int|null, seats: list<SeatViewPayload>, pause: array{pausedAt: string, interruptsAt: string}|null, round: RoundStatePayload|null, self: SelfStatePayload, leaderboard: LeaderboardPayload, podium: PodiumPayload|null, nextTransitionAt: string|null}
  */
@@ -316,7 +316,8 @@ final class GameStateBuilder
      * ({@see RoundTimelinePresenter}), puis sa phase dérivée, son palier
      * courant, ses images bornées, ses verrouillés, ses instants de clôture et
      * de révélation, et — seulement en révélation, à partir de
-     * `revealStartsAt` — le film et ses trouveurs.
+     * `revealStartsAt` — le film et ses trouveurs ; enfin le cas terminal du
+     * QCM ({@see self::choicesUnavailable()}, D54 du 02/10).
      *
      * @return RoundStatePayload
      */
@@ -341,7 +342,29 @@ final class GameStateBuilder
                     'finders' => Scoreboard::roundFinders($round),
                 ]
                 : null,
+            'choicesUnavailable' => self::choicesUnavailable($game, $round),
         ];
+    }
+
+    /**
+     * `round.choicesUnavailable` (D54 du 02/10, spec 70 § 10.7) : le palier
+     * du QCM est ouvert (`served_at` non nul) et aucun leurre n'est écrit —
+     * le prédicat du cas terminal, sans colonne propre. Faux en Expert (aucun
+     * palier de QCM), avant l'ouverture de ce palier, et pour une manche
+     * Facile annulée, dont l'ouverture n'a jamais marqué le palier servi. Le
+     * même booléen que `tier.opened.choicesUnavailable` : un client qui
+     * recharge après `T_N` affiche le même message. Booléen de manche,
+     * identique pour tout siège : il ne dit rien de la réponse.
+     */
+    private static function choicesUnavailable(Game $game, Round $round): bool
+    {
+        $tierIndex = $game->input_difficulty->choicesOpenTierIndex($game->frames_per_round);
+
+        if ($tierIndex === null || $round->decoy_movie_id_1 !== null) {
+            return false;
+        }
+
+        return self::tierOf($round, $tierIndex)?->served_at !== null;
     }
 
     /**

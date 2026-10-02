@@ -87,6 +87,9 @@ return [
         'label' => 'Choices',
         'wrong' => 'Wrong choice: answers are closed for this round.',
         'invalid' => 'This choice does not exist.',
+        // D54 du 02/10 (70 § 10.7) : cas terminal en Normal, à la place de la
+        // grille, et lu par l’annonceur.
+        'unavailable' => 'Choices aren’t available for this film.',
     ],
 
     // Spec 80 § 15 (lot L80-6) : valeur du palier, score, classement, podium,

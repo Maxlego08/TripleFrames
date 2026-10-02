@@ -57,7 +57,13 @@ import type { Leaderboard, Podium } from '@/types/scoring';
  *   `seat.choices` n'arrive pas dans les `heartbeatIntervalMs` qui suivent
  *   `tier.opened` du palier du QCM : c'est le **cas terminal** du contrat
  *   C11, où aucun `seat.choices` ne part (70 § 10.7). Le délai absorbe
- *   seulement l'ordre `tier.opened` puis `seat.choices` ; il ne décide rien ;
+ *   seulement l'ordre `tier.opened` puis `seat.choices` ; il ne décide rien.
+ *   **Filet seulement** depuis D54 du 02/10 : un `tier.opened` qui porte
+ *   `choicesUnavailable` le dit d'emblée et n'arme pas ce délai ;
+ * - en multijoueur, à la réception de `tier.opened` portant
+ *   `choicesUnavailable` pour un siège dont la saisie de cette manche est
+ *   `text_exhausted` : la composition terminale l'a fermé côté serveur sans
+ *   rien diffuser (70 § 10.7) ;
  * - **filet** (multijoueur) : si aucun message n'a porté un `serverNow`
  *   postérieur à la prochaine étape attendue (ouverture de palier, clôture,
  *   révélation, fin de révélation, échéance de pause — à défaut,
@@ -103,6 +109,7 @@ export type ResyncReason =
     | 'next_transition'
     | 'watchdog'
     | 'choices_missing'
+    | 'choices_unavailable'
     | 'launched'
     | 'replayed'
     | 'superseded'
@@ -1092,6 +1099,7 @@ export function createGameStore(options: GameStoreOptions): GameStore {
                 revealStartsAt: null,
                 revealEndsAt: null,
                 reveal: null,
+                choicesUnavailable: false,
             };
 
             meta.set(round.sequenceIndex, {
@@ -1139,6 +1147,10 @@ export function createGameStore(options: GameStoreOptions): GameStore {
                     event.next === null
                         ? round.images
                         : mergeImages(round.images, [event.next]),
+                // Cas terminal du QCM (D54 du 02/10) : su du serveur, jamais
+                // déduit d'un délai ; une fois vrai, il le reste.
+                choicesUnavailable:
+                    round.choicesUnavailable || event.choicesUnavailable,
             };
 
             meta.set(event.sequenceIndex, {
@@ -1154,6 +1166,16 @@ export function createGameStore(options: GameStoreOptions): GameStore {
 
             if (
                 state.mode === 'multiplayer' &&
+                event.choicesUnavailable &&
+                inputSequenceIndex === event.sequenceIndex &&
+                state.self.input?.inputState === 'text_exhausted'
+            ) {
+                // Le siège attendait le QCM : la composition terminale a fermé
+                // sa saisie côté serveur, sans diffusion (70 § 10.7).
+                requestResync('choices_unavailable');
+            } else if (
+                state.mode === 'multiplayer' &&
+                !next.choicesUnavailable &&
                 next.choicesAtTierIndex === event.tierIndex &&
                 !choicesReceived.has(event.sequenceIndex)
             ) {
@@ -1777,6 +1799,7 @@ export function createGameStore(options: GameStoreOptions): GameStore {
 
         if (
             round === undefined ||
+            round.choicesUnavailable ||
             round.locked.some((each) => each.publicId === publicId)
         ) {
             return false;

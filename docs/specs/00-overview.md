@@ -186,6 +186,7 @@ L'hôte configure tout, en deux onglets sur **un seul jeu de réglages** (`room_
 
 **Comptes & profils**
 - Jeu en invité avec un simple pseudo et un avatar prédéfini.
+- **Connexion Discord et Google livrée au J1 (D51 du 01/10, `40` § 12)** : ouverte dès que les clés d'un fournisseur sont posées, indépendamment de l'interrupteur d'inscription par mot de passe.
 - Compte optionnel : Fortify (inscription, reset, vérification e-mail, 2FA, passkeys — déjà livrés ; inscription publique et enregistrement de passkeys **fermés en production par deux interrupteurs dédiés** jusqu'au jalon 2, `40` [J1] § 8.2) **et connexion Discord / Google** via Socialite, avec table de comptes liés et rattachement croisé dans les deux sens — amendé le 23/09.
 - **Même e-mail sur deux providers** : liaison automatique **uniquement** si l'e-mail fourni est déclaré vérifié par le provider et correspond à un e-mail vérifié du compte cible ; sinon la liaison exige d'être déjà connecté au compte cible. Un compte à **2FA active** n'est jamais lié ni connecté sans second facteur ; une passkey à vérification de l'utilisateur **vaut** second facteur, rôles privilégiés compris — amendé le 23/09.
 - **Compte provider déjà lié ailleurs** : la connexion ouvre la session de ce `User` (c'est la même personne chez le provider) et la tentative de liaison est refusée avec un message explicite. Aucun transfert, aucune fusion automatique.

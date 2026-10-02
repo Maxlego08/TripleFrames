@@ -88,4 +88,13 @@ export type AvatarPresetOption = {
 export const ACCOUNT_AVATAR_CHOICE = 'account';
 
 /** Une valeur du sélecteur de siège : un prédéfini, ou l'image du compte. */
-export type SeatAvatarChoice = AvatarPresetKey | typeof ACCOUNT_AVATAR_CHOICE;
+/**
+ * Valeur de l'écran « Avatar » qui désigne la copie de la photo du
+ * fournisseur (`AvatarChoiceRequest::PROVIDER`, spec 40 § 12.6).
+ */
+export const PROVIDER_AVATAR_CHOICE = 'provider';
+
+export type SeatAvatarChoice =
+    | AvatarPresetKey
+    | typeof ACCOUNT_AVATAR_CHOICE
+    | typeof PROVIDER_AVATAR_CHOICE;

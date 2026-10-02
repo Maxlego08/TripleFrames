@@ -3505,6 +3505,17 @@ return [
         ],
 
         /*
+        | Rattrapage du titre de la langue originale (spec 10 § 3.4, D52 du
+        | 02/10). Écrit `movie_title`, table de la règle 12 : l'instantané
+        | précède toute écriture.
+        */
+        'original_titles' => [
+            'dry_run' => 'Simulation : :count film(s) recevraient le titre de leur langue originale. Rien n’a été écrit.',
+            'snapshot_failed' => 'Instantané refusé : aucun titre n’a été écrit. Corrigez la cause signalée par backup:snapshot, puis relancez catalog:original-titles.',
+            'done' => 'Rattrapage terminé. Titres de langue originale écrits et films reprojetés : :count.',
+        ],
+
+        /*
         | Purge de rétention (spec 100 § 14). `:scopes` de `failed` liste les
         | identifiants des périmètres tels que `purge_run` les écrit.
         */
