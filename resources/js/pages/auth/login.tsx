@@ -42,26 +42,14 @@ export default function Login({
         <>
             <Head title={t('account.login.title')} />
 
-            {canUsePasskeys && <PasskeyVerify />}
-
-            {/* Connexion et création de compte par fournisseur (spec 40
-                § 12, D51 du 01/10) : ouvertes dès qu'un fournisseur est
-                actif, inscription par mot de passe fermée ou non. */}
-            {oauthProviders.length > 0 && (
-                <div className="flex flex-col gap-4">
-                    <OAuthButtons providers={oauthProviders} intent="login" />
-                    <p className="text-center text-sm text-muted-foreground">
-                        {t('account.oauth.separator')}
-                    </p>
-                </div>
-            )}
-
             <InputError message={errors.oauth} />
+
+            {status && <div className="auth-status">{status}</div>}
 
             <Form
                 {...store.form()}
                 resetOnSuccess={['password']}
-                className="flex flex-col gap-6"
+                className="auth-form auth-form--login flex flex-col gap-6"
             >
                 {({ processing, errors }) => (
                     <>
@@ -150,9 +138,26 @@ export default function Login({
                 )}
             </Form>
 
-            {status && (
-                <div className="mb-4 text-center text-sm font-medium text-green-600">
-                    {status}
+            {(canUsePasskeys || oauthProviders.length > 0) && (
+                <div className="auth-methods">
+                    <div className="auth-divider">
+                        <span>{t('account.oauth.separator')}</span>
+                    </div>
+
+                    {canUsePasskeys && (
+                        <PasskeyVerify showSeparator={false} compact />
+                    )}
+
+                    {/* Connexion et création de compte par fournisseur (spec
+                        40 § 12, D51 du 01/10) : ouvertes dès qu'un fournisseur
+                        est actif, inscription par mot de passe fermée ou non. */}
+                    {oauthProviders.length > 0 && (
+                        <OAuthButtons
+                            providers={oauthProviders}
+                            intent="login"
+                            compact
+                        />
+                    )}
                 </div>
             )}
         </>

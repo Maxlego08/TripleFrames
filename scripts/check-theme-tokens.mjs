@@ -127,11 +127,21 @@ const WATCHED = [
     'resources/js/types/room-settings.ts',
     'resources/js/lib/room-settings.ts',
     'resources/js/lib/frame-geometry.ts',
+    'resources/js/lib/legal-document.ts',
     'resources/js/types/legal.ts',
     // L40-8 (spec 40 § 11, D49 du 01/10) : l'écran « Avatar » des réglages et
     // son recadreur.
     'resources/js/pages/settings/avatar.tsx',
     'resources/js/components/account',
+    // Nouvelle coquille d'authentification : composants de marque et en-tete.
+    // Les couleurs vivent exclusivement dans ses SCSS.
+    'resources/js/components/auth',
+    'resources/js/components/passkey-verify.tsx',
+    'resources/js/layouts/auth/auth-simple-layout.tsx',
+    'resources/js/pages/auth/forgot-password.tsx',
+    'resources/js/pages/auth/login.tsx',
+    'resources/js/pages/auth/register.tsx',
+    'resources/js/pages/auth/verify-email.tsx',
     // L40-9 (spec 40 § 12, D51 du 01/10) : finalisation d'inscription et
     // comptes liés.
     'resources/js/pages/auth/oauth-finish.tsx',
@@ -205,7 +215,6 @@ const EXEMPT = [
     'resources/js/components/nav-user.tsx',
     'resources/js/components/passkey-item.tsx',
     'resources/js/components/passkey-register.tsx',
-    'resources/js/components/passkey-verify.tsx',
     'resources/js/components/password-input.tsx',
     'resources/js/components/text-link.tsx',
     'resources/js/components/two-factor-recovery-codes.tsx',
@@ -223,16 +232,11 @@ const EXEMPT = [
     'resources/js/layouts/app/app-header-layout.tsx',
     'resources/js/layouts/app/app-sidebar-layout.tsx',
     'resources/js/layouts/auth/auth-card-layout.tsx',
-    'resources/js/layouts/auth/auth-simple-layout.tsx',
     'resources/js/layouts/auth/auth-split-layout.tsx',
     'resources/js/lib/i18n.ts',
     'resources/js/lib/utils.ts',
-    'resources/js/pages/auth/forgot-password.tsx',
-    'resources/js/pages/auth/login.tsx',
-    'resources/js/pages/auth/register.tsx',
     'resources/js/pages/auth/reset-password.tsx',
     'resources/js/pages/auth/two-factor-challenge.tsx',
-    'resources/js/pages/auth/verify-email.tsx',
     'resources/js/pages/dashboard.tsx',
     'resources/js/pages/settings/appearance.tsx',
     'resources/js/pages/settings/profile.tsx',

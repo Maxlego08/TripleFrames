@@ -1,0 +1,90 @@
+@use 'tokens' as *;
+@use 'mixins' as mix;
+
+.auth-shell .auth-divider {
+    display: grid;
+    margin: 0.4rem 0 0.1rem;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    gap: 0.65rem;
+    color: $muted;
+    font-size: 0.72rem;
+    font-weight: 700;
+
+    &::before,
+    &::after {
+        height: 0.125rem;
+        background: $lavender;
+        content: '';
+    }
+}
+
+.auth-shell .auth-methods {
+    display: grid;
+    gap: 0.75rem;
+}
+
+.auth-shell .auth-provider-list {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.65rem;
+
+    &:has(> :only-child) {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    &:has(> :nth-child(2):last-child) {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+.auth-shell .auth-content .auth-provider-button[data-slot='button'] {
+    min-width: 0;
+    min-height: 2.85rem;
+    border-width: 0.125rem;
+    border-radius: $radius-small;
+    padding: 0.55rem 0.7rem;
+    background: $white;
+    box-shadow: none;
+    font-size: 0.78rem;
+
+    &:hover {
+        background: $white;
+        translate: 0 -0.1rem;
+        box-shadow: 0 0.22rem 0 $ink;
+    }
+}
+
+.auth-shell .auth-content .auth-provider-button--passkey[data-slot='button'] {
+    background: $cyan;
+
+    &:hover {
+        background: $cyan;
+    }
+}
+
+.auth-shell .auth-content .auth-provider-button--discord[data-slot='button'] {
+    background: $lavender;
+
+    &:hover {
+        background: $lavender;
+    }
+}
+
+.auth-shell .auth-provider-icon {
+    display: grid;
+    width: 1.35rem;
+    height: 1.35rem;
+    flex: 0 0 auto;
+    border: 0.1rem solid $ink;
+    border-radius: 50%;
+    background: $yellow;
+    font-family: $display;
+    font-size: 0.7rem;
+    place-items: center;
+
+    svg {
+        width: 0.85rem;
+        height: 0.85rem;
+    }
+}

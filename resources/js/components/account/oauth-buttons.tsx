@@ -32,6 +32,8 @@ type Props = {
     intent: OAuthIntentValue;
     /** `account.oauth.continue_with` par défaut, `confirm_with` pour confirmer. */
     labelKey?: TranslationKey;
+    /** Libelle court reserve aux groupes compacts de la coquille auth. */
+    compact?: boolean;
 };
 
 /**
@@ -47,6 +49,7 @@ export function OAuthButtons({
     providers,
     intent,
     labelKey = 'account.oauth.continue_with',
+    compact = false,
 }: Props) {
     const { t } = useTranslations();
     const name = useProviderName();
@@ -57,16 +60,26 @@ export function OAuthButtons({
     }
 
     return (
-        <div className="grid gap-2">
+        <div className="auth-provider-list grid gap-2">
             {active.map((provider) => (
                 <Button
                     key={provider}
                     variant="outline"
-                    className="min-h-11 w-full"
+                    className={`auth-provider-button auth-provider-button--${provider} min-h-11 w-full`}
                     asChild
                 >
                     <a href={redirect({ provider }, { query: { intent } }).url}>
-                        {t(labelKey, { provider: name(provider) })}
+                        {compact && (
+                            <span
+                                className="auth-provider-icon"
+                                aria-hidden="true"
+                            >
+                                {provider === 'google' ? 'G' : 'D'}
+                            </span>
+                        )}
+                        {compact
+                            ? name(provider)
+                            : t(labelKey, { provider: name(provider) })}
                     </a>
                 </Button>
             ))}

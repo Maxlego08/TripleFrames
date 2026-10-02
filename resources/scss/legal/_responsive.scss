@@ -1,0 +1,81 @@
+@use '../auth/tokens' as *;
+
+@media (max-width: $tablet) {
+    .legal-document {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .legal-toc {
+        overflow-x: auto;
+        border-right: 0;
+        border-bottom: $line solid $ink;
+        padding: 0.8rem;
+
+        &__inner {
+            position: static;
+        }
+
+        h2 {
+            margin-bottom: 0.4rem;
+        }
+
+        ol {
+            display: flex;
+            width: max-content;
+        }
+
+        a {
+            grid-template-columns: auto auto;
+            white-space: nowrap;
+        }
+    }
+}
+
+@media (max-width: $mobile) {
+    .public-shell--legal {
+        .public-header__inner {
+            width: min(100% - 1rem, 76rem);
+            min-height: 4.25rem;
+        }
+
+        .public-header__controls {
+            gap: 0.2rem;
+        }
+
+        .public-header__nav-link {
+            min-height: 2.4rem;
+            padding: 0.4rem 0.55rem;
+            font-size: 0.76rem;
+        }
+
+        > footer > div {
+            width: min(100% - 1rem, 76rem);
+            align-items: flex-start;
+            flex-direction: column;
+            padding-block: 1rem;
+        }
+    }
+
+    .legal-page__inner {
+        width: min(100% - 1rem, 76rem);
+        padding-block: 1.35rem 2rem;
+    }
+
+    .legal-surface {
+        border-radius: 1.1rem;
+        box-shadow: 0.4rem 0.4rem 0 $ink;
+    }
+
+    .legal-content {
+        padding: 1rem;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .public-shell--legal *,
+    .public-shell--legal *::before,
+    .public-shell--legal *::after {
+        scroll-behavior: auto !important;
+        transition-duration: 0.01ms !important;
+    }
+}

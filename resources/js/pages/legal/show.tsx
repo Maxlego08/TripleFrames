@@ -1,7 +1,9 @@
 import { Head } from '@inertiajs/react';
 import { InfoIcon } from 'lucide-react';
+import { useMemo } from 'react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useTranslations } from '@/hooks/use-translations';
+import { prepareLegalDocument } from '@/lib/legal-document';
 import type { LegalPageName, LegalPageProps } from '@/types/legal';
 import type { TranslationKey } from '@/types/translations';
 
@@ -18,19 +20,15 @@ const TITLE_KEYS: Record<LegalPageName, TranslationKey> = {
     report: 'legal.report.title',
 };
 
+const DESCRIPTION_KEYS: Record<LegalPageName, TranslationKey> = {
+    notice: 'legal.notice.description',
+    terms: 'legal.terms.description',
+    privacy: 'legal.privacy.description',
+    report: 'legal.report.description',
+};
+
 /** Langue du corps : les textes légaux sont rédigés en français seulement. */
 const BODY_LOCALE = 'fr';
-
-/**
- * Mise en forme du corps par sélecteurs descendants, aux tokens : les
- * partiels Blade n'ont aucune classe, un re-skin ne les touche jamais
- * (spec 90 § 4.2). Un tableau trop large défile dans sa région (`role="region"`,
- * étiquetée et focalisable, pour qu'on la fasse défiler au clavier), jamais la
- * page : aucun défilement horizontal à 360 de large. Le tableau garde son
- * affichage de tableau, donc sa sémantique pour un lecteur d'écran.
- */
-const BODY_CLASS =
-    'flex max-w-prose flex-col gap-3 text-sm leading-relaxed [&_a]:rounded-sm [&_a]:underline [&_a]:underline-offset-4 [&_a]:hover:text-foreground [&_a]:focus-visible:ring-2 [&_a]:focus-visible:ring-ring [&_a]:focus-visible:outline-none [&_code]:rounded-sm [&_code]:bg-muted [&_code]:px-1 [&_code]:font-mono [&_code]:text-xs [&_h2]:mt-4 [&_h2]:text-lg [&_h2]:font-semibold [&_h2]:text-foreground [&_[role=region]]:max-w-full [&_[role=region]]:overflow-x-auto [&_[role=region]]:rounded-sm [&_[role=region]]:focus-visible:ring-2 [&_[role=region]]:focus-visible:ring-ring [&_[role=region]]:focus-visible:outline-none [&_table]:w-full [&_table]:border-collapse [&_td]:border [&_td]:border-border [&_td]:px-2 [&_td]:py-1 [&_td]:align-top [&_th]:border [&_th]:border-border [&_th]:bg-muted [&_th]:px-2 [&_th]:py-1 [&_th]:text-left [&_th]:font-medium [&_ul]:flex [&_ul]:list-disc [&_ul]:flex-col [&_ul]:gap-1 [&_ul]:pl-5';
 
 /**
  * Un jour `AAAA-MM-JJ` en date longue de la locale du visiteur, ou `null`.
@@ -77,19 +75,21 @@ export default function LegalShow({
     const { t, locale } = useTranslations();
     const title = t(TITLE_KEYS[page]);
     const updatedOn = updatedAt === null ? null : formatDay(updatedAt, locale);
+    const document = useMemo(() => prepareLegalDocument(body), [body]);
 
     return (
         <>
             <Head title={title} />
 
-            <article className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 py-8">
-                <header className="flex flex-col gap-3">
-                    <h1 className="text-2xl font-semibold tracking-tight">
-                        {title}
-                    </h1>
+            <section className="legal-page">
+                <div className="legal-page__inner">
+                    <header className="legal-hero">
+                        <h1>{title}</h1>
+                        <p>{t(DESCRIPTION_KEYS[page])}</p>
+                    </header>
 
                     {provisional && (
-                        <Alert role="note">
+                        <Alert role="note" className="legal-note">
                             <InfoIcon aria-hidden="true" />
                             <AlertDescription>
                                 {t('legal.provisional')}
@@ -98,26 +98,61 @@ export default function LegalShow({
                     )}
 
                     {locale !== BODY_LOCALE && (
-                        <p className="text-sm text-muted-foreground">
+                        <p className="legal-language-note">
                             {t('legal.french_only')}
                         </p>
                     )}
 
-                    {updatedOn !== null && (
-                        <p className="text-sm text-muted-foreground">
-                            {t('legal.updated_at', { date: updatedOn })}
-                        </p>
-                    )}
-                </header>
+                    <div className="legal-surface legal-document">
+                        <nav
+                            className="legal-toc"
+                            aria-label={t('legal.toc.label')}
+                        >
+                            <div className="legal-toc__inner">
+                                <h2>{t('legal.toc.title')}</h2>
+                                <ol>
+                                    {document.sections.map((section) => (
+                                        <li key={section.id}>
+                                            <a href={`#${section.id}`}>
+                                                {section.label}
+                                            </a>
+                                        </li>
+                                    ))}
+                                </ol>
+                            </div>
+                        </nav>
 
-                <div
-                    lang="fr"
-                    className={BODY_CLASS}
-                    dangerouslySetInnerHTML={{ __html: body }}
-                />
+                        <article className="legal-content">
+                            {updatedOn !== null && (
+                                <div className="legal-meta">
+                                    <span>
+                                        {t('legal.updated_at', {
+                                            date: updatedOn,
+                                        })}
+                                    </span>
+                                </div>
+                            )}
 
-                <ContactBlock email={contactEmail} />
-            </article>
+                            <div
+                                lang="fr"
+                                className="legal-body"
+                                dangerouslySetInnerHTML={{
+                                    __html: document.html,
+                                }}
+                            />
+
+                            <ContactBlock email={contactEmail} />
+
+                            <a
+                                className="legal-back-to-top"
+                                href="#public-main"
+                            >
+                                {t('legal.back_to_top')}
+                            </a>
+                        </article>
+                    </div>
+                </div>
+            </section>
         </>
     );
 }
@@ -133,16 +168,12 @@ function ContactBlock({ email }: { email: string | null }) {
     return (
         <section
             aria-labelledby="legal-contact-heading"
-            className="flex flex-col gap-2 border-t border-border pt-6 text-sm"
+            className="legal-contact"
         >
-            <h2 id="legal-contact-heading" className="text-lg font-semibold">
-                {t('legal.contact.heading')}
-            </h2>
+            <h2 id="legal-contact-heading">{t('legal.contact.heading')}</h2>
 
             {email === null ? (
-                <p className="text-muted-foreground">
-                    {t('legal.contact.unavailable')}
-                </p>
+                <p>{t('legal.contact.unavailable')}</p>
             ) : (
                 <ContactSentence
                     sentence={t('legal.contact.description', { email })}
@@ -174,12 +205,7 @@ function ContactSentence({
     return (
         <p>
             {sentence.slice(0, at)}
-            <a
-                href={`mailto:${email}`}
-                className="rounded-sm underline underline-offset-4 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-            >
-                {email}
-            </a>
+            <a href={`mailto:${email}`}>{email}</a>
             {sentence.slice(at + email.length)}
         </p>
     );

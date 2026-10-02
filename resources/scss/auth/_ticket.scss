@@ -1,0 +1,51 @@
+@use 'tokens' as *;
+@use 'mixins' as mix;
+
+.auth-ticket {
+    position: relative;
+    display: grid;
+    overflow: hidden;
+    width: min(100%, 50rem);
+    grid-template-columns: minmax(0, 1fr);
+    border: $line solid $ink;
+    border-radius: $radius-large;
+    background: $paper;
+    box-shadow:
+        0.85rem 0.85rem 0 $night,
+        -0.75rem -0.65rem 0 $yellow;
+
+    &__form-panel {
+        display: flex;
+        min-width: 0;
+        flex-direction: column;
+        justify-content: center;
+        padding: clamp(1.75rem, 3.2vw, 3.25rem);
+        background: $paper;
+    }
+}
+
+.auth-shell--register .auth-ticket {
+    width: min(100%, 56rem);
+}
+
+.auth-shell--compact .auth-ticket {
+    width: min(100%, 42rem);
+}
+
+.auth-heading {
+    margin-bottom: 1.35rem;
+
+    h1 {
+        @include mix.display-type;
+        margin: 0;
+        font-size: clamp(2rem, 4vw, 2.85rem);
+        line-height: 1;
+    }
+
+    p {
+        margin: 0.6rem 0 0;
+        color: $muted;
+        font-size: 0.92rem;
+        line-height: 1.45;
+    }
+}

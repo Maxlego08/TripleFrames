@@ -1,0 +1,16 @@
+@use 'tokens' as *;
+
+@mixin focus-ring {
+    outline: 0.1875rem solid $cyan;
+    outline-offset: 0.1875rem;
+}
+
+@mixin hard-shadow($size: 0.3125rem, $color: $ink) {
+    box-shadow: $size $size 0 $color;
+}
+
+@mixin display-type {
+    font-family: $display;
+    font-weight: 900;
+    letter-spacing: -0.045em;
+}

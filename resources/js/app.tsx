@@ -1,4 +1,6 @@
 import { createInertiaApp } from '@inertiajs/react';
+import '../scss/auth.scss';
+import '../scss/legal.scss';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { initializeTheme } from '@/hooks/use-appearance';
 import AdminLayout from '@/layouts/admin/admin-layout';

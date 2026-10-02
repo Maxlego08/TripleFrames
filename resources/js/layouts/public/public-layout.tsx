@@ -1,3 +1,4 @@
+import { usePage } from '@inertiajs/react';
 import type { ReactNode } from 'react';
 import { GameAnnouncer } from '@/components/game/game-announcer';
 import { MaintenanceBanner } from '@/components/public/maintenance-banner';
@@ -29,9 +30,12 @@ const MAIN_ID = 'public-main';
  */
 export default function PublicLayout({ children }: { children: ReactNode }) {
     const { t } = useTranslations();
+    const isLegalPage = usePage().component.startsWith('legal/');
 
     return (
-        <div className="flex min-h-svh flex-col bg-background text-foreground">
+        <div
+            className={`public-shell ${isLegalPage ? 'public-shell--legal' : ''} flex min-h-svh flex-col bg-background text-foreground`}
+        >
             <a
                 href={`#${MAIN_ID}`}
                 className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:rounded-md focus:bg-primary focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:text-primary-foreground focus:ring-2 focus:ring-ring focus:outline-none"

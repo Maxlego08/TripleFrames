@@ -1,0 +1,96 @@
+@use 'tokens' as *;
+
+@media (max-width: $tablet) {
+    .auth-ticket {
+        width: min(100%, 38rem);
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+@media (max-width: $mobile) {
+    .auth-header {
+        &__inner {
+            width: min(100% - 1rem, 72rem);
+            min-height: 4.25rem;
+        }
+
+        &__action span {
+            display: none;
+        }
+
+        &__action a {
+            min-height: 2.4rem;
+            padding: 0.4rem 0.75rem;
+            font-size: 0.76rem;
+        }
+    }
+
+    .auth-brand {
+        gap: 0.35rem;
+
+        &__logo {
+            width: 2.25rem;
+        }
+
+        &__name {
+            font-size: 1rem;
+        }
+    }
+
+    .auth-stage {
+        align-items: start;
+        padding: 1.75rem 0.75rem 2rem;
+    }
+
+    .auth-ticket {
+        border-radius: 1.2rem;
+        box-shadow: 0.45rem 0.5rem 0 $night;
+
+        &__form-panel {
+            padding: 1.55rem;
+        }
+    }
+
+    .auth-heading h1 {
+        font-size: 2rem;
+    }
+
+    .auth-form--register > div:first-child,
+    .auth-shell .auth-provider-list,
+    .auth-shell .auth-provider-list:has(> :nth-child(2):last-child) {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .auth-shell .auth-content .auth-provider-button[data-slot='button'] {
+        justify-content: flex-start;
+        padding-inline: 1rem;
+    }
+
+    .auth-shell > footer > div {
+        width: min(100% - 1rem, 72rem);
+        padding-block: 0.5rem;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .auth-shell *,
+    .auth-shell *::before,
+    .auth-shell *::after {
+        scroll-behavior: auto !important;
+        transition-duration: 0.01ms !important;
+    }
+}
+
+@media (min-width: 64rem) and (max-height: 50rem) {
+    .auth-stage {
+        padding-block: 1rem;
+    }
+
+    .auth-ticket__form-panel {
+        padding-block: 1.5rem;
+    }
+
+    .auth-heading {
+        margin-bottom: 0.8rem;
+    }
+}

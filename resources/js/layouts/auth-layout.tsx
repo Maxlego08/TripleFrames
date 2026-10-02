@@ -1,5 +1,5 @@
+import { usePage } from '@inertiajs/react';
 import type { ReactNode } from 'react';
-import { SiteFooter } from '@/components/public/site-footer';
 import { Toaster } from '@/components/ui/sonner';
 import { useTranslations } from '@/hooks/use-translations';
 import AuthLayoutTemplate from '@/layouts/auth/auth-simple-layout';
@@ -21,16 +21,17 @@ export default function AuthLayout({
     children,
 }: AuthLayoutKeys & { children: ReactNode }) {
     const { t } = useTranslations();
+    const page = usePage().component;
 
     return (
         <>
             <AuthLayoutTemplate
+                page={page}
                 title={title === undefined ? '' : t(title)}
                 description={description === undefined ? '' : t(description)}
             >
                 {children}
             </AuthLayoutTemplate>
-            <SiteFooter variant="full" />
             <Toaster />
         </>
     );

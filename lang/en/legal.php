@@ -40,22 +40,33 @@ return [
 
     'new_tab' => '(opens in a new tab)',
 
+    'back_to_top' => 'Back to top',
+
     'notice' => [
+        'description' => 'Essential information about the publisher, hosting and site content.',
         'title' => 'Legal notice',
     ],
 
     'privacy' => [
+        'description' => 'What TripleFrames keeps, why, and for how long.',
         'title' => 'Privacy policy',
     ],
 
     'provisional' => 'Provisional text, with no contractual value.',
 
     'report' => [
+        'description' => 'How to report an image or film and request its removal.',
         'title' => 'Report content',
     ],
 
     'terms' => [
+        'description' => 'The essential rules for playing and using TripleFrames.',
         'title' => 'Terms of use',
+    ],
+
+    'toc' => [
+        'label' => 'Document contents',
+        'title' => 'Contents',
     ],
 
     'terms_notice' => 'By continuing, you accept the terms of use.',

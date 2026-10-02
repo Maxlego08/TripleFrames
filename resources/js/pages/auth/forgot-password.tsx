@@ -17,11 +17,7 @@ export default function ForgotPassword({ status }: { status?: string }) {
         <>
             <Head title={t('account.forgot_password.title')} />
 
-            {status && (
-                <div className="mb-4 text-center text-sm font-medium text-green-600">
-                    {status}
-                </div>
-            )}
+            {status && <div className="auth-status">{status}</div>}
 
             <div className="space-y-6">
                 <Form {...email.form()}>

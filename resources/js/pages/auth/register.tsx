@@ -24,20 +24,11 @@ export default function Register({ passwordRules }: Props) {
     return (
         <>
             <Head title={t('account.register.title')} />
-            {oauthProviders.length > 0 && (
-                <div className="flex flex-col gap-4">
-                    <OAuthButtons providers={oauthProviders} intent="login" />
-                    <p className="text-center text-sm text-muted-foreground">
-                        {t('account.oauth.separator')}
-                    </p>
-                </div>
-            )}
-
             <Form
                 {...store.form()}
                 resetOnSuccess={['password', 'password_confirmation']}
                 disableWhileProcessing
-                className="flex flex-col gap-6"
+                className="auth-form auth-form--register flex flex-col gap-6"
             >
                 {({ processing, errors }) => (
                     <>
@@ -142,6 +133,19 @@ export default function Register({ passwordRules }: Props) {
                     </>
                 )}
             </Form>
+
+            {oauthProviders.length > 0 && (
+                <div className="auth-methods">
+                    <div className="auth-divider">
+                        <span>{t('account.oauth.separator')}</span>
+                    </div>
+                    <OAuthButtons
+                        providers={oauthProviders}
+                        intent="login"
+                        compact
+                    />
+                </div>
+            )}
         </>
     );
 }
