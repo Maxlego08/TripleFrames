@@ -51,7 +51,7 @@ type GameHelpProps = {
  * une fermeture traduite (`common.action.close`) ; `Échap` ferme aussi la
  * feuille (Radix). Titre et description traduits. Aucun portail ouvert sous
  * `GameThemeScope` : cette feuille ne sert que les pages de jeu, sombres par
- * forçage de la racine. Mouvement réduit : `motion-reduce:animate-none!`,
+ * la classe de la racine (D56 du 02/10). Mouvement réduit : `motion-reduce:animate-none!`,
  * l'important étant requis contre `data-[state=open]:animate-in`.
  */
 export function GameHelp({ speedBonusMaxPercent }: GameHelpProps) {

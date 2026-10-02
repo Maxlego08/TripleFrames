@@ -7,8 +7,6 @@ use App\Http\Middleware\EnsurePrivilegedTwoFactor;
 use App\Http\Middleware\EnsureProbeToken;
 use App\Http\Middleware\EnsureUserHasRole;
 use App\Http\Middleware\ForceAdminLocale;
-use App\Http\Middleware\ForceGameAppearance;
-use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\MeasureRequest;
 use App\Http\Middleware\RecordVisit;
@@ -69,21 +67,14 @@ return Application::configure(basePath: dirname(__DIR__))
         // après l'envoi de la réponse. Inerte si `PERF_ENABLED=false`.
         $middleware->append(MeasureRequest::class);
 
-        // `locale` rejoint `appearance` et `sidebar_state` pour la même raison :
+        // `locale` rejoint `sidebar_state` pour la même raison :
         // c'est une préférence publique, non sensible, que le front lit et écrit
         // directement pour appliquer la langue sans attendre un aller-retour. Un
         // cookie chiffré serait illisible côté client. Il n'est jamais une source
         // d'autorité : `SetLocale` le valide par `Locale::tryFrom()` et
         // `users.locale` le supplante toujours.
-        $middleware->encryptCookies(except: ['appearance', 'sidebar_state', 'locale']);
+        $middleware->encryptCookies(except: ['sidebar_state', 'locale']);
 
-        // `game.appearance` force le sombre des pages `game/*`, et d'elles
-        // seules (spec 90 § 2.2) : posé sur `room.show` (L50-3b), la page du
-        // salon, puis sur `solo.show` (L60-16), jamais sur une route qui rend
-        // une autre page — les pages d'entrée `room/*` suivent l'apparence du
-        // visiteur. Aucun forçage pour le back-office : il suit la préférence
-        // du visiteur (D8 du 23/09).
-        //
         // `accounts.switches` ferme l'inscription et les passkeys hors `local`
         // et `testing` (spec 40 § 8.2) : posé sur le groupe de Fortify par
         // `config/fortify.php` et sur `well-known.passkeys`.
@@ -95,7 +86,6 @@ return Application::configure(basePath: dirname(__DIR__))
             'accounts.switches' => EnforceAccountSwitches::class,
             'admin.2fa' => EnsurePrivilegedTwoFactor::class,
             'admin.locale' => ForceAdminLocale::class,
-            'game.appearance' => ForceGameAppearance::class,
             'role' => EnsureUserHasRole::class,
             'seat.active' => EnsureActiveSeat::class,
             'translations' => SelectTranslationDomains::class,
@@ -164,7 +154,6 @@ return Application::configure(basePath: dirname(__DIR__))
             VaryOnLanguage::class,
         ], append: [
             SetLocale::class,
-            HandleAppearance::class,
             HandleInertiaRequests::class,
             AddLinkHeadersForPreloadedAssets::class,
             // La mesure d'audience (spec 100 § 10.12, D48 du 01/10) :
@@ -183,7 +172,7 @@ return Application::configure(basePath: dirname(__DIR__))
         // Pages d'erreur traduites, HORS mode debug (spec 90 § 4.8) : `error`
         // côté joueur, `admin/error` quand le back-office avait sélectionné son
         // domaine, retour arrière avec message sur une page expirée en visite
-        // Inertia. La locale, le domaine `legal` et l'apparence du visiteur y
+        // Inertia. La locale et le domaine `legal` y
         // sont résolus par le gestionnaire lui-même : la plupart des erreurs
         // naissent avant `SetLocale` et `HandleInertiaRequests`.
         Inertia::handleExceptionsUsing(

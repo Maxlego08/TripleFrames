@@ -35,6 +35,13 @@
         font-size: 0.76rem;
     }
 
+    .public-header__language[data-slot='button'] {
+        min-width: 2.4rem;
+        min-height: 2.4rem;
+        padding: 0.4rem 0.55rem;
+        font-size: 0.76rem;
+    }
+
     .auth-brand {
         gap: 0.35rem;
 

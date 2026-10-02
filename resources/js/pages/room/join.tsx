@@ -38,8 +38,8 @@ const OPEN_ENTRY_KEYS: Partial<Record<RoomEntryState, TranslationKey>> = {
 };
 
 /**
- * Entrée dans un salon — `room.entry` (spec 50 § 7), dans `PublicLayout`, à
- * l'apparence du visiteur : le code ou le lien suffit, dans la limite des
+ * Entrée dans un salon — `room.entry` (spec 50 § 7), dans `PublicLayout` :
+ * le code ou le lien suffit, dans la limite des
  * sièges ; l'hôte ne valide pas chaque arrivée.
  *
  * C'est la cible du lien partagé `/r/{code}` (D55 du 02/10) : le code est

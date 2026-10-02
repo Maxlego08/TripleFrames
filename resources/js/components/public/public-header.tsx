@@ -1,7 +1,6 @@
 import { Link, usePage } from '@inertiajs/react';
 import { AuthBrand } from '@/components/auth/auth-brand';
 import LanguageSwitcher from '@/components/language-switcher';
-import { AppearanceToggle } from '@/components/public/appearance-toggle';
 import { useTranslations } from '@/hooks/use-translations';
 import { dashboard, login, register } from '@/routes';
 
@@ -14,7 +13,6 @@ const NAV_LINK_CLASS =
  * - La marque TripleFrames est identique sur toutes les pages publiques.
  * - `LanguageSwitcher` **avec libellé visible** : étiqueté et présent dès
  *   l'accueil (principe 8).
- * - `AppearanceToggle` : un invité choisit son thème sans compte.
  * - Les liens de compte relèvent des interrupteurs de 40 : rendus **si et
  *   seulement si** `accountsOpen` est vrai (40 § 8.2), c'est-à-dire jamais en
  *   production au jalon 1, où aucun compte n'existe hors le premier admin
@@ -59,8 +57,7 @@ export function PublicHeader() {
                             </>
                         ))}
 
-                    <LanguageSwitcher className="min-h-11 min-w-11" />
-                    <AppearanceToggle />
+                    <LanguageSwitcher className="public-header__language" />
                 </div>
             </div>
         </header>

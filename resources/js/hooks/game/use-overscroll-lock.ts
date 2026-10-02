@@ -60,8 +60,9 @@ export function lockOverscroll(targets: readonly StyleTarget[]): () => void {
  * souscription et ferait courir le délai de grâce de déconnexion.
  *
  * `overscroll-behavior-y: none` sur `<html>` ET `<body>` : selon le
- * navigateur, c'est l'un ou l'autre qui porte le défilement du document. Même
- * patron de compteur de module que `useForcedAppearance`.
+ * navigateur, c'est l'un ou l'autre qui porte le défilement du document. Un
+ * compteur de module tient le verrou : il résiste au double montage de
+ * `strictMode`, comme `useVisualViewport`.
  */
 export function useOverscrollLock(): void {
     useLayoutEffect(

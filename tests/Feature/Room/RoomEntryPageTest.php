@@ -8,7 +8,6 @@ use App\Settings\RoomSettingsBounds;
 use App\Support\I18n\TranslationDomains;
 use App\Support\Identity\NicknameNormalizer;
 use App\Support\Identity\PlayerToken;
-use Illuminate\Support\Facades\Route;
 use Illuminate\Testing\TestResponse;
 use Inertia\Testing\AssertableInertia as Assert;
 use Symfony\Component\HttpFoundation\Response;
@@ -299,32 +298,18 @@ it('redirige sans erreur vers la page de salon expiré quand on rejoint un salon
         ->assertInertia(fn (Assert $page) => $page->component('game/room-expired'));
 });
 
-it('ne force jamais le thème sombre sur les pages d\'entrée et de création', function (): void {
-    [$room, $host] = roomEntryRoom();
+it('rend les pages d\'entrée et de création en sombre, quel que soit le cookie d\'apparence', function (): void {
+    [$room] = roomEntryRoom();
 
-    // Les deux pages d'entrée suivent l'apparence du visiteur, dans les deux
-    // sens, sans jamais porter l'attribut de forçage.
+    // Tout le site est sombre (D56 du 02/10) : les deux pages d'entrée le
+    // sont aussi, sans attribut de forçage, et un cookie `appearance` hérité
+    // d'avant la décision n'y change rien.
     foreach (['room.create' => route('room.create'), 'room.entry' => route('room.entry', $room)] as $name => $url) {
-        foreach (['light', 'dark'] as $appearance) {
+        foreach (['light', 'system', 'dark'] as $appearance) {
             $tag = roomEntryHtmlTag($this->withUnencryptedCookie('appearance', $appearance)->get($url)->assertOk());
 
             expect($tag)->not->toContain('data-appearance-forced', "{$name} ({$appearance})")
-                ->and(preg_match('/\sclass="[^"]*\bdark\b/', $tag))->toBe($appearance === 'dark' ? 1 : 0, "{$name} ({$appearance})");
+                ->and(preg_match('/\sclass="[^"]*\bdark\b/', $tag))->toBe(1, "{$name} ({$appearance})");
         }
-
-        expect(Route::getRoutes()->getByName($name)?->gatherMiddleware())->not->toContain('game.appearance');
     }
-
-    // Contraste, joué en dernier — le partage de vue survit d'une requête à
-    // l'autre dans l'application du test : la page du salon force le sombre,
-    // malgré un visiteur en clair.
-    expect(Route::getRoutes()->getByName('room.show')?->gatherMiddleware())->toContain('game.appearance');
-
-    $holder = PlayerToken::mint(Locale::English);
-    Player::query()->whereKey($host->id)->update(['player_token_hash' => $holder->hash()]);
-    LobbyWrites::actAs($this, $holder);
-
-    $forced = roomEntryHtmlTag($this->withUnencryptedCookie('appearance', 'light')->get(route('room.show', $room))->assertOk());
-
-    expect($forced)->toContain('data-appearance-forced="dark"');
 });

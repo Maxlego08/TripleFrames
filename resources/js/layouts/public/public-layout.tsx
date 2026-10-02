@@ -12,8 +12,8 @@ const MAIN_ID = 'public-main';
 /**
  * Coquille des pages publiques (spec 90 § 2.4, contrat C16 § 2.4) : pages
  * légales, page d'erreur, pages d'entrée `room/*` et, par le cas par défaut
- * d'`app.tsx`, toute page qui n'a pas de coquille propre. Elle suit
- * l'apparence du visiteur : seules les pages `game/*` sont forcées en sombre.
+ * d'`app.tsx`, toute page qui n'a pas de coquille propre. Sombre comme tout
+ * le site (D56 du 02/10).
  *
  * De haut en bas : le lien d'évitement (première cible de tabulation), l'en-
  * tête, le bandeau de maintenance (rendu seulement pendant un drainage,

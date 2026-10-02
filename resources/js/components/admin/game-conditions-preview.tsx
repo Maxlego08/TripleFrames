@@ -21,8 +21,8 @@ type Props = {
 /**
  * L'image telle qu'un joueur la verra (spec 20 § 6.7 ; D8 du 23/09, A-23) :
  * le conteneur de jeu `GameFrame` (C16 § 2.5), sous les tokens sombres du jeu
- * (`GameThemeScope`, C16 § 2.2), quelle que soit l'apparence choisie par le
- * curateur. Le rendu final, jamais l'aperçu de recadrage.
+ * (`GameThemeScope`, C16 § 2.2), même si les tokens du back-office divergent
+ * un jour de ceux du jeu. Le rendu final, jamais l'aperçu de recadrage.
  *
  * Deux largeurs : celle du viewport minimal déclaré par `90` (360 px),
  * simulée par la classe d'échelle `w-90` (22,5 rem — aucune valeur en `px`

@@ -10,7 +10,7 @@ type RoomCreateProps = {
 
 /**
  * Création de salon — `room.create` (spec 50 § 6.1 et § 6.2), dans
- * `PublicLayout`, à l'apparence du visiteur.
+ * `PublicLayout`.
  *
  * « Créer un salon » crée le salon TOUT DE SUITE, aux réglages par défaut :
  * l'hôte ne saisit ici que son pseudo, et règle la partie dans le lobby, où

@@ -8,7 +8,6 @@ use App\Http\Middleware\SetLocale;
 use App\Support\I18n\TranslationDomains;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\App;
-use Illuminate\Support\Facades\View;
 use Inertia\ExceptionResponse;
 use Inertia\Inertia;
 use Inertia\Support\Header;
@@ -44,10 +43,9 @@ use Throwable;
  * `HandleInertiaRequests` est le seul à poser `locale`, `locales`,
  * `translations` et `name` : sans eux, `PublicLayout` plante et la page n'est
  * ni rendue ni traduite (règle 4). D'où, avant le rendu de la page joueur :
- * la locale par {@see SetLocale::resolve()}, le domaine `legal`, et la remise
- * à zéro de l'apparence. Pour `admin/error`, la remise à zéro seule : la
- * locale reste le `fr` de `ForceAdminLocale`, le domaine `admin` seul, qui
- * n'existe qu'en français.
+ * la locale par {@see SetLocale::resolve()} et le domaine `legal`. Pour
+ * `admin/error`, rien de plus : la locale reste le `fr` de
+ * `ForceAdminLocale`, le domaine `admin` seul, qui n'existe qu'en français.
  *
  * **Jamais une seconde panne.** Si le rendu de la page échoue à son tour
  * (base injoignable, vue introuvable), l'échec est rapporté et la réponse du
@@ -117,16 +115,6 @@ final class ErrorPageResponder
             // la même méthode.
             return back(Response::HTTP_SEE_OTHER);
         }
-
-        // Étape 3 — apparence : celle du visiteur. `ForceGameAppearance`
-        // partage l'apparence forcée AVANT le contrôleur (spec 90 § 2.2) :
-        // sans cette remise à zéro, une exception levée dans une route de jeu
-        // rendrait une page hors `game/*` en sombre forcé, et aucun
-        // `useForcedAppearance` monté ne retirerait ensuite l'attribut.
-        $appearance = $request->cookie('appearance');
-
-        View::share('appearanceForced', false);
-        View::share('appearance', is_string($appearance) ? $appearance : 'system');
 
         if ($admin) {
             return $this->page($response, self::ADMIN_PAGE, $status);

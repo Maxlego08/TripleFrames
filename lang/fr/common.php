@@ -43,13 +43,6 @@ return [
         'toggle_sidebar' => 'Replier ou déplier la barre latérale',
     ],
 
-    'appearance' => [
-        'dark' => 'Sombre',
-        'label' => 'Apparence',
-        'light' => 'Clair',
-        'system' => 'Système',
-    ],
-
     'maintenance' => [
         'banner' => 'Une mise à jour du site est en préparation : aucune nouvelle partie ne peut être lancée pour le moment. Les parties en cours continuent normalement.',
         'launch_blocked' => 'Une mise à jour du site est en préparation : impossible de lancer une partie pour le moment. Réessayez un peu plus tard.',

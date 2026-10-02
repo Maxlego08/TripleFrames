@@ -71,11 +71,9 @@ Route::pattern('room', RoomCode::ROUTE_PATTERN);
 // `room.join` en frappent un, une fois tous leurs refus écartés.
 //
 // `room.create` est déclarée AVANT `room.show` : `new` ne peut pas être un
-// code, que le motif de `{room}` refuse d'ailleurs (trois signes). Les pages
-// d'entrée `room/*` suivent l'apparence du visiteur, hors de `game.appearance`,
-// qui ne force que les pages `game/*` : `room.show` le porte, et redirige
-// vers `room.entry` le visiteur sans siège plutôt que de lui rendre un
-// formulaire forcé en sombre (spec 90 § 2.2, règle de groupe).
+// code, que le motif de `{room}` refuse d'ailleurs (trois signes).
+// `room.show` rend la page `game/lobby` et redirige vers `room.entry` le
+// visiteur sans siège plutôt que de lui rendre un formulaire d'entrée.
 Route::get('r/new', [RoomController::class, 'create'])
     ->name('room.create')
     ->middleware(['translations:room,legal', 'throttle:game-read']);
@@ -86,7 +84,7 @@ Route::post('r', [RoomController::class, 'store'])
 
 Route::get('r/{room}', [RoomController::class, 'show'])
     ->name('room.show')
-    ->middleware(['game.appearance', 'translations:game,room,legal', 'throttle:game-read']);
+    ->middleware(['translations:game,room,legal', 'throttle:game-read']);
 
 Route::get('r/{room}/join', [RoomEntryController::class, 'show'])
     ->name('room.entry')
@@ -97,9 +95,8 @@ Route::post('r/{room}/join', [RoomEntryController::class, 'store'])
     ->middleware('throttle:room-join');
 
 // Mode solo (spec 60 § 10.1 et § 16 ; écart (l) du § 22 bis). La page
-// d'entrée `room/solo` suit l'apparence du visiteur, hors de
-// `game.appearance`, comme `room.entry` à côté de `room.show` ; `solo.show`
-// rend `game/solo` et redirige vers `solo.create` le visiteur sans siège solo
+// d'entrée `room/solo` est distincte, comme `room.entry` à côté de
+// `room.show` ; `solo.show` rend `game/solo` et redirige vers `solo.create` le visiteur sans siège solo
 // (§ 16.4). Un GET ne frappe jamais de jeton : seul `solo.store` en frappe
 // un, une fois les refus de drainage et de vivier écartés (C4 I4.1).
 Route::get('solo/new', [SoloGameController::class, 'create'])
@@ -112,7 +109,7 @@ Route::post('solo', [SoloGameController::class, 'store'])
 
 Route::get('solo', [SoloGameController::class, 'show'])
     ->name('solo.show')
-    ->middleware(['game.appearance', 'translations:game,room,legal', 'throttle:game-read']);
+    ->middleware(['translations:game,room,legal', 'throttle:game-read']);
 
 // Sondage de la partie solo (§ 12 et § 16.4) : le paquet `GameStatePacket`,
 // JSON à destinataire unique, rattrapage compris — le solo ne reçoit aucun

@@ -6,7 +6,6 @@ import { Separator } from '@/components/ui/separator';
 import { useCurrentUrl } from '@/hooks/use-current-url';
 import { useTranslations } from '@/hooks/use-translations';
 import { cn, toUrl } from '@/lib/utils';
-import { edit as editAppearance } from '@/routes/appearance';
 import { edit as editAvatar } from '@/routes/avatar';
 import { edit as editLinkedAccounts } from '@/routes/linked_accounts';
 import { edit } from '@/routes/profile';
@@ -36,11 +35,6 @@ export default function SettingsLayout({ children }: PropsWithChildren) {
         {
             title: t('account.settings.nav.security'),
             href: editSecurity(),
-            icon: null,
-        },
-        {
-            title: t('account.settings.nav.appearance'),
-            href: editAppearance(),
             icon: null,
         },
     ];

@@ -32,7 +32,7 @@ use Throwable;
  * contrat C7 § 2.4 et § 4.12 ; écart (l) du § 22 bis).
  *
  * - `solo.create`, `GET /solo/new` : la page d'entrée **`room/solo`**
- *   (`PublicLayout`, apparence du visiteur, domaines `room` et `legal`) —
+ *   (`PublicLayout`, domaines `room` et `legal`) —
  *   choix d'un des quatre presets, et pseudo du premier siège solo,
  *   l'avatar étant attribué par le serveur (D55 du 02/10). Un GET ne frappe jamais de jeton (C4 I4.1) : le jeton courant est
  *   seulement lu. 303 vers `solo.show` quand le jeton tient déjà un siège

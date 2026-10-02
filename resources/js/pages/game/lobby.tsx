@@ -106,10 +106,9 @@ function firstError(errors: Record<string, string>): string | null {
 
 /**
  * La page du salon — `room.show` (spec 50 § 7.2 et § 8.1 ; 90 § 2.1 et § 10)
- * : **une seule page du lobby au podium**, sous `GameLayout`, forcée en
- * sombre. Le changement d'écran vient du magasin de 60, jamais d'une
- * navigation : `game.launched` passe à l'état de partie, `room.replayed`
- * ramène au lobby, sans démonter la souscription, l'horloge ni l'annonceur.
+ * : **une seule page du lobby au podium**, sous `GameLayout`. Le changement
+ * d'écran vient du magasin de 60, jamais d'une navigation : `game.launched`
+ * passe à l'état de partie, `room.replayed` ramène au lobby, sans démonter la souscription, l'horloge ni l'annonceur.
  *
  * **État de lobby**, composé ici :
  * - pour tous : le code et le lien de partage, « Votre avatar » — le sélecteur

@@ -154,7 +154,6 @@ it('déclare le domaine legal sur toute route joueur', function () {
         'password.confirm',
         'dashboard',
         'profile.edit',
-        'appearance.edit',
         'security.edit',
     );
 });

@@ -750,23 +750,23 @@ it('un premier passage sans siège solo redirige vers la page d\'entrée du solo
     expect(SeatEntry::tokenCookies($this->get(route('solo.create'))->assertOk()))->toBe([]);
 });
 
-it('la page d\'entrée du solo rend room/solo dans l\'apparence du visiteur', function (): void {
+it('la page d\'entrée du solo rend room/solo, en sombre', function (): void {
     $this->withoutVite();
     soloCatalogue(soloRoundsOf());
 
-    // Page `room/*` : domaines `room` et `legal`, jamais `game.appearance`.
+    // Page `room/*` : domaines `room` et `legal`.
     $middleware = Route::getRoutes()->getByName('solo.create')?->gatherMiddleware() ?? [];
 
-    expect($middleware)->not->toContain('game.appearance')
-        ->and($middleware)->toContain('translations:room,legal')
-        ->and(Route::getRoutes()->getByName('solo.show')?->gatherMiddleware())->toContain('game.appearance');
+    expect($middleware)->toContain('translations:room,legal');
 
-    foreach (['light', 'dark'] as $appearance) {
+    // Sombre comme tout le site (D56 du 02/10), quel que soit un cookie
+    // `appearance` hérité d'avant la décision.
+    foreach (['light', 'system', 'dark'] as $appearance) {
         $response = $this->withUnencryptedCookie('appearance', $appearance)->get(route('solo.create'))->assertOk();
         $tag = soloHtmlTag($response);
 
         expect($tag)->not->toContain('data-appearance-forced', $appearance)
-            ->and(preg_match('/\sclass="[^"]*\bdark\b/', $tag))->toBe($appearance === 'dark' ? 1 : 0, $appearance);
+            ->and(preg_match('/\sclass="[^"]*\bdark\b/', $tag))->toBe(1, $appearance);
     }
 
     // Les props : les quatre presets dans l'ordre du site et leur N jouable

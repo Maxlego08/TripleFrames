@@ -18,7 +18,7 @@ const PRESET_FIELD = 'preset';
 
 /**
  * Page d'entrée du solo — `solo.create` (spec 60 § 16.4 ; écart (l) du
- * § 22 bis), dans `PublicLayout`, à l'apparence du visiteur : une page
+ * § 22 bis), dans `PublicLayout` : une page
  * `room/*`, qui ne reçoit que les domaines `room` et `legal`.
  *
  * Premier passage d'un jeton qui ne tient aucun siège solo : le choix d'un

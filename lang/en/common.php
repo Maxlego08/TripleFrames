@@ -46,13 +46,6 @@ return [
         'toggle_sidebar' => 'Toggle sidebar',
     ],
 
-    'appearance' => [
-        'dark' => 'Dark',
-        'label' => 'Appearance',
-        'light' => 'Light',
-        'system' => 'System',
-    ],
-
     'maintenance' => [
         'banner' => 'A site update is being prepared: no new game can be started for now. Games in progress carry on as usual.',
         'launch_blocked' => 'A site update is being prepared: a game cannot be started for now. Please try again a little later.',

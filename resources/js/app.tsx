@@ -3,7 +3,6 @@ import '../scss/auth.scss';
 import '../scss/home.scss';
 import '../scss/legal.scss';
 import { TooltipProvider } from '@/components/ui/tooltip';
-import { initializeTheme } from '@/hooks/use-appearance';
 import AdminLayout from '@/layouts/admin/admin-layout';
 import AppLayout from '@/layouts/app-layout';
 import AuthLayout from '@/layouts/auth-layout';
@@ -20,23 +19,23 @@ void createInertiaApp({
     layout: (name) => {
         switch (true) {
             // L'accueil, les pages légales et la page d'erreur joueur sont des
-            // pages publiques, dans l'apparence du visiteur (spec 90 § 4.7).
+            // pages publiques (spec 90 § 4.7).
             // La page d'erreur l'est même levée depuis une route de jeu (spec
             // 90 § 4.8) ; `admin/error` reste dans la coquille du back-office.
             case name === 'welcome':
             case name === 'error':
             case name.startsWith('legal/'):
                 return PublicLayout;
-            // Toute page `game/*`, et elle seule, est plein écran et forcée en
-            // sombre (spec 90 § 2.1, § 2.2) : lobby, salon expiré, solo. Le
+            // Toute page `game/*`, et elle seule, est plein écran (spec 90
+            // § 2.1) : lobby, salon expiré, solo. Le
             // salon est UNE page du lobby au podium : manche, révélation et
             // podium en sont des états, jamais des pages, pour qu'aucune
             // visite ne démonte souscription, horloge ni annonceur.
             case name.startsWith('game/'):
                 return GameLayout;
             // Le back-office a sa propre coquille : il n'hérite pas de la
-            // barre latérale joueur. Son thème n'est pas forcé : il suit
-            // l'apparence du visiteur (D8 du 23/09, spec 90 § 2.2).
+            // barre latérale joueur. Il garde le design du starter, en sombre
+            // comme tout le site (D56 du 02/10).
             case name.startsWith('admin/'):
                 return AdminLayout;
             case name.startsWith('auth/'):
@@ -47,8 +46,8 @@ void createInertiaApp({
             // `fortify.home` ; son retrait relève de 40 au jalon 2.
             case name === 'dashboard':
                 return AppLayout;
-            // Toute autre page est une page publique ordinaire, dans
-            // l'apparence du visiteur : pages d'entrée `room/*` comprises.
+            // Toute autre page est une page publique ordinaire : pages
+            // d'entrée `room/*` comprises.
             default:
                 return PublicLayout;
         }
@@ -63,15 +62,11 @@ void createInertiaApp({
         return <TooltipProvider delayDuration={0}>{app}</TooltipProvider>;
     },
     // La barre de progression se peint au TOKEN, jamais à une couleur
-    // littérale : elle s'affiche par-dessus toutes les coquilles, dans le thème
-    // choisi par le visiteur comme sous un forçage, et un re-skin ne doit
-    // toucher que le thème (règle 5). `--primary` est défini sur `:root` dans
-    // `resources/css/app.css` et redéfini pour `.dark` : la barre suit donc le
-    // thème en vigueur.
+    // littérale : elle s'affiche par-dessus toutes les coquilles, et un
+    // re-skin ne doit toucher que le thème (règle 5). `--primary` est défini
+    // pour `.dark` dans `resources/css/app.css`, classe que `<html>` porte
+    // toujours (D56 du 02/10).
     progress: {
         color: 'var(--primary)',
     },
 });
-
-// This will set light / dark mode on load...
-initializeTheme();

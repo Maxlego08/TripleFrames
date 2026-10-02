@@ -28,7 +28,6 @@ return [
         'description' => 'Gérez votre profil et les réglages de votre compte',
         'heading' => 'Réglages',
         'nav' => [
-            'appearance' => 'Apparence',
             'avatar' => 'Avatar',
             'linked' => 'Comptes liés',
             'profile' => 'Profil',
@@ -296,15 +295,6 @@ return [
         'heading' => 'Modifier le mot de passe',
         'submit' => 'Enregistrer',
         'title' => 'Réglages de sécurité',
-    ],
-
-    'appearance' => [
-        'dark' => 'Sombre',
-        'description' => 'Modifiez l’apparence de l’interface pour votre compte',
-        'heading' => 'Réglages d’apparence',
-        'light' => 'Clair',
-        'system' => 'Système',
-        'title' => 'Réglages d’apparence',
     ],
 
     'delete_account' => [

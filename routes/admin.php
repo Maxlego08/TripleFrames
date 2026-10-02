@@ -87,10 +87,10 @@ use Illuminate\Support\Facades\Route;
 |   donc PAS joint : toute clé appelée par une page d'administration vit dans
 |   `lang/fr/admin.php`, pied de page compris (`admin.footer.*`, jamais `legal`).
 |
-| **Aucun forçage d'apparence** : le back-office suit l'apparence choisie par
-| le visiteur (D8 du 23/09, spec 90 § 2.2). Seuls les cadres de revue et de
-| prévisualisation d'image passent en sombre, localement, sous les tokens du
-| jeu (spec 20 § 6.7) — jamais le document entier.
+| **Aucun choix d'apparence** : le back-office garde le design du starter
+| (tokens shadcn), en sombre comme tout le site (D56 du 02/10). Les cadres de
+| revue et de prévisualisation d'image restent sous la portée locale des
+| tokens du jeu (spec 20 § 6.7).
 |
 | **L'autorisation est posée route par route par `can:`, jamais par un test de
 | rôle dans un contrôleur.** Deux routes seulement n'en portent pas, parce que

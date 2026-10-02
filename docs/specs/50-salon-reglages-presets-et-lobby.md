@@ -579,7 +579,7 @@ Après validation : `SeatJoined` (sans autre destinataire que le créateur, l'é
 
 | Route | Méthode et chemin | Contrôleur | Middleware | Réponse |
 |---|---|---|---|---|
-| `room.show` | GET `/r/{room}` | `RoomController@show` | `game.appearance`, `translations:game,room,legal`, `throttle:game-read` | voir la liste ci-dessous |
+| `room.show` | GET `/r/{room}` | `RoomController@show` | `translations:game,room,legal`, `throttle:game-read` (`game.appearance` retiré, D56 du 02/10 — amendé le 02/10) | voir la liste ci-dessous |
 | `room.entry` | GET `/r/{room}/join` | `RoomEntryController@show` | `translations:room,legal`, `throttle:game-read` | Inertia `room/join` (`PublicLayout`), ou 303 → `room.show` pour un salon archivé ou un porteur de siège |
 | `room.join` | POST `/r/{room}/join` | `RoomEntryController@store` (`App\Http\Requests\Room\JoinRoomRequest`) | `throttle:room-join` | 303 → `room.show` |
 
@@ -600,8 +600,7 @@ Après validation : `SeatJoined` (sans autre destinataire que le créateur, l'é
    - **Aucune page `game/room`.** 60 § 10.1 le confirme ; ce document ferme ainsi l'écart (m) de 60 § 22 bis, qu'il lui revenait d'arbitrer avec `90` (points restés ouverts, n° 0).
 
 Pourquoi deux routes, `room.show` et `room.entry` :
-- `game.appearance` force le thème sombre et ne doit toucher qu'une page `game/*` (contrat C16 : « aucune page hors `game/*` n'est forcée »).
-- Le formulaire d'entrée d'un visiteur suit donc la préférence du site, et le lobby est sombre dès le premier écran de jeu.
+- Le lobby (`game/lobby`, `GameLayout`) et le formulaire d'entrée (`room/join`, `PublicLayout`) sont deux pages de coquilles et de domaines de traduction différents (`game,room,legal` contre `room,legal`). Le motif d'origine — `game.appearance` forçait le sombre et ne devait toucher qu'une page `game/*` — est sans objet depuis D56 du 02/10 : tout le site est sombre et le middleware est retiré ; la séparation des deux routes reste — amendé le 02/10.
 - **Un GET ne frappe jamais de jeton** (contrat C4 I4.1).
 
 **Page `room/join`**, props : `room: { code }`, `entry`, `nickname: { min, max }`. Le formulaire ne porte **que le pseudo** : la prop `avatars` et le sélecteur sont retirés, l'avatar est attribué par le serveur à la prise de siège (§ 7.3, S6) et se change au lobby (§ 8.1) (D55 du 02/10 — amendé le 02/10).
@@ -1490,7 +1489,7 @@ Ces textes sont normatifs sur leur **sens** et leurs **placeholders**. Leur form
 |---|---|---|---|
 | `room.create` | GET `/r/new` | `translations:room,legal`, `throttle:game-read` | J1 |
 | `room.store` | POST `/r` | `throttle:room-create` | J1 |
-| `room.show` | GET `/r/{room}` | `game.appearance`, `translations:game,room,legal`, `throttle:game-read` | J1 |
+| `room.show` | GET `/r/{room}` | `translations:game,room,legal`, `throttle:game-read` (`game.appearance` retiré, D56 du 02/10 — amendé le 02/10) | J1 |
 | `room.entry` | GET `/r/{room}/join` | `translations:room,legal`, `throttle:game-read` | J1 |
 | `room.join` | POST `/r/{room}/join` | `throttle:room-join` | J1 |
 | `room.settings.update` | PATCH `/r/{room}/settings` | `seat.active`, `throttle:game-write` | J1 |
@@ -1587,7 +1586,7 @@ Chaque estimation inclut la barre « terminé » : tests verts, textes FR et EN,
 | L50-2 | J1 | Éditeur Simple, point d'écriture unique, presets et présentateur (serveur), types client des réglages | L50-1 ; `30` L30-2 et L30-3 (`PoolQuery`, `PoolReporter`, `types/pool.ts`) ; `40` L40-1 (`PlayerTokenManager`) ; `60` L60-2 (limiteur `game-write`), L60-3 (`SettingsChanged`) et L60-4 (`seat.active`, `BroadcastLobbyState`), dépendance croisée avec L60-4 (points restés ouverts, n° 13) | 6–8 |
 | L50-3a | J1 | Code de salon, identifiant public de siège, motif de route et miroir client du code | L50-2 (`routes/game.php`) ; `90` L90-1 (`lib/game` dans `WATCHED`) ; `100` L100-3 (Vitest) | 2–3 |
 | L50-3b | J1 | Création, entrée et prise de siège, pages `room/create` et `room/join` | L50-3a ; `40` [J1] (identité, avatars, jeton) ; `90` L90-3 (`PublicLayout`) et L90-4 (clé `legal.terms_notice`, route `legal.terms`) ; `60` L60-2 (limiteur `game-read`) et L60-3 (`SeatJoined`) | 5–7 |
-| L50-4 | J1 | Page `game/lobby`, page unique du salon : sièges, partage, abonnement temps réel, états | L50-3b ; `60` L60-3 (canaux), L60-4 (`GameStateBuilder` au lobby, `ClaimSeatTab`, `seat.active`), L60-9 (magasin, client temps réel) et L60-12 (branche de partie de `GameStateBuilder`, § 8.1) ; `90` L90-7 (`GameLayout`, `ForceGameAppearance`), `ConnectionBanner`, `GameAnnouncer` | 5,5–7,5 |
+| L50-4 | J1 | Page `game/lobby`, page unique du salon : sièges, partage, abonnement temps réel, états | L50-3b ; `60` L60-3 (canaux), L60-4 (`GameStateBuilder` au lobby, `ClaimSeatTab`, `seat.active`), L60-9 (magasin, client temps réel) et L60-12 (branche de partie de `GameStateBuilder`, § 8.1) ; `90` L90-7 (`GameLayout` ; `ForceGameAppearance` retiré par D56 du 02/10 — amendé le 02/10), `ConnectionBanner`, `GameAnnouncer` | 5,5–7,5 |
 | L50-5 | J1 | Formulaire Simple, presets, vivier et avertissements (client) | L50-2, L50-4 ; `30` (`types/pool.ts`) ; `90` (`slider`, `switch`, `radio-group` installés) ; `100` L100-3 (Vitest) | 6,5–8 |
 | L50-6 | J1 | Pouvoirs de l'hôte : expulsion, transfert manuel, départ, `RoomPolicy` | L50-3b, L50-4 ; `40` L40-1 (migration `add_kicked_at_to_player_table`, `Player::wasKicked()`, état `PlayerFactory::kicked()`, `PlayerTokenManager::seatIn()` et `wasKickedFrom()`) ; `60` L60-3 (`SeatUpdated`, `HostChanged`, `SeatKicked`) et L60-7 (`SeatInputClosed`) | 6–8 |
 | L50-7a | J1 | Lancement et drainage | L50-2, L50-3b ; `30` (tirage) ; `60` L60-1 (`EngineConstants`), L60-3 (`GameLaunched`) et L60-5 (`MaterializeDraw`, `ScheduleRound`) ; `70` (`AnswerRules::VERSION`) ; `80` (`ScoringRules::VERSION`) ; `100` L100-5 (`DeployDrain`) | 6–8 |
@@ -1748,7 +1747,7 @@ Chaque estimation inclut la barre « terminé » : tests verts, textes FR et EN,
   - « n'expose aux visiteurs sans siège ni pseudo ni identifiant interne »
   - « annonce le salon complet, la partie en cours et le refus d'un expulsé »
   - « redirige sans erreur vers la page de salon expiré quand on rejoint un salon archivé »
-  - « ne force jamais le thème sombre sur les pages d'entrée et de création »
+  - « ne force jamais le thème sombre sur les pages d'entrée et de création » (réécrit par `90` L90-10 : pages d'entrée et de création sombres quel que soit le cookie, D56 du 02/10 — amendé le 02/10)
 
 ### L50-4 — Page du salon `game/lobby` (J1, 5,5–7,5 h)
 
@@ -1774,7 +1773,7 @@ Chaque estimation inclut la barre « terminé » : tests verts, textes FR et EN,
 - `tests/Feature/Room/LobbyPayloadTest.php` :
   - « n'envoie jamais au client le player_token, son tid ni son hash »
   - « n'envoie aucun identifiant interne de salon, de siège ni de thème dans les props du lobby »
-- `tests/Feature/Public/ShellTest.php` (fichier de `90`, test ajouté par ce lot, dépendance inversée signalée par 90 § L90-7) : « rend le lobby en sombre quelle que soit l'apparence du visiteur »
+- `tests/Feature/Public/ShellTest.php` (fichier de `90`, test ajouté par ce lot, dépendance inversée signalée par 90 § L90-7) : « rend le lobby en sombre quelle que soit l'apparence du visiteur » (preuves de forçage retirées par `90` L90-10, D56 du 02/10 — amendé le 02/10)
 
 ### L50-5 — Formulaire Simple, presets, vivier, avertissements (client) (J1, 6,5–8 h)
 

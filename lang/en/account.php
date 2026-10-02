@@ -9,8 +9,8 @@ return [
     |
     | Domaine normatif de la spec 05. Couvre les écrans réellement présents
     | dans le dépôt : connexion, inscription, mot de passe, vérification
-    | d’adresse, 2FA, passkeys, profil, sécurité, apparence, suppression de
-    | compte. Les comptes liés (Discord, Google) et les avatars n’ont pas
+    | d’adresse, 2FA, passkeys, profil, sécurité, suppression de compte (aucun
+    | choix d’apparence, D56 du 02/10). Les comptes liés (Discord, Google) et les avatars n’ont pas
     | encore d’écran : leurs clés naîtront avec eux (spec 40).
     |
     | `title` = titre de document, `heading` = titre affiché, `description` =
@@ -35,7 +35,6 @@ return [
         'description' => 'Manage your profile and account settings',
         'heading' => 'Settings',
         'nav' => [
-            'appearance' => 'Appearance',
             'avatar' => 'Avatar',
             'linked' => 'Linked accounts',
             'profile' => 'Profile',
@@ -303,15 +302,6 @@ return [
         'heading' => 'Update password',
         'submit' => 'Save',
         'title' => 'Security settings',
-    ],
-
-    'appearance' => [
-        'dark' => 'Dark',
-        'description' => 'Update the appearance settings for your account',
-        'heading' => 'Appearance settings',
-        'light' => 'Light',
-        'system' => 'System',
-        'title' => 'Appearance settings',
     ],
 
     'delete_account' => [

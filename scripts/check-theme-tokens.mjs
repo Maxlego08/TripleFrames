@@ -12,11 +12,10 @@
  *   - un appel `rgb(`, `rgba(`, `hsl(`, `hsla(`, `oklch(`, `lab(`… ;
  *   - une valeur en `px` — les largeurs se bornent en unités relatives ou par
  *     les utilitaires de grille (`min-w-[24rem]` passe, `min-w-[380px]` non) ;
- *   - une variante `dark:` — le forçage sombre de l'écran de jeu, comme la
- *     portée sombre locale des cadres de revue du back-office, passe par la
- *     classe `dark` posée à la racine ou sur le sous-arbre, jamais par une
- *     variante écrite dans un composant (le back-office, lui, suit
- *     l'apparence du visiteur : D8 du 23/09, spec 90 § 2.2) ;
+ *   - une variante `dark:` — le thème sombre de tout le site (D56 du 02/10),
+ *     comme la portée sombre locale des cadres de revue du back-office, passe
+ *     par la classe `dark` posée à la racine ou sur le sous-arbre, jamais par
+ *     une variante écrite dans un composant ;
  *   - un utilitaire de couleur littérale : `bg-white`, `text-black`,
  *     `bg-neutral-*`, `text-gray-*`, `border-zinc-*`, `bg-slate-*`…
  *
@@ -77,9 +76,7 @@ const ROOT = fileURLToPath(new URL('..', import.meta.url));
  * utilitaires vivent dans `resources/js/lib/admin-*.ts`, son contrat de props
  * dans un type. Les laisser hors périmètre ferait passer dans
  * `resources/js/lib/` un `bg-neutral-200` que le même script refuse deux
- * répertoires plus loin. `hooks/use-forced-appearance.ts`, né pour le
- * forçage clair du back-office, retiré par D8 du 23/09, ne sert plus que le
- * forçage sombre de l'écran de jeu ; il reste surveillé.
+ * répertoires plus loin.
  */
 const WATCHED = [
     // Back-office.
@@ -90,7 +87,6 @@ const WATCHED = [
     'resources/js/lib/admin-enum-keys.ts',
     'resources/js/lib/admin-format.ts',
     'resources/js/lib/roles.ts',
-    'resources/js/hooks/use-forced-appearance.ts',
     'resources/js/types/admin.ts',
     // Répertoires du back-office créés par la spec 20, inscrits à la création
     // de leur premier fichier par le lot L20-9a (état et clavier du
@@ -150,8 +146,6 @@ const WATCHED = [
 
     // Fichiers hérités PROPRES que retouche un lot (spec 90 § 9.3, règle
     // d'entrée n° 2) : ils entrent dans le commit qui les modifie.
-    // `use-appearance.tsx` : docblocks du forçage, L90-1.
-    'resources/js/hooks/use-appearance.tsx',
     // L40-7 (spec 40 § 8.2 et § 8.5) : `auth.user` nullable, prop
     // `accountsOpen`, bouton de passkey sur `canUsePasskeys`. Les autres
     // fichiers hérités que retouche ce lot (`auth/login.tsx`,
@@ -194,7 +188,9 @@ const WATCHED = [
  *
  * Contenu régénéré par `--list-unclassified` au commit de gel du lot L90-1,
  * puis relu : 63 fichiers ; `app.tsx`, `components/language-switcher.tsx` et
- * `hooks/use-appearance.tsx` en sont sortis pour `WATCHED`.
+ * `hooks/use-appearance.tsx` en sont sortis pour `WATCHED` — ce dernier
+ * supprimé depuis, avec `appearance-tabs.tsx` et `settings/appearance.tsx`
+ * (D56 du 02/10).
  */
 const EXEMPT = [
     'resources/js/components/alert-error.tsx',
@@ -204,7 +200,6 @@ const EXEMPT = [
     'resources/js/components/app-logo.tsx',
     'resources/js/components/app-shell.tsx',
     'resources/js/components/app-sidebar-header.tsx',
-    'resources/js/components/appearance-tabs.tsx',
     'resources/js/components/breadcrumbs.tsx',
     'resources/js/components/heading.tsx',
     'resources/js/components/input-error.tsx',
@@ -238,7 +233,6 @@ const EXEMPT = [
     'resources/js/pages/auth/reset-password.tsx',
     'resources/js/pages/auth/two-factor-challenge.tsx',
     'resources/js/pages/dashboard.tsx',
-    'resources/js/pages/settings/appearance.tsx',
     'resources/js/pages/settings/profile.tsx',
     'resources/js/pages/settings/security.tsx',
     'resources/js/types/navigation.ts',
@@ -319,7 +313,7 @@ const RULES = [
         id: 'dark-variant',
         pattern: /(?:^|[\s"'`:[])dark:/g,
         message:
-            'variante `dark:` — le forçage de thème passe par la classe posée à la racine, jamais par un composant',
+            'variante `dark:` — le thème sombre passe par la classe posée à la racine, jamais par un composant',
     },
     {
         id: 'literal-color-utility',

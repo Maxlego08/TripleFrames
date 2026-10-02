@@ -46,7 +46,7 @@ type SoloPageProps = {
 
 /**
  * La partie solo — `solo.show` (spec 60 § 16 ; 90 § 2.1 et § 10, « Solo ») :
- * **une seule page**, sous `GameLayout`, forcée en sombre, de la première
+ * **une seule page**, sous `GameLayout`, de la première
  * manche au podium et aux relances. Le changement d'écran vient du magasin
  * de 60, jamais d'une navigation ; le solo ne reçoit aucun événement et vit
  * de ses lectures de `solo.state` ({@see useSoloState}).

@@ -33,14 +33,14 @@ use Symfony\Component\HttpFoundation\Response;
  * Le salon : création et page (spec 50 § 6 et § 7.2 ; 21).
  *
  * - `room.create`, `GET /r/new` : le formulaire de pseudo de l'hôte
- *   (`room/create`, `PublicLayout`, apparence du visiteur), sans avatar : la
+ *   (`room/create`, `PublicLayout`), sans avatar : la
  *   prise de siège l'attribue (D55 du 02/10). **Un GET ne frappe jamais de
  *   jeton** (C4 I4.1).
  * - `room.store`, `POST /r` : crée le salon aux réglages par défaut, prend le
  *   siège du créateur, le nomme hôte ({@see CreateRoom}), puis 303 vers la
  *   page du salon — les réglages se font dans le lobby (§ 6.1).
  * - `room.show`, `GET /r/{room}` : la page UNIQUE du salon, du lobby au
- *   podium, sous `game.appearance` — voir {@see self::show()}.
+ *   podium — voir {@see self::show()}.
  */
 class RoomController extends Controller
 {
@@ -76,7 +76,7 @@ class RoomController extends Controller
      *    salon archivé n'est jamais une 404 ; après recyclage de son code, il
      *    mène au salon actif qui le porte (§ 6.3) ;
      * 2. aucun siège non expulsé pour ce jeton (`seatIn()`) → 303 vers la
-     *    page d'entrée publique `room.entry`, hors de `game.appearance` ;
+     *    page d'entrée publique `room.entry` ;
      * 3. sinon : la réparation d'hôte (§ 11.1 : une lecture qui ne trouve pas
      *    de cible valide déclenche un transfert, jamais une erreur), puis
      *    `ClaimSeatTab` (le second onglet prend la main), puis **la page

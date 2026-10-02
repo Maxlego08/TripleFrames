@@ -13,12 +13,6 @@ export type TranslationDomain =
     | 'room';
 
 export type TranslationKey =
-    | 'account.appearance.dark'
-    | 'account.appearance.description'
-    | 'account.appearance.heading'
-    | 'account.appearance.light'
-    | 'account.appearance.system'
-    | 'account.appearance.title'
     | 'account.avatar.cancel'
     | 'account.avatar.choice_legend'
     | 'account.avatar.choose_file'
@@ -181,7 +175,6 @@ export type TranslationKey =
     | 'account.security.title'
     | 'account.settings.description'
     | 'account.settings.heading'
-    | 'account.settings.nav.appearance'
     | 'account.settings.nav.avatar'
     | 'account.settings.nav.linked'
     | 'account.settings.nav.profile'
@@ -2391,10 +2384,6 @@ export type TranslationKey =
     | 'common.action.delete'
     | 'common.action.remove'
     | 'common.action.save'
-    | 'common.appearance.dark'
-    | 'common.appearance.label'
-    | 'common.appearance.light'
-    | 'common.appearance.system'
     | 'common.avatar.alt.initials'
     | 'common.avatar.alt.preset'
     | 'common.avatar.alt.provider'

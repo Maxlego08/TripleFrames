@@ -25,8 +25,7 @@ use Symfony\Component\HttpFoundation\Response;
  * L'entrée libre dans un salon, par son code ou son lien (spec 50 § 7).
  *
  * **Le code ou le lien suffit**, dans la limite des sièges : l'hôte ne valide
- * pas chaque arrivée (§ 7.1). Deux routes, hors de `game.appearance` : la
- * page d'entrée suit l'apparence du visiteur, et un GET ne frappe jamais de
+ * pas chaque arrivée (§ 7.1). Deux routes ; un GET ne frappe jamais de
  * jeton (C4 I4.1).
  *
  * - `room.entry`, `GET /r/{room}/join` : le formulaire `room/join`

@@ -15,11 +15,9 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useFlashNotice } from '@/hooks/game/use-flash-notice';
 import { useOverscrollLock } from '@/hooks/game/use-overscroll-lock';
 import { useVisualViewport } from '@/hooks/game/use-visual-viewport';
-import { useForcedAppearance } from '@/hooks/use-forced-appearance';
 import type { GameLayoutProps } from '@/types/ui';
 
 export default function GameLayout({ children }: GameLayoutProps) {
-    useForcedAppearance('dark');
     useVisualViewport();
     useOverscrollLock();
     const notice = useFlashNotice();

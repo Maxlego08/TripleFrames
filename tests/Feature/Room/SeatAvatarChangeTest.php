@@ -143,7 +143,8 @@ it("change l'avatar d'un siège au lobby, diffuse seat.updated après validation
 });
 
 it("n'écrit rien et ne diffuse rien quand l'avatar choisi est déjà le sien", function (): void {
-    [$room] = HostGestures::room();
+    [$room, $host] = HostGestures::room();
+    Player::query()->whereKey($host->id)->update(['avatar_preset' => SeatEntry::avatar(1)]);
     [$guest, $guestToken] = HostGestures::seat($room, 10, ['avatar_preset' => SeatEntry::avatar(4)]);
     $before = HostGestures::raw('player', $guest->id);
     $roomBefore = HostGestures::raw('room', $room->id);

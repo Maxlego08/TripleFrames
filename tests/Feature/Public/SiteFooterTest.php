@@ -118,7 +118,6 @@ it('envoie les clés du pied de page à toute page joueur', function () {
         'confirmation du mot de passe' => fn () => $this->actingAs($verified)->get(route('password.confirm')),
         'tableau de bord' => fn () => $this->actingAs($verified)->get(route('dashboard')),
         'profil' => fn () => $this->actingAs($verified)->get(route('profile.edit')),
-        'apparence' => fn () => $this->actingAs($verified)->get(route('appearance.edit')),
         'sécurité' => fn () => $this->actingAs($verified)
             ->withSession(['auth.password_confirmed_at' => time()])
             ->get(route('security.edit')),

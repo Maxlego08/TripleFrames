@@ -34,10 +34,9 @@ const JOIN_FAILURE_KEYS: Record<JoinFailure, TranslationKey> = {
 const NICKNAME_FIELD = 'nickname';
 
 /**
- * L'accueil (spec 90 § 4.7 et § 10), dans `PublicLayout` et dans
- * l'apparence du visiteur : le sélecteur de langue et la bascule d'apparence
- * sont dans l'en-tête de la coquille, le bandeau de maintenance au-dessus du
- * contenu, le pied de page en dessous. Domaines `common` et `legal`, et rien
+ * L'accueil (spec 90 § 4.7 et § 10), dans `PublicLayout` : le sélecteur de
+ * langue est dans l'en-tête de la coquille, le bandeau de maintenance
+ * au-dessus du contenu, le pied de page en dessous. Domaines `common` et `legal`, et rien
  * d'autre : cette page n'appelle que des clés `common.*` et `legal.*`.
  *
  * Le jeu en une phrase, puis trois entrées, sans compte (principe 10) :
