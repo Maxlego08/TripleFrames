@@ -21,6 +21,7 @@ use App\Http\Controllers\Room\RoomController;
 use App\Http\Controllers\Room\RoomEntryController;
 use App\Http\Controllers\Room\RoomPresetController;
 use App\Http\Controllers\Room\RoomSettingsController;
+use App\Http\Controllers\Room\SeatAvatarController;
 use App\Support\Room\RoomCode;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
@@ -239,6 +240,11 @@ Route::middleware(['seat.active', 'throttle:game-write'])->group(function (): vo
 
     Route::post('r/{room}/leave', [LeaveRoomController::class, 'store'])
         ->name('room.leave');
+
+    // Avatar du siège demandeur (D55 du 02/10), au lobby seulement : avant
+    // le lancement et après « Rejouer », jamais en partie ni au podium.
+    Route::post('r/{room}/avatar', [SeatAvatarController::class, 'update'])
+        ->name('room.avatar.update');
 
     // « Manche suivante » (spec 60 § 5.4), le seul pouvoir de l'hôte en
     // partie : raccourcit la révélation, jamais une manche. JSON à

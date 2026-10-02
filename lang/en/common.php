@@ -161,18 +161,26 @@ return [
         ],
     ],
 
-    // Accueil (spec 90 § 4.7) : le jeu en une phrase et ses trois entrées.
+    // Accueil (spec 90 § 4.7) : le jeu en une phrase et ses trois entrées ;
+    // « Rejoindre » demande le code ET le pseudo (D55 du 02/10).
     // Aucun placeholder. Aucun texte ne dit la longueur ni l'alphabet d'un
     // code de salon : ils appartiennent à `RoomCode` (spec 50), et le nombre
     // d'images d'une manche est un réglage, jamais une règle (« a few »).
     'home' => [
-        'create_room' => 'Create a room',
-        'heading' => 'Guess the movie, frame by frame',
-        'join_room' => 'Join',
+        'create_prompt' => 'Start your own room.',
+        'create_prompt_lead' => 'No code yet?',
+        'create_room' => 'Create a game',
+        'heading' => 'Three frames. One movie to find.',
+        'join_heading' => 'Join the game',
+        'join_room' => 'Join the game',
         'play_solo' => 'Play solo',
+        'room_code_help' => 'The code is displayed on the host’s screen.',
         'room_code_invalid' => 'This room code is not valid. Check it and try again.',
-        'room_code_label' => 'Room code',
-        'tagline' => 'A movie and cartoon guessing game: each round reveals a few frames from the same film, from the most cryptic to the most obvious. Find its title before everyone else.',
+        'room_code_label' => 'Game code',
+        'room_code_placeholder' => 'ABCD',
+        'nickname_label' => 'Your nickname',
+        'nickname_placeholder' => 'E.g. Marty McFly',
+        'tagline' => 'Guess the title before your friends. The earlier you find it, the more points you score.',
     ],
 
 ];

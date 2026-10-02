@@ -15,7 +15,6 @@ use App\Support\Game\GameJournal;
 use App\Support\Game\GameStateBuilder;
 use App\Support\Game\SoloPresets;
 use App\Support\Game\SoloSeat;
-use App\Support\Identity\PlayerTokenManager;
 use App\ValueObjects\Game\SoloStartOutcome;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
@@ -34,8 +33,8 @@ use Throwable;
  *
  * - `solo.create`, `GET /solo/new` : la page d'entrée **`room/solo`**
  *   (`PublicLayout`, apparence du visiteur, domaines `room` et `legal`) —
- *   choix d'un des quatre presets, et pseudo et avatar du premier siège
- *   solo. Un GET ne frappe jamais de jeton (C4 I4.1) : le jeton courant est
+ *   choix d'un des quatre presets, et pseudo du premier siège solo,
+ *   l'avatar étant attribué par le serveur (D55 du 02/10). Un GET ne frappe jamais de jeton (C4 I4.1) : le jeton courant est
  *   seulement lu. 303 vers `solo.show` quand le jeton tient déjà un siège
  *   solo — la relance se fait depuis `game/solo`.
  * - `solo.store`, `POST /solo` : {@see StartSoloGame}, puis 303 vers
@@ -66,7 +65,7 @@ final class SoloGameController extends Controller
     /** Champ sous lequel reviennent un refus et un échec technique. */
     private const string ERROR_FIELD = 'preset';
 
-    public function create(Request $request, PlayerTokenManager $tokens, SoloSeat $soloSeat, SoloPresets $presets): InertiaResponse|RedirectResponse
+    public function create(Request $request, SoloSeat $soloSeat, SoloPresets $presets): InertiaResponse|RedirectResponse
     {
         if ($soloSeat->of($request) !== null) {
             return to_route('solo.show', [], Response::HTTP_SEE_OTHER);
@@ -74,7 +73,6 @@ final class SoloGameController extends Controller
 
         return Inertia::render('room/solo', [
             'presets' => $presets->options(),
-            'avatars' => $this->avatarProps($tokens->current($request), []),
             'nickname' => $this->nicknameProps(),
         ]);
     }
@@ -91,7 +89,6 @@ final class SoloGameController extends Controller
                 $request,
                 $request->preset(),
                 $request->nickname(),
-                $request->avatarPreset(),
                 $this->effectiveLocale(),
             );
         } catch (Throwable $exception) {

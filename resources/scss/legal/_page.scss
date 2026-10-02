@@ -14,57 +14,6 @@
     font-family: $body;
     line-height: 1.55;
 
-    .public-header {
-        position: relative;
-        z-index: 2;
-        border-bottom: $line solid $ink;
-        background: $paper;
-        color: $ink;
-
-        &__inner {
-            width: min(100% - 2rem, 76rem);
-            max-width: none;
-            min-height: 5rem;
-            margin-inline: auto;
-            padding: 0;
-        }
-
-        &__controls {
-            gap: 0.35rem;
-        }
-
-        &__nav-link {
-            border-radius: 999px;
-            color: $ink;
-            font-weight: 900;
-
-            &:hover {
-                background: transparent;
-                color: $ink;
-                text-decoration: underline;
-                text-underline-offset: 0.2rem;
-            }
-        }
-
-        &__nav-pill {
-            @include mix.hard-shadow(0.1875rem);
-            border: 0.125rem solid $ink;
-            background: $yellow;
-            text-decoration: none;
-
-            &:hover {
-                background: $yellow;
-                text-decoration: none;
-            }
-        }
-
-        &__controls > [data-slot='button'] {
-            border: 0.125rem solid $ink;
-            background: $white;
-            color: $ink;
-        }
-    }
-
     > footer {
         border-top: $line solid $ink;
         background: $yellow;

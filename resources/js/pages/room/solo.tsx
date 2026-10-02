@@ -3,15 +3,13 @@ import { useRef } from 'react';
 import SoloGameController from '@/actions/App/Http/Controllers/Game/SoloGameController';
 import type { PresetOption } from '@/components/room/preset-picker';
 import { SeatForm } from '@/components/room/seat-form';
-import type { NicknameBounds, SeatAvatars } from '@/components/room/seat-form';
+import type { NicknameBounds } from '@/components/room/seat-form';
 import { SoloPresetField } from '@/components/room/solo-preset-field';
 import { useTranslations } from '@/hooks/use-translations';
 
 type RoomSoloProps = {
     /** Les quatre presets du site et leur `N` jouable le plus proche (§ 16.4). */
     presets: PresetOption[];
-    /** Catalogue et présélection ; `taken` toujours vide : un solo n'a pas de salon. */
-    avatars: SeatAvatars;
     nickname: NicknameBounds;
 };
 
@@ -25,13 +23,14 @@ const PRESET_FIELD = 'preset';
  *
  * Premier passage d'un jeton qui ne tient aucun siège solo : le choix d'un
  * des quatre presets du site (D19 du 23/09, sans formulaire de réglages),
- * puis le pseudo et l'avatar du premier siège solo, et la mention des CGU
+ * puis le pseudo du premier siège solo, et la mention des CGU
  * sous le bouton d'envoi (`SeatForm`). L'envoi (`solo.store`) démarre la
  * partie et mène à `game/solo` ; un porteur de siège solo n'arrive jamais
- * ici (303 vers `solo.show`).
+ * ici (303 vers `solo.show`). Aucun avatar à choisir : le serveur l'attribue
+ * (D55 du 02/10), et un solo n'a pas de lobby où le changer.
  *
  * États : chargement (`processing` du formulaire : bouton désactivé,
- * `aria-busy`) ; erreur — pseudo ou avatar refusés sous leur champ, focus
+ * `aria-busy`) ; erreur — pseudo refusé sous son champ, focus
  * rendu au pseudo ; preset invalide, drainage (`common.maintenance.
  * launch_blocked`), vivier sans `N` jouable (`game.errors.pool_too_small`)
  * ou échec technique (`room.errors.launch_failed`) sous le groupe des
@@ -40,11 +39,7 @@ const PRESET_FIELD = 'preset';
  * le rendu : aucun état de connexion propre à la page. Le titre ne porte
  * aucun paramètre.
  */
-export default function RoomSolo({
-    presets,
-    avatars,
-    nickname,
-}: RoomSoloProps) {
+export default function RoomSolo({ presets, nickname }: RoomSoloProps) {
     const { t } = useTranslations();
     const { errors } = usePage().props;
     const presetGroup = useRef<HTMLDivElement>(null);
@@ -73,7 +68,6 @@ export default function RoomSolo({
 
                 <SeatForm
                     form={SoloGameController.store.form()}
-                    avatars={avatars}
                     nickname={nickname}
                     submitLabel={t('room.solo.start')}
                     nicknameHintKey="room.solo.nickname_hint"

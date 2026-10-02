@@ -52,50 +52,90 @@
     }
 }
 
-.auth-header {
+.auth-header,
+.public-header {
     position: relative;
-    z-index: 2;
+    z-index: 10;
     border-bottom: $line solid $ink;
     background: $paper;
+    color: $ink;
+}
 
-    &__inner {
-        display: flex;
-        width: min(100% - 2rem, 72rem);
-        min-height: 5rem;
-        margin-inline: auto;
+.auth-header__inner,
+.public-header__inner {
+    display: flex;
+    width: min(100% - 2rem, 76rem);
+    max-width: none;
+    min-height: 5rem;
+    margin-inline: auto;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1.5rem;
+    padding: 0;
+}
+
+.auth-header__action {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-size: 0.86rem;
+    font-weight: 800;
+
+    a {
+        @include mix.hard-shadow(0.2rem);
+        display: inline-flex;
+        min-height: 2.65rem;
         align-items: center;
-        justify-content: space-between;
-        gap: 1.5rem;
-    }
+        border: 0.125rem solid $ink;
+        border-radius: 999px;
+        padding: 0.5rem 1rem;
+        background: $yellow;
+        color: $ink;
+        text-decoration: none;
+        transition:
+            translate 120ms ease,
+            box-shadow 120ms ease;
 
-    &__action {
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-        font-size: 0.86rem;
-        font-weight: 800;
-
-        a {
-            @include mix.hard-shadow(0.2rem);
-            display: inline-flex;
-            min-height: 2.65rem;
-            align-items: center;
-            border: 0.125rem solid $ink;
-            border-radius: 999px;
-            padding: 0.5rem 1rem;
-            background: $yellow;
-            color: $ink;
-            text-decoration: none;
-            transition:
-                translate 120ms ease,
-                box-shadow 120ms ease;
-
-            &:hover {
-                translate: -0.08rem -0.08rem;
-                box-shadow: 0.3rem 0.3rem 0 $ink;
-            }
+        &:hover {
+            translate: -0.08rem -0.08rem;
+            box-shadow: 0.3rem 0.3rem 0 $ink;
         }
     }
+}
+
+.public-header__controls {
+    gap: 0.35rem;
+}
+
+.public-header__nav-link {
+    border-radius: 999px;
+    color: $ink;
+    font-weight: 900;
+
+    &:hover {
+        background: transparent;
+        color: $ink;
+        text-decoration: underline;
+        text-underline-offset: 0.2rem;
+    }
+}
+
+.public-header__nav-pill {
+    @include mix.hard-shadow(0.1875rem);
+    border: 0.125rem solid $ink;
+    background: $yellow;
+    text-decoration: none;
+
+    &:hover {
+        background: $yellow;
+        text-decoration: none;
+    }
+}
+
+.public-header__controls > [data-slot='button'] {
+    border: 0.125rem solid $ink;
+    background: $white;
+    color: $ink;
 }
 
 .auth-brand {

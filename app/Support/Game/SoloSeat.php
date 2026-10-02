@@ -17,8 +17,8 @@ use Illuminate\Http\Request;
  *
  * **Une seule définition** du prédicat, lue par tous ses consommateurs : le
  * démarrage ({@see StartSoloGame}, qui prend le siège `FOR UPDATE`), la
- * validation de `solo.store` (pseudo et avatar exigés d'un jeton sans siège
- * solo), les pages `solo.create` et `solo.show`, et `seat.active`
+ * validation de `solo.store` (pseudo exigé d'un jeton sans siège solo,
+ * aucun avatar : D55 du 02/10), les pages `solo.create` et `solo.show`, et `seat.active`
  * ({@see EnsureActiveSeat}) :
  *
  * `player_token_hash = hash(tid)` ET `room_id IS NULL` ET `left_at IS NULL`

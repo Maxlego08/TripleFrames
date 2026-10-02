@@ -3,7 +3,7 @@ import { AuthBrand } from '@/components/auth/auth-brand';
 import LanguageSwitcher from '@/components/language-switcher';
 import { AppearanceToggle } from '@/components/public/appearance-toggle';
 import { useTranslations } from '@/hooks/use-translations';
-import { dashboard, home, login, register } from '@/routes';
+import { dashboard, login, register } from '@/routes';
 
 const NAV_LINK_CLASS =
     'public-header__nav-link inline-flex min-h-11 items-center rounded-md px-3 text-sm font-medium hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none';
@@ -11,8 +11,7 @@ const NAV_LINK_CLASS =
 /**
  * En-tête des pages publiques (spec 90 § 2.4).
  *
- * - Le nom du site vient de la prop partagée `name`. Les pages légales
- *   activent en plus la marque graphique de leur maquette.
+ * - La marque TripleFrames est identique sur toutes les pages publiques.
  * - `LanguageSwitcher` **avec libellé visible** : étiqueté et présent dès
  *   l'accueil (principe 8).
  * - `AppearanceToggle` : un invité choisit son thème sans compte.
@@ -27,8 +26,7 @@ const NAV_LINK_CLASS =
 export function PublicHeader() {
     const { t } = useTranslations();
     const page = usePage();
-    const { name, accountsOpen, oauthProviders, auth } = page.props;
-    const branded = page.component.startsWith('legal/');
+    const { accountsOpen, oauthProviders, auth } = page.props;
     // La connexion par fournisseur est ouverte dès que ses clés sont posées
     // (spec 40 § 12.1, D51 du 01/10) ; l'inscription par mot de passe suit
     // seule `accountsOpen`.
@@ -37,16 +35,7 @@ export function PublicHeader() {
     return (
         <header className="public-header border-b border-border">
             <div className="public-header__inner mx-auto flex w-full max-w-5xl flex-wrap items-center justify-between gap-2 px-4 py-2">
-                {branded ? (
-                    <AuthBrand />
-                ) : (
-                    <Link
-                        href={home()}
-                        className="inline-flex min-h-11 items-center rounded-md text-base font-semibold focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                    >
-                        {name}
-                    </Link>
-                )}
+                <AuthBrand />
 
                 <div className="public-header__controls flex flex-wrap items-center gap-1">
                     {canSignIn &&

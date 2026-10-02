@@ -33,21 +33,6 @@
 
 @media (max-width: $mobile) {
     .public-shell--legal {
-        .public-header__inner {
-            width: min(100% - 1rem, 76rem);
-            min-height: 4.25rem;
-        }
-
-        .public-header__controls {
-            gap: 0.2rem;
-        }
-
-        .public-header__nav-link {
-            min-height: 2.4rem;
-            padding: 0.4rem 0.55rem;
-            font-size: 0.76rem;
-        }
-
         > footer > div {
             width: min(100% - 1rem, 76rem);
             align-items: flex-start;

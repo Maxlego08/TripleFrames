@@ -158,18 +158,26 @@ return [
         ],
     ],
 
-    // Accueil (spec 90 § 4.7) : le jeu en une phrase et ses trois entrées.
+    // Accueil (spec 90 § 4.7) : le jeu en une phrase et ses trois entrées ;
+    // « Rejoindre » demande le code ET le pseudo (D55 du 02/10).
     // Aucun placeholder. Aucun texte ne dit la longueur ni l'alphabet d'un
     // code de salon : ils appartiennent à `RoomCode` (spec 50), et le nombre
     // d'images d'une manche est un réglage, jamais une règle (« quelques »).
     'home' => [
-        'create_room' => 'Créer un salon',
-        'heading' => 'Devinez le film, image après image',
-        'join_room' => 'Rejoindre',
+        'create_prompt' => 'Lance ton propre salon.',
+        'create_prompt_lead' => 'Pas encore de code ?',
+        'create_room' => 'Créer une partie',
+        'heading' => 'Trois images. Un film à trouver.',
+        'join_heading' => 'Rejoins la partie',
+        'join_room' => 'Rejoindre la partie',
         'play_solo' => 'Jouer en solo',
+        'room_code_help' => 'Le code est affiché sur l’écran de l’hôte.',
         'room_code_invalid' => 'Ce code de salon n’est pas valide. Vérifiez-le, puis réessayez.',
-        'room_code_label' => 'Code du salon',
-        'tagline' => 'Un blindtest de films et de dessins animés : chaque manche dévoile quelques images d’un même film, de la plus cryptique à la plus évidente. Trouvez son titre avant les autres.',
+        'room_code_label' => 'Code de la partie',
+        'room_code_placeholder' => 'ABCD',
+        'nickname_label' => 'Ton pseudo',
+        'nickname_placeholder' => 'Ex. Marty McFly',
+        'tagline' => 'Devine le titre avant tes amis. Plus tu trouves tôt, plus tu marques de points.',
     ],
 
 ];

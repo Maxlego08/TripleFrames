@@ -510,13 +510,9 @@ D19 du 23/09 : le joueur choisit l'un des quatre presets. Si son `N` n'est pas j
 | `room.create` | GET `/r/new` | `RoomController@create` | `translations:room,legal`, `throttle:game-read` | Inertia `room/create` (`PublicLayout`) |
 | `room.store` | POST `/r` | `RoomController@store` (`App\Http\Requests\Room\StoreRoomRequest`) | `throttle:room-create` | 303 → `room.show` |
 
-- **Page `room/create`**, props :
-  - `avatars: { options, taken: [], suggested }`, par `AvatarPresetCatalog::options()` et `suggest()`, avec `PlayerTokenManager::current()?->avatar` comme préférence (contrat C5) ;
-  - `nickname: { min, max }`, par `NicknameNormalizer::MIN_LENGTH` et `MAX_LENGTH`.
-
-  Le front n'écrit jamais ces bornes en dur.
-- **Mention des CGU** : sous le bouton d'envoi, le texte `legal.terms_notice` **sert lui-même de texte** au lien Wayfinder vers `legal.terms`, sans second libellé (clé et page livrées par `90`, composition de 90 § 10 ; exigence de 90 aux specs voisines, demandée par 40 § 2.1). La clé est rédigée pour tenir seule sous le bouton comme pour servir de texte au lien (E16-5) : un texte suivi d'un second lien répéterait les mêmes mots — amendé le 28/09 (E101-5 ; composition à confirmer par le porteur, points restés ouverts, n° 22). Le lien s'ouvre en nouvel onglet (`target="_blank" rel="noopener"`, suffixé de `legal.new_tab` en `sr-only`, comme les liens du pied replié de 90 § 3.1) : une visite dans le même onglet perdrait le pseudo et l'avatar déjà saisis. **Rien n'est stocké** : le jeton ne porte aucun consentement (40 § 2.1), et l'acceptation horodatée des CGU n'existe qu'avec les comptes (`40`, J2).
-- **`StoreRoomRequest`** utilise le trait `PlayerIdentityValidationRules` (contrat C5) : `prepareForValidation()` canonicalise le pseudo, puis la requête applique `nicknameRules()` et `avatarPresetRules()`.
+- **Page `room/create`**, une seule prop : `nickname: { min, max }`, par `NicknameNormalizer::MIN_LENGTH` et `MAX_LENGTH`. Le front n'écrit jamais ces bornes en dur. **Aucun sélecteur d'avatar** : l'hôte ne saisit que son pseudo, l'avatar est attribué par le serveur à la prise de siège (§ 7.3, S6) et se change au lobby (§ 8.1) ; la prop `avatars` est retirée (D55 du 02/10 — amendé le 02/10).
+- **Mention des CGU** : sous le bouton d'envoi, le texte `legal.terms_notice` **sert lui-même de texte** au lien Wayfinder vers `legal.terms`, sans second libellé (clé et page livrées par `90`, composition de 90 § 10 ; exigence de 90 aux specs voisines, demandée par 40 § 2.1). La clé est rédigée pour tenir seule sous le bouton comme pour servir de texte au lien (E16-5) : un texte suivi d'un second lien répéterait les mêmes mots — amendé le 28/09 (E101-5 ; composition à confirmer par le porteur, points restés ouverts, n° 22). Le lien s'ouvre en nouvel onglet (`target="_blank" rel="noopener"`, suffixé de `legal.new_tab` en `sr-only`, comme les liens du pied replié de 90 § 3.1) : une visite dans le même onglet perdrait le pseudo déjà saisi (amendé le 02/10). **Rien n'est stocké** : le jeton ne porte aucun consentement (40 § 2.1), et l'acceptation horodatée des CGU n'existe qu'avec les comptes (`40`, J2).
+- **`StoreRoomRequest`** utilise le trait `PlayerIdentityValidationRules` (contrat C5) : `prepareForValidation()` canonicalise le pseudo, puis la requête applique `nicknameRules()` seul ; un champ `avatar` envoyé est ignoré (D55 du 02/10 — amendé le 02/10).
 - `room.create` est déclarée **avant** `room.show`, et `{room}` est contraint au motif du code (§ 6.3) : `new` ne peut pas être un code.
 
 ### 6.3 Code de salon
@@ -549,7 +545,7 @@ D19 du 23/09 : le joueur choisit l'un des quatre presets. Si son `N` n'est pas j
 
 ### 6.4 `CreateRoom`
 
-`App\Actions\Room\CreateRoom` [nouveau], `handle(Request $request, string $nickname, string $avatarPreset, Locale $locale, ?User $user): Room`. **C'est l'un des deux seuls gestes qui frappent un jeton**, avec `room.join` (contrat C4 I4.1). Aucun contrôleur n'appelle `PlayerTokenManager::ensure()` : c'est la prise de siège (§ 7.3) qui frappe, après tout refus et juste avant d'écrire le siège. 40 § 2.1 étape 4, propriétaire du jeton, l'emporte sur la lettre de la signature d'origine (`handle(PlayerToken $token, …)`, jeton frappé par le contrôleur avant l'action) : une prise de siège refusée ne pose aucun `Set-Cookie` — amendé le 28/09 (E101-1). Tout se passe dans une transaction :
+`App\Actions\Room\CreateRoom` [nouveau], `handle(Request $request, string $nickname, Locale $locale, ?User $user): Room` — sans paramètre d'avatar : `TakeSeat` attribue celui du créateur (§ 7.3, S6 ; D55 du 02/10 — amendé le 02/10). **C'est l'un des deux seuls gestes qui frappent un jeton**, avec `room.join` (contrat C4 I4.1). Aucun contrôleur n'appelle `PlayerTokenManager::ensure()` : c'est la prise de siège (§ 7.3) qui frappe, après tout refus et juste avant d'écrire le siège. 40 § 2.1 étape 4, propriétaire du jeton, l'emporte sur la lettre de la signature d'origine (`handle(PlayerToken $token, …)`, jeton frappé par le contrôleur avant l'action) : une prise de siège refusée ne pose aucun `Set-Cookie` — amendé le 28/09 (E101-1). Tout se passe dans une transaction :
 
 1. `$now` ;
 2. `$settings = RoomSettings::defaults()` ([J2] ou la configuration par défaut normalisée, § 18.3) ;
@@ -589,6 +585,12 @@ Après validation : `SeatJoined` (sans autre destinataire que le créateur, l'é
 
 `{room}` est le `room_code`, résolu par `Room::resolveRouteBinding()` [existant]. Un code inconnu ou mal formé répond 404 (page `error` de `90`).
 
+**Deux formulaires postent sur `room.join`** (D55 du 02/10 — amendé le 02/10) : la page `room/join` (lien partagé, pseudo seul) et la carte « Rejoindre » de l'**accueil** (`90` § 4.7), qui envoie le **code et le pseudo** en un seul envoi, l'URL étant construite par Wayfinder depuis le code normalisé par le miroir client (§ 6.3). Depuis l'accueil :
+- **code inconnu** (ou mal formé côté serveur) → page `error` 404, comme aujourd'hui ; le pseudo saisi est perdu ;
+- **`Kicked` et `Full`** reviennent en `errors.room` sur la page qui a posté, donc l'accueil (`back()`) ; la validation du pseudo précède la prise de siège, si bien qu'un pseudo mal formé d'un visiteur expulsé montre l'erreur de pseudo avant le refus `kicked` ;
+- un visiteur qui **tient déjà un siège** dans ce salon est repris sous son ancien siège, **le pseudo saisi est ignoré** (`JoinRoomRequest::requiresIdentity()`, S3, comportement inchangé) ;
+- les états `late_join` et `in_progress` ne sont plus annoncés avant l'envoi : le visiteur arrive au lobby, dont l'état « en attente de la partie suivante » ou « retardataire » le dit (§ 8.1, § 15.3).
+
 **`room.show` rend**, dans cet ordre :
 1. un salon archivé → `game/room-expired`, statut **410** (§ 16.3) ;
 2. aucun siège non expulsé pour ce jeton (`PlayerTokenManager::seatIn()`, contrat C4) → 303 vers `room.entry` ;
@@ -602,8 +604,8 @@ Pourquoi deux routes, `room.show` et `room.entry` :
 - Le formulaire d'entrée d'un visiteur suit donc la préférence du site, et le lobby est sombre dès le premier écran de jeu.
 - **Un GET ne frappe jamais de jeton** (contrat C4 I4.1).
 
-**Page `room/join`**, props : `room: { code }`, `entry`, `avatars: { options, taken, suggested }`, `nickname: { min, max }`.
-- `taken` = les `avatar_preset` des sièges `holdingSeat()`. Aucun pseudo, aucun `public_id` : un visiteur sans siège ne voit pas qui est dans le salon.
+**Page `room/join`**, props : `room: { code }`, `entry`, `nickname: { min, max }`. Le formulaire ne porte **que le pseudo** : la prop `avatars` et le sélecteur sont retirés, l'avatar est attribué par le serveur à la prise de siège (§ 7.3, S6) et se change au lobby (§ 8.1) (D55 du 02/10 — amendé le 02/10).
+- Aucun pseudo, aucun `public_id`, aucun avatar pris : un visiteur sans siège ne voit pas qui est dans le salon.
 - **Mention des CGU** sous le bouton d'envoi, identique à celle de `room/create` (§ 6.2) : le texte `legal.terms_notice` sert de texte au lien Wayfinder vers `legal.terms`, en nouvel onglet, sans rien stocker (90 § 10) — amendé le 28/09 (E101-5). Elle n'accompagne que le formulaire : les états `kicked` et `full`, qui n'en ont pas, ne l'affichent pas.
 - `entry` vaut, dans cet ordre de priorité :
 
@@ -619,12 +621,12 @@ Pourquoi deux routes, `room.show` et `room.entry` :
 
 ### 7.3 `TakeSeat` : la séquence normative
 
-`App\Actions\Room\TakeSeat` [nouveau], `handle(Room $room, Request $request, ?string $nickname, ?string $avatarPreset, Locale $locale, bool $repairHost = true): Player|JoinRefusal`. Pseudo et avatar sont nuls pour une reprise, que `JoinRoomRequest` ne valide pas. Elle est appelée par `CreateRoom` (avec `repairHost: false`) et par `room.join`. Elle s'exécute dans une transaction, sous l'ordre de verrouillage global `room → player → game → round → round_player` (E10-51).
+`App\Actions\Room\TakeSeat` [nouveau], `handle(Room $room, Request $request, ?string $nickname, Locale $locale, bool $repairHost = true): Player|JoinRefusal`. Le pseudo est nul pour une reprise, que `JoinRoomRequest` ne valide pas ; **aucun paramètre d'avatar** : `TakeSeat` l'attribue elle-même sous le verrou du salon (S6 ; D55 du 02/10 — amendé le 02/10). Elle est appelée par `CreateRoom` (avec `repairHost: false`) et par `room.join`. Elle s'exécute dans une transaction, sous l'ordre de verrouillage global `room → player → game → round → round_player` (E10-51).
 
 **Elle frappe elle-même le jeton, jamais le contrôleur** — amendé le 28/09 (E101-1) :
 - S3 lit le jeton par `PlayerTokenManager::current()`, sans frappe ; à la reprise, `ensure()` fait glisser le cookie ;
 - un jeton neuf n'est frappé par `ensure()` qu'après S4 et S5, juste avant l'INSERT de S6 ;
-- la re-signature avec l'avatar choisi a lieu après la validation (S10).
+- la re-signature avec l'avatar attribué a lieu après la validation (S10, amendé le 02/10).
 
 Un refus (salon archivé, expulsé, complet, pseudo pris) ne pose donc aucun `Set-Cookie` (40 § 2.1 étape 4).
 
@@ -635,12 +637,17 @@ Un refus (salon archivé, expulsé, complet, pseudo pris) ne pose donc aucun `Se
 | S3 | **Reprise avant tout comptage.** Siège du jeton dans ce salon (`Player::heldByToken($token)`, `room_id`). S'il est **expulsé** → refus `JoinRefusal::Kicked` (`room.join.kicked`), **avant** tout comptage et jamais par une 1062 (D15 du 23/09). S'il existe et n'est pas expulsé → **rendu tel quel, sans aucune écriture** : ni revalidation du pseudo (contrat C5 I5.5), ni garde de capacité (10 § 6.2). La séquence s'arrête là. Le retour à `connected` d'un siège déconnecté ou parti est l'affaire du battement de présence (`60`). |
 | S4 | Effectif présent = `COUNT(player holdingSeat)` (`player_room_state_idx`). S'il est ≥ `room.capacity` → refus `JoinRefusal::Full` (`room.join.full`). |
 | S5 | `nickname_normalized = NicknameNormalizer::normalize($nickname)` (contrat C5). Si un siège de ce salon porte déjà cette forme, **partis et expulsés compris** → `validation.nickname.taken` sous `nickname` (contrat C5 I5.4, E10-35). |
-| S6 | INSERT `player` : `public_id = SeatPublicId::generate()`, `room_id`, `nickname` (forme canonique), `nickname_normalized`, `player_token_hash = $token->hash()`, `locale` = locale effective de la requête, `avatar_kind = preset`, `avatar_preset`, `joined_at = last_seen_at = $now`, `connection_state = connected`. |
+| S6 | INSERT `player` : `public_id = SeatPublicId::generate()`, `room_id`, `nickname` (forme canonique), `nickname_normalized`, `player_token_hash = $token->hash()`, `locale` = locale effective de la requête, `avatar_kind` et `avatar_preset` **attribués par le serveur sous le verrou du salon** (ci-dessous), `joined_at = last_seen_at = $now`, `connection_state = connected`. |
 | S7 | Salon en `playing` : admission d'un retardataire (§ 15) ou attente de la partie suivante. En `lobby` : rien. |
 | S8 | Si `$repairHost` est vrai et que `host_player_id` n'a pas de cible valide (nul, siège parti, expulsé ou absent) → `TransferHost::automatic()` (§ 11.2). `CreateRoom` passe `repairHost: false` : à la création, `host_player_id` est encore nul, et sans ce drapeau S8 poserait l'hôte une première fois avant le `TransferHost::to()` de `CreateRoom` (§ 6.4), soit deux écritures d'hôte (E10-34bis). |
 | S9 | `room.last_activity_at = $now`, par mise à jour ciblée. |
-| S10 | **Après validation** : `SeatJoined { seat: SeatView }` au salon (contrat C7). Le jeton est re-signé avec l'avatar choisi (`PlayerTokenManager::resign()`, `withAvatar()`, contrat C4 I4.5). |
+| S10 | **Après validation** : `SeatJoined { seat: SeatView }` au salon (contrat C7). Le jeton est re-signé avec l'avatar attribué (`PlayerTokenManager::resign()`, `withAvatar()`, contrat C4 I4.5 ; amendé le 02/10). |
 
+- **Attribution de l'avatar en S6** (D55 du 02/10 — amendé le 02/10 ; règle : `40` § 6.4 et § 11.4). Les clés prises sont lues sous le verrou du salon par `App\Support\Room\TakenAvatars::of($room)` (seul calcul, partagé avec le geste du lobby et la prop `avatars`, § 8.1) : `avatar_preset` de tout siège `holdingSeat()`, **prédéfini de repli des sièges `upload`/`provider` compris**. Puis :
+  1. compte connecté dont `users.avatar_kind = upload` et dont l'image est visible → `avatar_kind = upload`, avec un prédéfini de repli `suggest(users.avatar_preset ?? préféré du jeton, pris)` résolu par `SeatAvatar::resolve()` ;
+  2. sinon `avatar_kind = preset`, `avatar_preset = AvatarPresetCatalog::suggest(préféré du jeton, pris)`.
+
+  Aucun champ `avatar` n'est lu dans la requête. La garde `roomSeats() ≤ avatarPresets()` (§ 2.7) garantit un prédéfini libre tant que l'effectif ne dépasse pas la capacité ; au-delà (retours de sièges, ci-dessous), `suggest()` rend un doublon, assumé.
 - **Collision résiduelle.** Une `UniqueConstraintViolationException` est interceptée et suivie d'une relecture.
   - Si un siège de ce jeton existe désormais dans le salon (double envoi), c'est une reprise.
   - Sinon, c'est `validation.nickname.taken`. **Jamais une 1062 brute** (10 § 7.1).
@@ -651,7 +658,7 @@ Un refus (salon archivé, expulsé, complet, pseudo pris) ne pose donc aucun `Se
 - **Conséquences assumées**, écrites pour ne pas être découvertes :
   - Le pseudo d'un siège parti reste réservé jusqu'à l'archivage. Un joueur qui change d'appareil ne reprend pas son pseudo dans le même salon ; le texte de `validation.nickname.taken`, rédigé par `40`, le dit.
   - Un siège repris ne consomme aucune place. L'effectif peut donc **dépasser** la capacité : capacité 2, deux entrées, un départ, une troisième entrée, puis le retour du partant, soit trois sièges tenus (test de 10 § 6.2). La capacité n'est alors réglable qu'à la hausse jusqu'à ce que l'effectif redescende, et toute autre écriture de réglages reste acceptée (§ 10).
-  - **Au J1, aucun siège n'est rattaché à un compte** : `player.user_id` n'est jamais écrit (contrat C4 I4.10). Un compte connecté prend un siège comme un invité.
+  - **Au J1, aucun siège n'est rattaché à un compte** : `player.user_id` n'est jamais écrit (contrat C4 I4.10). Un compte connecté prend un siège comme un invité. — Amendé par D49 du 01/10 (la prise de siège d'un compte connecté écrit `player.user_id`, `40` § 11.4) et par D55 du 02/10 (le compte saisit son pseudo comme un invité, et le serveur lui attribue son image téléversée visible, S6) — amendé le 02/10.
 
 ---
 
@@ -675,6 +682,12 @@ type LobbyPageProps = {
   editor: { advancedAvailable: boolean; themeSelectorVisible: boolean; lateJoinAvailable: boolean };
   themes: { key: string; labels: Record<LocaleCode, string> }[] | null;  // [J2], non nul seulement si le sélecteur est visible
   configs: { key: string; name: string; isDefault: boolean }[] | null;   // [J2], null pour un invité
+  avatars: {                           // D55 du 02/10, closure Inertia : rechargeable par only: ['avatars']
+    options: AvatarPresetOption[];     // AvatarPresetCatalog::options()
+    taken: string[];                   // clés tenues par les AUTRES sièges holdingSeat(), replis compris (TakenAvatars::of($room, $self))
+    current: string;                   // 'account' si l'avatarRef du siège est une image upload/provider visible, sinon sa clé avatar_preset
+    account: { url: string } | null;   // SeatAvatar::accountOption(seatAccount($seat, $user)), null pour un invité, une image masquée ou un compte qui n’est pas celui du siège (player.user_id)
+  };
 };
 ```
 
@@ -683,6 +696,26 @@ type LobbyPageProps = {
 - **Le vivier est recalculé à chaque rendu** : l'entrée dans le lobby, un rechargement, le rechargement partiel qui suit un « Rejouer », et celui qui suit une resynchronisation au lobby après une reconnexion d'Echo ou un retour de visibilité ou en ligne (§ 8.2).
 - Les libellés de thèmes [J2] voyagent **pour chaque locale activée**, comme les titres de la révélation : un changement de langue sans rechargement n'a rien à redemander.
 - Les **sièges** viennent de `state.seats` (`SeatView`, contrat C7), triés par `joined_at` croissant par `GameStateBuilder`. `state.self.isHost` décide de la vue.
+- **`avatars`** (D55 du 02/10 — amendé le 02/10) est calculée côté serveur, jamais dérivée de `state.seats` : `SeatView` ne porte pas la clé d'un prédéfini, et le prédéfini de repli d'un siège `upload`/`provider` n'y est jamais visible, alors qu'il compte comme pris. `current` applique la même règle de visibilité que `Player::avatarRef()` : une image de compte masquée, supprimée ou déliée fait redescendre `current` au prédéfini de repli, et la tuile « Mon avatar » disparaît (`account` nul).
+
+**Changement d'avatar au lobby** (D55 du 02/10 — amendé le 02/10). Chaque siège, hôte compris, peut changer **son propre** avatar par le sélecteur `avatar-picker.tsx` (`40` § 7.4), **tant que `room.status = lobby`** : avant le lancement et après « Rejouer » (§ 13). Pendant une partie et sur le podium, le sélecteur n'est pas montré et le serveur refuse. Ce n'est pas un geste d'hôte.
+- **Route** `room.avatar.update`, POST `/r/{room}/avatar`, `App\Http\Controllers\Room\SeatAvatarController@update`, FormRequest `App\Http\Requests\Room\ChangeSeatAvatarRequest` (champ `avatar` = clé du catalogue ou `account`, par `PlayerIdentityValidationRules::seatAvatarRules()`), middleware `seat.active` et `throttle:game-write`, policy `RoomPolicy::changeAvatar` (§ 17.1).
+- **Action** `App\Actions\Room\ChangeSeatAvatar`, dans une transaction, **verrou du salon puis verrou du siège** (même ordre que `LeaveRoom` et `KickSeat`) :
+  1. salon hors `lobby` → refus `RoomRefusal::NotInLobby` : 303 `back()` avec `errors.avatar` = `room.refusal.not_in_lobby` ;
+  2. choix identique à l'avatar effectif → rien n'est écrit (idempotent) ;
+  3. clé prédéfinie tenue par un autre siège `holdingSeat()` (`TakenAvatars::of($room, $seat)`, prédéfinis de repli des sièges `upload`/`provider` compris) → `ValidationException` sous `avatar`, `room.lobby.avatar_taken` ;
+  4. `account` : résolu par `SeatAvatar::resolve()` (image visible exigée, repli `suggest(users.avatar_preset ?? préféré, pris)`) ;
+  5. écriture de `player.avatar_kind` et `player.avatar_preset`, `room.last_activity_at = $now` ;
+  6. après validation : `SeatUpdated { seat: SeatView }` au salon (`SeatViewPresenter::lobby()`, § 8.2), puis re-signature de la revendication `avatar` du `player_token` (`PlayerTokenManager::resign()`, `withAvatar()`, contrat C4 I4.5).
+
+  Succès : 303 `back()` (repli `room.show`).
+- **Unicité.** L'avatar est **unique entre sièges tenus**, garanti par le seul verrou du salon dans `TakeSeat` (§ 7.3, S6) et `ChangeSeatAvatar` ; **aucun index unique** en base, qui serait faux pour un siège `left` et pour les replis. **Doublons résiduels assumés**, documentés et non corrigés :
+  - un siège qui revient de `left` par `RecordHeartbeat` (`60` § 3) alors que son prédéfini a été pris entre-temps : le retour reste sans écriture ;
+  - un retardataire admis en partie (§ 15) face à l'identité gelée (`game_player.display_avatar_preset`) d'un siège parti, qui reste affichée dans la manche et au podium ;
+  - un effectif au-delà de la taille du catalogue (retours de sièges au-delà de la capacité) : `suggest()` rend un doublon.
+
+  Dans ces trois cas, le pseudo, unique par salon, reste le discriminant. Le sélecteur marque pris l'avatar de l'autre siège : chacun des deux peut sortir du doublon en choisissant un avatar libre au lobby.
+- **Fraîcheur de `taken`.** La prop est relue avec `settings` et `presets` (§ 8.2) ; un `seat.joined` ou `seat.updated` ne la recharge pas. Un choix devenu pris entre deux relectures est refusé par le serveur, puis la page relit `avatars` (`only: ['avatars']`).
 
 **Ce que voit l'hôte** :
 - le formulaire Simple, éditable ([J2] plus l'onglet Avancé) ;
@@ -690,12 +723,13 @@ type LobbyPageProps = {
 - le compteur de vivier, avec les remèdes cliquables ;
 - les avertissements ;
 - la liste des sièges, avec pour chacun « Retirer du salon » et « Nommer hôte » ;
+- le sélecteur de son propre avatar, hors partie (D55 du 02/10) ;
 - « Lancer la partie » et « Quitter le salon ».
 
 **Ce que voient les autres** :
 - les mêmes réglages en lecture seule (`room.lobby.read_only`) ;
 - le même compteur et le même message de blocage, **sans** bouton de remède ;
-- la liste des sièges et « Quitter le salon ».
+- la liste des sièges, le sélecteur de son propre avatar hors partie (D55 du 02/10) et « Quitter le salon ».
 
 Tous voient le code, le lien de partage et le nombre de joueurs (`room.lobby.players`, `:count`, `:capacity`).
 
@@ -707,16 +741,17 @@ Tous voient le code, le lien de partage et le nombre de joueurs (`room.lobby.pla
   - la section des réglages est occupée (`aria-busy`) pendant un envoi, et un seul envoi est en vol. Un geste fait pendant l'envoi est mis en file, fusionné avec les suivants, puis part seul à la réponse ; un refus (validation, 409, réseau, annulation) abandonne la file et rend l'affichage au serveur ;
   - les contrôles **ne sont jamais désactivés par l'envoi** et gardent le focus : Radix retire de la tabulation une poignée désactivée. Seuls les désactivent le rôle (non-hôte), l'onglet supplanté et la déconnexion ;
 - **erreur** : erreurs de validation liées au champ par `aria-describedby` ; refus de réglages, de gestes d'hôte, de lancement ou de « Rejouer » (erreur `room`, § 12.5) rendus **dans la page** en `Alert` au rôle `note` (`room.refusal.*`, `room.lobby.cannot_kick_self`, `room.errors.launch_failed` ou `common.maintenance.launch_blocked`) et annoncés par `announce()` ; **jamais de toast** : aucun `Toaster` n'est monté sous `GameLayout`, pour qu'une page de jeu n'ait qu'une région `aria-live` (90 § 2.3, contrat C16 § 4), si bien qu'un toast ne s'afficherait pas ;
+- **changement d'avatar** (D55 du 02/10 — amendé le 02/10) : le choix part par un bouton de confirmation (`room.lobby.avatar.apply`), jamais à chaque changement de valeur — la primitive coche l'option qu'elle focalise aux flèches ; les tuiles ne sont jamais désactivées par l'envoi ; tant que le sélecteur est ouvert, la prop `avatars` est relue (`only: ['avatars']`) à chaque changement d'avatar, de présence ou d'expulsion d'un autre siège reçu du salon ; envoi en cours (`processing`, un seul en vol) ; refus « déjà pris » (`room.lobby.avatar_taken`) et refus « partie en cours » (`room.refusal.not_in_lobby`) sous `errors.avatar`, rendus dans la page en `Alert` au rôle `note` et annoncés par `announce()`, jamais en toast ; avatars pris marqués par texte (`common.avatar.picker.taken`), non sélectionnables ;
 - **déconnexion** : `ConnectionBanner` de `90`, contrôles d'hôte désactivés tant que l'état n'est pas `connected` ;
 - **onglet supplanté** : réponse 409 `seat_superseded` du middleware `seat.active` (contrat C7), interceptée par le rappel `onHttpException` de chaque requête du lobby ; le lobby passe en lecture seule (`ReadOnlyNotice`). Sans cette interception, Inertia ouvrirait sa fenêtre d'erreur brute (§ 12.5).
 
 **Clavier et accessibilité (principe 8)** :
 - curseurs `slider` exposant valeur, bornes et pas ;
-- `N` et la difficulté de saisie en `radio-group` ;
+- `N`, la difficulté de saisie et le sélecteur d'avatar en `radio-group` ;
 - cibles d'au moins 44 px ;
 - changements d'hôte, changements de réglages vus par un non-hôte (`room.lobby.settings_updated`) et `D` remonté annoncés dans l'unique région `aria-live` (`GameAnnouncer`).
 
-Composants [nouveaux], sous `resources/js/components/room/` : `room-settings-form.tsx`, `preset-picker.tsx`, `pool-status.tsx`, `settings-warnings.tsx`, `settings-changes.tsx`, `seat-list.tsx`, `seat-actions.tsx`, `share-code.tsx`, `replay-button.tsx`. Ils ne composent que la liste close de `90` (contrat C16 § 2.9) et ne lisent ni Echo ni horloge. Les souscriptions vivent dans `resources/js/hooks/game/use-lobby-state.ts` [nouveau], en `useSyncExternalStore` sur le magasin de `60` (`lib/game/store.ts`), idempotent sous React Compiler et le mode strict.
+Composants [nouveaux], sous `resources/js/components/room/` : `room-settings-form.tsx`, `preset-picker.tsx`, `pool-status.tsx`, `settings-warnings.tsx`, `settings-changes.tsx`, `seat-list.tsx`, `seat-actions.tsx`, `share-code.tsx`, `replay-button.tsx` ; le lobby compose aussi `avatar-picker.tsx` de `40` (`components/game/`, liste close de `90`), alimenté par la prop `avatars` (D55 du 02/10 — amendé le 02/10). Ils ne composent que la liste close de `90` (contrat C16 § 2.9) et ne lisent ni Echo ni horloge. Les souscriptions vivent dans `resources/js/hooks/game/use-lobby-state.ts` [nouveau], en `useSyncExternalStore` sur le magasin de `60` (`lib/game/store.ts`), idempotent sous React Compiler et le mode strict.
 
 ### 8.2 Messages émis par `50`
 
@@ -725,7 +760,7 @@ Ce document fixe le **contenu en données** de chaque message de lobby. `60` en 
 | Événement (contrat C7) | Canal | Émis par | Charge |
 |---|---|---|---|
 | `seat.joined` | salon | `TakeSeat` (création, entrée, admission d'un retardataire) | `{ seat: SeatView }` |
-| `seat.updated` | salon | `KickSeat`, `LeaveRoom` (les transitions de présence appartiennent à `60`) | `{ seat: SeatView }` |
+| `seat.updated` | salon | `KickSeat`, `LeaveRoom`, `ChangeSeatAvatar` (D55 du 02/10 — amendé le 02/10 ; les transitions de présence appartiennent à `60`) | `{ seat: SeatView }` |
 | `host.changed` | salon | `TransferHost` | `{ hostPublicId, previousHostPublicId }` |
 | `settings.changed` | salon | `BroadcastLobbyState` (anti-rebond, § 8.3), après toute écriture de réglages et après un refus `pool_insufficient` | `RoomSettingsState` |
 | `room.replayed` | salon | `ReplayRoom` | `RoomSettingsState` recalculé |
@@ -738,8 +773,8 @@ Ce document fixe le **contenu en données** de chaque message de lobby. `60` en 
 | Message ou déclencheur | Réaction |
 |---|---|
 | `game.launched` | **Aucune visite** : le magasin de `60` passe à l'état de manche, dans la même page `game/lobby` (§ 7.2). |
-| `room.replayed` | **Aucune visite** : le magasin de `60` repasse à l'état de lobby, et `settings` est pris dans la charge (`RoomSettingsState`). Le client relit ensuite `room.state` (motif `replayed`), puis recharge les props qui ne voyagent pas dans l'événement par `router.reload({ only: ['settings', 'presets'] })`, sous l'en-tête `X-Seat-Token`, jamais depuis un onglet supplanté. La relecture vient de ce que `room.replayed` ne porte aucun siège : ceux que garde le magasin sont les sièges gelés de la partie, qui omettent un siège entré sans participation. « Joueurs (n sur c) » et `room.lobby.need_players` seraient alors faux, alors que le paquet relu porte les sièges du salon. Un paquet de relecture qui ramène lui-même au lobby n'en déclenche pas une seconde — amendé le 28/09 (E110-8). |
-| Reconnexion d'Echo, retour de visibilité ou en ligne, en état de lobby (y compris après un paquet qui ramène au lobby) | Après la resynchronisation `room.state` de `60` (60 § 12.6), `router.reload({ only: ['settings', 'presets'] })` sous l'en-tête `X-Seat-Token`. Pourquoi : `GameStatePacket` ne porte pas `RoomSettingsState` (60 § 12.1), et un `settings.changed` ou un `room.replayed` manqué pendant la coupure n'est jamais rejoué ; sans ce rechargement, le compteur de vivier, le blocage et les presets grisés resteraient périmés jusqu'au déclencheur suivant. |
+| `room.replayed` | **Aucune visite** : le magasin de `60` repasse à l'état de lobby, et `settings` est pris dans la charge (`RoomSettingsState`). Le client relit ensuite `room.state` (motif `replayed`), puis recharge les props qui ne voyagent pas dans l'événement par `router.reload({ only: ['settings', 'presets', 'avatars'] })` (`avatars` ajoutée par D55 du 02/10 — amendé le 02/10), sous l'en-tête `X-Seat-Token`, jamais depuis un onglet supplanté. La relecture vient de ce que `room.replayed` ne porte aucun siège : ceux que garde le magasin sont les sièges gelés de la partie, qui omettent un siège entré sans participation. « Joueurs (n sur c) » et `room.lobby.need_players` seraient alors faux, alors que le paquet relu porte les sièges du salon. Un paquet de relecture qui ramène lui-même au lobby n'en déclenche pas une seconde — amendé le 28/09 (E110-8). |
+| Reconnexion d'Echo, retour de visibilité ou en ligne, en état de lobby (y compris après un paquet qui ramène au lobby) | Après la resynchronisation `room.state` de `60` (60 § 12.6), `router.reload({ only: ['settings', 'presets', 'avatars'] })` sous l'en-tête `X-Seat-Token` (amendé le 02/10). Pourquoi : `GameStatePacket` ne porte pas `RoomSettingsState` (60 § 12.1), et un `settings.changed` ou un `room.replayed` manqué pendant la coupure n'est jamais rejoué ; sans ce rechargement, le compteur de vivier, le blocage et les presets grisés resteraient périmés jusqu'au déclencheur suivant. |
 | `room.archived` | Visite de `room.show`, qui rend « salon expiré » : le joueur quitte le salon, une nouvelle page est attendue. |
 | `seat.kicked` | Le client quitte les canaux, puis visite `room.show`, qui redirige vers `room/join` en état `kicked`. |
 
@@ -1058,7 +1093,7 @@ Elles ont un destinataire unique, et sont donc résolues dans la langue de la re
 
 - **« Rejouer » est un geste d'hôte**, proposé sur le podium par `components/room/replay-button.tsx`, composant affiché par l'état podium de `game/lobby` (écran de `90`, contenu de `60` et `80`). Les non-hôtes voient `room.replay.waiting`.
 - Les échecs techniques de la transaction suivent le § 12.5.
-- Les réglages redeviennent modifiables, et **le lancement suivant repasse par la garde de vivier** (00 § Déroulé d'une partie).
+- Les réglages redeviennent modifiables, et **le lancement suivant repasse par la garde de vivier** (00 § Déroulé d'une partie). L'avatar de chaque siège redevient modifiable au lobby (§ 8.1 ; D55 du 02/10 — amendé le 02/10).
 - Les sièges partis restent partis, les expulsés restent expulsés.
 - Un siège entré pendant la partie sans participation (§ 15) devient un siège de lobby ordinaire.
 
@@ -1198,6 +1233,7 @@ Après validation : `room.archived`. **Aucune ligne n'est supprimée** : les lig
 | `updateSettings(?User $user, Room $room, ?Player $seat)` | `$seat` appartient au salon et `room.host_player_id = $seat->id` |
 | `launch(...)`, `replay(...)`, `advanceRound(...)`, `kick(...)`, `transferHost(...)` | même clause |
 | `leave(?User $user, Room $room, ?Player $seat)` | `$seat` appartient au salon |
+| `changeAvatar(?User $user, Room $room, ?Player $seat)` | même clause que `leave` : son propre siège, jamais un geste d'hôte ; la garde `lobby` est relue sous verrou par `ChangeSeatAvatar` (§ 8.1 ; D55 du 02/10 — amendé le 02/10) |
 | `loadConfig(?User $user, Room $room, ?Player $seat)` [J2] | même clause que `updateSettings`, et `$user` non nul |
 | `saveConfig(?User $user, Room $room, ?Player $seat)` [J2] | `$user` non nul et `$seat` appartient au salon : tout porteur de siège connecté à un compte, pas seulement l'hôte (§ 18.2) |
 
@@ -1215,7 +1251,7 @@ Elle reste `view`, `update` et `delete` **par propriété seule**, sans clause d
 |---|---|---|---|
 | `room-create` | adresse IP (cache, jamais une table de domaine) | `RoomRateLimits::createsPerHour()`, défaut 10, `game.room.creates_per_hour` | `room.store` |
 | `room-join` | hash du `player_token`, repli sur l'IP | `RoomRateLimits::joinsPerMinute()`, défaut 10, `game.room.joins_per_minute` | `room.join` |
-| `game-read` / `game-write` | contrat C7 | contrat C7 | GET du salon / écritures du salon |
+| `game-read` / `game-write` | contrat C7 | contrat C7 | GET du salon / écritures du salon, `room.avatar.update` compris (D55 du 02/10 — amendé le 02/10) |
 
 - Ces limiteurs sont déclarés dans `FortifyServiceProvider::configureRateLimiting()`.
 - `App\Support\Room\RoomRateLimits` [nouveau] suit le patron de `PlatformLimits` : constantes `DEFAULT_*`, accesseurs statiques, garde ≥ 1. Il n'a **pas** d'instance mémoïsée : ses deux accesseurs lisent et gardent la configuration à chaque appel, ce qui tient la garde sur tout chemin sans liaison de conteneur. Preuve : `tests/Feature/Room/RoomRateLimitsTest.php` (L50-1) — amendé le 25/09 (E9-6).
@@ -1371,10 +1407,11 @@ Dans `room.settings.change.*`, `:attribute` reçoit côté client le libellé tr
 | `room.join.in_progress` | — | Une partie est en cours : vous attendrez dans le salon et jouerez la suivante. | A game is in progress: you will wait in the room and play the next one. |
 | `room.join.late_join` | — | Une partie est en cours : vous entrerez à la manche suivante, sans aucun point. | A game is in progress: you will join from the next round, with no points yet. |
 | `room.join.title` / `room.join.submit` | — | Rejoindre le salon / Entrer | Join the room / Join |
-| `room.create.title` / `room.create.intro` / `room.create.submit` | — | Créer un salon / Choisissez un pseudo et un avatar : vous réglerez la partie dans le salon. / Créer le salon | Create a room / Pick a nickname and an avatar: you will set up the game in the room. / Create room |
+| `room.create.title` / `room.create.intro` / `room.create.submit` | — | Créer un salon / Choisissez un pseudo : vous réglerez la partie et votre avatar dans le salon. / Créer le salon | Create a room / Pick a nickname: you will set up the game and your avatar in the room. / Create room |
 | `room.identity.nickname_label` | — | Pseudo | Nickname |
 | `room.identity.nickname_hint` | `:min`, `:max` | Entre :min et :max caractères, unique dans le salon. | Between :min and :max characters, unique in the room. |
 | `room.lobby.title` | — | Salon | Room |
+| `room.lobby.avatar_taken` | — | Un autre joueur a déjà cet avatar. | Another player already has this avatar. |
 | `room.lobby.code_label` / `copy_link` / `link_copied` / `share_hint` | — | Code / Copier le lien / Lien copié / Partagez ce lien ou ce code avec vos amis. | Code / Copy link / Link copied / Share this link or code with your friends. |
 | `room.lobby.share` | — | Partager | Share |
 | `room.lobby.players` | `:count`, `:capacity` | Joueurs (:count sur :capacity) | Players (:count of :capacity) |
@@ -1401,7 +1438,9 @@ Dans `room.settings.change.*`, `:attribute` reçoit côté client le libellé tr
 
 Chaque cellule « a / b » représente plusieurs clés, dans l'ordre indiqué.
 
-Les deux clés `room.identity.*` donnent au champ de pseudo de `room/create` et `room/join` son libellé visible et son aide, que ce tableau ne donnait pas. Aucune clé existante ne convenait : `validation.attributes.nickname` n'est pas expédié au client, et `common.avatar.picker.label` est la légende du sélecteur d'avatar. Les bornes restent des props (§ 6.2), formatées par `Intl.NumberFormat` — amendé le 28/09 (E101-4 ; formulation au porteur, points restés ouverts, n° 23).
+**D55 du 02/10 — amendé le 02/10.** `room.create.intro` et `room.solo.intro` (`60` § 16.4) ne parlent plus d'avatar. `room.lobby.avatar_taken` est le refus du geste `room.avatar.update` (clé serveur) ; le refus hors lobby réemploie `room.refusal.not_in_lobby`. Le sélecteur du lobby réemploie `common.avatar.picker.label` et `common.avatar.picker.taken` (`40` § 6.7) ; ses libellés propres (titre, aide, envoi) vivent sous `room.lobby.avatar.*`, clés posées par le lot client et nées en FR et EN dans le même commit. Le champ de pseudo de l'accueil a ses clés sous `common.home.*` (`90` § 4.7), l'accueil ne chargeant que `common` et `legal`.
+
+Les deux clés `room.identity.*` donnent au champ de pseudo de `room/create` et `room/join` son libellé visible et son aide, que ce tableau ne donnait pas. Aucune clé existante ne convenait : `validation.attributes.nickname` n'est pas expédié au client, et `common.avatar.picker.label` est la légende du sélecteur d'avatar, désormais au lobby. Les bornes restent des props (§ 6.2), formatées par `Intl.NumberFormat` — amendé le 28/09 (E101-4 ; formulation au porteur, points restés ouverts, n° 23).
 
 ### 20.4 Validation
 
@@ -1461,6 +1500,7 @@ Ces textes sont normatifs sur leur **sens** et leurs **placeholders**. Leur form
 | `room.players.kick` | POST `/r/{room}/players/{target}/kick` (jamais `{player}`, § 11.3) | idem | J1 |
 | `room.host.transfer` | POST `/r/{room}/host` | idem | J1 |
 | `room.leave` | POST `/r/{room}/leave` | idem | J1 |
+| `room.avatar.update` | POST `/r/{room}/avatar` (§ 8.1, D55 du 02/10 — amendé le 02/10) | idem | J1 |
 | `room.settings.load` | POST `/r/{room}/settings/load` | `auth`, `seat.active`, `throttle:game-write` | J2 |
 | `room.configs.store` | POST `/r/{room}/configs` | `auth`, `seat.active`, `throttle:game-write` | J2 |
 | `saved-configs.{index,update,destroy,default}` | `/settings/configs…` | `auth`, `translations:account,room,legal` | J2 |
@@ -1679,7 +1719,7 @@ Chaque estimation inclut la barre « terminé » : tests verts, textes FR et EN,
 - `resources/js/pages/room/{create,join}.tsx` [nouveaux], mention des CGU sous le bouton d'envoi comprise (§ 6.2, § 7.2 ; clé et route livrées par L90-4) ;
 - `lang/{fr,en}/room.php` [modifiés : `room.create.*`, `room.join.*`].
 
-**Vérifié à la main dans la liste « terminé »** (aucun DOM en Pest ni en Vitest au J1, contrat C18 § 2.4) : mention `legal.terms_notice` sous le bouton d'envoi de `room/create` et de `room/join`, lien vers `legal.terms` ouvert en nouvel onglet, pseudo et avatar saisis intacts au retour ; aucune mention dans les états `kicked` et `full`.
+**Vérifié à la main dans la liste « terminé »** (aucun DOM en Pest ni en Vitest au J1, contrat C18 § 2.4) : mention `legal.terms_notice` sous le bouton d'envoi de `room/create` et de `room/join`, lien vers `legal.terms` ouvert en nouvel onglet, pseudo saisi intact au retour (amendé le 02/10) ; aucune mention dans les états `kicked` et `full`.
 
 **Tests :**
 - `tests/Feature/Room/RoomCreationTest.php` :
@@ -1701,7 +1741,7 @@ Chaque estimation inclut la barre « terminé » : tests verts, textes FR et EN,
   - « compte l'effectif présent et non l'historique des sièges »
   - « refuse un salon complet avec un message traduit »
   - « laisse entrer dans un salon en partie et fait attendre la partie suivante quand les retardataires sont fermés »
-  - « re-signe le player_token avec l'avatar choisi »
+  - « re-signe le player_token avec l'avatar attribué » (amendé le 02/10, D55 du 02/10 ; les tests d'attribution et d'unicité sont au lot L50-14)
   - « écrit la langue effective de la requête sur le siège »
 - `tests/Feature/Room/RoomEntryPageTest.php` :
   - « redirige un visiteur sans siège vers la page d'entrée publique »
@@ -1922,6 +1962,21 @@ Le prédicat de fin anticipée lui-même est prouvé par `EarlyEndTest` de `60` 
 
 D17 du 23/09 est sans effet depuis D35 du 23/09 : ces fichiers et ces tests sont tous livrés au J1, sans variante de coupe (§ 15.4) — amendé le 23/09.
 
+### L50-14 — Entrée au pseudo seul, avatar attribué et changé au lobby (J1, D55 du 02/10 — amendé le 02/10)
+
+**Fichiers :**
+- `app/Support/Room/TakenAvatars.php` [nouveau] : seul calcul des clés prises (`of(Room, ?Player $except)`), sièges `holdingSeat()`, replis compris ; consommé par `TakeSeat`, `ChangeSeatAvatar` et la prop `avatars` ; le calcul dupliqué de `RoomEntryController` est retiré ;
+- `app/Actions/Room/{TakeSeat,CreateRoom}.php`, `app/Actions/Game/StartSoloGame.php` [modifiés : paramètre d'avatar retiré, attribution serveur sous verrou, § 7.3 S6, `60` § 16.2] ; `app/Avatars/{SeatAvatar,AvatarPresetCatalog}.php` [modifiés : repli d'une image de compte évitant les clés prises] ;
+- `app/Http/Requests/Room/{StoreRoomRequest,JoinRoomRequest}.php`, `app/Http/Requests/Game/SoloStartRequest.php` [modifiés : aucun champ `avatar`] ; props `avatars` retirées de `room/create`, `room/join` et `room/solo` ;
+- `app/Actions/Room/ChangeSeatAvatar.php`, `app/Http/Controllers/Room/SeatAvatarController.php`, `app/Http/Requests/Room/ChangeSeatAvatarRequest.php` [nouveaux] ; `RoomPolicy::changeAvatar` ; route `room.avatar.update` dans `routes/game.php` ;
+- `RoomController@show` [complété : prop `avatars` en closure] ;
+- `resources/js/pages/welcome.tsx` [modifié : carte « Rejoindre » code + pseudo, `90` § 4.7] ; `resources/js/pages/room/{create,join,solo}.tsx` [modifiés : pseudo seul] ; `resources/js/pages/game/lobby.tsx` et `use-lobby-state.ts` [modifiés : sélecteur, relecture de `avatars`] ;
+- `lang/{fr,en}/room.php` (`room.lobby.avatar_taken`, `room.lobby.avatar.*`, intros) et `lang/{fr,en}/common.php` (`common.home.*` du pseudo), puis `php artisan lang:types`.
+
+**Tests** (intitulés définitifs à compléter par le lot, phrases françaises, `tests/Feature/Room/`) : attribution à la prise de siège (`suggest()` du jeton s'il est libre, sinon le premier libre ; l'image téléversée visible d'un compte ; repli d'un compte évitant les clés prises) ; changement au lobby (succès, idempotence, `seat.updated`, re-signature) ; refus d'une clé tenue par un autre siège, repli d'un siège `upload` compris ; refus hors lobby, partie et podium ; refus d'un onglet supplanté (409) ; création, entrée et solo sans prop `avatars` et sans validation d'un champ `avatar` ; entrée depuis l'accueil (reprise sous l'ancien pseudo, `kicked` et `full` en `errors.room`).
+
+**Vérifié à la main** : carte « Rejoindre » de l'accueil (code + pseudo, mention des CGU), sélecteur du lobby (avatars pris marqués par texte, refus annoncés, absent pendant une partie et sur le podium, de retour après « Rejouer »).
+
 ### L50-10 — Onglet Avancé (J2, 7–8 h)
 
 **Fichiers :**
@@ -1983,7 +2038,7 @@ D17 du 23/09 est sans effet depuis D35 du 23/09 : ces fichiers et ces tests sont
 
 ### Totaux
 
-- **Jalon 1** : L50-1 à L50-9 (L50-3 scindé en L50-3a et L50-3b, L50-7 en L50-7a et L50-7b), **51 à 71,5 h**, L50-9 compris : aucune coupe ne s'applique (D35 du 23/09) — amendé le 23/09.
+- **Jalon 1** : L50-1 à L50-9 (L50-3 scindé en L50-3a et L50-3b, L50-7 en L50-7a et L50-7b), **51 à 71,5 h**, L50-9 compris : aucune coupe ne s'applique (D35 du 23/09) — amendé le 23/09. Plus L50-14 (D55 du 02/10), lot J1 ajouté après coup et non chiffré — amendé le 02/10.
 - **Jalon 2** : L50-10 à L50-13, **19,5 à 24,5 h**.
 - La hausse du J1 sur la version précédente (49 à 69 h) vient du miroir client du code et de sa parité, de la mention des CGU, de la page du salon construite sur la partie et rechargée après une resynchronisation, et du remède `clear_themes` avec le message de thème élagué, avancés au J1 ; ce dernier retire 0,5 h au J2.
 
@@ -2040,6 +2095,6 @@ La ligne « salon onglet Simple et bornes croisées serveur 12 h » de 00 § Jal
 25. **403 `not_host` d'un hôte déchu entre l'affichage et le clic** (E110-5, E111-7). Il suit le traitement ordinaire (page `error`), pour le lancement comme pour les gestes d'hôte, alors que `host.changed` retire aussitôt les gestes. L'intercepter par une relecture garderait l'hôte déchu sur la page du salon.
 26. **`purge:suspend` et le balayage `stale_lobby`** (E113-2). L'interrupteur d'incident de `RetentionPurger` ne suspend pas le balayage de ce document (§ 16.2). Doit-il le suspendre aussi ? La sonde `purge` est de toute façon en alerte pendant une suspension.
 27. **Preuve MySQL des sérialisations du salon** (E113-6). Aucun test `tests/Concurrency` (`locks-timing`) n'est nommé pour la sérialisation de l'archivage, du battement et de la prise de siège sous le verrou du salon ; SQLite ne la prouve que par injection de course. À inscrire dans une passe `locks-timing` si voulu.
-28. **Passations de tests d'identité sans lot** (E101-6, E111-7). La route de test `…/resign` de `PlayerTokenTest` (changement d'avatar hors siège) et l'en-tête de `NicknameBlocklistTest` (rebranchement sur les FormRequest de `50`) attendaient un geste de changement d'avatar ou de pseudo en L50-6, qui n'en contient aucun. Reste à nommer le lot qui livrera ce geste, ou une passe de dette de tests.
+28. **Passations de tests d'identité sans lot** (E101-6, E111-7). La route de test `…/resign` de `PlayerTokenTest` (changement d'avatar hors siège) et l'en-tête de `NicknameBlocklistTest` (rebranchement sur les FormRequest de `50`) attendaient un geste de changement d'avatar ou de pseudo en L50-6, qui n'en contient aucun. Reste à nommer le lot qui livrera ce geste, ou une passe de dette de tests. — **Fermé pour l'avatar par D55 du 02/10** : le geste `room.avatar.update` (§ 8.1, lot L50-14) est celui sur lequel rebrancher la route de test `…/resign` ; le changement de pseudo hors prise de siège reste sans lot (amendé le 02/10).
 29. **Durée d'effacement des sièges solo lue dans `RoomExpiry`** (E122-3). `RetentionWindows::SOLO_SEAT_IDLE_MINUTES` lit `RoomExpiry::ROOM_IDLE_MINUTES` (une durée annoncée, deux déclencheurs) : changer l'échéance d'archivage du salon changerait donc celle des sièges solo. Si les deux durées doivent pouvoir diverger, la constante de `100` devient un littéral propre.
 30. **Forme de la prop `presets`** (E123-11). Elle ne porte que `nearestPlayableFramesPerRound` (§ 5.3), nul pour un preset jouable tel quel : la relance solo de `game/solo` n'a aucune source du `N` d'un preset non grisé et affiche le `B_max` du `N` de la dernière partie. Si la prop est enrichie du `N` de chaque preset, la forme du § 5.3 change, avec 60 § 16.4 et 90 § 7.7.

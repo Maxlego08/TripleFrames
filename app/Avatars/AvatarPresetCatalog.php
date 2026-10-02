@@ -3,12 +3,13 @@
 namespace App\Avatars;
 
 use App\Settings\PlatformLimits;
+use App\Support\Room\TakenAvatars;
 use InvalidArgumentException;
 
 /**
  * Registre des avatars prédéfinis — contrat C5, seconde moitié (spec 40 § 6.3).
  *
- * **Seul registre des clés.** La règle de formulaire (`avatarPresetRules()`), la
+ * **Seul registre des clés.** La règle de formulaire (`seatAvatarRules()`), la
  * signature et le décodage du `player_token`, les fabriques et la couverture de
  * traduction passent par lui ; personne d'autre n'écrit `preset-%02d`.
  *
@@ -83,8 +84,12 @@ final class AvatarPresetCatalog
      * 3. sinon — impossible sous la garde `roomSeats() ≤ avatarPresets()` —
      *    `$preferred` s'il est valide, ou la première clé.
      *
-     * C'est une suggestion, jamais une contrainte : le doublon reste permis, le
-     * pseudo (unique par salon) est le discriminant.
+     * C'est l'attribution automatique d'une prise de siège (D55 du 02/10) et
+     * le repli de « Mon avatar ». L'unicité, elle, n'est pas imposée ici mais
+     * par l'appelant, sous le verrou du salon : la liste `$taken` vient de
+     * {@see TakenAvatars::of()}, et le changement d'avatar au lobby refuse une
+     * clé tenue par un autre siège. Le cas 3 est un doublon résiduel accepté
+     * (effectif au-delà du catalogue, D55 du 02/10).
      *
      * @param  string|null  $preferred  Revendication `avatar` du jeton courant.
      * @param  list<string>  $taken  Avatars des sièges tenus dans le salon.

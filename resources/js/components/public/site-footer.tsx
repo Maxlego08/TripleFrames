@@ -67,8 +67,8 @@ function FullFooter() {
     const { t } = useTranslations();
 
     return (
-        <footer className="mt-auto border-t border-border">
-            <div className="mx-auto flex w-full max-w-5xl flex-col gap-3 px-4 py-6 text-sm text-muted-foreground">
+        <footer className="site-footer mt-auto border-t border-border">
+            <div className="site-footer__inner mx-auto flex w-full max-w-5xl flex-col gap-3 px-4 py-6 text-sm text-muted-foreground">
                 <nav aria-label={t('legal.footer.label')}>
                     <ul className="flex flex-wrap gap-x-4">
                         {LEGAL_LINKS.map((link) => (

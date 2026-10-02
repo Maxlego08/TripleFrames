@@ -1,5 +1,7 @@
 <?php
 
+use App\Avatars\UploadedAvatars;
+use App\Enums\AvatarKind;
 use App\Enums\Locale;
 use App\Enums\PlayerConnectionState;
 use App\Enums\RoomStatus;
@@ -7,13 +9,14 @@ use App\Models\Game;
 use App\Models\GamePlayer;
 use App\Models\Player;
 use App\Models\Room;
+use App\Models\User;
 use App\Rules\ValidNickname;
 use App\Settings\RoomSettings;
 use App\Settings\RoomSettingsBounds;
 use App\Support\Identity\PlayerToken;
 use App\Support\Realtime\GameRef;
 use Illuminate\Support\Facades\DB;
-use Inertia\Testing\AssertableInertia as Assert;
+use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\Response;
 use Tests\Support\Realtime\RecordingBroadcaster;
 use Tests\Support\Room\LobbyWrites;
@@ -28,7 +31,8 @@ use Tests\Support\Room\SeatEntry;
 | avant tout comptage, effectif présent et non historique des sièges,
 | unicité du pseudo sur tous les sièges du salon, partis et expulsés
 | compris, jamais une 1062. Le jeton n'est frappé qu'une fois tous les
-| refus écartés, puis re-signé avec l'avatar choisi.
+| refus écartés, puis re-signé avec l'avatar que le serveur attribue
+| (D55 du 02/10).
 |
 */
 
@@ -166,7 +170,7 @@ it("ne revalide jamais le pseudo d'un siège repris", function (): void {
 
     // Sans champ, avec le pseudo refusé, avec un pseudo mal formé : trois
     // reprises du même siège, sans aucune écriture.
-    $bodies = [[], SeatEntry::form('Admin', SeatEntry::avatar(9)), ['nickname' => 'x', 'avatar' => 'inconnu']];
+    $bodies = [[], [...SeatEntry::form('Admin'), 'avatar' => SeatEntry::avatar(9)], ['nickname' => 'x', 'avatar' => 'inconnu']];
 
     foreach ($bodies as $body) {
         $this->flushSession();
@@ -295,6 +299,49 @@ it('refuse un salon complet avec un message traduit', function (): void {
     expect(SeatEntry::rawSeats($room))->toBe($before);
 });
 
+it("rend à l'accueil les refus d'une entrée par la carte « Rejoindre », et y reprend le siège du jeton sous son ancien pseudo", function (): void {
+    // D55 du 02/10, point 6 : code et pseudo envoyés depuis l'accueil.
+    [$full] = seatTakingRoom(seatTakingSmallRoom());
+    Player::factory()->for($full)->create();
+
+    $this->from(route('home'))
+        ->post(route('room.join', $full), SeatEntry::form('Nouveau'))
+        ->assertStatus(Response::HTTP_SEE_OTHER)
+        ->assertRedirect(route('home'))
+        ->assertSessionHasErrors(['room' => trans('room.join.full')]);
+
+    // Expulsé : refusé avant tout comptage, de retour sur l'accueil.
+    [$kickedRoom] = seatTakingRoom();
+    $kickedToken = PlayerToken::mint(Locale::English, SeatEntry::avatar(6));
+    Player::factory()->for($kickedRoom)->kicked()->create(['player_token_hash' => $kickedToken->hash()]);
+    LobbyWrites::actAs($this, $kickedToken);
+
+    $this->flushSession();
+    $this->from(route('home'))
+        ->post(route('room.join', $kickedRoom), SeatEntry::form('Revenant'))
+        ->assertRedirect(route('home'))
+        ->assertSessionHasErrors(['room' => trans('room.join.kicked')]);
+
+    // Déjà assis : reprise du siège, le pseudo saisi est ignoré.
+    [$heldRoom] = seatTakingRoom();
+    $heldToken = PlayerToken::mint(Locale::English, SeatEntry::avatar(4));
+    Player::factory()->for($heldRoom)->withNickname('Ancien')->create([
+        'player_token_hash' => $heldToken->hash(),
+        'avatar_preset' => SeatEntry::avatar(4),
+    ]);
+    $before = SeatEntry::rawSeats($heldRoom);
+    LobbyWrites::actAs($this, $heldToken);
+
+    $this->flushSession();
+    $this->from(route('home'))
+        ->post(route('room.join', $heldRoom), SeatEntry::form('Nouveau'))
+        ->assertRedirect(route('room.show', $heldRoom))
+        ->assertSessionHasNoErrors();
+
+    expect(SeatEntry::rawSeats($heldRoom))->toBe($before)
+        ->and(Player::query()->whereBelongsTo($heldRoom)->where('nickname', 'Nouveau')->exists())->toBeFalse();
+});
+
 it('laisse entrer dans un salon en partie et fait attendre la partie suivante quand les retardataires sont fermés', function (): void {
     $settings = RoomSettings::fromInput(['allowLateJoin' => false]);
     $room = Room::factory()->withSettings($settings)->playing()->create();
@@ -344,51 +391,119 @@ it('laisse entrer dans un salon en partie et fait attendre la partie suivante qu
         ->and(GamePlayer::query()->whereBelongsTo($podiumGame)->count())->toBe(0);
 });
 
-it('re-signe le player_token avec l\'avatar choisi', function (): void {
+it("attribue à la prise de siège l'avatar préféré du jeton s'il est libre, sinon le premier libre, et re-signe le jeton avec lui", function (): void {
     [$first] = seatTakingRoom();
+    Player::query()->whereBelongsTo($first)->update(['avatar_preset' => SeatEntry::avatar(1)]);
 
-    // Sans jeton : la prise de siège frappe un jeton qui revendique l'avatar
-    // choisi, et le siège le porte.
-    $seated = $this->post(route('room.join', $first), SeatEntry::form('Zoé', SeatEntry::avatar(6)));
+    // Sans jeton : le premier prédéfini libre, quel que soit le champ
+    // `avatar` envoyé — ignoré (D55 du 02/10).
+    $seated = $this->post(route('room.join', $first), [...SeatEntry::form('Zoé'), 'avatar' => SeatEntry::avatar(6)])
+        ->assertSessionHasNoErrors();
     $token = SeatEntry::tokenFrom($seated);
 
-    expect($token->avatar)->toBe(SeatEntry::avatar(6))
-        ->and(SeatEntry::seatOf($first, $token)?->avatar_preset)->toBe(SeatEntry::avatar(6));
+    expect($token->avatar)->toBe(SeatEntry::avatar(2))
+        ->and(SeatEntry::seatOf($first, $token)?->avatar_preset)->toBe(SeatEntry::avatar(2))
+        ->and(SeatEntry::seatOf($first, $token)?->avatar_kind)->toBe(AvatarKind::Preset);
 
-    // Avec un jeton : même tid, avatar remplacé, un seul `Set-Cookie`.
-    [$second] = seatTakingRoom();
-    LobbyWrites::actAs($this, $token);
+    // Avec un jeton qui revendique une clé libre : cette clé, même tid, un
+    // seul `Set-Cookie`.
+    [$free] = seatTakingRoom();
+    Player::query()->whereBelongsTo($free)->update(['avatar_preset' => SeatEntry::avatar(1)]);
+    LobbyWrites::actAs($this, $token->withAvatar(SeatEntry::avatar(11)));
 
     $this->flushSession();
-    $resignedResponse = $this->post(route('room.join', $second), SeatEntry::form('Zoé', SeatEntry::avatar(11)));
-    $resigned = SeatEntry::tokenFrom($resignedResponse);
+    $resigned = SeatEntry::tokenFrom($this->post(route('room.join', $free), SeatEntry::form('Zoé')));
 
     expect($resigned->sameIdentityAs($token))->toBeTrue()
         ->and($resigned->avatar)->toBe(SeatEntry::avatar(11))
-        ->and(SeatEntry::seatOf($second, $token)?->avatar_preset)->toBe(SeatEntry::avatar(11));
+        ->and(SeatEntry::seatOf($free, $token)?->avatar_preset)->toBe(SeatEntry::avatar(11));
 
-    // Au salon suivant, `suggest()` le présélectionne s'il y est libre, et
-    // la première clé libre sinon.
-    [$free] = seatTakingRoom();
+    // Clé revendiquée déjà tenue : la première clé libre ; un siège parti
+    // libère la sienne.
     [$busy] = seatTakingRoom();
-
-    // L'hôte de `$free` tient une clé fixe, autre que celle du jeton : tirée
-    // au hasard par la fabrique, elle tomberait une fois sur 24 sur la clé
-    // revendiquée, et le salon ne serait plus libre.
-    Player::query()->whereBelongsTo($free)->update(['avatar_preset' => SeatEntry::avatar(1)]);
     Player::query()->whereBelongsTo($busy)->update(['avatar_preset' => SeatEntry::avatar(11)]);
     Player::factory()->for($busy)->create(['avatar_preset' => SeatEntry::avatar(1)]);
-
+    Player::factory()->for($busy)->left()->create(['avatar_preset' => SeatEntry::avatar(2)]);
     LobbyWrites::actAs($this, $resigned);
 
-    $this->get(route('room.entry', $free))
-        ->assertInertia(fn (Assert $page) => $page->where('avatars.suggested', SeatEntry::avatar(11))->etc());
+    $this->flushSession();
+    $fallback = SeatEntry::tokenFrom($this->post(route('room.join', $busy), SeatEntry::form('Zoé')));
 
-    $this->get(route('room.entry', $busy))
-        ->assertInertia(fn (Assert $page) => $page
-            ->where('avatars.taken', [SeatEntry::avatar(1), SeatEntry::avatar(11)])
-            ->where('avatars.suggested', SeatEntry::avatar(2))
-            ->etc());
+    expect($fallback->avatar)->toBe(SeatEntry::avatar(2))
+        ->and(SeatEntry::seatOf($busy, $token)?->avatar_preset)->toBe(SeatEntry::avatar(2));
+});
+
+it("attribue « Mon avatar » au compte dont l'image téléversée est l'avatar choisi, repli libre compris", function (): void {
+    Storage::fake(UploadedAvatars::DISK);
+    [$room] = seatTakingRoom();
+    // Le prédéfini du compte est déjà tenu dans le salon.
+    Player::query()->whereBelongsTo($room)->update(['avatar_preset' => SeatEntry::avatar(4)]);
+    $user = User::factory()->withUploadedAvatar()->create(['avatar_preset' => SeatEntry::avatar(4)]);
+
+    $joined = $this->actingAs($user)->post(route('room.join', $room), SeatEntry::form('Zoé'))
+        ->assertSessionHasNoErrors();
+    $seat = Player::query()->whereBelongsTo($room)->where('nickname', 'Zoé')->sole();
+
+    // L'image du compte, et un repli qui n'est pas celui d'un autre siège.
+    expect($seat->avatar_kind)->toBe(AvatarKind::Upload)
+        ->and($seat->user_id)->toBe($user->id)
+        ->and($seat->avatar_preset)->toBe(SeatEntry::avatar(1))
+        ->and(SeatEntry::claims($joined)['avatar'])->toBe(SeatEntry::avatar(1));
+});
+
+it("attribue un prédéfini, jamais la photo du fournisseur, au compte dont l'image téléversée choisie est masquée", function (): void {
+    Storage::fake(UploadedAvatars::DISK);
+    [$room] = seatTakingRoom();
+    Player::query()->whereBelongsTo($room)->update(['avatar_preset' => SeatEntry::avatar(1)]);
+    // Avatar choisi : l'image téléversée, masquée ; photo Google visible.
+    $user = User::factory()->uploadedAvatarHidden()->create([
+        'avatar_preset' => SeatEntry::avatar(9),
+        'avatar_provider_path' => 'provider-photo.webp',
+        'avatar_provider_hidden_at' => null,
+    ]);
+
+    LobbyWrites::actAs($this, PlayerToken::mint(Locale::French)->withAvatar(SeatEntry::avatar(5)));
+
+    $this->actingAs($user)->post(route('room.join', $room), SeatEntry::form('Zoé'))
+        ->assertSessionHasNoErrors();
+    $seat = Player::query()->whereBelongsTo($room)->where('nickname', 'Zoé')->sole();
+
+    // Spec 40 § 11.4 : `upload` seulement si l'image téléversée elle-même
+    // est visible ; sinon `suggest(préféré du jeton, pris)`.
+    expect($seat->avatar_kind)->toBe(AvatarKind::Preset)
+        ->and($seat->avatar_preset)->toBe(SeatEntry::avatar(5));
+});
+
+it("attribue un prédéfini libre au compte dont l'avatar choisi est un prédéfini, photo du fournisseur visible comprise", function (): void {
+    [$room] = seatTakingRoom();
+    Player::query()->whereBelongsTo($room)->update(['avatar_preset' => SeatEntry::avatar(1)]);
+    $user = User::factory()->withProviderAvatar()->create();
+    $user->forceFill(['avatar_kind' => AvatarKind::Preset, 'avatar_preset' => SeatEntry::avatar(9)])->save();
+
+    LobbyWrites::actAs($this, PlayerToken::mint(Locale::French)->withAvatar(SeatEntry::avatar(5)));
+
+    $this->actingAs($user)->post(route('room.join', $room), SeatEntry::form('Zoé'))
+        ->assertSessionHasNoErrors();
+    $seat = Player::query()->whereBelongsTo($room)->where('nickname', 'Zoé')->sole();
+
+    // Seule l'image téléversée choisie est attribuée d'office, comme la
+    // présélection d'avant D55 : ici, la préférence du jeton.
+    expect($seat->avatar_kind)->toBe(AvatarKind::Preset)
+        ->and($seat->avatar_preset)->toBe(SeatEntry::avatar(5));
+});
+
+it('ne donne jamais le même prédéfini à deux sièges tenus pris à la suite', function (): void {
+    [$room] = seatTakingRoom();
+    Player::query()->whereBelongsTo($room)->update(['avatar_preset' => SeatEntry::avatar(1)]);
+
+    // Trois visiteurs sans jeton, chacun frappe le sien.
+    foreach (['Ana', 'Bob', 'Cid'] as $nickname) {
+        $this->post(route('room.join', $room), SeatEntry::form($nickname))->assertSessionHasNoErrors();
+    }
+
+    $held = Player::query()->whereBelongsTo($room)->holdingSeat()->orderBy('id')->pluck('avatar_preset')->all();
+
+    expect($held)->toBe([SeatEntry::avatar(1), SeatEntry::avatar(2), SeatEntry::avatar(3), SeatEntry::avatar(4)]);
 });
 
 it('écrit la langue effective de la requête sur le siège', function (): void {

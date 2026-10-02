@@ -2,7 +2,7 @@ import { Head, Link, usePage } from '@inertiajs/react';
 import { Info, TriangleAlert } from 'lucide-react';
 import RoomEntryController from '@/actions/App/Http/Controllers/Room/RoomEntryController';
 import { SeatForm } from '@/components/room/seat-form';
-import type { NicknameBounds, SeatAvatars } from '@/components/room/seat-form';
+import type { NicknameBounds } from '@/components/room/seat-form';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useTranslations } from '@/hooks/use-translations';
 import { home } from '@/routes';
@@ -18,7 +18,6 @@ type RoomEntryState = 'kicked' | 'full' | 'late_join' | 'in_progress' | 'open';
 type RoomJoinProps = {
     room: { code: string };
     entry: RoomEntryState;
-    avatars: SeatAvatars;
     nickname: NicknameBounds;
 };
 
@@ -43,9 +42,12 @@ const OPEN_ENTRY_KEYS: Partial<Record<RoomEntryState, TranslationKey>> = {
  * l'apparence du visiteur : le code ou le lien suffit, dans la limite des
  * sièges ; l'hôte ne valide pas chaque arrivée.
  *
+ * C'est la cible du lien partagé `/r/{code}` (D55 du 02/10) : le code est
+ * déjà dans l'adresse, la page ne demande QUE le pseudo. Aucun avatar :
+ * le serveur l'attribue à la prise de siège, et il se change au lobby.
  * Un visiteur sans siège ne voit pas qui est dans le salon : aucun pseudo,
- * aucun identifiant, seulement les avatars déjà pris, signalés dans le
- * sélecteur. Le titre ne porte ni code ni paramètre (§ 6.5).
+ * aucun identifiant, aucun avatar. Le titre ne porte ni code ni paramètre
+ * (§ 6.5).
  *
  * États : `kicked` et `full` sans formulaire ni mention des CGU, avec un
  * lien vers l'accueil ; `late_join` avec le formulaire (le siège entrera à
@@ -57,12 +59,7 @@ const OPEN_ENTRY_KEYS: Partial<Record<RoomEntryState, TranslationKey>> = {
  * répétée. Aucune donnée à charger ; un refus du limiteur (429) rend la page
  * `error`.
  */
-export default function RoomJoin({
-    room,
-    entry,
-    avatars,
-    nickname,
-}: RoomJoinProps) {
+export default function RoomJoin({ room, entry, nickname }: RoomJoinProps) {
     const { t } = useTranslations();
     const { errors } = usePage().props;
     const closedKey = CLOSED_ENTRY_KEYS[entry];
@@ -117,7 +114,6 @@ export default function RoomJoin({
                             form={RoomEntryController.store.form({
                                 room: room.code,
                             })}
-                            avatars={avatars}
                             nickname={nickname}
                             submitLabel={t('room.join.submit')}
                         />

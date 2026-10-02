@@ -1,5 +1,6 @@
 import { createInertiaApp } from '@inertiajs/react';
 import '../scss/auth.scss';
+import '../scss/home.scss';
 import '../scss/legal.scss';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { initializeTheme } from '@/hooks/use-appearance';

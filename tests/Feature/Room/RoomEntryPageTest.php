@@ -1,6 +1,5 @@
 <?php
 
-use App\Avatars\AvatarPresetCatalog;
 use App\Enums\Locale;
 use App\Models\Player;
 use App\Models\Room;
@@ -156,24 +155,16 @@ it("n'expose aux visiteurs sans siège ni pseudo ni identifiant interne", functi
     $response = $this->get(route('room.entry', $room))->assertOk();
     $props = roomEntryOwnProps($response);
 
-    // Exactement les props du § 7.2, dans cet ordre.
-    expect(array_keys($props))->toBe(['room', 'entry', 'avatars', 'nickname'])
+    // Exactement les props du § 7.2, dans cet ordre : aucun avatar, la prise
+    // de siège l'attribue (D55 du 02/10).
+    expect(array_keys($props))->toBe(['room', 'entry', 'nickname'])
         ->and($props['room'])->toBe(['code' => $room->room_code])
         ->and($props['entry'])->toBe('open')
-        ->and($props['avatars'])->toBe([
-            'options' => AvatarPresetCatalog::options(),
-            // Les avatars des sièges TENUS, dans l'ordre du catalogue ; celui
-            // d'un siège parti est libre.
-            'taken' => [SeatEntry::avatar(5), SeatEntry::avatar(9)],
-            'suggested' => SeatEntry::avatar(1),
-            // « Mon avatar » : aucun pour un visiteur sans compte (spec 40 § 11.4).
-            'account' => null,
-        ])
         ->and($props['nickname'])->toBe(['min' => NicknameNormalizer::MIN_LENGTH, 'max' => NicknameNormalizer::MAX_LENGTH]);
 
-    // Aucune clé d'identifiant, à toute profondeur, dans toute la page.
+    // Aucune clé d'identifiant ni d'avatar, à toute profondeur, dans toute la page.
     $page = $response->inertiaPage();
-    $forbidden = ['id', 'room_id', 'host_player_id', 'publicId', 'public_id', 'player_token_hash', 'nickname_normalized', 'seatToken', 'state', 'seats'];
+    $forbidden = ['id', 'room_id', 'host_player_id', 'publicId', 'public_id', 'player_token_hash', 'nickname_normalized', 'seatToken', 'state', 'seats', 'avatars', 'taken'];
 
     expect(array_values(array_intersect(roomEntryKeys($page['props']), $forbidden)))->toBe([]);
 
@@ -185,14 +176,14 @@ it("n'expose aux visiteurs sans siège ni pseudo ni identifiant interne", functi
 
         expect($json)->not->toContain((string) $seat->public_id)
             ->and($json)->not->toContain((string) $seat->player_token_hash)
-            ->and($json)->not->toContain('"'.$seat->nickname.'"');
+            ->and($json)->not->toContain('"'.$seat->nickname.'"')
+            ->and($json)->not->toContain('"'.$seat->avatar_preset.'"');
     }
 
-    // La page de création non plus : aucun avatar pris, aucun salon.
+    // La page de création non plus : ni avatar, ni salon.
     $create = roomEntryOwnProps($this->get(route('room.create'))->assertOk());
 
-    expect(array_keys($create))->toBe(['avatars', 'nickname'])
-        ->and($create['avatars']['taken'])->toBe([]);
+    expect(array_keys($create))->toBe(['nickname']);
 });
 
 it("annonce le salon complet, la partie en cours et le refus d'un expulsé", function (): void {

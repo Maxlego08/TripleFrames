@@ -3,6 +3,7 @@
 use App\Actions\Game\RevealSoloAnswer;
 use App\Actions\Game\SkipSoloRound;
 use App\Avatars\AvatarPresetCatalog;
+use App\Avatars\UploadedAvatars;
 use App\Enums\AvatarKind;
 use App\Enums\ContentAvailability;
 use App\Enums\GameMode;
@@ -26,6 +27,7 @@ use App\Models\Movie;
 use App\Models\Player;
 use App\Models\Round;
 use App\Models\RoundPlayer;
+use App\Models\User;
 use App\Settings\EngineConstants;
 use App\Settings\PlatformLimits;
 use App\Settings\RoomSettings;
@@ -51,6 +53,7 @@ use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Testing\Fakes\QueueFake;
 use Illuminate\Support\ViewErrorBag;
 use Illuminate\Testing\TestResponse;
@@ -138,9 +141,10 @@ function soloStart(TestCase $test, array $body, ?string $from = null): TestRespo
 }
 
 /**
- * Le corps d'un premier démarrage : preset, pseudo et avatar.
+ * Le corps d'un premier démarrage : preset et pseudo — l'avatar est
+ * attribué par le serveur (D55 du 02/10).
  *
- * @return array{preset: string, nickname: string, avatar: string}
+ * @return array{preset: string, nickname: string}
  */
 function soloFirstBody(SettingPresetKey $preset = SOLO_PRESET): array
 {
@@ -277,6 +281,25 @@ function soloUnreachableQueue(): void
     config(['queue.connections.unreachable' => ['driver' => 'unreachable'], 'queue.default' => 'unreachable']);
 }
 
+it("attribue au premier siège solo l'image téléversée d'un compte qui l'a choisie, sinon un prédéfini, jamais le champ avatar envoyé", function (): void {
+    Storage::fake(UploadedAvatars::DISK);
+    soloCatalogue(soloRoundsOf());
+    $user = User::factory()->withUploadedAvatar()->create(['avatar_preset' => SeatEntry::avatar(6)]);
+
+    $response = $this->actingAs($user)
+        ->from(route('solo.create'))
+        ->post(route('solo.store'), [...soloFirstBody(), 'avatar' => SeatEntry::avatar(9)])
+        ->assertRedirect(route('solo.show'))
+        ->assertSessionHasNoErrors();
+
+    $seat = Player::query()->whereNull('room_id')->sole();
+
+    expect($seat->avatar_kind)->toBe(AvatarKind::Upload)
+        ->and($seat->user_id)->toBe($user->id)
+        ->and($seat->avatar_preset)->toBe(SeatEntry::avatar(6))
+        ->and(SeatEntry::tokenFrom($response)->avatar)->toBe(SeatEntry::avatar(6));
+});
+
 it('un second lancement solo sous le même jeton reprend le siège', function (): void {
     $recorder = RecordingBroadcaster::install();
     soloCatalogue(soloRoundsOf());
@@ -290,13 +313,14 @@ it('un second lancement solo sous le même jeton reprend le siège', function ()
         ->and($seat->solo_token_hash)->toBe($token->hash())
         ->and($seat->nickname)->toBe(SeatEntry::NICKNAME)
         ->and($seat->nickname_normalized)->toBe(NicknameNormalizer::normalize(SeatEntry::NICKNAME))
-        ->and($seat->avatar_preset)->toBe(SeatEntry::avatar(3))
+        ->and($seat->avatar_kind)->toBe(AvatarKind::Preset)
+        ->and($seat->avatar_preset)->toBe(AvatarPresetCatalog::suggest(null, []))
         ->and($seat->connection_state)->toBe(PlayerConnectionState::Connected)
         ->and($first->mode)->toBe(GameMode::Solo)
         ->and($first->room_id)->toBeNull();
 
-    // L'avatar choisi rejoint le jeton après la validation (I4.5).
-    expect($token->avatar)->toBe(SeatEntry::avatar(3));
+    // L'avatar attribué rejoint le jeton après la validation (I4.5).
+    expect($token->avatar)->toBe(AvatarPresetCatalog::suggest(null, []));
 
     $before = DB::table('player')->where('id', $seat->id)->first();
 
@@ -746,9 +770,9 @@ it('la page d\'entrée du solo rend room/solo dans l\'apparence du visiteur', fu
     }
 
     // Les props : les quatre presets dans l'ordre du site et leur N jouable
-    // le plus proche sur le vivier catalogue (passe 1 : Hardcore à 3), le
-    // catalogue des avatars sans avatar pris, les bornes du pseudo — ni
-    // paquet, ni jeton d'onglet.
+    // le plus proche sur le vivier catalogue (passe 1 : Hardcore à 3), les
+    // bornes du pseudo — ni avatar (D55 du 02/10), ni paquet, ni jeton
+    // d'onglet.
     $this->get(route('solo.create'))->assertOk()->assertInertia(fn (Assert $page) => $page
         ->component('room/solo')
         ->where('presets', [
@@ -757,9 +781,7 @@ it('la page d\'entrée du solo rend room/solo dans l\'apparence du visiteur', fu
             ['key' => 'hardcore', 'grayed' => true, 'nearestPlayableFramesPerRound' => RoomSettingsBounds::DEFAULT_FRAMES_PER_ROUND],
             ['key' => 'discovery', 'grayed' => false, 'nearestPlayableFramesPerRound' => null],
         ])
-        ->where('avatars.options', AvatarPresetCatalog::options())
-        ->where('avatars.taken', [])
-        ->where('avatars.suggested', AvatarPresetCatalog::suggest(null, []))
+        ->missing('avatars')
         ->where('nickname', ['min' => NicknameNormalizer::MIN_LENGTH, 'max' => NicknameNormalizer::MAX_LENGTH])
         ->missing('state')
         ->missing('seatToken'));
@@ -813,13 +835,15 @@ it('ramène d\'office un preset au N injouable au N jouable le plus proche et le
         ->assertSessionMissing(SoloGameController::SETTINGS_NOTICE);
 });
 
-it('exige pseudo et avatar d\'un premier siège solo, jamais d\'une reprise, et nomme le champ preset dans la langue du joueur', function (): void {
+it('exige le pseudo d\'un premier siège solo, jamais d\'une reprise, et nomme le champ preset dans la langue du joueur', function (): void {
     soloCatalogue(soloRoundsOf());
 
-    // Premier siège : pseudo et avatar exigés ; aucun jeton frappé.
+    // Premier siège : pseudo exigé, jamais d'avatar (D55 du 02/10) ; aucun
+    // jeton frappé.
     $response = soloStart($this, ['preset' => SOLO_PRESET->value])
         ->assertRedirect(route('solo.create'))
-        ->assertSessionHasErrors(['nickname', 'avatar']);
+        ->assertSessionHasErrors(['nickname'])
+        ->assertSessionDoesntHaveErrors(['avatar']);
 
     expect(SeatEntry::tokenCookies($response))->toBe([])
         ->and(Player::query()->count())->toBe(0);

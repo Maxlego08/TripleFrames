@@ -1,6 +1,5 @@
 <?php
 
-use App\Avatars\AvatarPresetCatalog;
 use App\Enums\AvatarKind;
 use App\Enums\Locale;
 use App\Enums\PlayerConnectionState;
@@ -62,7 +61,8 @@ function roomCreationRawRow(Room $room): array
 }
 
 it("crée le salon avec les réglages par défaut et fait du créateur l'hôte", function (): void {
-    $response = $this->post(route('room.store'), SeatEntry::form('  Zoé   la  Brave ', SeatEntry::avatar(5)));
+    // Un champ `avatar` envoyé est ignoré : le serveur attribue (D55 du 02/10).
+    $response = $this->post(route('room.store'), [...SeatEntry::form('  Zoé   la  Brave '), 'avatar' => SeatEntry::avatar(5)]);
 
     $room = Room::query()->sole();
     $seat = Player::query()->sole();
@@ -89,7 +89,7 @@ it("crée le salon avec les réglages par défaut et fait du créateur l'hôte",
         ->and($seat->nickname)->toBe('Zoé la Brave')
         ->and($seat->nickname_normalized)->toBe(NicknameNormalizer::normalize('Zoé la Brave'))
         ->and($seat->avatar_kind)->toBe(AvatarKind::Preset)
-        ->and($seat->avatar_preset)->toBe(SeatEntry::avatar(5))
+        ->and($seat->avatar_preset)->toBe(SeatEntry::avatar(1))
         ->and($seat->connection_state)->toBe(PlayerConnectionState::Connected)
         ->and($seat->player_token_hash)->toBe($token->hash())
         ->and($seat->user_id)->toBeNull()
@@ -231,14 +231,12 @@ it("n'émet qu'un seul host.changed à la création", function (): void {
 });
 
 it("frappe un player_token à la création et jamais à l'affichage du formulaire", function (): void {
-    // L'affichage : aucun jeton frappé, présélection sans préférence.
+    // L'affichage : aucun jeton frappé, aucun avatar proposé (D55 du 02/10).
     $form = $this->get(route('room.create'))
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->component('room/create')
-            ->where('avatars.options', AvatarPresetCatalog::options())
-            ->where('avatars.taken', [])
-            ->where('avatars.suggested', SeatEntry::avatar(1))
+            ->missing('avatars')
             ->where('nickname', ['min' => NicknameNormalizer::MIN_LENGTH, 'max' => NicknameNormalizer::MAX_LENGTH])
             ->etc());
 
@@ -252,33 +250,34 @@ it("frappe un player_token à la création et jamais à l'affichage du formulair
         ->and(Room::query()->count())->toBe(0);
 
     // La création frappe un seul jeton, dont le SHA-256 du tid est le siège,
-    // revendiquant la langue de la requête et l'avatar choisi.
+    // revendiquant la langue de la requête et l'avatar ATTRIBUÉ — jamais
+    // celui qu'un corps prétendrait choisir.
     $created = $this->withUnencryptedCookie('locale', Locale::French->value)
-        ->post(route('room.store'), SeatEntry::form(avatar: SeatEntry::avatar(7)));
+        ->post(route('room.store'), [...SeatEntry::form(), 'avatar' => SeatEntry::avatar(7)]);
 
     $token = SeatEntry::tokenFrom($created);
 
     expect(Player::query()->sole()->player_token_hash)->toBe($token->hash())
         ->and($token->locale)->toBe(Locale::French)
-        ->and($token->avatar)->toBe(SeatEntry::avatar(7));
+        ->and($token->avatar)->toBe(SeatEntry::avatar(1));
 
-    // Le formulaire suivant LIT ce jeton pour présélectionner son avatar,
-    // sans en frapper ni en reposer aucun.
-    LobbyWrites::actAs($this, $token);
+    // Le formulaire suivant ne frappe ni ne repose aucun jeton.
+    LobbyWrites::actAs($this, $token->withAvatar(SeatEntry::avatar(8)));
 
-    $again = $this->get(route('room.create'))
-        ->assertInertia(fn (Assert $page) => $page->where('avatars.suggested', SeatEntry::avatar(7))->etc());
+    $again = $this->get(route('room.create'))->assertOk();
 
     expect(SeatEntry::tokenCookies($again))->toBe([]);
 
     // Une seconde création sous ce jeton garde le même tid : un jeton = un
-    // siège par salon, jamais un jeton par salon.
-    $second = $this->post(route('room.store'), SeatEntry::form('Autre', SeatEntry::avatar(8)));
+    // siège par salon, jamais un jeton par salon ; la préférence du jeton
+    // donne l'avatar attribué.
+    $second = $this->post(route('room.store'), SeatEntry::form('Autre'));
     $resigned = SeatEntry::tokenFrom($second);
 
     expect($resigned->sameIdentityAs($token))->toBeTrue()
         ->and($resigned->avatar)->toBe(SeatEntry::avatar(8))
-        ->and(Player::query()->where('player_token_hash', $token->hash())->count())->toBe(2);
+        ->and(Player::query()->where('player_token_hash', $token->hash())->count())->toBe(2)
+        ->and(Player::query()->where('nickname', 'Autre')->value('avatar_preset'))->toBe(SeatEntry::avatar(8));
 });
 
 it('écrit les cinq projections égales au value object dès la création', function (): void {

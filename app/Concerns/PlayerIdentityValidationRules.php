@@ -14,12 +14,15 @@ use Illuminate\Validation\Rule;
  * Les règles de l'identité d'un siège — pseudo et avatar prédéfini (contrat
  * C5, spec 40 § 5.8). Même modèle que {@see ProfileValidationRules}.
  *
- * Chaque FormRequest de `50` et `60` qui crée un siège (`nickname`, `avatar`) :
+ * Chaque FormRequest de `50` et `60` qui crée un siège (`nickname`) :
  *
  * 1. utilise ce trait ;
  * 2. appelle, dans `prepareForValidation()`,
  *    `$this->merge(['nickname' => $this->prepareNickname($this->input('nickname'))])` ;
- * 3. applique {@see self::nicknameRules()} et {@see self::avatarPresetRules()}.
+ * 3. applique {@see self::nicknameRules()}.
+ *
+ * Aucune n'accepte d'avatar (D55 du 02/10) : la prise de siège l'attribue.
+ * {@see self::seatAvatarRules()} ne sert qu'au changement d'avatar au lobby.
  *
  * La forme canonique est donc ce que valide la règle **et** ce qu'écrit
  * l'action : aucune seconde normalisation dans un contrôleur. L'exclusion des
@@ -39,20 +42,11 @@ trait PlayerIdentityValidationRules
     }
 
     /**
-     * L'avatar prédéfini : une clé de {@see AvatarPresetCatalog}, seul registre
-     * des clés — jamais un chemin, jamais `preset-%02d` écrit ici.
-     *
-     * @return array<int, mixed>
-     */
-    protected function avatarPresetRules(): array
-    {
-        return ['required', 'string', Rule::in(AvatarPresetCatalog::keys())];
-    }
-
-    /**
-     * L'avatar d'un siège (spec 40 § 11.4, D49 du 01/10) : une clé du
-     * catalogue, ou `account` (« Mon avatar ») pour un compte qui porte une
-     * image visible — jamais pour un invité ni pour une image masquée.
+     * L'avatar d'un siège au lobby (spec 40 § 11.4, D49 du 01/10, D55 du
+     * 02/10) : une clé de {@see AvatarPresetCatalog}, seul registre des clés —
+     * jamais un chemin, jamais `preset-%02d` écrit ici —, ou `account`
+     * (« Mon avatar ») pour un compte qui porte une image visible — jamais
+     * pour un invité ni pour une image masquée.
      *
      * @return array<int, mixed>
      */

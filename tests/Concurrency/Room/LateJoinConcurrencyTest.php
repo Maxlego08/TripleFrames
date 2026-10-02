@@ -27,7 +27,6 @@ use Illuminate\Support\Facades\Queue;
 use Tests\Support\Draw\PoolFixtures;
 use Tests\Support\Game\EngineFixtures;
 use Tests\Support\Room\HostGestures;
-use Tests\Support\Room\SeatEntry;
 
 /*
 |--------------------------------------------------------------------------
@@ -122,7 +121,6 @@ function lateJoinConcurrencySeat(Room $room, string $nickname): Player
         $room,
         Request::create('/r/'.$room->room_code.'/join', 'POST'),
         $nickname,
-        SeatEntry::avatar(4),
         Locale::French,
     );
 

@@ -22,6 +22,7 @@ use App\Support\Identity\NicknameNormalizer;
 use App\Support\Identity\PlayerToken;
 use App\Support\Identity\PlayerTokenManager;
 use App\Support\Room\SeatPublicId;
+use App\Support\Room\TakenAvatars;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\Request;
@@ -49,8 +50,10 @@ use LogicException;
  *   ≥ capacité → {@see JoinRefusal::Full} ;
  * - S5 : forme repliée du pseudo déjà portée par un siège du salon, partis et
  *   expulsés compris → `validation.nickname.taken` sous `nickname` (I5.4) ;
- * - S6 : **`ensure()` seulement alors**, puis l'écriture du siège, en une
- *   seule écriture Eloquent (40 § 2.2) ;
+ * - S6 : l'avatar **attribué par le serveur** sous le verrou du salon
+ *   ({@see SeatAvatar::assign()}, D55 du 02/10 : aucun formulaire d'entrée
+ *   n'en porte), **`ensure()` seulement alors**, puis l'écriture du siège,
+ *   en une seule écriture Eloquent (40 § 2.2) ;
  * - S7 : salon en partie → **admission d'un retardataire** (§ 15.2) si le
  *   salon leur est ouvert (`allow_late_join`, lu en projection) et qu'une
  *   manche numérotée reste à démarrer, sinon attente de la partie suivante,
@@ -59,7 +62,7 @@ use LogicException;
  * - S9 : `last_activity_at`, par mise à jour ciblée ;
  * - S10 : APRÈS la validation, `seat.joined` au salon — `firstRoundNumber`
  *   compris pour un retardataire admis (§ 15.3) — et re-signature du jeton
- *   avec l'avatar choisi (I4.5).
+ *   avec le prédéfini attribué (I4.5).
  *
  * **Admission (S7, § 15.2)**, sous l'ordre global : la dernière partie du
  * salon est relue `FOR UPDATE` après le siège (`room → player → game`,
@@ -106,8 +109,6 @@ final readonly class TakeSeat
      *                            et du jeton frappé à l'écriture du siège.
      * @param  string|null  $nickname  Forme canonique validée ; nulle seulement
      *                                 quand le jeton tient déjà un siège (reprise).
-     * @param  string|null  $avatarPreset  Clé du catalogue validée, ou
-     *                                     `SeatAvatar::ACCOUNT` ; même règle.
      * @param  Locale  $locale  Locale effective de la requête (`SetLocale`).
      * @return Player|JoinRefusal le siège pris ou repris, ou le refus
      *
@@ -117,13 +118,12 @@ final readonly class TakeSeat
         Room $room,
         Request $request,
         ?string $nickname,
-        ?string $avatarPreset,
         Locale $locale,
         bool $repairHost = true,
     ): Player|JoinRefusal {
         try {
             return DB::transaction(fn (): Player|JoinRefusal => $this->seat(
-                $room, $request, $nickname, $avatarPreset, $locale, $repairHost,
+                $room, $request, $nickname, $locale, $repairHost,
             ));
         } catch (UniqueConstraintViolationException) {
             $token = $this->tokens->current($request);
@@ -141,13 +141,12 @@ final readonly class TakeSeat
      * La séquence S1 à S10, dans la transaction.
      *
      * @throws ValidationException Pseudo déjà pris dans ce salon.
-     * @throws LogicException Siège neuf sans pseudo ni avatar validés.
+     * @throws LogicException Siège neuf sans pseudo validé.
      */
     private function seat(
         Room $room,
         Request $request,
         ?string $nickname,
-        ?string $avatarPreset,
         Locale $locale,
         bool $repairHost,
     ): Player|JoinRefusal {
@@ -174,8 +173,8 @@ final readonly class TakeSeat
             return $held;
         }
 
-        if ($nickname === null || $avatarPreset === null) {
-            throw new LogicException('TakeSeat : un siège neuf exige un pseudo et un avatar validés.');
+        if ($nickname === null) {
+            throw new LogicException('TakeSeat : un siège neuf exige un pseudo validé.');
         }
 
         // S4 — effectif présent, jamais l'historique des sièges.
@@ -192,15 +191,11 @@ final readonly class TakeSeat
             throw self::nicknameTaken();
         }
 
-        // S6 — l'avatar, relu sur le compte sous le verrou (spec 40 § 11.4),
-        // la frappe, seulement maintenant, puis l'écriture du siège.
+        // S6 — l'avatar, attribué sous le verrou du salon et relu sur le
+        // compte (spec 40 § 11.4, D55 du 02/10), la frappe, seulement
+        // maintenant, puis l'écriture du siège.
         $account = $request->user() instanceof User ? $request->user() : null;
-        $avatar = SeatAvatar::resolve(
-            $avatarPreset,
-            $account,
-            $current?->avatar,
-            self::takenPresets($locked),
-        );
+        $avatar = SeatAvatar::assign($account, $current?->avatar, TakenAvatars::of($locked));
 
         $token = $this->tokens->ensure($request);
 
@@ -330,7 +325,7 @@ final readonly class TakeSeat
     }
 
     /**
-     * `seat.joined` au salon et re-signature du jeton avec l'avatar choisi,
+     * `seat.joined` au salon et re-signature du jeton avec le prédéfini attribué,
      * APRÈS la validation de la transaction la plus externe — celle de
      * `CreateRoom` à la création. La vue du siège est composée à cet instant,
      * sur l'état validé : l'hôte qu'y pose la création (`TransferHost::to()`,
@@ -351,23 +346,6 @@ final readonly class TakeSeat
 
             $this->tokens->resign($request, $token->withAvatar($avatarPreset));
         });
-    }
-
-    /**
-     * Les prédéfinis des sièges tenus du salon : la suggestion d'un repli évite
-     * un avatar déjà pris (I5.8).
-     *
-     * @return list<string>
-     */
-    private static function takenPresets(Room $room): array
-    {
-        return array_values(Player::query()
-            ->whereBelongsTo($room)
-            ->holdingSeat()
-            ->whereNotNull('avatar_preset')
-            ->pluck('avatar_preset')
-            ->map(static fn (mixed $key): string => (string) $key)
-            ->all());
     }
 
     /** Le siège de ce jeton dans ce salon, expulsé compris : c'est S3 qui le refuse. */

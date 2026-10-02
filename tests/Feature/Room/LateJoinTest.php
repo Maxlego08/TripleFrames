@@ -118,12 +118,12 @@ function lateJoinGame(bool $open = true, int $reserve = 0): array
  *
  * @return TestResponse<Response>
  */
-function lateJoinEnter(TestCase $test, Room $room, string $nickname, int $avatar = 3): TestResponse
+function lateJoinEnter(TestCase $test, Room $room, string $nickname): TestResponse
 {
     $test->flushSession();
 
     return $test->withoutHeader('referer')
-        ->post(route('room.join', $room), SeatEntry::form($nickname, SeatEntry::avatar($avatar)))
+        ->post(route('room.join', $room), SeatEntry::form($nickname))
         ->assertStatus(Response::HTTP_SEE_OTHER)
         ->assertRedirect(route('room.show', $room))
         ->assertSessionHasNoErrors();
@@ -207,7 +207,7 @@ it('admet un retardataire à la prochaine manche numérotée non démarrée, ave
     }
 
     $recorder = RecordingBroadcaster::install();
-    $joined = lateJoinEnter($this, $room, 'Retard', 6);
+    $joined = lateJoinEnter($this, $room, 'Retard');
     $seat = lateJoinSeat($room, 'Retard');
     $participation = lateJoinParticipation($game, $seat);
 
@@ -218,7 +218,8 @@ it('admet un retardataire à la prochaine manche numérotée non démarrée, ave
         ->and($participation?->first_round_number)->toBe(2)
         ->and($participation?->display_nickname)->toBe('Retard')
         ->and($participation?->display_avatar_kind)->toBe(AvatarKind::Preset)
-        ->and($participation?->display_avatar_preset)->toBe(SeatEntry::avatar(6))
+        ->and($participation?->display_avatar_preset)->toBe($seat->avatar_preset)
+        ->and($seat->avatar_preset)->not->toBeNull()
         ->and($participation?->rounds_played)->toBeNull()
         ->and($participation?->correct_answers)->toBeNull()
         ->and($participation?->final_score)->toBeNull()
@@ -329,7 +330,7 @@ it('admet le retardataire à la manche de remplacement quand elle est la prochai
 
     // La remplaçante démarrée n'est plus une cible : le suivant entre à la
     // manche 3.
-    lateJoinEnter($this, $room, 'Suivant', 7);
+    lateJoinEnter($this, $room, 'Suivant');
 
     expect(lateJoinParticipation($game, lateJoinSeat($room, 'Suivant'))?->first_round_number)->toBe(3);
 
@@ -352,7 +353,7 @@ it('admet le retardataire à la manche de remplacement quand elle est la prochai
         ->and($thirdPlannedAt?->greaterThan(Date::now()))->toBeTrue()
         ->and(lateJoinEntryState($this, $room, Locale::French)[0])->toBe('in_progress');
 
-    lateJoinEnter($this, $room, 'Annule', 8);
+    lateJoinEnter($this, $room, 'Annule');
 
     expect(lateJoinParticipation($game, lateJoinSeat($room, 'Annule')))->toBeNull();
 });
@@ -393,7 +394,7 @@ it('fait attendre la partie suivante quand aucune manche numérotée ne reste à
 
     // 2. La dernière manche en cours : attente.
     EngineFixtures::openTier($last, 1);
-    lateJoinEnter($this, $room, 'Encore', 7);
+    lateJoinEnter($this, $room, 'Encore');
 
     expect(lateJoinParticipation($game, lateJoinSeat($room, 'Encore')))->toBeNull();
 
@@ -414,7 +415,7 @@ it('fait attendre la partie suivante quand aucune manche numérotée ne reste à
         ->and($room->refresh()->status)->toBe(RoomStatus::Playing)
         ->and(lateJoinEntryState($this, $room, Locale::French)[0])->toBe('in_progress');
 
-    lateJoinEnter($this, $room, 'Podium', 8);
+    lateJoinEnter($this, $room, 'Podium');
 
     expect(lateJoinParticipation($game, lateJoinSeat($room, 'Podium')))->toBeNull()
         ->and(GamePlayer::query()->whereBelongsTo($game)->count())->toBe(2);
@@ -429,7 +430,7 @@ it('fait attendre la partie suivante quand aucune manche numérotée ne reste à
         ->and(Round::query()->where('game_id', $interrupted->id)->lateJoinableAt($frozenAt)->count())->toBe($interrupted->rounds_count)
         ->and(lateJoinEntryState($this, $paused, Locale::French)[0])->toBe('in_progress');
 
-    lateJoinEnter($this, $paused, 'Gel', 9);
+    lateJoinEnter($this, $paused, 'Gel');
 
     expect(lateJoinParticipation($interrupted, lateJoinSeat($paused, 'Gel')))->toBeNull();
 });
@@ -453,7 +454,7 @@ it('ne donne jamais au retardataire la manche en cours', function (): void {
     Date::setTestNow($firstOpensAt);
     expect($first->refresh()->status)->toBe(RoundStatus::Pending);
 
-    $atFirst = lateJoinEnter($this, $room, 'Pile', 7);
+    $atFirst = lateJoinEnter($this, $room, 'Pile');
     $onTime = lateJoinSeat($room, 'Pile');
 
     expect(lateJoinParticipation($game, $onTime)?->first_round_number)->toBe(2);
@@ -467,7 +468,7 @@ it('ne donne jamais au retardataire la manche en cours', function (): void {
         ->and(lateJoinState($this, $room, $atFirst)['self']['member'])->toBeFalse();
 
     // 3. Manche 1 en cours : manche 2.
-    lateJoinEnter($this, $room, 'Pendant', 8);
+    lateJoinEnter($this, $room, 'Pendant');
 
     expect(lateJoinParticipation($game, lateJoinSeat($room, 'Pendant'))?->first_round_number)->toBe(2);
 
@@ -482,12 +483,12 @@ it('ne donne jamais au retardataire la manche en cours', function (): void {
 
     $secondOpensAt = EngineFixtures::opensAt($second, 1);
     Date::setTestNow($secondOpensAt->subMillisecond());
-    lateJoinEnter($this, $room, 'Revelation', 9);
+    lateJoinEnter($this, $room, 'Revelation');
 
     expect(lateJoinParticipation($game, lateJoinSeat($room, 'Revelation'))?->first_round_number)->toBe(2);
 
     Date::setTestNow($secondOpensAt);
-    lateJoinEnter($this, $room, 'Frontiere', 10);
+    lateJoinEnter($this, $room, 'Frontiere');
     $boundary = lateJoinSeat($room, 'Frontiere');
 
     expect(lateJoinParticipation($game, $boundary)?->first_round_number)->toBe(3);
@@ -514,7 +515,7 @@ it("n'admet personne en partie quand les retardataires sont fermés", function (
     }
 
     $recorder = RecordingBroadcaster::install();
-    $joined = lateJoinEnter($this, $room, 'Ferme', 7);
+    $joined = lateJoinEnter($this, $room, 'Ferme');
     $closed = lateJoinSeat($room, 'Ferme');
 
     // Un siège qui compte dans la capacité, sans participation : il jouera

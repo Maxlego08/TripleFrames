@@ -1,11 +1,10 @@
 import { Head } from '@inertiajs/react';
 import RoomController from '@/actions/App/Http/Controllers/Room/RoomController';
 import { SeatForm } from '@/components/room/seat-form';
-import type { NicknameBounds, SeatAvatars } from '@/components/room/seat-form';
+import type { NicknameBounds } from '@/components/room/seat-form';
 import { useTranslations } from '@/hooks/use-translations';
 
 type RoomCreateProps = {
-    avatars: SeatAvatars;
     nickname: NicknameBounds;
 };
 
@@ -14,8 +13,9 @@ type RoomCreateProps = {
  * `PublicLayout`, à l'apparence du visiteur.
  *
  * « Créer un salon » crée le salon TOUT DE SUITE, aux réglages par défaut :
- * l'hôte ne saisit ici que son pseudo et son avatar, et règle la partie dans
- * le lobby, où le code se partage pendant qu'il règle. L'envoi mène à la
+ * l'hôte ne saisit ici que son pseudo, et règle la partie dans le lobby, où
+ * le code se partage pendant qu'il règle ; son avatar, attribué par le
+ * serveur, s'y change aussi (D55 du 02/10). L'envoi mène à la
  * page du salon (`room.show`).
  *
  * Aucune donnée à charger : les états sont ceux du formulaire (soumission,
@@ -23,7 +23,7 @@ type RoomCreateProps = {
  * La création reste possible pendant un drainage : seul le lancement est
  * refusé. Le titre ne porte ni code ni paramètre (§ 6.5).
  */
-export default function RoomCreate({ avatars, nickname }: RoomCreateProps) {
+export default function RoomCreate({ nickname }: RoomCreateProps) {
     const { t } = useTranslations();
 
     return (
@@ -42,7 +42,6 @@ export default function RoomCreate({ avatars, nickname }: RoomCreateProps) {
 
                 <SeatForm
                     form={RoomController.store.form()}
-                    avatars={avatars}
                     nickname={nickname}
                     submitLabel={t('room.create.submit')}
                 />

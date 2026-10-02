@@ -1,0 +1,228 @@
+@use '../auth/tokens' as *;
+@use '../auth/mixins' as mix;
+
+.home-join-card {
+    align-self: center;
+    margin: 1.4rem;
+    border: $line solid $ink;
+    border-radius: $radius-medium;
+    padding: clamp(1.5rem, 4vw, 2.5rem);
+    background: $white;
+    box-shadow: 0.4375rem 0.4375rem 0 $coral;
+
+    &__heading {
+        display: flex;
+        align-items: center;
+        margin-bottom: 1.5rem;
+
+        h2 {
+            @include mix.display-type;
+            margin: 0;
+            font-size: clamp(1.45rem, 3vw, 2rem);
+        }
+    }
+
+    &__mobile-intro {
+        display: none;
+    }
+
+    // Refus du salon (complet, jeton expulsé), rendu au-dessus du bouton.
+    &__alert {
+        margin: 0 0 1rem;
+        border: $line solid $error;
+        border-radius: $radius-small;
+        padding: 0.65rem 0.8rem;
+        background: $paper;
+        color: $error;
+        font-size: 0.85rem;
+        font-weight: 800;
+    }
+
+    // Mention des CGU sous le bouton, lien ouvert dans un nouvel onglet.
+    &__terms {
+        margin: 0.75rem 0 0;
+        color: $muted;
+        font-size: 0.8rem;
+        line-height: 1.4;
+
+        a {
+            display: inline-flex;
+            min-height: 2.75rem;
+            align-items: center;
+            border-radius: 0.25rem;
+            color: inherit;
+            text-decoration: underline;
+            text-underline-offset: 0.2em;
+
+            &:hover {
+                color: $ink;
+            }
+
+            &:focus-visible {
+                outline: $line solid $cyan;
+                outline-offset: 0.125rem;
+            }
+        }
+    }
+}
+
+.home-field {
+    margin-bottom: 1rem;
+
+    [data-slot='label'] {
+        display: block;
+        margin-bottom: 0.35rem;
+        color: $ink;
+        font-size: 0.9rem;
+        font-weight: 900;
+    }
+
+    &__input[data-slot='input'] {
+        width: 100%;
+        min-height: 3.4rem;
+        border: $line solid $ink;
+        border-radius: 0.75rem;
+        padding: 0.75rem 0.9rem;
+        background: $paper;
+        color: $ink;
+        box-shadow: 0.1875rem 0.1875rem 0 transparent;
+        font-size: 1rem;
+        font-weight: 800;
+
+        &::placeholder {
+            color: $muted;
+            opacity: 1;
+        }
+
+        &:focus-visible {
+            border-color: $ink;
+            box-shadow: 0.25rem 0.25rem 0 $cyan;
+        }
+
+        &[aria-invalid='true'] {
+            border-color: $error;
+            box-shadow: 0.25rem 0.25rem 0 $coral;
+        }
+    }
+
+    // Le code : monospace et capitales, lisible caractère par caractère.
+    &__input--code[data-slot='input'] {
+        font-family: ui-monospace, monospace;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+    }
+
+    // Le pseudo : tel que le joueur l'écrit, jamais transformé à l'affichage.
+    &__input--nickname[data-slot='input'] {
+        font-family: $body;
+        letter-spacing: normal;
+        text-transform: none;
+    }
+
+    &__help,
+    &__error {
+        margin: 0.35rem 0 0;
+        font-size: 0.76rem;
+    }
+
+    &__help {
+        color: $muted;
+    }
+
+    &__error {
+        min-height: 1.15em;
+        color: $error;
+        font-weight: 800;
+    }
+}
+
+.home-button[data-slot='button'] {
+    @include mix.display-type;
+    position: relative;
+    min-height: 3.55rem;
+    border: $line solid $ink;
+    border-radius: $radius-medium;
+    padding: 0.75rem 1.15rem;
+    color: $ink;
+    font-size: 1rem;
+    transition:
+        translate 120ms ease,
+        box-shadow 120ms ease,
+        background-color 120ms ease;
+
+    &:hover {
+        color: $ink;
+        translate: -0.125rem -0.125rem;
+    }
+
+    &:active {
+        box-shadow: 0.0625rem 0.0625rem 0 $ink;
+        translate: 0.125rem 0.125rem;
+    }
+
+    &[aria-disabled='true'] {
+        cursor: wait;
+        opacity: 0.65;
+    }
+
+    &.home-button--primary {
+        @include mix.hard-shadow;
+        width: 100%;
+        background: $coral;
+
+        &:hover {
+            background: $coral;
+            box-shadow: 0.4375rem 0.4375rem 0 $ink;
+        }
+    }
+
+    &.home-button--secondary {
+        @include mix.hard-shadow(0.25rem);
+        background: $paper;
+
+        &:hover {
+            background: $paper;
+            box-shadow: 0.375rem 0.375rem 0 $ink;
+        }
+    }
+
+    &.home-button--solo {
+        @include mix.hard-shadow(0.25rem);
+        background: $yellow;
+
+        &:hover {
+            background: $yellow;
+            box-shadow: 0.375rem 0.375rem 0 $ink;
+        }
+    }
+}
+
+.home-actions {
+    display: flex;
+    width: min(100%, 48rem);
+    align-items: center;
+    justify-content: space-between;
+    gap: 1.25rem;
+    margin: clamp(2.8rem, 6vw, 4.5rem) auto 0;
+    border: $line solid $ink;
+    border-radius: 1.2rem;
+    padding: 1rem 1rem 1rem 1.25rem;
+    background: $cyan;
+    box-shadow: 0.5rem 0.5rem 0 $ink;
+    rotate: -0.5deg;
+
+    &__copy {
+        min-width: 0;
+        flex: 1;
+
+        p {
+            margin: 0;
+        }
+    }
+
+    &__buttons {
+        display: flex;
+        flex: 0 0 auto;
+        gap: 0.75rem;
+    }
+}

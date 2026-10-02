@@ -112,7 +112,7 @@ it("n'accorde aucun geste de salon à un administrateur qui n'est pas l'hôte", 
         ),
     ));
 
-    expect($abilities)->toContain('updateSettings', 'launch', 'replay', 'advanceRound', 'kick', 'transferHost', 'leave');
+    expect($abilities)->toContain('updateSettings', 'launch', 'replay', 'advanceRound', 'kick', 'transferHost', 'leave', 'changeAvatar');
 
     foreach ($abilities as $ability) {
         expect(Gate::forUser($admin)->allows($ability, [$room, null]))->toBeFalse($ability)
@@ -120,12 +120,13 @@ it("n'accorde aucun geste de salon à un administrateur qui n'est pas l'hôte", 
     }
 
     // Tenant un siège qui n'est pas l'hôte : aucun geste d'hôte ; quitter son
-    // propre siège, comme tout joueur.
-    foreach (array_diff($abilities, ['leave']) as $ability) {
+    // propre siège et en changer l'avatar, comme tout joueur.
+    foreach (array_diff($abilities, ['leave', 'changeAvatar']) as $ability) {
         expect(Gate::forUser($admin)->allows($ability, [$room, $adminSeat]))->toBeFalse($ability);
     }
 
-    expect(Gate::forUser($admin)->allows('leave', [$room, $adminSeat]))->toBeTrue();
+    expect(Gate::forUser($admin)->allows('leave', [$room, $adminSeat]))->toBeTrue()
+        ->and(Gate::forUser($admin)->allows('changeAvatar', [$room, $adminSeat]))->toBeTrue();
 
     // Par les routes, connecté à son compte : 403, rien d'écrit.
     $roomRow = HostGestures::raw('room', $room->id);

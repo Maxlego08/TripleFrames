@@ -16,8 +16,8 @@ use Illuminate\Foundation\Http\FormRequest;
  * Même intégration du trait {@see PlayerIdentityValidationRules} que la
  * création, à une exception près, qui appartient à cette requête (§ 5.8,
  * « Reprise ») : **quand le jeton courant tient déjà un siège dans ce salon**
- * (`seatIn()`, expulsé exclu), `nickname` et `avatar` ne sont ni exigés ni
- * validés — la reprise ne revalide jamais un pseudo (I5.5), et une liste
+ * (`seatIn()`, expulsé exclu), `nickname` n'est ni exigé ni
+ * validé — la reprise ne revalide jamais un pseudo (I5.5), et une liste
  * noire enrichie depuis n'éjecte personne. Il en va de même d'un salon
  * archivé : la prise de siège le refuse avant tout champ, et le visiteur est
  * renvoyé sans erreur vers la page « salon expiré ».
@@ -25,6 +25,10 @@ use Illuminate\Foundation\Http\FormRequest;
  * Ce n'est qu'une lecture préalable, sans verrou : {@see TakeSeat} relit le
  * siège du jeton et le statut sous le verrou du salon, et fait seule
  * autorité.
+ *
+ * **Aucun avatar** (D55 du 02/10) : la prise de siège l'attribue ; un champ
+ * `avatar` envoyé est ignoré. Il se change ensuite au lobby
+ * (`room.avatar.update`).
  */
 class JoinRoomRequest extends FormRequest
 {
@@ -41,7 +45,6 @@ class JoinRoomRequest extends FormRequest
 
         return [
             'nickname' => $this->nicknameRules(),
-            'avatar' => $this->seatAvatarRules($this->authenticatedUser()),
         ];
     }
 
@@ -51,14 +54,6 @@ class JoinRoomRequest extends FormRequest
         $nickname = $this->validated('nickname');
 
         return is_string($nickname) ? $nickname : null;
-    }
-
-    /** La clé d'avatar validée ; `null` quand elle n'est pas exigée. */
-    public function avatarPreset(): ?string
-    {
-        $avatar = $this->validated('avatar');
-
-        return is_string($avatar) ? $avatar : null;
     }
 
     protected function prepareForValidation(): void

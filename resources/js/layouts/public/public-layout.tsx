@@ -30,11 +30,18 @@ const MAIN_ID = 'public-main';
  */
 export default function PublicLayout({ children }: { children: ReactNode }) {
     const { t } = useTranslations();
-    const isLegalPage = usePage().component.startsWith('legal/');
+    const component = usePage().component;
+    const isHomePage = component === 'welcome';
+    const isLegalPage = component.startsWith('legal/');
+    const shellVariant = isHomePage
+        ? 'public-shell--home'
+        : isLegalPage
+          ? 'public-shell--legal'
+          : '';
 
     return (
         <div
-            className={`public-shell ${isLegalPage ? 'public-shell--legal' : ''} flex min-h-svh flex-col bg-background text-foreground`}
+            className={`public-shell ${shellVariant} flex min-h-svh flex-col bg-background text-foreground`}
         >
             <a
                 href={`#${MAIN_ID}`}

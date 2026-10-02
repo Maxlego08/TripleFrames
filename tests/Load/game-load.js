@@ -417,12 +417,7 @@ export function setup() {
         return { rooms: [] };
     }
 
-    const avatarKeys = readAvatarKeys();
-    const first = createRoom(
-        nicknameFor(0, hostSlotIndex(0)),
-        avatarKeys,
-        true,
-    );
+    const first = createRoom(nicknameFor(0, hostSlotIndex(0)), true);
     const profile = readProfile(first.props);
     const waves =
         PROFILE.waves === 'auto'
@@ -447,54 +442,28 @@ export function setup() {
         const wave = Math.floor(index / ROOMS);
 
         rooms.push(
-            createRoom(
-                nicknameFor(wave, hostSlotIndex(index % ROOMS)),
-                avatarKeys,
-                false,
-            ).room,
+            createRoom(nicknameFor(wave, hostSlotIndex(index % ROOMS)), false)
+                .room,
         );
     }
 
-    return { t0: Date.now(), waves, rooms, avatarKeys, profile };
-}
-
-/** Les clés d'avatar prédéfini, lues sur le formulaire de création du salon. */
-function readAvatarKeys() {
-    const jar = new http.CookieJar();
-    const res = http.get(`${BASE.url}/r/new`, {
-        jar,
-        tags: { name: 'room.create' },
-    });
-    const page = inertiaPage(res);
-
-    if (res.status !== 200 || page === null) {
-        throw new Error(
-            `room.create a répondu ${res.status} : cible injoignable ?`,
-        );
-    }
-
-    const keys = page.props.avatars.options.map((option) => option.key);
-
-    if (keys.length === 0) {
-        throw new Error('Aucun avatar prédéfini publié par room.create.');
-    }
-
-    return keys;
+    return { t0: Date.now(), waves, rooms, profile };
 }
 
 /**
  * Crée un salon comme un hôte réel (`room.store`), applique le preset du
  * scénario (`room.settings.preset`), et rend ce que son hôte simulé reprendra :
- * code, cookies et jeton d'onglet.
+ * code, cookies et jeton d'onglet. Aucun avatar : le serveur l'attribue
+ * (D55 du 02/10).
  */
-function createRoom(nickname, avatarKeys, withProps) {
+function createRoom(nickname, withProps) {
     const jar = new http.CookieJar();
 
     http.get(`${BASE.url}/`, { jar, tags: { name: 'home' } });
 
     let res = http.post(
         `${BASE.url}/r`,
-        { nickname, avatar: pick(avatarKeys) },
+        { nickname },
         {
             jar,
             redirects: 0,
@@ -720,7 +689,7 @@ class Seat {
             const res = await this.request(
                 'POST',
                 `/r/${this.room.code}/join`,
-                { nickname: this.nickname, avatar: pick(this.data.avatarKeys) },
+                { nickname: this.nickname },
                 { name: 'room.join', redirects: 0 },
             );
 

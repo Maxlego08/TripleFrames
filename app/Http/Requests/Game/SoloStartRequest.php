@@ -18,11 +18,13 @@ use LogicException;
  *   quatre presets du site, sans formulaire de réglages (D19 du 23/09). Son
  *   libellé d'erreur est `validation.attributes.preset` (écart (o)) : un
  *   refus n'affiche jamais le nom brut du champ.
- * - `nickname` et `avatar`, par le trait {@see PlayerIdentityValidationRules}
+ * - `nickname`, par le trait {@see PlayerIdentityValidationRules}
  *   (pseudo remplacé par sa forme canonique avant validation), **seulement
  *   pour un jeton qui ne tient encore aucun siège solo** : un siège n'existe
  *   jamais sans pseudo au J1 (C5), et la reprise d'un siège ne revalide
  *   jamais un pseudo (I5.5). Aucune unicité en solo (C5).
+ * - **aucun avatar** (D55 du 02/10) : le démarrage l'attribue, un champ
+ *   `avatar` envoyé est ignoré ; un siège solo n'en change jamais.
  *
  * Ce n'est qu'une lecture préalable, sans verrou : {@see StartSoloGame} relit
  * le siège du jeton sous son verrou et fait seule autorité. Un envoi refusé à
@@ -47,7 +49,6 @@ class SoloStartRequest extends FormRequest
 
         if ($this->requiresIdentity()) {
             $rules['nickname'] = $this->nicknameRules();
-            $rules['avatar'] = $this->seatAvatarRules($this->authenticatedUser());
         }
 
         return $rules;
@@ -70,14 +71,6 @@ class SoloStartRequest extends FormRequest
         $nickname = $this->validated('nickname');
 
         return is_string($nickname) ? $nickname : null;
-    }
-
-    /** La clé d'avatar validée ; `null` quand elle n'est pas exigée. */
-    public function avatarPreset(): ?string
-    {
-        $avatar = $this->validated('avatar');
-
-        return is_string($avatar) ? $avatar : null;
     }
 
     protected function prepareForValidation(): void
