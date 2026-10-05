@@ -80,6 +80,17 @@ class FramePolicy
     }
 
     /**
+     * Ouvrir l'aperçu d'un lot d'images et l'importer (spec 20 § 5.10, D57
+     * du 05/10, ligne 46 de la matrice). Curateur au moins : un lot n'ajoute
+     * que des variantes `draft`, et l'état de chaque film est rejoué image
+     * par image par {@see self::create()}, sous le verrou du film.
+     */
+    public function importBatch(User $user): bool
+    {
+        return $user->role->atLeast(UserRole::Curator);
+    }
+
+    /**
      * Ajouter une variante par capture personnelle.
      *
      * Voie ouverte (le défaut, D38 du 28/09) : le seuil et les états de

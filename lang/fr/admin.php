@@ -46,6 +46,8 @@ return [
         // L'écran des thèmes (spec 20 § 9.6, D43 du 01/10).
         'themes' => 'Thèmes',
         'import' => 'Import',
+        // Les lots d'images (ligne 46, D57 du 05/10).
+        'frame_batch' => 'Lots d’images',
         'review' => 'Revue',
         'throughput' => 'Débit',
         'guide' => 'Premiers pas',
@@ -2322,6 +2324,79 @@ return [
     | dépublier. Les refus des gestes sont des clés littérales, jamais
     | construites par concaténation.
     */
+    // L'écran « Lots d'images » (spec 20 § 5.10, D57 du 05/10).
+    'frame_batch' => [
+        'title' => 'Lots d’images',
+        'heading' => 'Lots d’images',
+        'description' => 'Déposez un lot d’images préparé et validé hors production : chaque image entre en brouillon dans la banque de son film, au niveau et au cadre du lot. La revue et la publication restent à faire, film par film.',
+        'upload' => [
+            'title' => 'Déposer un lot',
+            'description' => 'Un fichier .json au format des lots d’images, de :max Ko au plus. Rien n’est importé avant votre confirmation.',
+            'label' => 'Fichier du lot',
+            'submit' => 'Voir l’aperçu',
+        ],
+        'preview' => [
+            'title' => 'Aperçu du lot',
+            'description' => ':movies film(s), :frames image(s). Les films absents du catalogue et les films suspendus ou retirés ne reçoivent aucune image.',
+            'import' => 'Importer :frames image(s)',
+            'nothing' => 'Aucun film de ce lot ne peut recevoir d’images.',
+        ],
+        'progress' => ':done film(s) traité(s) sur :total',
+        'state' => [
+            'previewed' => 'Aperçu',
+            'pending' => 'En attente',
+            'running' => 'Import en cours',
+            'completed' => 'Terminé',
+            'failed' => 'Interrompu',
+        ],
+        'status' => [
+            'ready' => 'Prêt',
+            'missing' => 'Absent du catalogue',
+            'locked' => 'Suspendu ou retiré',
+        ],
+        'columns' => [
+            'movie' => 'Film',
+            'status' => 'État',
+            'frames' => 'Images',
+            'known' => 'Déjà en banque',
+            'result' => 'Résultat',
+        ],
+        'result' => [
+            'waiting' => 'À importer',
+            'summary' => ':added ajoutée(s), :skipped déjà présente(s), :refused refusée(s)',
+            'none' => '—',
+        ],
+        'missing' => [
+            'title' => 'Films absents du catalogue',
+            'description' => 'Importez d’abord ces films par le collage, puis déposez de nouveau le lot : seules leurs images manqueront.',
+            'import' => 'Importer ces :count film(s)',
+        ],
+        'next' => 'Les images ajoutées attendent leur traitement, puis votre revue : ouvrez la file de revue pour les valider film par film.',
+        'open_review' => 'Ouvrir la file de revue',
+        'new_batch' => 'Déposer un autre lot',
+        'empty' => 'Aucun lot déposé récemment.',
+        'toast' => [
+            'queued' => 'Import du lot lancé : l’avancement s’affiche ci-dessous.',
+        ],
+        'expired' => 'Ce lot a expiré ou a déjà été importé : déposez-le de nouveau.',
+        'failed' => 'L’import du lot s’est interrompu : les films déjà traités le restent. Déposez de nouveau le lot pour reprendre ; les images déjà ajoutées seront reconnues.',
+        'snapshot_failed' => 'La sauvegarde préalable a échoué : aucune image n’a été ajoutée.',
+        'frame_failed' => 'échec imprévu de l’ajout ; redéposez le lot plus tard.',
+        'invalid' => [
+            'required' => 'Choisissez le fichier du lot.',
+            'json' => 'Ce fichier n’est pas un lot lisible (JSON attendu).',
+            'format' => 'Ce fichier n’est pas un lot d’images de TripleFrames, ou d’une version inconnue.',
+            'empty' => 'Ce lot ne contient aucun film.',
+            'too_large' => 'Le fichier dépasse :max Ko.',
+            'too_many_movies' => 'Un lot compte au plus :max films.',
+            'duplicate_movie' => 'Le film TMDB :tmdb_id apparaît deux fois dans le lot.',
+            'movie' => 'Le film n° :position du lot est mal formé.',
+            'no_frames' => 'Le film TMDB :tmdb_id ne porte aucune image.',
+            'too_many_frames' => 'Le film TMDB :tmdb_id porte plus de :max images.',
+            'frame' => 'Une image du film TMDB :tmdb_id est mal formée.',
+        ],
+    ],
+
     'themes' => [
         'title' => 'Thèmes',
         'heading' => 'Thèmes',

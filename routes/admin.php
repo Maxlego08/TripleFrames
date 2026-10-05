@@ -8,6 +8,7 @@ use App\Http\Controllers\Admin\CurationHeartbeatController;
 use App\Http\Controllers\Admin\CurationQueueController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\FrameBankController;
+use App\Http\Controllers\Admin\FrameBatchController;
 use App\Http\Controllers\Admin\FrameCaptureController;
 use App\Http\Controllers\Admin\FrameCropController;
 use App\Http\Controllers\Admin\FrameImageController;
@@ -365,6 +366,22 @@ Route::middleware(['auth', 'verified', 'role:curator', 'admin.2fa', 'admin.local
         Route::get('review', [FrameReviewQueueController::class, 'index'])
             ->middleware('can:create,'.FrameReview::class)
             ->name('review.index');
+
+        // Les lots d'images (§ 5.10, D57 du 05/10, ligne 46) : déposer un
+        // lot préparé hors production, en voir l'aperçu à blanc, l'importer
+        // par la file. Les images entrent `draft` ; revue et publication
+        // restent les gestes ordinaires.
+        Route::get('frame-batch', [FrameBatchController::class, 'index'])
+            ->middleware('can:importBatch,'.Frame::class)
+            ->name('frame_batch.index');
+
+        Route::post('frame-batch', [FrameBatchController::class, 'store'])
+            ->middleware(['can:importBatch,'.Frame::class, 'throttle:admin-import'])
+            ->name('frame_batch.store');
+
+        Route::post('frame-batch/import', [FrameBatchController::class, 'import'])
+            ->middleware(['can:importBatch,'.Frame::class, 'throttle:admin-import'])
+            ->name('frame_batch.import');
 
         Route::get('import', [ImportController::class, 'index'])
             ->middleware('can:viewAny,'.ImportRun::class)

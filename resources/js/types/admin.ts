@@ -968,6 +968,43 @@ export type AdminPastePreview = {
     expires_at: string;
 };
 
+/** L'état d'un lot d'images (`FrameBatchImport`, spec 20 § 5.10, D57 du 05/10). */
+export type AdminFrameBatchStatus =
+    | 'previewed'
+    | 'pending'
+    | 'running'
+    | 'completed'
+    | 'failed';
+
+/** Le sort d'un film du lot, calculé à l'aperçu sur la base seule. */
+export type AdminFrameBatchRowStatus = 'ready' | 'missing' | 'locked';
+
+export type AdminFrameBatchRow = {
+    tmdb_id: number;
+    title: string | null;
+    movie_id: number | null;
+    status: AdminFrameBatchRowStatus;
+    frames: number;
+    known: number;
+    added: number;
+    skipped: number;
+    /** Les motifs traduits des images refusées. */
+    refused: string[];
+    done: boolean;
+};
+
+/** Le dernier lot de l'auteur — miroir de `FrameBatchImport::toProps()`. */
+export type AdminFrameBatch = {
+    token: string;
+    status: AdminFrameBatchStatus;
+    rows: AdminFrameBatchRow[];
+    error_key:
+        | 'admin.frame_batch.failed'
+        | 'admin.frame_batch.snapshot_failed'
+        | null;
+    expires_at: string;
+};
+
 /** L'état du bouton de la liste d'amorçage (`SeedList::summary()`). */
 export type AdminSeedListState = 'empty' | 'busy' | 'done' | 'ready';
 

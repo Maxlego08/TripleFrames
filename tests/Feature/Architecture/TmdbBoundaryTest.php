@@ -24,6 +24,10 @@ arch('le client TMDB ne quitte jamais la console et le back-office')
     ->toOnlyBeUsedIn([
         'App\Console\Commands',
         'App\Http\Controllers\Admin',
+        // La voie TMDB de l'ajout d'une variante, partagée par l'éditeur et
+        // l'import d'un lot d'images (spec 20 § 5.3 et § 5.10, D57 du 05/10) :
+        // une classe nommée, jamais l'espace `App\Support\Curation` entier.
+        'App\Support\Curation\TmdbFrameIntake',
     ]);
 
 arch('les DTO TMDB ne descendent jamais dans une surface de jeu')
@@ -32,6 +36,7 @@ arch('les DTO TMDB ne descendent jamais dans une surface de jeu')
         'App\Console\Commands',
         'App\Http\Controllers\Admin',
         'App\Support\Catalog',
+        'App\Support\Curation\TmdbFrameIntake',
         'App\Support\Tmdb',
         'App\ValueObjects\Catalog',
     ]);

@@ -11,6 +11,7 @@ use App\Support\Admin\AdminCatalogPresenter;
 use App\Support\Catalog\AmbiguityPreview;
 use App\Support\Curation\CoverageLossPreview;
 use App\Support\Curation\FrameBankSnapshot;
+use App\Support\Curation\TmdbFrameIntake;
 use App\Support\Frames\FrameGeometry;
 use App\Support\Tmdb\TmdbClient;
 use App\Support\Tmdb\TmdbErrorKind;
@@ -73,7 +74,7 @@ class FrameBankController extends Controller
     public const string PREVIEW_FRAME_PARAMETER = 'preview_frame';
 
     /** Clé de cache de la liste des visuels d'un film, par identifiant TMDB. */
-    public const string BACKDROPS_CACHE_PREFIX = 'admin:tmdb-backdrops:';
+    public const string BACKDROPS_CACHE_PREFIX = TmdbFrameIntake::BACKDROPS_CACHE_PREFIX;
 
     /** Les états de la prop différée `backdrops`. */
     public const string BACKDROPS_READY = 'ready';
@@ -227,7 +228,7 @@ class FrameBankController extends Controller
         }
 
         try {
-            $backdrops = self::cachedBackdrops($tmdb, $movie->tmdb_id);
+            $backdrops = app(TmdbFrameIntake::class)->backdrops($movie->tmdb_id);
         } catch (TmdbException $exception) {
             Log::warning('Visuels TMDB de l’éditeur en échec.', [
                 'movie_id' => $movie->id,
@@ -279,54 +280,5 @@ class FrameBankController extends Controller
         }
 
         return ['status' => self::BACKDROPS_READY, 'excluded' => $excluded, 'items' => $items];
-    }
-
-    /**
-     * Les backdrops d'un film, dans l'ordre de TMDB, en données primitives.
-     *
-     * Mis en cache `catalog.curation.images_cache_minutes` minutes par
-     * identifiant TMDB : une liste un peu ancienne est inoffensive, un chemin
-     * de fichier TMDB restant valide (§ 6.2). Seule une RÉPONSE entre au
-     * cache : une panne lève, n'écrit rien, et « Réessayer » rappelle TMDB.
-     * Des tableaux et jamais des objets : le cache ne désérialise aucune
-     * classe (`cache.serializable_classes`).
-     *
-     * **Tous les backdrops y entrent**, ceux auxquels TMDB attache une langue
-     * compris (`language_neutral` faux) : la grille ne les propose pas mais
-     * les compte, et l'ajout les refuse d'un motif précis — « peut contenir
-     * du texte » — plutôt que de les dire étrangers au film (D39 du 28/09).
-     *
-     * **Le même ensemble sert à la vérification d'appartenance de l'ajout**
-     * ({@see FrameTmdbController}, § 5.3) : ce que la grille propose est ce
-     * que l'ajout accepte, sans second appel à TMDB — et un quota atteint
-     * sur l'API n'empêche pas d'ajouter un visuel déjà listé.
-     *
-     * @return list<array{file_path: string, width: int, height: int, language_neutral: bool}>
-     *
-     * @throws TmdbException
-     */
-    public static function cachedBackdrops(TmdbClient $tmdb, int $tmdbId): array
-    {
-        /** @var list<array{file_path: string, width: int, height: int, language_neutral: bool}> $backdrops */
-        $backdrops = Cache::remember(
-            self::BACKDROPS_CACHE_PREFIX.$tmdbId,
-            Date::now()->addMinutes(Config::integer('catalog.curation.images_cache_minutes')),
-            function () use ($tmdb, $tmdbId): array {
-                $rows = [];
-
-                foreach ($tmdb->images($tmdbId)->backdrops as $image) {
-                    $rows[] = [
-                        'file_path' => $image->filePath,
-                        'width' => $image->width,
-                        'height' => $image->height,
-                        'language_neutral' => $image->isLanguageNeutral(),
-                    ];
-                }
-
-                return $rows;
-            },
-        );
-
-        return $backdrops;
     }
 }
