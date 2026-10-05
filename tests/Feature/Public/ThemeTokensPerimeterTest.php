@@ -205,7 +205,6 @@ function themePerimeterFrozenExempt(): array
         'resources/js/pages/auth/reset-password.tsx',
         'resources/js/pages/auth/two-factor-challenge.tsx',
         'resources/js/pages/auth/verify-email.tsx',
-        'resources/js/pages/dashboard.tsx',
         'resources/js/pages/settings/profile.tsx',
         'resources/js/pages/settings/security.tsx',
         'resources/js/pages/welcome.tsx',

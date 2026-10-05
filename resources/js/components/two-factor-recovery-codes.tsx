@@ -55,7 +55,7 @@ export default function TwoFactorRecoveryCodes({
     const RecoveryCodeIconComponent = codesAreVisible ? EyeOff : Eye;
 
     return (
-        <Card>
+        <Card className="settings-recovery-card">
             <CardHeader>
                 <CardTitle className="flex gap-3">
                     <LockKeyhole className="size-4" aria-hidden="true" />
@@ -116,7 +116,7 @@ export default function TwoFactorRecoveryCodes({
                             <>
                                 <div
                                     ref={codesSectionRef}
-                                    className="grid gap-1 rounded-lg bg-muted p-4 font-mono text-sm"
+                                    className="settings-recovery-codes grid gap-1 rounded-lg bg-muted p-4 font-mono text-sm"
                                     role="list"
                                     aria-label={t(
                                         'account.two_factor.recovery_codes.heading',

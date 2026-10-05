@@ -132,37 +132,6 @@
     }
 }
 
-.public-header__language[data-slot='button'] {
-    @include mix.hard-shadow(0.15rem);
-    min-width: 2.75rem;
-    min-height: 2.75rem;
-    border: 0.125rem solid $ink;
-    border-radius: 999px;
-    padding: 0.55rem 0.8rem;
-    background: $white;
-    color: $ink;
-    font-family: $body;
-    font-size: 0.86rem;
-    font-weight: 900;
-    transition:
-        translate 120ms ease,
-        box-shadow 120ms ease,
-        background-color 120ms ease;
-
-    &:hover,
-    &[data-state='open'] {
-        background: $cyan;
-        color: $ink;
-        box-shadow: 0.25rem 0.25rem 0 $ink;
-        translate: -0.05rem -0.05rem;
-    }
-
-    &:active {
-        box-shadow: 0.0625rem 0.0625rem 0 $ink;
-        translate: 0.0625rem 0.0625rem;
-    }
-}
-
 .auth-brand {
     display: inline-flex;
     min-width: 0;

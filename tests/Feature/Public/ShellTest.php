@@ -420,16 +420,16 @@ it("monte le bandeau de maintenance sous l'en-tête public, au rôle note, sur s
         ->and($header < $mounted && $mounted < $main)->toBeTrue();
 });
 
-it('garde le tableau de bord du starter dans AppLayout', function () {
-    // Côté serveur : la cible de `fortify.home` rend toujours la page du
-    // starter `dashboard`, conservée au jalon 1 (spec 90 § 2.1) ; son retrait
-    // relève de 40 au jalon 2.
-    expect(config('fortify.home'))->toBe(parse_url(route('dashboard'), PHP_URL_PATH));
+it('envoie la sortie de connexion vers les réglages et retire le dashboard joueur', function () {
+    expect(config('fortify.home'))->toBe(parse_url(route('profile.edit'), PHP_URL_PATH));
 
     $this->actingAs(User::factory()->create())
-        ->get(route('dashboard'))
+        ->get(route('profile.edit'))
         ->assertOk()
-        ->assertInertia(fn (Assert $page) => $page->component('dashboard'));
+        ->assertInertia(fn (Assert $page) => $page->component('settings/profile'));
+
+    expect(Route::getRoutes()->getByName('dashboard'))->toBeNull();
+    $this->get('/dashboard')->assertNotFound();
 
     // Côté client : le `switch` d'`app.tsx`, dans l'ordre de C16 § 2.1.
     // `welcome` a rejoint `PublicLayout` à sa réécriture en accueil (L90-8) :
@@ -442,7 +442,6 @@ it('garde le tableau de bord du starter dans AppLayout', function () {
         ['conditions' => ["name.startsWith('admin/')"], 'layout' => 'AdminLayout'],
         ['conditions' => ["name.startsWith('auth/')"], 'layout' => 'AuthLayout'],
         ['conditions' => ["name.startsWith('settings/')"], 'layout' => '[AppLayout, SettingsLayout]'],
-        ['conditions' => ["name === 'dashboard'"], 'layout' => 'AppLayout'],
         ['conditions' => ['default'], 'layout' => 'PublicLayout'],
     ]);
 });
@@ -454,7 +453,7 @@ it("rend chaque page publique en sombre, quel que soit le cookie d'apparence", f
     config(['app.debug' => false]);
 
     // 1. Les pages joueurs hors `game/*` qui existent : accueil, pages
-    //    légales, « signaler un contenu », écrans de compte, tableau de bord,
+    //    légales, « signaler un contenu », écrans de compte,
     //    réglages, page d'erreur d'une URL inconnue. Chacune est sombre, et un
     //    cookie `appearance` hérité d'avant D56 n'y change rien.
     $user = User::factory()->create();
@@ -467,7 +466,6 @@ it("rend chaque page publique en sombre, quel que soit le cookie d'apparence", f
         'signaler un contenu' => fn () => $this->get(route('takedown.create')),
         'connexion' => fn () => $this->get(route('login')),
         'URL inconnue' => fn () => $this->get('/__shell/introuvable'),
-        'tableau de bord' => fn () => $this->actingAs($user)->get(route('dashboard')),
         'profil' => fn () => $this->actingAs($user)->get(route('profile.edit')),
     ];
 
@@ -917,10 +915,11 @@ it('compose la coquille de jeu, de haut en bas, du bandeau, de la page, de la li
     expect($layout)->toMatch('/\{notice !== null && \(\s*<div[^>]*>\s*<Alert\b[^>]*\brole="note"/');
 
     // La ligne basse contient exactement le sélecteur de langue en icône
-    // seule, à 44 px, et le déclencheur du pied replié.
+    // seule et le déclencheur du pied replié. Sa cible de 44 px appartient à
+    // sa feuille SCSS dédiée, jamais à un utilitaire Tailwind posé ici.
     expect(preg_match('/<LanguageSwitcher\b(.*?)\/>\s*<SiteFooter variant="collapsed" \/>\s*<\/div>/s', $layout, $line))->toBe(1)
         ->and($line[1])->toMatch('/\biconOnly\b/')
-        ->and($line[1])->toContain('min-h-11 min-w-11');
+        ->and($line[1])->not->toContain('className=');
 
     // `PublicLayout` monte aussi l'annonceur, une fois, après le pied et
     // avant le `Toaster`, pour la seule annonce du changement de langue

@@ -1,5 +1,5 @@
 import { Link, usePage } from '@inertiajs/react';
-import { LayoutGrid, Menu, Search } from 'lucide-react';
+import { Menu, Search, Settings } from 'lucide-react';
 import AppLogo from '@/components/app-logo';
 import AppLogoIcon from '@/components/app-logo-icon';
 import { Breadcrumbs } from '@/components/breadcrumbs';
@@ -28,7 +28,7 @@ import { useCurrentUrl } from '@/hooks/use-current-url';
 import { useInitials } from '@/hooks/use-initials';
 import { useTranslations } from '@/hooks/use-translations';
 import { cn } from '@/lib/utils';
-import { dashboard } from '@/routes';
+import { edit as editProfile } from '@/routes/profile';
 import type { BreadcrumbItem, NavItem } from '@/types';
 
 type Props = {
@@ -49,9 +49,9 @@ export function AppHeader({ breadcrumbs = [] }: Props) {
     // module resterait figé dans la langue du bundle.
     const mainNavItems: NavItem[] = [
         {
-            title: t('common.nav.dashboard'),
-            href: dashboard(),
-            icon: LayoutGrid,
+            title: t('common.nav.settings'),
+            href: editProfile(),
+            icon: Settings,
         },
     ];
 
@@ -104,7 +104,7 @@ export function AppHeader({ breadcrumbs = [] }: Props) {
                     </div>
 
                     <Link
-                        href={dashboard()}
+                        href={editProfile()}
                         prefetch
                         className="flex items-center space-x-2"
                     >

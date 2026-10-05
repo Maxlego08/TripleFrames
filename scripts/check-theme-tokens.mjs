@@ -232,7 +232,6 @@ const EXEMPT = [
     'resources/js/lib/utils.ts',
     'resources/js/pages/auth/reset-password.tsx',
     'resources/js/pages/auth/two-factor-challenge.tsx',
-    'resources/js/pages/dashboard.tsx',
     'resources/js/pages/settings/profile.tsx',
     'resources/js/pages/settings/security.tsx',
     'resources/js/types/navigation.ts',

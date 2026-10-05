@@ -58,7 +58,6 @@ function maintenanceBannerPages(): array
         'connexion' => fn () => test()->get(route('login')),
         'mot de passe oublié' => fn () => test()->get(route('password.request')),
         'page error' => fn () => test()->get('/__maintenance/definitely-unknown-url'),
-        'tableau de bord' => fn () => test()->actingAs($verified)->get(route('dashboard')),
         'profil' => fn () => test()->actingAs($verified)->get(route('profile.edit')),
     ];
 }

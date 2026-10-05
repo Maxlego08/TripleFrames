@@ -47,14 +47,14 @@ export default function ManageTwoFactor(props: Props) {
     }
 
     return (
-        <div className="space-y-6">
+        <div className="settings-section space-y-6">
             <Heading
                 variant="small"
                 title={t('account.two_factor.manage.heading')}
                 description={t('account.two_factor.manage.description')}
             />
             {twoFactorEnabled ? (
-                <div className="flex flex-col items-start justify-start space-y-4">
+                <div className="settings-two-factor-state settings-two-factor-state--enabled flex flex-col items-start justify-start space-y-4">
                     <p className="text-sm text-muted-foreground">
                         {t('account.two_factor.manage.enabled_hint')}
                     </p>
@@ -80,7 +80,7 @@ export default function ManageTwoFactor(props: Props) {
                     />
                 </div>
             ) : (
-                <div className="flex flex-col items-start justify-start space-y-4">
+                <div className="settings-two-factor-state settings-two-factor-state--disabled flex flex-col items-start justify-start space-y-4">
                     <p className="text-sm text-muted-foreground">
                         {t('account.two_factor.manage.disabled_hint')}
                     </p>

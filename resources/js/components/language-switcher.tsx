@@ -1,21 +1,10 @@
 import { router } from '@inertiajs/react';
-import { Languages } from 'lucide-react';
+import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
+import { Check, ChevronDown, Languages, LoaderCircle } from 'lucide-react';
 import { useState } from 'react';
-import { Button } from '@/components/ui/button';
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuLabel,
-    DropdownMenuRadioGroup,
-    DropdownMenuRadioItem,
-    DropdownMenuSeparator,
-    DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import { Spinner } from '@/components/ui/spinner';
 import { useTranslations } from '@/hooks/use-translations';
 import { announce } from '@/lib/game/announcer';
 import { translate } from '@/lib/i18n';
-import { cn } from '@/lib/utils';
 import { update } from '@/routes/locale';
 
 type Props = {
@@ -42,21 +31,23 @@ type Props = {
  * serveur seul persiste la préférence ; le client n'applique jamais un
  * dictionnaire qu'il n'a pas reçu.
  *
+ * Le composant utilise directement les primitives de comportement Radix :
+ * aucun `Button`, composant `ui/*` ou utilitaire Tailwind n'entre dans son
+ * rendu. Sa forme, ses états et son mouvement sont entièrement définis dans
+ * `_language-switcher.scss`.
+ *
  * États (spec 90 § 8) :
  * - **aller-retour en cours** : le déclencheur porte `aria-busy`, les options
- *   sont désactivées et le `Spinner` est neutralisé — son `role="status"` et
- *   son nom « Loading » générés, en dur et en anglais, feraient une seconde
- *   région vivante sur une page de jeu (C16 § 4). Le déclencheur n'est pas
- *   désactivé : le menu referme en lui rendant le focus, qu'un bouton
- *   désactivé perdrait ;
+ *   sont désactivées et le pictogramme de chargement est purement décoratif.
+ *   Le déclencheur n'est pas désactivé : le menu referme en lui rendant le
+ *   focus, qu'un bouton désactivé perdrait ;
  * - **changement reçu** : `common.language.changed` est annoncé par
  *   `announce()`, une fois le dictionnaire reçu, dans la NOUVELLE langue —
  *   la seule région qui parle, `GameAnnouncer`, est montée par `GameLayout`
  *   et par `PublicLayout`.
  *
- * Mouvement réduit : `motion-reduce:animate-none` sur le `Spinner`, et
- * `motion-reduce:animate-none!` sur le menu, l'important étant requis contre
- * `data-[state=open]:animate-in` du composant généré.
+ * Mouvement réduit : la feuille dédiée neutralise directement rotation,
+ * transitions et ouverture du menu sous `prefers-reduced-motion`.
  */
 export default function LanguageSwitcher({
     className,
@@ -67,6 +58,13 @@ export default function LanguageSwitcher({
     const [pending, setPending] = useState(false);
 
     const current = locales.find((option) => option.value === locale);
+    const triggerClassName = [
+        'language-switcher__trigger',
+        iconOnly ? 'language-switcher__trigger--icon' : null,
+        className,
+    ]
+        .filter(Boolean)
+        .join(' ');
 
     const change = (value: string): void => {
         if (pending || value === locale) {
@@ -105,55 +103,105 @@ export default function LanguageSwitcher({
     };
 
     return (
-        <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-                <Button
-                    variant="ghost"
-                    size="sm"
+        <DropdownMenu.Root>
+            <DropdownMenu.Trigger asChild>
+                <button
+                    type="button"
                     aria-busy={pending}
-                    className={cn('gap-2', className)}
+                    className={triggerClassName}
                     aria-label={t('common.language.current', {
                         language: current?.label ?? locale,
                     })}
                 >
-                    {pending ? (
-                        <Spinner
-                            aria-hidden="true"
-                            role="presentation"
-                            aria-label={undefined}
-                            className="motion-reduce:animate-none"
-                        />
-                    ) : (
-                        <Languages aria-hidden="true" className="size-4" />
-                    )}
+                    <span className="language-switcher__symbol">
+                        {pending ? (
+                            <LoaderCircle
+                                aria-hidden="true"
+                                className="language-switcher__loader"
+                            />
+                        ) : (
+                            <Languages aria-hidden="true" />
+                        )}
+                    </span>
                     {!iconOnly && (
-                        <span lang={current?.bcp47 ?? locale}>
-                            {current?.label ?? locale}
+                        <span className="language-switcher__selection">
+                            <span
+                                className="language-switcher__current"
+                                lang={current?.bcp47 ?? locale}
+                            >
+                                {current?.label ?? locale}
+                            </span>
+                            <span
+                                aria-hidden="true"
+                                className="language-switcher__current-code"
+                            >
+                                {locale.toUpperCase()}
+                            </span>
                         </span>
                     )}
-                </Button>
-            </DropdownMenuTrigger>
+                    {!iconOnly && (
+                        <ChevronDown
+                            aria-hidden="true"
+                            className="language-switcher__chevron"
+                        />
+                    )}
+                </button>
+            </DropdownMenu.Trigger>
 
-            <DropdownMenuContent
-                align={align}
-                className="min-w-40 motion-reduce:animate-none!"
-            >
-                <DropdownMenuLabel>
-                    {t('common.language.label')}
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuRadioGroup value={locale} onValueChange={change}>
-                    {locales.map((option) => (
-                        <DropdownMenuRadioItem
-                            key={option.value}
-                            value={option.value}
-                            disabled={pending}
+            <DropdownMenu.Portal>
+                <DropdownMenu.Content
+                    align={align}
+                    sideOffset={10}
+                    collisionPadding={12}
+                    className="language-switcher__menu"
+                >
+                    <DropdownMenu.Label className="language-switcher__menu-heading">
+                        <span className="language-switcher__menu-kicker">
+                            <Languages aria-hidden="true" />
+                            {t('common.language.label')}
+                        </span>
+                        <span
+                            aria-hidden="true"
+                            className="language-switcher__menu-count"
                         >
-                            <span lang={option.bcp47}>{option.label}</span>
-                        </DropdownMenuRadioItem>
-                    ))}
-                </DropdownMenuRadioGroup>
-            </DropdownMenuContent>
-        </DropdownMenu>
+                            {String(locales.length).padStart(2, '0')}
+                        </span>
+                    </DropdownMenu.Label>
+                    <DropdownMenu.Separator className="language-switcher__separator" />
+                    <DropdownMenu.RadioGroup
+                        value={locale}
+                        onValueChange={change}
+                    >
+                        {locales.map((option) => (
+                            <DropdownMenu.RadioItem
+                                key={option.value}
+                                value={option.value}
+                                disabled={pending}
+                                className="language-switcher__option"
+                            >
+                                <span
+                                    aria-hidden="true"
+                                    className="language-switcher__option-code"
+                                >
+                                    {option.value.toUpperCase()}
+                                </span>
+                                <span
+                                    className="language-switcher__option-label"
+                                    lang={option.bcp47}
+                                >
+                                    {option.label}
+                                </span>
+                                <DropdownMenu.ItemIndicator asChild>
+                                    <Check
+                                        aria-hidden="true"
+                                        className="language-switcher__option-check"
+                                    />
+                                </DropdownMenu.ItemIndicator>
+                            </DropdownMenu.RadioItem>
+                        ))}
+                    </DropdownMenu.RadioGroup>
+                </DropdownMenu.Content>
+            </DropdownMenu.Portal>
+        </DropdownMenu.Root>
     );
 }

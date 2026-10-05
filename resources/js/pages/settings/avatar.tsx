@@ -137,14 +137,14 @@ export default function AvatarSettings({
 
             <h1 className="sr-only">{t('account.avatar.title')}</h1>
 
-            <div className="space-y-6">
+            <div className="settings-section space-y-6">
                 <Heading
                     variant="small"
                     title={t('account.avatar.heading')}
                     description={t('account.avatar.description')}
                 />
 
-                <div className="flex items-center gap-4">
+                <div className="settings-avatar-current flex items-center gap-4">
                     <PlayerAvatar
                         avatar={avatar}
                         alt={t(avatarAltKey(avatar.altKey))}
@@ -225,7 +225,7 @@ export default function AvatarSettings({
                 )}
             </div>
 
-            <div className="space-y-6">
+            <div className="settings-section space-y-6">
                 <Heading
                     variant="small"
                     title={t('account.avatar.upload_heading')}
@@ -309,14 +309,14 @@ export default function AvatarSettings({
                                 {t('account.avatar.delete')}
                             </Button>
                         </DialogTrigger>
-                        <DialogContent className="sm:max-w-md [&>button:last-child]:hidden">
+                        <DialogContent className="settings-dialog sm:max-w-md [&>button:last-child]:hidden">
                             <DialogClose asChild>
                                 <Button
                                     type="button"
                                     variant="ghost"
                                     size="icon"
                                     aria-label={t('common.action.close')}
-                                    className="absolute top-3 right-3 min-h-11 min-w-11"
+                                    className="settings-dialog__close absolute top-3 right-3 min-h-11 min-w-11"
                                 >
                                     <XIcon aria-hidden="true" />
                                 </Button>

@@ -16,8 +16,8 @@ const EmptyState = () => {
     const { t } = useTranslations();
 
     return (
-        <div className="p-8 text-center">
-            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-muted">
+        <div className="settings-empty-state p-8 text-center">
+            <div className="settings-empty-state__icon mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-muted">
                 <KeyRound className="h-7 w-7 text-muted-foreground" />
             </div>
             <p className="font-medium">{t('account.passkeys.empty')}</p>
@@ -48,14 +48,14 @@ export default function ManagePasskeys(props: Props) {
     }
 
     return (
-        <div className="space-y-6">
+        <div className="settings-section space-y-6">
             <Heading
                 variant="small"
                 title={t('account.passkeys.heading')}
                 description={t('account.passkeys.description')}
             />
 
-            <div className="overflow-hidden rounded-lg border border-border">
+            <div className="settings-credential-list overflow-hidden rounded-lg border border-border">
                 {passkeys.length > 0 ? (
                     passkeys.map((passkey) => (
                         <PasskeyItem

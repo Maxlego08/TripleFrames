@@ -207,7 +207,7 @@ export function AvatarCropper({
     };
 
     return (
-        <div className="flex flex-col gap-4">
+        <div className="settings-avatar-cropper flex flex-col gap-4">
             <p id={helpId} className="text-sm text-muted-foreground">
                 {labels.help}
             </p>
@@ -222,7 +222,7 @@ export function AvatarCropper({
                 onPointerUp={onPointerUp}
                 onPointerCancel={onPointerUp}
                 onKeyDown={onKeyDown}
-                className="relative size-64 cursor-grab touch-none overflow-hidden rounded-full border border-border bg-muted outline-none select-none focus-visible:ring-2 focus-visible:ring-ring active:cursor-grabbing"
+                className="settings-avatar-cropper__viewport relative size-64 cursor-grab touch-none overflow-hidden rounded-full border border-border bg-muted outline-none select-none focus-visible:ring-2 focus-visible:ring-ring active:cursor-grabbing"
             >
                 {source !== null && (
                     <img

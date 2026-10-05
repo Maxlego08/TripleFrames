@@ -74,11 +74,7 @@ export default function GameLayout({ children }: GameLayoutProps) {
             </main>
 
             <div className="flex shrink-0 items-center justify-between gap-2 border-t border-border px-2">
-                <LanguageSwitcher
-                    iconOnly
-                    align="start"
-                    className="min-h-11 min-w-11"
-                />
+                <LanguageSwitcher iconOnly align="start" />
                 <SiteFooter variant="collapsed" />
             </div>
 

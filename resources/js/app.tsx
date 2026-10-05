@@ -2,6 +2,7 @@ import { createInertiaApp } from '@inertiajs/react';
 import '../scss/auth.scss';
 import '../scss/home.scss';
 import '../scss/legal.scss';
+import '../scss/settings.scss';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import AdminLayout from '@/layouts/admin/admin-layout';
 import AppLayout from '@/layouts/app-layout';
@@ -42,10 +43,6 @@ void createInertiaApp({
                 return AuthLayout;
             case name.startsWith('settings/'):
                 return [AppLayout, SettingsLayout];
-            // Page du starter conservée au jalon 1 comme cible de
-            // `fortify.home` ; son retrait relève de 40 au jalon 2.
-            case name === 'dashboard':
-                return AppLayout;
             // Toute autre page est une page publique ordinaire : pages
             // d'entrée `room/*` comprises.
             default:

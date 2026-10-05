@@ -90,7 +90,6 @@ function domainDeclarationTable(): array
         'pages/error.tsx' => $player,
         'pages/auth/' => $account,
         'pages/settings/' => $account,
-        'pages/dashboard.tsx' => $account,
         'pages/game/' => $game,
         'pages/room/' => ['common', 'legal', 'room'],
         'pages/admin/' => $admin,
@@ -152,7 +151,6 @@ it('déclare le domaine legal sur toute route joueur', function () {
         'password.request',
         'verification.notice',
         'password.confirm',
-        'dashboard',
         'profile.edit',
         'security.edit',
     );

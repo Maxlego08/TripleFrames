@@ -128,7 +128,7 @@ test('real_name n\'est jamais sérialisé', function (): void {
     // `HandleInertiaRequests` sérialise l'utilisateur sur TOUTES les pages :
     // la page du compte comme celle du back-office.
     $this->actingAs($curator->fresh())
-        ->get(route('dashboard'))
+        ->get(route('profile.edit'))
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->where('auth.user.id', $curator->id)

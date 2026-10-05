@@ -40,7 +40,7 @@ export default function Security(props: Props) {
 
             <h1 className="sr-only">{t('account.security.title')}</h1>
 
-            <div className="space-y-6">
+            <div className="settings-section space-y-6">
                 <Heading
                     variant="small"
                     title={

@@ -2,7 +2,8 @@ import { Link, usePage } from '@inertiajs/react';
 import { AuthBrand } from '@/components/auth/auth-brand';
 import LanguageSwitcher from '@/components/language-switcher';
 import { useTranslations } from '@/hooks/use-translations';
-import { dashboard, login, register } from '@/routes';
+import { login, register } from '@/routes';
+import { edit as editProfile } from '@/routes/profile';
 
 const NAV_LINK_CLASS =
     'public-header__nav-link inline-flex min-h-11 items-center rounded-md px-3 text-sm font-medium hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none';
@@ -38,8 +39,11 @@ export function PublicHeader() {
                 <div className="public-header__controls flex flex-wrap items-center gap-1">
                     {canSignIn &&
                         (auth.user ? (
-                            <Link href={dashboard()} className={NAV_LINK_CLASS}>
-                                {t('common.nav.dashboard')}
+                            <Link
+                                href={editProfile()}
+                                className={NAV_LINK_CLASS}
+                            >
+                                {t('common.nav.settings')}
                             </Link>
                         ) : (
                             <>

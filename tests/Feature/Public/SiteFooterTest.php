@@ -116,7 +116,6 @@ it('envoie les clés du pied de page à toute page joueur', function () {
         'nouveau mot de passe' => fn () => $this->get(route('password.reset', ['token' => 'jeton'])),
         'vérification d\'adresse' => fn () => $this->actingAs($unverified)->get(route('verification.notice')),
         'confirmation du mot de passe' => fn () => $this->actingAs($verified)->get(route('password.confirm')),
-        'tableau de bord' => fn () => $this->actingAs($verified)->get(route('dashboard')),
         'profil' => fn () => $this->actingAs($verified)->get(route('profile.edit')),
         'sécurité' => fn () => $this->actingAs($verified)
             ->withSession(['auth.password_confirmed_at' => time()])

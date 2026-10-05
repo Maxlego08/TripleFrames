@@ -69,7 +69,7 @@ export default function LinkedAccounts({ providers, requiresCode }: Props) {
 
             <h1 className="sr-only">{t('account.linked.title')}</h1>
 
-            <div className="space-y-6">
+            <div className="settings-section space-y-6">
                 <Heading
                     variant="small"
                     title={t('account.linked.heading')}
@@ -84,7 +84,7 @@ export default function LinkedAccounts({ providers, requiresCode }: Props) {
                     </p>
                 )}
 
-                <ul className="flex flex-col gap-3">
+                <ul className="settings-provider-list flex flex-col gap-3">
                     {providers
                         .filter((row) => isOAuthProvider(row.provider))
                         .map((row) => {
@@ -95,7 +95,7 @@ export default function LinkedAccounts({ providers, requiresCode }: Props) {
                             return (
                                 <li
                                     key={row.provider}
-                                    className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border p-3"
+                                    className="settings-provider-row flex flex-wrap items-center justify-between gap-3 rounded-md border border-border p-3"
                                 >
                                     <div className="flex flex-col gap-1">
                                         <span className="font-medium">
@@ -159,14 +159,14 @@ function UnlinkDialog({ provider, name, requiresCode }: UnlinkDialogProps) {
                     {t('account.linked.unlink')}
                 </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-md [&>button:last-child]:hidden">
+            <DialogContent className="settings-dialog sm:max-w-md [&>button:last-child]:hidden">
                 <DialogClose asChild>
                     <Button
                         type="button"
                         variant="ghost"
                         size="icon"
                         aria-label={t('common.action.close')}
-                        className="absolute top-3 right-3 min-h-11 min-w-11"
+                        className="settings-dialog__close absolute top-3 right-3 min-h-11 min-w-11"
                     >
                         <XIcon aria-hidden="true" />
                     </Button>
