@@ -1,8 +1,7 @@
-import SeatAvatarController from '@/actions/App/Http/Controllers/Room/SeatAvatarController';
 import type { FormDataConvertible } from '@inertiajs/core';
 import { Form, Head, router, usePage } from '@inertiajs/react';
 import { ArrowLeft, CircleAlert, Play, Settings, X } from 'lucide-react';
-import { useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import LaunchController from '@/actions/App/Http/Controllers/Room/LaunchController';
 import { ConnectionBanner } from '@/components/game/connection-banner';
@@ -11,6 +10,9 @@ import { GameStage } from '@/components/game/game-stage';
 import { NextRoundButton } from '@/components/game/next-round-button';
 import { Podium } from '@/components/game/podium';
 import { AuthBrand } from '@/components/auth/auth-brand';
+import { GameToast } from '@/components/game/game-toast';
+import type { GameToastMessage } from '@/components/game/game-toast';
+import { AvatarDialog } from '@/components/room/avatar-dialog';
 import { CinemaSeatMap } from '@/components/room/cinema-seat-map';
 import { PoolStatus } from '@/components/room/pool-status';
 import { PresetPicker } from '@/components/room/preset-picker';
@@ -41,9 +43,10 @@ import type { LobbyStateView } from '@/hooks/game/use-lobby-state';
 import { useMaintenanceRefresh } from '@/hooks/game/use-maintenance-refresh';
 import { useNextRound } from '@/hooks/game/use-next-round';
 import { useRoundStage } from '@/hooks/game/use-round-stage';
+import { useSeatAvatar } from '@/hooks/game/use-seat-avatar';
 import { useTranslations } from '@/hooks/use-translations';
 import { announce } from '@/lib/game/announcer';
-import { cycleLobbyAvatar } from '@/lib/game/lobby-avatars';
+import { lobbyAvatarData } from '@/lib/game/lobby-avatars';
 import type { LobbyAvatars } from '@/lib/game/lobby-avatars';
 import { show } from '@/routes/room';
 import { update as updateSettings } from '@/routes/room/settings';
@@ -204,7 +207,15 @@ export default function Lobby({
     const [remedyPending, setRemedyPending] = useState(false);
     const [remedyError, setRemedyError] = useState<string | null>(null);
     const [settingsOpen, setSettingsOpen] = useState(false);
-    const [avatarPending, setAvatarPending] = useState(false);
+    const [avatarOpen, setAvatarOpen] = useState(false);
+    // Toast d'erreur visuel (`GameToast`) ; le même texte part à l'annonceur,
+    // seule région `aria-live` d'une page de jeu.
+    const [toast, setToast] = useState<GameToastMessage | null>(null);
+    const showToast = (message: string): void => {
+        setToast((previous) => ({ id: (previous?.id ?? 0) + 1, message }));
+        announce(message);
+    };
+    const dismissToast = useCallback(() => setToast(null), []);
     const motiveId = useId();
     const titleRef = useRef<HTMLHeadingElement>(null);
     const previousPhase = useRef(phase);
@@ -315,36 +326,15 @@ export default function Lobby({
     };
     const leaveGesture: RoomGestureContext = { ...gestures, disabled: !active };
 
-    // L'avatar du siège, choisi par les flèches ‹ › de la salle d'attente
-    // (D55 du 02/10, amendé le 06/10) : un clic envoie l'avatar libre voisin,
-    // un seul envoi en vol ; le serveur reste juge (clé prise entre-temps,
-    // partie lancée) et sa réponse relit la prop `avatars`.
-    const cycleAvatar = (direction: 1 | -1): void => {
-        const target = cycleLobbyAvatar(avatars, direction);
-
-        if (target === null || avatarPending) {
-            return;
-        }
-
-        router.post(
-            SeatAvatarController.update.url({ room: room.code }),
-            { avatar: target },
-            {
-                preserveScroll: true,
-                preserveState: true,
-                onHttpException,
-                onStart: () => setAvatarPending(true),
-                onError: (failed) => {
-                    const message = firstError(failed);
-
-                    if (message !== null) {
-                        announce(message);
-                    }
-                },
-                onFinish: () => setAvatarPending(false),
-            },
-        );
-    };
+    // L'avatar du siège (D55 du 02/10, amendé le 06/10) : flèches ‹ › et
+    // grille du clic sur l'avatar, optimistes et regroupés (`useSeatAvatar`).
+    const seatAvatar = useSeatAvatar({
+        roomCode: room.code,
+        avatars,
+        onHttpException,
+        onRefused: announce,
+        onTooManyRequests: () => showToast(t('room.lobby.avatar.too_fast')),
+    });
 
     // En partie, les sièges sont les participations gelées au lancement
     // (`firstRoundNumber` 1) ou à l'admission d'un retardataire (sa manche
@@ -561,8 +551,46 @@ export default function Lobby({
                         <CinemaSeatMap
                             seats={state.seats}
                             selfPublicId={state.self.publicId}
-                            onCycleAvatar={cycleAvatar}
-                            avatarBusy={avatarPending || !canWrite}
+                            onCycleAvatar={seatAvatar.cycle}
+                            avatarBusy={!canWrite}
+                            selfAvatar={
+                                selfSeat === undefined
+                                    ? null
+                                    : lobbyAvatarData(
+                                          seatAvatar.effective,
+                                          avatars,
+                                          selfSeat.avatar,
+                                      )
+                            }
+                            onOpenAvatar={() => {
+                                setAvatarOpen(true);
+                                // Clés prises fraîches à l'ouverture.
+                                router.reload({
+                                    only: ['avatars'],
+                                    onHttpException: (response) => {
+                                        if (response.status === 429) {
+                                            showToast(
+                                                t('room.lobby.avatar.too_fast'),
+                                            );
+
+                                            return false;
+                                        }
+
+                                        return onHttpException(response);
+                                    },
+                                });
+                            }}
+                        />
+
+                        <GameToast toast={toast} onDismiss={dismissToast} />
+
+                        <AvatarDialog
+                            open={avatarOpen}
+                            onOpenChange={setAvatarOpen}
+                            avatars={avatars}
+                            value={seatAvatar.effective}
+                            onChoose={seatAvatar.choose}
+                            disabled={!canWrite}
                         />
 
                         <div className="waiting-room__actions">

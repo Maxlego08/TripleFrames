@@ -5,7 +5,11 @@ import {
 } from '@/lib/game/avatar-keys';
 import { ACCOUNT_AVATAR_CHOICE } from '@/types/player';
 import type { SeatView } from '@/types/game-wire';
-import type { AvatarPresetOption, SeatAvatarChoice } from '@/types/player';
+import type {
+    AvatarData,
+    AvatarPresetOption,
+    SeatAvatarChoice,
+} from '@/types/player';
 import type { TranslationKey } from '@/types/translations';
 
 /**
@@ -105,6 +109,31 @@ export function cycleLobbyAvatar(
     }
 
     return choices[(index + direction + choices.length) % choices.length];
+}
+
+/**
+ * L'avatar à afficher pour un choix du siège, dérivé de la prop `avatars`
+ * (D55 du 02/10, amendé le 06/10) : le choix optimiste s'affiche avant la
+ * réponse du serveur, et sans dépendre de `seat.updated`. `fallback` (l'avatar
+ * que le salon voit) garde les initiales et la clé d'alternative ; il est
+ * rendu tel quel quand le choix n'a pas d'image connue.
+ */
+export function lobbyAvatarData(
+    choice: SeatAvatarChoice | null,
+    avatars: Pick<LobbyAvatars, 'options' | 'account'>,
+    fallback: AvatarData,
+): AvatarData {
+    if (choice === ACCOUNT_AVATAR_CHOICE && avatars.account !== null) {
+        return { ...fallback, kind: 'upload', url: avatars.account.url };
+    }
+
+    const option = avatars.options.find(
+        (candidate) => candidate.key === choice,
+    );
+
+    return option === undefined
+        ? fallback
+        : { ...fallback, kind: 'preset', url: option.url };
 }
 
 /**

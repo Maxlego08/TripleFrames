@@ -271,6 +271,8 @@ return [
             'change' => 'Changer d’avatar',
             'done' => 'Terminé',
             'apply' => 'Choisir cet avatar',
+            'too_fast' => 'Vous changez d’avatar trop vite : réessayez dans une minute.',
+            'open' => 'Choisir mon avatar',
             'previous' => 'Avatar précédent',
             'next' => 'Avatar suivant',
         ],

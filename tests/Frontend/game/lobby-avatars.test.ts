@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vite-plus/test';
-import { cycleLobbyAvatar } from '@/lib/game/lobby-avatars';
+import { cycleLobbyAvatar, lobbyAvatarData } from '@/lib/game/lobby-avatars';
 import type { LobbyAvatars } from '@/lib/game/lobby-avatars';
 
 /*
@@ -55,5 +55,33 @@ describe('cycleLobbyAvatar', () => {
                 1,
             ),
         ).toBeNull();
+    });
+});
+
+describe('lobbyAvatarData', () => {
+    const fallback = {
+        kind: 'preset' as const,
+        url: '/avatars/preset-01.svg',
+        altKey: 'preset-01',
+        initials: 'ZO',
+    };
+
+    it('affiche l’image du choix, initiales et alternative gardées', () => {
+        expect(lobbyAvatarData('preset-03', avatars(), fallback)).toEqual({
+            ...fallback,
+            url: '/avatars/preset-03.svg',
+        });
+        expect(
+            lobbyAvatarData(
+                'account',
+                avatars({ account: { url: '/avatar/me' } }),
+                fallback,
+            ),
+        ).toEqual({ ...fallback, kind: 'upload', url: '/avatar/me' });
+    });
+
+    it('garde l’avatar du salon pour un choix sans image connue', () => {
+        expect(lobbyAvatarData(null, avatars(), fallback)).toBe(fallback);
+        expect(lobbyAvatarData('account', avatars(), fallback)).toBe(fallback);
     });
 });

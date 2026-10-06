@@ -292,6 +292,8 @@ return [
             'change' => 'Change avatar',
             'done' => 'Done',
             'apply' => 'Use this avatar',
+            'too_fast' => 'You are changing avatars too quickly: try again in a minute.',
+            'open' => 'Choose my avatar',
             'previous' => 'Previous avatar',
             'next' => 'Next avatar',
         ],

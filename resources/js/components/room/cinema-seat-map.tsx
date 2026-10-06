@@ -5,6 +5,7 @@ import { BrandMark } from '@/components/auth/auth-brand';
 import { PlayerAvatar } from '@/components/game/player-avatar';
 import { useTranslations } from '@/hooks/use-translations';
 import type { SeatView } from '@/types/game-wire';
+import type { AvatarData } from '@/types/player';
 
 type CinemaSeatMapProps = {
     seats: readonly SeatView[];
@@ -20,6 +21,13 @@ type CinemaSeatMapProps = {
      * supplanté, connexion temps réel absente) : flèches visibles, inactives.
      */
     avatarBusy: boolean;
+    /**
+     * L'avatar affiché du siège du joueur, choix optimiste compris
+     * (`lobbyAvatarData`) ; nul : celui du salon.
+     */
+    selfAvatar: AvatarData | null;
+    /** Le clic sur l'avatar du joueur : la grille « Votre avatar ». */
+    onOpenAvatar: () => void;
 };
 
 const OTHER_POSITIONS = [1, 3, 5, 7, 8, 11, 2, 4, 6, 9, 12] as const;
@@ -32,6 +40,8 @@ export function CinemaSeatMap({
     selfPublicId,
     onCycleAvatar,
     avatarBusy,
+    selfAvatar,
+    onOpenAvatar,
 }: CinemaSeatMapProps) {
     const { t } = useTranslations();
     const { name } = usePage().props;
@@ -138,15 +148,39 @@ export function CinemaSeatMap({
                                             </button>
                                         )}
 
-                                        <PlayerAvatar
-                                            avatar={seat.avatar}
-                                            alt=""
-                                            className={
-                                                isSelf
-                                                    ? 'player-avatar player-avatar--large'
-                                                    : 'player-avatar'
-                                            }
-                                        />
+                                        {isSelf ? (
+                                            <button
+                                                type="button"
+                                                className="cinema-seat__avatar-button"
+                                                aria-label={t(
+                                                    'room.lobby.avatar.open',
+                                                )}
+                                                aria-haspopup="dialog"
+                                                aria-disabled={
+                                                    avatarBusy || undefined
+                                                }
+                                                onClick={() => {
+                                                    if (!avatarBusy) {
+                                                        onOpenAvatar();
+                                                    }
+                                                }}
+                                            >
+                                                <PlayerAvatar
+                                                    avatar={
+                                                        selfAvatar ??
+                                                        seat.avatar
+                                                    }
+                                                    alt=""
+                                                    className="player-avatar player-avatar--large"
+                                                />
+                                            </button>
+                                        ) : (
+                                            <PlayerAvatar
+                                                avatar={seat.avatar}
+                                                alt=""
+                                                className="player-avatar"
+                                            />
+                                        )}
 
                                         {isSelf && (
                                             <button
