@@ -196,8 +196,15 @@ class CurationFrameBatchCommand extends Command
         foreach ($entry['frames'] as $frame) {
             $movie->load('frames');
 
-            // Un doublon déclaré n'est pas retéléchargé : `AddFrame` le
-            // refuserait de toute façon, après coup.
+            // Un visuel suspendu ou retiré ne revient jamais, sous aucun cadre.
+            if (FrameBatchImport::isBlocked($movie, $frame['tmdb_file_path'])) {
+                $refused[] = sprintf('%s (niveau %d) : %s', $frame['tmdb_file_path'], $frame['level']->value, __('admin.frame_batch.blocked', [], 'fr'));
+
+                continue;
+            }
+
+            // Une image déjà dans la banque, quel que soit son état — écartée
+            // ou dépubliée comprise —, n'est ni retéléchargée ni réajoutée.
             if ($frame['crop'] !== null && FrameBatchImport::isKnown($movie, $frame['tmdb_file_path'], $frame['crop']->toArray())) {
                 $skipped++;
 

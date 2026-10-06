@@ -1952,6 +1952,8 @@ return [
             'to_rereview' => 'À re-revoir (:count)',
             'rejected' => 'Rejetées (:count)',
         ],
+        // La file plafonnée à ses premiers films (amendé le 05/10, D57).
+        'truncated' => 'Affichage des :shown premiers films sur :total : un film revu sort de la liste, le suivant y entre.',
 
         'lists' => [
             'to_review' => [
@@ -2382,6 +2384,7 @@ return [
         'failed' => 'L’import du lot s’est interrompu : les films déjà traités le restent. Déposez de nouveau le lot pour reprendre ; les images déjà ajoutées seront reconnues.',
         'snapshot_failed' => 'La sauvegarde préalable a échoué : aucune image n’a été ajoutée.',
         'frame_failed' => 'échec imprévu de l’ajout ; redéposez le lot plus tard.',
+        'blocked' => 'visuel suspendu ou retiré dans la banque du film : jamais réajouté par un lot.',
         'invalid' => [
             'required' => 'Choisissez le fichier du lot.',
             'json' => 'Ce fichier n’est pas un lot lisible (JSON attendu).',

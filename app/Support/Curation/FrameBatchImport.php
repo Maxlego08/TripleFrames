@@ -33,9 +33,9 @@ use Throwable;
  * - `locked` : film suspendu ou retiré, dont la banque ne grossit pas
  *   (`FramePolicy::create`).
  *
- * `known` compte les images du lot déjà présentes dans la banque — même
- * visuel, même cadre, ni dépubliées ni écartées : l'ajout les refusera comme
- * doublons, sans rien télécharger.
+ * `known` compte les images du lot qui n'entreront pas : déjà présentes
+ * dans la banque — même visuel, même cadre, quel que soit leur état, écartées
+ * comprises — ou d'un visuel suspendu ou retiré. Aucune n'est téléchargée.
  *
  * @phpstan-type BatchRow array{tmdb_id: int, title: string|null, movie_id: int|null, status: string, frames: int, known: int, added: int, skipped: int, refused: list<string>, done: bool}
  * @phpstan-type BatchState array{token: string, status: string, batch: array<string, mixed>, rows: list<BatchRow>, error_key: string|null, expires_at: string}
@@ -151,23 +151,49 @@ final class FrameBatchImport
 
     /**
      * Vrai si la banque du film porte déjà ce visuel sous ce cadre — ou, sans
-     * cadre, ce visuel sous un cadre quelconque —, hors images dépubliées,
-     * écartées, suspendues ou retirées. La relation `frames` doit être
-     * chargée.
+     * cadre, ce visuel sous un cadre quelconque —, **quel que soit son état**,
+     * ou si ce visuel y est bloqué ({@see self::isBlocked()}). La relation
+     * `frames` doit être chargée.
+     *
+     * Plus strict que le dédoublonnage de l'ajout unitaire (`AddFrame`, qui
+     * laisse réajouter une image écartée) : un lot se redépose à volonté — pour
+     * rattraper les films d'abord absents, par exemple —, et ne doit jamais
+     * ressusciter une image que le curateur a écartée ou dépubliée.
      *
      * @param  array{x: int, y: int, width: int, height: int}|null  $crop
      */
     public static function isKnown(Movie $movie, string $filePath, ?array $crop): bool
     {
+        if (self::isBlocked($movie, $filePath)) {
+            return true;
+        }
+
         foreach ($movie->frames as $frame) {
-            if ($frame->tmdb_file_path !== $filePath
-                || ! in_array($frame->availability, [ContentAvailability::Draft, ContentAvailability::Published], true)) {
+            if ($frame->tmdb_file_path !== $filePath) {
                 continue;
             }
 
             if ($crop === null
                 || ($frame->crop_x === $crop['x'] && $frame->crop_y === $crop['y']
                     && $frame->crop_width === $crop['width'] && $frame->crop_height === $crop['height'])) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Vrai si une image de ce visuel, sous n'importe quel cadre, est
+     * suspendue ou retirée : un lot ne la fait jamais revenir sous un autre
+     * cadre (retrait juridique, suspension conservatoire, spec 20 § 11). La
+     * relation `frames` doit être chargée.
+     */
+    public static function isBlocked(Movie $movie, string $filePath): bool
+    {
+        foreach ($movie->frames as $frame) {
+            if ($frame->tmdb_file_path === $filePath
+                && in_array($frame->availability, [ContentAvailability::Suspended, ContentAvailability::Withdrawn], true)) {
                 return true;
             }
         }

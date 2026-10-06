@@ -308,3 +308,43 @@ test('l\'export écrit les images exportables des films demandés', function ():
 test('la collecte des candidats est réservée au poste local', function (): void {
     expect(Artisan::call('curation:candidates', ['ids' => [(string) BATCH_TMDB_ID]]))->toBe(1);
 });
+
+test('un lot redéposé ne ressuscite jamais une image écartée', function (): void {
+    frameBatchTmdbFake();
+    $movie = Movie::factory()->create(['tmdb_id' => BATCH_TMDB_ID]);
+    $curator = User::factory()->curator()->create();
+    $crop = FrameGeometry::defaultCrop(FrameGeometry::masterHeightFor(1920, 1080), PlatformLimits::current());
+    Frame::factory()->for($movie)->create([
+        'tmdb_file_path' => BATCH_BACKDROP,
+        'availability' => ContentAvailability::Unpublished,
+        'first_published_at' => null,
+        'crop_x' => $crop->x,
+        'crop_y' => $crop->y,
+        'crop_width' => $crop->width,
+        'crop_height' => $crop->height,
+    ]);
+
+    Artisan::call('curation:frame-batch', [
+        'file' => frameBatchFile(frameBatchData([['tmdb_file_path' => BATCH_BACKDROP, 'level' => 3, 'crop' => $crop->toArray()]])),
+        '--actor' => (string) $curator->id,
+    ]);
+
+    expect($movie->frames()->count())->toBe(1)
+        ->and(Http::recorded(fn (Request $request): bool => str_contains($request->url(), 'image.tmdb.org')))->toBeEmpty();
+});
+
+test('un visuel retiré n\'est jamais réajouté par un lot, même sous un autre cadre', function (): void {
+    frameBatchTmdbFake();
+    $movie = Movie::factory()->create(['tmdb_id' => BATCH_TMDB_ID]);
+    $curator = User::factory()->curator()->create();
+    Frame::factory()->for($movie)->withdrawn()->create(['tmdb_file_path' => BATCH_BACKDROP]);
+
+    Artisan::call('curation:frame-batch', [
+        'file' => frameBatchFile(frameBatchData([['tmdb_file_path' => BATCH_BACKDROP, 'level' => 1, 'crop' => ['x' => 0, 'y' => 0, 'width' => 640, 'height' => 360]]])),
+        '--actor' => (string) $curator->id,
+    ]);
+
+    expect($movie->frames()->count())->toBe(1)
+        ->and(Artisan::output())->toContain(__('admin.frame_batch.blocked', [], 'fr'))
+        ->and(Http::recorded(fn (Request $request): bool => str_contains($request->url(), 'image.tmdb.org')))->toBeEmpty();
+});

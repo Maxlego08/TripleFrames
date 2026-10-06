@@ -40,6 +40,11 @@ import type { TranslationKey } from '@/types/translations';
 type Props = {
     queue: AdminReviewQueue;
     /**
+     * Les vrais totaux de chaque liste : `queue` n'en porte que les premiers
+     * films (`FrameReviewQueueController::MOVIES_PER_LIST`).
+     */
+    queue_totals: Record<AdminReviewList, { movies: number; frames: number }>;
+    /**
      * Les lots à valider en une fois, un par film qui en a un (D42 du 30/09,
      * spec 20 § 7.9).
      */
@@ -155,6 +160,7 @@ function entriesOf(groups: AdminReviewGroup[]): Entry[] {
  */
 export default function AdminReviewIndex({
     queue,
+    queue_totals,
     review_batches,
     unpublish_preview,
     heartbeat_seconds,
@@ -367,7 +373,7 @@ export default function AdminReviewIndex({
                                     className="min-h-11 px-3"
                                 >
                                     {t(LIST_KEYS[list].tab, {
-                                        count: entriesOf(queue[list]).length,
+                                        count: queue_totals[list].frames,
                                     })}
                                 </TabsTrigger>
                             ))}
@@ -383,6 +389,15 @@ export default function AdminReviewIndex({
                             <p className="max-w-prose text-sm text-muted-foreground">
                                 {t(LIST_KEYS[list].description)}
                             </p>
+
+                            {queue_totals[list].movies > queue[list].length && (
+                                <p className="max-w-prose text-sm text-muted-foreground">
+                                    {t('admin.review.truncated', {
+                                        shown: queue[list].length,
+                                        total: queue_totals[list].movies,
+                                    })}
+                                </p>
+                            )}
 
                             {list === tab && (
                                 <div className="grid gap-6 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]">
