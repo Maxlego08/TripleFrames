@@ -2,6 +2,7 @@
 
 namespace App\Jobs\Curation;
 
+use App\Console\Commands\CurationFrameBatchCommand;
 use App\Support\Catalog\ImportSnapshotGuard;
 use App\Support\Curation\FrameBatchImport;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -19,6 +20,11 @@ use Throwable;
  * curateur ({@see ImportSnapshotGuard::ordinaryPath()}) : comme le balayage,
  * il ajoute des images et ne détruit rien, et un instantané complet à chaque
  * lot placerait un geste d'exploitation sur le chemin du curateur.
+ *
+ * **Par passages** (amendé le 06/10) : chaque passage travaille au plus
+ * {@see self::BUDGET_SECONDS} secondes, puis se relance sur les films
+ * restants — un seul passage tué à 900 s laissait un lot de 200 films à
+ * moitié importé.
  */
 class ImportFrameBatch implements ShouldQueue
 {
@@ -30,6 +36,13 @@ class ImportFrameBatch implements ShouldQueue
 
     public bool $failOnTimeout = true;
 
+    /**
+     * Secondes de travail d'un passage, bien sous `$timeout` : le film en
+     * cours au moment du budget (jusqu'à 40 images) doit finir avant que le
+     * worker ne tue le job (amendé le 06/10).
+     */
+    public const int BUDGET_SECONDS = 600;
+
     public function __construct(
         public readonly int $userId,
         public readonly string $token,
@@ -40,7 +53,16 @@ class ImportFrameBatch implements ShouldQueue
         $status = ImportSnapshotGuard::ordinaryPath(fn (): int => Artisan::call('curation:frame-batch', [
             '--batch' => $this->token,
             '--actor' => (string) $this->userId,
+            '--budget' => (string) self::BUDGET_SECONDS,
         ]));
+
+        // Budget atteint : les films traités sont enregistrés, un nouveau
+        // passage reprend au premier film non traité.
+        if ($status === CurationFrameBatchCommand::PARTIAL) {
+            self::dispatch($this->userId, $this->token);
+
+            return;
+        }
 
         // La commande marque elle-même le lot dans les cas qu'elle connaît ;
         // ce filet couvre un refus d'entrée qu'elle n'aurait pas nommé. Un

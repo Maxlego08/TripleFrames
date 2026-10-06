@@ -248,14 +248,25 @@ final class FrameBatchImport
         });
     }
 
-    /** La commande a commencé. */
+    /**
+     * La commande a commencé, ou reprend un passage. Le lot vit de nouveau
+     * toute sa durée à compter de cet instant : un import en plusieurs
+     * passages ne doit jamais perdre son état en route (amendé le 06/10).
+     */
     public static function start(int $userId, string $token): void
     {
         self::update($userId, $token, static function (array $state): array {
             $state['status'] = self::RUNNING;
+            $state['expires_at'] = CarbonImmutable::now()->addMinutes(self::ttlMinutes())->toIso8601String();
 
             return $state;
         });
+
+        $state = self::find($userId, $token);
+
+        if ($state !== null) {
+            Cache::put(self::CACHE_PREFIX.$userId.':'.self::LATEST, $token, CarbonImmutable::parse($state['expires_at']));
+        }
     }
 
     /**

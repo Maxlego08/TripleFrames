@@ -291,6 +291,42 @@ test('le job importe le lot et rend le sort de chaque film', function (): void {
         ->and($movie->frames()->count())->toBe(1);
 });
 
+test('un lot trop long pour un passage reprend au premier film non traité', function (): void {
+    // Chaque téléchargement fait avancer l'horloge au-delà du budget : le
+    // passage rend la main après le premier film.
+    Http::fake([
+        '*themoviedb.org/3/movie/'.BATCH_TMDB_ID.'/images*' => Http::response(TmdbFixture::json('movie-987654-images')),
+        '*image.tmdb.org/*' => function () {
+            test()->travel(ImportFrameBatch::BUDGET_SECONDS + 1)->seconds();
+
+            return Http::response(SourceImages::jpeg(1920, 1080));
+        },
+    ]);
+    $curator = User::factory()->curator()->create();
+    $movie = Movie::factory()->create(['tmdb_id' => BATCH_TMDB_ID]);
+    $data = frameBatchData([['tmdb_file_path' => BATCH_BACKDROP, 'level' => 1]]);
+    $data['movies'][] = ['tmdb_id' => BATCH_TMDB_ID + 1, 'title' => 'Film absent', 'frames' => [['tmdb_file_path' => BATCH_BACKDROP, 'level' => 1]]];
+    $token = FrameBatchImport::open($curator, FrameBatch::fromArray($data));
+    FrameBatchImport::queue($curator->id, $token);
+
+    (new ImportFrameBatch($curator->id, $token))->handle();
+
+    $state = FrameBatchImport::find($curator->id, $token);
+
+    expect($state['status'] ?? null)->toBe(FrameBatchImport::RUNNING)
+        ->and($state['rows'][0]['done'] ?? null)->toBeTrue()
+        ->and($state['rows'][1]['done'] ?? null)->toBeFalse()
+        ->and($movie->frames()->count())->toBe(1);
+
+    Queue::assertPushed(ImportFrameBatch::class, fn (ImportFrameBatch $job): bool => $job->token === $token);
+
+    // Le passage suivant ne rejoue pas le premier film, et termine le lot.
+    (new ImportFrameBatch($curator->id, $token))->handle();
+
+    expect(FrameBatchImport::find($curator->id, $token)['status'] ?? null)->toBe(FrameBatchImport::COMPLETED)
+        ->and($movie->frames()->count())->toBe(1);
+});
+
 test('l\'export écrit les images exportables des films demandés', function (): void {
     $movie = Movie::factory()->create(['tmdb_id' => BATCH_TMDB_ID]);
     Frame::factory()->for($movie)->level(FrameLevel::Level5)->create(['processing_state' => FrameProcessingState::Ready]);
