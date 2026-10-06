@@ -4,6 +4,7 @@ use App\Enums\ContentAvailability;
 use App\Enums\FrameLevel;
 use App\Enums\FrameProcessingState;
 use App\Enums\FrameSourceKind;
+use App\Http\Requests\Admin\FrameBatchStoreRequest;
 use App\Jobs\Curation\ImportFrameBatch;
 use App\Models\Frame;
 use App\Models\Movie;
@@ -303,6 +304,29 @@ test('l\'export écrit les images exportables des films demandés', function ():
         ->and($batch->movies[0]['frames'][0]['level'])->toBe(FrameLevel::Level5);
 
     unlink($out);
+});
+
+test("un export au-delà des plafonds de l'import se découpe en lots importables", function (): void {
+    foreach (range(1, FrameBatch::MAX_MOVIES + 1) as $offset) {
+        $movie = Movie::factory()->create(['tmdb_id' => BATCH_TMDB_ID + $offset]);
+        Frame::factory()->for($movie)->level(FrameLevel::Level1)->create(['processing_state' => FrameProcessingState::Ready]);
+    }
+
+    $out = sys_get_temp_dir().DIRECTORY_SEPARATOR.'frame-batch-split-'.bin2hex(random_bytes(4)).'.json';
+    $first = str_replace('.json', '-1.json', $out);
+    $second = str_replace('.json', '-2.json', $out);
+
+    expect(Artisan::call('curation:export-batch', ['--all' => true, '--out' => $out]))->toBe(0)
+        ->and(file_exists($out))->toBeFalse();
+
+    $batches = [FrameBatch::fromJson((string) file_get_contents($first)), FrameBatch::fromJson((string) file_get_contents($second))];
+
+    expect(count($batches[0]->movies))->toBe(FrameBatch::MAX_MOVIES)
+        ->and(count($batches[1]->movies))->toBe(1)
+        ->and(filesize($first))->toBeLessThanOrEqual(FrameBatchStoreRequest::MAX_KILOBYTES * 1024);
+
+    unlink($first);
+    unlink($second);
 });
 
 test('la collecte des candidats est réservée au poste local', function (): void {
