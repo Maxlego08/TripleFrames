@@ -43,6 +43,8 @@ type Props = {
     frame_batch: AdminFrameBatch | null;
     poll_seconds: number;
     max_kilobytes: number;
+    /** Plafond d'identifiants d'un collage : les absents se collent par tranches. */
+    paste_max_ids: number;
 };
 
 type BadgeVariant = 'default' | 'secondary' | 'destructive' | 'outline';
@@ -72,6 +74,7 @@ export default function AdminFrameBatchIndex({
     frame_batch: batch,
     poll_seconds: pollSeconds,
     max_kilobytes: maxKilobytes,
+    paste_max_ids: pasteMaxIds,
 }: Props) {
     const { t } = useTranslations();
 
@@ -224,7 +227,10 @@ export default function AdminFrameBatchIndex({
 
                             {batch.status === 'previewed' &&
                                 missing.length > 0 && (
-                                    <MissingMovies rows={missing} />
+                                    <MissingMovies
+                                        rows={missing}
+                                        pasteMaxIds={pasteMaxIds}
+                                    />
                                 )}
 
                             {batch.status === 'completed' && (
@@ -398,28 +404,47 @@ function BatchTable({ rows }: { rows: AdminFrameBatchRow[] }) {
 }
 
 /**
- * Les films du lot absents du catalogue : un clic les importe par le collage
- * (§ 3.3), voie d'exception, avec toutes ses gardes ; il suffit ensuite de
- * redéposer le lot.
+ * Les films du lot absents du catalogue : un clic importe par le collage
+ * (§ 3.3), voie d'exception, avec toutes ses gardes, **au plus
+ * `pasteMaxIds` films à la fois** — un envoi plus large serait refusé en
+ * entier. Une fois le collage terminé, revenir sur cet écran relit l'état
+ * des films : les films collés deviennent importables, et le bouton propose
+ * la tranche suivante (amendé le 06/10).
  */
-function MissingMovies({ rows }: { rows: AdminFrameBatchRow[] }) {
+function MissingMovies({
+    rows,
+    pasteMaxIds,
+}: {
+    rows: AdminFrameBatchRow[];
+    pasteMaxIds: number;
+}) {
     const { t } = useTranslations();
+    const slice = rows.slice(0, pasteMaxIds);
 
     return (
         <Alert>
             <AlertTitle>{t('admin.frame_batch.missing.title')}</AlertTitle>
             <AlertDescription className="space-y-2">
                 <p>{t('admin.frame_batch.missing.description')}</p>
+                {rows.length > slice.length && (
+                    <p>
+                        {t('admin.frame_batch.missing.sliced', {
+                            max: pasteMaxIds,
+                            total: rows.length,
+                        })}
+                    </p>
+                )}
                 <Form {...ImportIdsController.store.form()}>
-                    {({ processing }) => (
+                    {({ processing, errors }) => (
                         <>
                             <input
                                 type="hidden"
                                 name="ids"
-                                value={rows
+                                value={slice
                                     .map((row) => row.tmdb_id)
                                     .join('\n')}
                             />
+                            <AdminInputError message={errors.ids} />
                             <Button
                                 type="submit"
                                 variant="outline"
@@ -427,7 +452,7 @@ function MissingMovies({ rows }: { rows: AdminFrameBatchRow[] }) {
                                 disabled={processing}
                             >
                                 {t('admin.frame_batch.missing.import', {
-                                    count: rows.length,
+                                    count: slice.length,
                                 })}
                             </Button>
                         </>

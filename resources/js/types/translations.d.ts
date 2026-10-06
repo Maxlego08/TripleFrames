@@ -1104,6 +1104,7 @@ export type TranslationKey =
     | 'admin.frame_batch.invalid.too_many_movies'
     | 'admin.frame_batch.missing.description'
     | 'admin.frame_batch.missing.import'
+    | 'admin.frame_batch.missing.sliced'
     | 'admin.frame_batch.missing.title'
     | 'admin.frame_batch.new_batch'
     | 'admin.frame_batch.next'

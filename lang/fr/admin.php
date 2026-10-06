@@ -2389,8 +2389,9 @@ return [
         ],
         'missing' => [
             'title' => 'Films absents du catalogue',
-            'description' => 'Importez d’abord ces films par le collage, puis déposez de nouveau le lot : seules leurs images manqueront.',
-            'import' => 'Importer ces :count film(s)',
+            'description' => 'Importez d’abord ces films par le collage. Une fois le collage terminé, revenez sur cet écran : les films importés deviennent prêts, sans redéposer le lot.',
+            'sliced' => 'Un collage importe au plus :max films : :total sont absents. Relancez le bouton une fois chaque collage terminé.',
+            'import' => 'Importer :count film(s) absent(s)',
         ],
         'next' => 'Les images ajoutées attendent leur traitement, puis votre revue : ouvrez la file de revue pour les valider film par film.',
         'open_review' => 'Ouvrir la file de revue',

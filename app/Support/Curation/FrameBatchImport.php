@@ -249,6 +249,37 @@ final class FrameBatchImport
     }
 
     /**
+     * Relit l'état de chaque film d'un lot encore à l'aperçu — un film collé
+     * depuis le dépôt devient importable — et rend l'état à jour. Un lot en
+     * file, en cours ou terminé est rendu tel quel.
+     *
+     * @param  BatchState|null  $state
+     * @return BatchState|null
+     */
+    public static function refreshPreview(User $user, ?array $state): ?array
+    {
+        if ($state === null || $state['status'] !== self::PREVIEWED) {
+            return $state;
+        }
+
+        try {
+            $rows = self::preview($user, FrameBatch::fromArray($state['batch']));
+        } catch (FrameBatchException) {
+            return $state;
+        }
+
+        self::update($user->id, $state['token'], static function (array $current) use ($rows): array {
+            if ($current['status'] === self::PREVIEWED) {
+                $current['rows'] = $rows;
+            }
+
+            return $current;
+        });
+
+        return self::find($user->id, $state['token']) ?? $state;
+    }
+
+    /**
      * La commande a commencé, ou reprend un passage. Le lot vit de nouveau
      * toute sa durée à compter de cet instant : un import en plusieurs
      * passages ne doit jamais perdre son état en route (amendé le 06/10).

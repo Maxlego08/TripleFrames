@@ -5,6 +5,7 @@ use App\Enums\FrameLevel;
 use App\Enums\FrameProcessingState;
 use App\Enums\FrameSourceKind;
 use App\Http\Requests\Admin\FrameBatchStoreRequest;
+use App\Http\Requests\Admin\ImportIdsRequest;
 use App\Jobs\Curation\ImportFrameBatch;
 use App\Models\Frame;
 use App\Models\Movie;
@@ -289,6 +290,25 @@ test('le job importe le lot et rend le sort de chaque film', function (): void {
         ->and($state['rows'][0]['added'] ?? null)->toBe(1)
         ->and($state['rows'][0]['refused'] ?? [])->toHaveCount(1)
         ->and($movie->frames()->count())->toBe(1);
+});
+
+test('un film collé après le dépôt devient importable sans redéposer le lot', function (): void {
+    $curator = User::factory()->curator()->create();
+    FrameBatchImport::open($curator, FrameBatch::fromArray(frameBatchData([['tmdb_file_path' => BATCH_BACKDROP, 'level' => 1]])));
+
+    $this->actingAs($curator)
+        ->get(route('admin.frame_batch.index'))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('frame_batch.rows.0.status', FrameBatchImport::STATUS_MISSING)
+            ->where('paste_max_ids', ImportIdsRequest::pasteMaxIds()));
+
+    // Le collage a importé le film entre-temps.
+    Movie::factory()->create(['tmdb_id' => BATCH_TMDB_ID]);
+
+    $this->actingAs($curator)
+        ->get(route('admin.frame_batch.index'))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('frame_batch.rows.0.status', FrameBatchImport::STATUS_READY));
 });
 
 test('un lot trop long pour un passage reprend au premier film non traité', function (): void {
