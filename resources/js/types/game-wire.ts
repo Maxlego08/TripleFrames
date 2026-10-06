@@ -80,6 +80,8 @@ export interface RevealTitle {
  * titre par locale activée, le titre original (et sa translittération), sa
  * langue et l'année. Aussi le « paquet de titres » du récapitulatif de fin
  * de partie (`TitlePacket` de `types/scoring.ts`, contrat C13).
+ * `letterboxdUrl` : la fiche Letterboxd du film, nulle sans `tmdb_id`
+ * (catalogue de démonstration ; D58 du 06/10).
  */
 export interface RevealMovie {
     titles: Record<LocaleCode, RevealTitle>;
@@ -87,6 +89,7 @@ export interface RevealMovie {
     originalTitleLatin: string | null;
     originalLanguage: string;
     year: number | null;
+    letterboxdUrl: string | null;
 }
 
 // --- L60-4 : sièges, chronologie, paquet de resynchronisation ---------------

@@ -1143,6 +1143,7 @@ it("chaque titre de la révélation porte l'attribut lang de la locale atteinte"
             'originalTitleLatin' => $movie->title_original_latin,
             'originalLanguage' => $movie->original_language,
             'year' => $movie->release_year,
+            'letterboxdUrl' => "https://letterboxd.com/tmdb/{$movie->tmdb_id}/",
         ], $label)
             // Une entrée par locale activée, dans l'ordre du registre.
             ->and(array_keys($packet['titles'] ?? []))->toBe(array_map(static fn (Locale $locale): string => $locale->value, Locale::cases()), $label);

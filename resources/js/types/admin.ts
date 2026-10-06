@@ -754,6 +754,33 @@ export type AdminPublicationPreview = {
 };
 
 /**
+ * Un film du lot « Publier les films prêts » (spec 20 § 8.1 bis, D59 du
+ * 06/10) : son identité et les formes que sa publication rendra ambiguës, le
+ * lot entier compté comme publié — miroir de `ReadyBatch` (`ReadyEntry`).
+ */
+export type AdminReadyMovie = {
+    id: number;
+    title_original: string;
+    release_year: number | null;
+    lines: AdminAmbiguityLine[];
+};
+
+/** Un film prêt mis de côté, avec ses conditions manquantes (`SkippedEntry`). */
+export type AdminSkippedReadyMovie = {
+    id: number;
+    title_original: string;
+    release_year: number | null;
+    blockers: AdminPublicationBlocker[];
+};
+
+/** La prop `batch` de l'écran — `ReadyBatch::preview()`. */
+export type AdminReadyBatch = {
+    movies: AdminReadyMovie[];
+    skipped: AdminSkippedReadyMovie[];
+    digest: string;
+};
+
+/**
  * Clé d'un libellé ou d'une aide de la grille d'exclusion
  * (`admin.exclusion_grid.v{n}.{slug}.label` et `.help`, spec 20 § 7.1).
  * Le serveur les envoie ; un item sans ses deux feuilles fait échouer

@@ -29,6 +29,7 @@ use App\Http\Controllers\Admin\ImportSearchController;
 use App\Http\Controllers\Admin\ImportSeedListController;
 use App\Http\Controllers\Admin\JournalController;
 use App\Http\Controllers\Admin\MovieAliasController;
+use App\Http\Controllers\Admin\MovieBatchPublishController;
 use App\Http\Controllers\Admin\MovieContentVerifiedController;
 use App\Http\Controllers\Admin\MovieFramesReviewController;
 use App\Http\Controllers\Admin\MovieGroupController;
@@ -162,6 +163,19 @@ Route::middleware(['auth', 'verified', 'role:curator', 'admin.2fa', 'admin.local
         Route::get('catalog', [CatalogController::class, 'index'])
             ->middleware('can:viewAny,'.Movie::class)
             ->name('catalog.index');
+
+        // « Publier les films prêts » (§ 8.1 bis, ligne 47, D59 du 06/10) :
+        // l'écran du lot — films prêts, avertissement d'ambiguïté de chacun,
+        // films mis de côté —, puis un envoi qui poste les identifiants et
+        // l'empreinte lus. Déclarées AVANT `catalog/{movie}`, qui prendrait
+        // sinon « ready » pour un film.
+        Route::get('catalog/ready', [MovieBatchPublishController::class, 'create'])
+            ->middleware('can:publishReady,'.Movie::class)
+            ->name('catalog.ready');
+
+        Route::post('catalog/ready', [MovieBatchPublishController::class, 'store'])
+            ->middleware(['can:publishReady,'.Movie::class, 'throttle:admin-curation'])
+            ->name('catalog.ready.publish');
 
         Route::get('catalog/{movie}', [CatalogController::class, 'show'])
             ->middleware('can:view,movie')

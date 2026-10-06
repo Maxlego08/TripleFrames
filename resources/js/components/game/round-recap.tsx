@@ -1,4 +1,5 @@
 import { useId } from 'react';
+import { LetterboxdLink } from '@/components/game/letterboxd-link';
 import { useTranslations } from '@/hooks/use-translations';
 import { recapTitles } from '@/lib/game/scoring-format';
 import type { RecapEntry } from '@/types/scoring';
@@ -19,7 +20,7 @@ type RecapFilmProps = {
  * Le film d'une manche close, rendu exactement comme l'écran de révélation
  * rend `RevealMovie` : par l'assistant client unique `revealTitles()` (60
  * § 9.5, par `recapTitles()`), le titre retenu dans la langue du joueur, le
- * titre original s'il diffère, l'année — chaque titre dans un élément
+ * titre original s'il diffère, l'année, le lien Letterboxd (D58 du 06/10) — chaque titre dans un élément
  * portant **sa** langue (05 § Attribut `lang`), jamais celle du joueur. Au
  * changement de langue, le titre bascule aussitôt : le paquet porte déjà
  * celui de chaque locale activée.
@@ -53,13 +54,19 @@ function RecapFilm({ entry }: RecapFilmProps) {
                           count: number.format(entry.foundCount),
                       })}
             </p>
+
+            <LetterboxdLink
+                url={entry.titles.letterboxdUrl}
+                title={title.text}
+            />
         </>
     );
 }
 
 /**
  * Le récapitulatif des films de la partie (spec 80 § 11.4, lot L80-7) :
- * **texte seul**, aucune vignette ni URL d'image (Q80-1) — un film dépublié,
+ * **texte seul**, aucune vignette ni URL d'image (Q80-1), le seul lien sortant
+ * étant la fiche Letterboxd de chaque film (D58 du 06/10) — un film dépublié,
  * suspendu ou retiré depuis sa manche y garde son titre, sans aucun octet
  * d'image servi.
  *

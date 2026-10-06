@@ -494,7 +494,7 @@ La révélation montre, et rien d'autre :
 
 « Affiche » est retirée : aucune affiche n'est stockée ni licite (A-03). Une révélation déjà affichée ne se recompose pas au changement de langue (05) ; le paquet porte les titres de **toutes** les locales activées, chaque client choisit le sien.
 
-**Assistant client unique de rendu des titres** (propriété de 60, 80 § 21) : `resources/js/lib/game/reveal-titles.ts` [nouveau, L60-9] exporte `revealTitles(movie: RevealMovie, locale: LocaleCode): { title: RevealTitle; original: RevealTitle | null; year: number | null }`. `title` = `movie.titles[locale]`, avec son `lang` ; `original` = `originalTitleLatin ?? originalTitle`, de `lang` = `originalLanguage` suffixé `-Latn` quand la translittération est rendue, et **nul quand il égale `title.text`** (« titre original s'il diffère ») ; `year` = `movie.year`. L'écran de révélation (60) et le récapitulatif du podium (80, L80-7) le consomment tous deux : ni l'un ni l'autre ne réimplémente ce choix.
+**Assistant client unique de rendu des titres** (propriété de 60, 80 § 21) : `resources/js/lib/game/reveal-titles.ts` [nouveau, L60-9] exporte `revealTitles(movie: RevealMovie, locale: LocaleCode): { title: RevealTitle; original: RevealTitle | null; year: number | null }`. `title` = `movie.titles[locale]`, avec son `lang` ; `original` = `originalTitleLatin ?? originalTitle`, de `lang` = `originalLanguage` suffixé `-Latn` quand la translittération est rendue, et **nul quand il égale `title.text`** (« titre original s'il diffère ») ; `year` = `movie.year`. L'écran de révélation (60) et le récapitulatif du podium (80, L80-7) le consomment tous deux : ni l'un ni l'autre ne réimplémente ce choix. Tous deux rendent aussi `RevealMovie.letterboxdUrl` par le seul composant `components/game/letterboxd-link.tsx`, toujours `target="_blank"` et `rel="noopener noreferrer"`, rien quand l'URL est nulle (D58 du 06/10 — amendé le 06/10).
 
 ### 9.6 `EndReveal`
 
@@ -645,7 +645,7 @@ Tout nouvel événement amende cette spec et entre dans `EventPayloadTest`. Le J
 type LocaleCode = 'fr' | 'en';                                   // Locale::cases()
 interface TierImageRef { tierIndex: number; url: string; fetchNotBefore: IsoMs }
 interface RevealTitle { text: string; lang: string }
-interface RevealMovie { titles: Record<LocaleCode, RevealTitle>; originalTitle: string; originalTitleLatin: string | null;
+interface RevealMovie { titles: Record<LocaleCode, RevealTitle>; originalTitle: string; originalTitleLatin: string | null; /* + letterboxdUrl: string | null, D58 du 06/10 */
   originalLanguage: string; year: number | null }                 // aussi TitlePacket du récapitulatif (C13)
 
 // L60-4
@@ -677,7 +677,7 @@ import type { ChoicesPayload } from '@/types/answers';                          
 | `TierImageRef` | `url` = `ServeUrl::for($tier)` ; `fetchNotBefore` = `Tᵢ − preload_lead_ms` |
 | `tier.opened` | `opensAt` = `Tᵢ` théorique (= `served_at`) ; `next` = référence du palier `i+1`, frappé dans la même transition, NULL au dernier palier ; `choicesUnavailable` = vrai au seul palier du QCM d'une manche Normal dont la composition a abouti au cas terminal (70 § 10.7), faux partout ailleurs — Facile (la manche est alors annulée, aucun `tier.opened`) et Expert compris. Booléen identique pour tout le salon, qui ne dit rien de la réponse : l'absence de `seat.choices` le disait déjà à chaque siège (D54 du 02/10 — amendé le 02/10) |
 | `round.closed` | `endedAt` = `ended_at` ; `revealStartsAt` = `ended_at + tier_grace_ms` ; `revealEndsAt` = `reveal_ends_at` |
-| `RevealMovie` | composé par le **seul** constructeur `App\Support\Game\RevealMovieBuilder::build(Movie $movie): array` [nouveau, L60-6], appelé par `RevealRound`, par `GameStateBuilder` (`round.reveal`) et par `Scoreboard::podium()` de 80 (paquet de titres du récapitulatif, contrat C7 § 3) — une seule composition, pour que la révélation et le récapitulatif ne divergent jamais : `titles` : pour **chaque** `Locale::cases()`, `DisplayTitleResolver::resolve($movie, $locale)` (contrat C11) → `text` et `lang` = `Locale::bcp47()` de la locale atteinte, ou, au rang 3, `movie.original_language` suffixé `-Latn` si la translittération est servie ; `originalTitle` = `title_original` ; `originalTitleLatin` = `title_original_latin` ; `originalLanguage` = `original_language` ; `year` = `release_year` |
+| `RevealMovie` | composé par le **seul** constructeur `App\Support\Game\RevealMovieBuilder::build(Movie $movie): array` [nouveau, L60-6], appelé par `RevealRound`, par `GameStateBuilder` (`round.reveal`) et par `Scoreboard::podium()` de 80 (paquet de titres du récapitulatif, contrat C7 § 3) — une seule composition, pour que la révélation et le récapitulatif ne divergent jamais : `titles` : pour **chaque** `Locale::cases()`, `DisplayTitleResolver::resolve($movie, $locale)` (contrat C11) → `text` et `lang` = `Locale::bcp47()` de la locale atteinte, ou, au rang 3, `movie.original_language` suffixé `-Latn` si la translittération est servie ; `originalTitle` = `title_original` ; `originalTitleLatin` = `title_original_latin` ; `originalLanguage` = `original_language` ; `year` = `release_year` ; `letterboxdUrl` = `https://letterboxd.com/tmdb/{tmdb_id}/`, **nul sans `tmdb_id`** (D58 du 06/10 — amendé le 06/10) |
 | `round.revealed` | `images` = une `TierImageRef` par palier **ouvert**, par `tier_index` ; `finders` = `Scoreboard::roundFinders($round)` ; `leaderboard` = `Scoreboard::leaderboard($game, $round)` (contrat C13) |
 | `game.paused` | `pausedAt` = `paused_at` ; `interruptsAt` = `paused_at + pauseTimeoutMs` |
 | `game.ended` | `podium` = `Scoreboard::podium($game)` ; issue, manches jouées et prévues sont dans `Podium` |
@@ -704,6 +704,7 @@ Tout ce qui est au tableau du § 11.3 avec le canal « salon » est **diffusé**
 - **À aucun moment** : `round.id`, `game.id`, `room.id`, `player.id`, `frame.id`, `frame_level`, `served_frame_id`, `game_path`, `draw_seed`, `draw_pool_size`, `choice_1` en position identifiable, `input_state` d'autrui, `active_seat_token` (sauf la prop `seatToken` de l'onglet qui vient de le frapper).
 - **Avant la révélation** : les points et le `tier_index` d'autrui.
 - **Le genre, le studio et la durée du film** (principe 2).
+- **Le `tmdb_id`**, identifiant externe, ne sort qu'**après** `revealStartsAt`, dans la seule `RevealMovie.letterboxdUrl` (D58 du 06/10 — amendé le 06/10).
 - **Aucune phrase formatée côté serveur**, à la seule exception des quatre chaînes du QCM et des titres de la révélation, qui sont des données (05).
 
 ### 11.8 Réception côté client

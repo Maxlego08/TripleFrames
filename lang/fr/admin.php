@@ -767,8 +767,27 @@ return [
     'catalog' => [
         'title' => 'Catalogue',
         'heading' => 'Catalogue des films',
-        'description' => 'Liste en lecture seule. Chaque film se publie, se dépublie, s’écarte et se corrige depuis sa fiche.',
+        'description' => 'Liste en lecture seule. Chaque film se publie, se dépublie, s’écarte et se corrige depuis sa fiche ; les films prêts se publient aussi ensemble.',
         'results' => ':total film(s) au filtre courant',
+
+        // « Publier les films prêts » (spec 20 § 8.1 bis, D59 du 06/10).
+        'publish_ready' => [
+            'action' => 'Publier les films prêts',
+            'title' => 'Publier les films prêts',
+            'description' => 'Les brouillons au contenu vérifié dont les niveaux 1, 3 et 5 sont en jeu. Chacun est publié comme depuis sa fiche, à votre nom, et entre au vivier des parties lancées ensuite. Les films dépubliés ou écartés n’y figurent pas : ils se republient depuis leur fiche.',
+            'list_heading' => 'Films publiés par ce geste',
+            'ambiguity_description' => 'Pour chaque film, les formes que la publication rendra ambiguës, les autres films du lot comptés comme publiés. Un préfixe ou un sous-titre ambigu n’est plus accepté seul ; les titres complets et les alias restent acceptés.',
+            'none_ambiguous' => 'Aucune forme ne deviendra ambiguë.',
+            'skipped_heading' => 'Prêts, mais pas publiables',
+            'skipped_description' => 'Ces films ne seront pas publiés : corrigez-les depuis leur fiche.',
+            'empty_title' => 'Aucun film prêt à publier',
+            'empty_description' => 'Un brouillon devient prêt quand son contenu est vérifié et que ses niveaux 1, 3 et 5 ont chacun une image en jeu.',
+            'movie' => ':title (:year)',
+            'movie_without_year' => ':title',
+            'submit' => 'Publier :count film|Publier les :count films',
+            'stale' => 'Le lot a changé depuis son affichage (un film n’est plus prêt, ou un avertissement d’ambiguïté a changé) : rien n’a été publié. Relisez le lot mis à jour, puis confirmez de nouveau.',
+            'flash' => ':count film publié : il entre au vivier des parties lancées désormais.|:count films publiés : ils entrent au vivier des parties lancées désormais.',
+        ],
 
         'filters' => [
             'heading' => 'Filtres',

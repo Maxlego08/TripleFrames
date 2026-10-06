@@ -240,6 +240,7 @@ const MOVIE: RevealMovie = {
     originalTitleLatin: null,
     originalLanguage: 'fr',
     year: 1999,
+    letterboxdUrl: null,
 };
 
 /** Un événement tel qu'il arrive du fil : enveloppe, puis charge. */

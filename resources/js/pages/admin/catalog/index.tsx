@@ -1,5 +1,6 @@
 import { Head, Link, router } from '@inertiajs/react';
-import { ClapperboardIcon } from 'lucide-react';
+import { ClapperboardIcon, SendIcon } from 'lucide-react';
+import MovieBatchPublishController from '@/actions/App/Http/Controllers/Admin/MovieBatchPublishController';
 import { useEffect, useState } from 'react';
 import { AdminCatalogFiltersForm } from '@/components/admin/admin-catalog-filters';
 import { AdminEmptyState } from '@/components/admin/admin-empty-state';
@@ -55,7 +56,9 @@ const breadcrumbs: BreadcrumbItem[] = [
  *
  * Publier, dépublier, corriger : chacun de ces gestes a son propre seuil, et
  * tous sont tranchés par la spec 20. Aucun bouton d'écriture n'est offert ici,
- * et l'écran le dit plutôt que de le laisser deviner.
+ * et l'écran le dit plutôt que de le laisser deviner ; seul « Publier les films
+ * prêts » mène à l'écran du lot, qui écrit après confirmation (§ 8.1 bis, D59
+ * du 06/10).
  *
  * Le COMPTAGE PAR MOTIF d'exception est affiché au-dessus du tableau parce que
  * la décision 11 interdit nommément que le marquage soit silencieux. Sa
@@ -122,9 +125,19 @@ export default function AdminCatalogIndex({
                     title={t('admin.catalog.heading')}
                     description={t('admin.catalog.description')}
                     actions={
-                        <Badge variant="outline">
-                            {t('admin.common.read_only')}
-                        </Badge>
+                        <>
+                            <Badge variant="outline">
+                                {t('admin.common.read_only')}
+                            </Badge>
+                            <Button asChild className="min-h-11">
+                                <Link
+                                    href={MovieBatchPublishController.create()}
+                                >
+                                    <SendIcon aria-hidden />
+                                    {t('admin.catalog.publish_ready.action')}
+                                </Link>
+                            </Button>
+                        </>
                     }
                 />
 

@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { GameFrame } from '@/components/game/game-frame';
 import type { FrameFormat } from '@/components/game/game-frame';
+import { LetterboxdLink } from '@/components/game/letterboxd-link';
 import { PlayerAvatar } from '@/components/game/player-avatar';
 import { StandingsTable } from '@/components/game/standings-table';
 import { TmdbAttribution } from '@/components/public/tmdb-attribution';
@@ -56,7 +57,7 @@ const MS_PER_SECOND = 1000;
  *   et l'**année**, par l'assistant unique `revealTitles()` (via
  *   `recapTitles()`, qui réduit la locale active à celles du paquet) : chaque
  *   titre dans un fragment qui porte son `lang` (05), jamais interpolé en
- *   texte brut. Le paquet porte les titres de toutes les locales activées ;
+ *   texte brut, puis le **lien Letterboxd** (D58 du 06/10). Le paquet porte les titres de toutes les locales activées ;
  *   le client choisit le sien **à l'affichage**, et une révélation déjà
  *   affichée ne se recompose pas au changement de langue (05 § exceptions,
  *   60 § 9.5) : la locale des titres est figée au montage, les libellés
@@ -152,6 +153,8 @@ export function RoundReveal({
                         {t('game.reveal.year', { year: String(year) })}
                     </p>
                 )}
+
+                <LetterboxdLink url={movie.letterboxdUrl} title={title.text} />
             </div>
 
             {images !== null && images.length > 0 && (

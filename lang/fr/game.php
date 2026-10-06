@@ -119,6 +119,9 @@ return [
         'images' => 'Images de la manche',
         'finders' => 'Ont trouvé',
         'finder_tier' => 'Image :index',
+        // D58 du 06/10 : fiche Letterboxd du film, toujours dans un nouvel onglet.
+        'letterboxd' => 'Voir sur Letterboxd',
+        'letterboxd_label' => ':title sur Letterboxd (nouvel onglet)',
     ],
 
     // Spec 60 § 14 (lot L60-14) : la pause, et l’heure de clôture formatée

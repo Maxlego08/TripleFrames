@@ -275,6 +275,7 @@ describe('scoring-format', () => {
             originalTitleLatin: 'Chōchin-mori no tabi',
             originalLanguage: 'ja',
             year: 2003,
+            letterboxdUrl: 'https://letterboxd.com/tmdb/1/',
         };
 
         expect(recapTitles(packet, 'fr')).toEqual({

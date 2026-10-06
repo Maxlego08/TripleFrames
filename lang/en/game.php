@@ -128,6 +128,9 @@ return [
         'images' => 'Frames of this round',
         'finders' => 'Found it',
         'finder_tier' => 'Frame :index',
+        // D58 du 06/10 : fiche Letterboxd du film, toujours dans un nouvel onglet.
+        'letterboxd' => 'View on Letterboxd',
+        'letterboxd_label' => ':title on Letterboxd (new tab)',
     ],
 
     // Spec 60 § 14 (lot L60-14) : la pause, et l’heure de clôture formatée

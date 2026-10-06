@@ -677,6 +677,43 @@ Le porteur signale que « le QCM n'apparaît pas pour certains films », sans co
 | D57 | Images proposées par l'IA hors production | **oui, J1** : collecte, proposition (niveau, cadre) et export par l'IA sur le poste local ; validation des niveaux par le porteur dans l'éditeur local ; import en production par l'écran « Lots d'images » ; TMDB seul ; revue et publication inchangées, en production | **oui** — amende D1 du 23/09 pour la seule proposition ; le pilote ne mesure que le temps de production | `20` § 2.2 (ligne 46), § 5.10, § 10.3, L20-37 ; `CLAUDE.md` § 2, § 4 |
 
 
+## Décisions du 06/10/2026
+
+### D58. Un film révélé mène-t-il à Letterboxd ? — **oui : un lien vers la fiche Letterboxd à la révélation, au récapitulatif du podium et dans l'historique du compte, toujours dans un nouvel onglet**
+
+**Demande du porteur.** « Est-ce qu'il est possible d'ajouter le lien vers Letterboxd aux films ? Si on voit un film, on peut avoir un bouton vers Letterboxd et ainsi l'avoir dans sa watchlist de films à voir si on ne le connaît pas. » Puis : « Il faut l'afficher pour les 3, et toujours un `target="_blank"`. »
+
+**Ce que la décision arrête :**
+
+1. **URL composée, aucune donnée nouvelle.** `https://letterboxd.com/tmdb/{tmdb_id}/`, que Letterboxd redirige vers la fiche du film ; composée par le seul `RevealMovieBuilder` (`60` § 11.5), champ `letterboxdUrl` de `RevealMovie`, **nul sans `tmdb_id`** (catalogue de démonstration). Aucune colonne, aucun appel réseau (règle 6 tenue).
+2. **Trois surfaces** : l'écran de révélation (`60` § 9.5, `90` § 10), le récapitulatif du podium (`80` § 11.4, `TitlePacket = RevealMovie`) et l'historique du compte (`40`, J2, quand l'écran naîtra).
+3. **Jamais avant la révélation** (règle 3) : l'URL porte le `tmdb_id`, qui désigne le film ; elle ne voyage que dans `RevealMovie`, qui ne part qu'à `revealStartsAt`.
+4. **Toujours un nouvel onglet** : `target="_blank"` et `rel="noopener noreferrer"` — `noreferrer` obligatoire, l'URL de jeu portant le `room_code`. Composant unique `components/game/letterboxd-link.tsx`.
+5. **Lien texte et icône lucide**, jamais le logo de Letterboxd ; clés `game.reveal.letterboxd` et `game.reveal.letterboxd_label` (nom accessible avec le titre, « nouvel onglet »).
+6. **Watchlist** : l'ajout se fait sur Letterboxd, compte Letterboxd du joueur ; Letterboxd n'ouvre aucune API publique d'écriture, TripleFrames n'en appelle aucune.
+
+**Écart assumé.** `RevealMovie` ne portait « aucun identifiant » (`60` § 11.5) : il porte désormais un identifiant **externe**, le `tmdb_id`, dans une URL, après la révélation seulement — le titre et l'année révélés au même instant désignent déjà le film, et aucun identifiant interne (§ 11.7) n'est touché. Un lien sortant pendant la révélation fait quitter l'attention du jeu (`TmdbAttribution` : « chaque lien sortant depuis une page de jeu est un départ de page de plus ») : le nouvel onglet garde la page de jeu ouverte et le salon connecté. Ce n'est pas du « partage » (hors v1) : rien n'est publié. Une décision : elle se cite « D58 du 06/10 ».
+
+| # | Décision | Réponse retenue | Écart | Inscrite dans |
+|---|---|---|---|---|
+| D58 | Lien Letterboxd du film révélé | **oui, J1** (historique au J2, avec son écran) : `RevealMovie.letterboxdUrl` = `https://letterboxd.com/tmdb/{tmdb_id}/`, nul sans `tmdb_id` ; révélation, récapitulatif du podium, historique ; toujours `target="_blank"` + `rel="noopener noreferrer"` | **oui** — `RevealMovie` porte un identifiant externe après la révélation ; aucune migration | `60` § 9.5, § 11.5, § 11.7 ; `80` § 11.4 ; `90` § 10 ; `40` § 10.1 sujet 7 |
+
+### D59. Peut-on publier d'un coup tous les films prêts ? — **oui : un écran du back-office, le lot lu avant confirmation, publié tout ou rien ; jamais une commande**
+
+**Demande du porteur.** « Génère une commande pour publier tous les films qui sont prêts à être publiés. » Deux arbitrages fermés, tous deux sur la recommandation : **un bouton du back-office plutôt qu'une commande artisan** (une commande sur le chemin du curateur disqualifie le pilote, `20` § 1.3, § 10.3) ; les films à l'avertissement d'ambiguïté non vide sont **listés puis publiés comme les autres**.
+
+**Ce que la décision arrête** (règle complète : `20` § 8.1 bis ; matrice : `20` § 2.2, ligne 47 ; lot : `20` L20-38) :
+
+1. **Prêt** = l'état dérivé du tableau de bord (brouillon, contenu `clear`, niveaux 1, 3 et 5 couverts) ; dépubliés et écartés exclus, republiés à l'unité ; les prêts sans clé exacte sont nommés à part, jamais publiés.
+2. **Lu avant confirmation** : l'avertissement d'ambiguïté de chaque film, tout le lot compté comme publié.
+3. **Tout ou rien** : mêmes gardes et mêmes écritures que la publication à l'unité, une ligne `movie.published` par film au nom du curateur ; un lot changé entre l'affichage et le clic ne publie rien.
+
+**Écart assumé.** La publication restait un geste « à l'unité » (`20` § 8.1) : elle devient aussi un geste de lot, sans rien céder de « geste explicite, jamais un déclencheur » — le curateur lit la liste et l'avertissement de chaque film avant de confirmer. Aucune migration, aucun type de journal nouveau. Une décision : elle se cite « D59 du 06/10 ».
+
+| # | Décision | Réponse retenue | Écart | Inscrite dans |
+|---|---|---|---|---|
+| D59 | Publier les films prêts d'un coup | **oui, J1** : écran `admin.catalog.ready` depuis le catalogue, lot = prêts à publier (brouillons), avertissement du lot, publication tout ou rien ; pas de commande artisan | **oui** — la publication devient aussi un geste de lot ; aucune migration | `20` § 2.2 (ligne 47), § 8.1 bis, L20-38 |
+
 ## Seule question encore ouverte — le nom de domaine (décision 5)
 
 La réponse est **« à acheter »**, mais **le nom n'a pas été fourni**. C'est le dernier point du questionnaire, et il bloque plus tôt qu'annoncé : le montage de développement retenu — `dev.<DOMAINE>` résolu en 127.0.0.1, certificat par défi DNS-01, RP ID de passkey fixé à `<DOMAINE>` — est le **seul** qui satisfasse simultanément Google, Discord, WebAuthn et les cookies `Secure`. `tripleframes.test` ne conviendra jamais : Google refuse tout redirect URI en `http` hors `localhost` et les TLD non enregistrés. **Le domaine conditionne donc le développement d'OAuth et des passkeys, pas seulement la mise en production.** C'est un achat à une dizaine d'euros par an, et c'est le seul achat réellement sur le chemin critique. Amendé le 23/09 (D1 du 23/09) : il conditionne aussi le jalon 1 lui-même, dont le back-office et la curation naissent en production sur `<DOMAINE>` ; l'achat est donc placé **avant la semaine 4**.
