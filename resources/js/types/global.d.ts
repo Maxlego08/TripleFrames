@@ -31,6 +31,11 @@ declare module '@inertiajs/core' {
              */
             oauthProviders: Array<'google' | 'discord'>;
             /**
+             * Le choix de la bannière de consentement (D62 du 06/10) ; nul
+             * tant que le visiteur n'a pas répondu à la version courante.
+             */
+            consent: 'accepted' | 'refused' | null;
+            /**
              * Format fixe de la frame servable (`FrameGeometry::GAME_WIDTH` /
              * `GAME_HEIGHT`, contrat C9), identique pour tous et sans aucune
              * donnée de manche. Réservé aux attributs `width` / `height` de

@@ -512,12 +512,14 @@ it('archive un salon oublié depuis 48 h par l\'action d\'archivage de 50, jamai
             ->and($room->host_player_id)->toBeNull();
     }
 
+    // Le jeton tombe, le pseudo reste pour l'analyse (D62 du 06/10).
     foreach ([...$forgottenSeats, ...$lobbySeats] as $seat) {
-        expect(retentionPurgeIdentity($seat))->toBe(['nickname' => null, 'nickname_normalized' => null, 'player_token_hash' => null]);
+        expect(retentionPurgeIdentity($seat))->toMatchArray(['player_token_hash' => null])
+            ->and(retentionPurgeIdentity($seat)['nickname'])->not->toBeNull();
     }
 
     expect(GamePlayer::query()->where('game_id', $game->id)->count())->toBe(2)
-        ->and(GamePlayer::query()->where('game_id', $game->id)->whereNotNull('display_nickname')->exists())->toBeFalse();
+        ->and(GamePlayer::query()->where('game_id', $game->id)->whereNull('display_nickname')->exists())->toBeFalse();
 
     // Après validation, `room.archived` pour chacun d'eux, et pour eux seuls.
     expect(array_column($recorder->sent, 'event'))->toBe(['room.archived', 'room.archived'])
@@ -616,7 +618,7 @@ function retentionPurgeSoloRest(Player $seat): array
     ];
 }
 
-it('efface pseudo, forme normalisée du pseudo, empreinte du jeton et pseudo figé d\'un siège solo inactif depuis 24 h, dans une transaction', function (): void {
+it('efface les empreintes du jeton d\'un siège solo inactif depuis 24 h, et garde son pseudo', function (): void {
     // Un siège par lot : le curseur doit dépasser les sièges qui échouent ou
     // ne sont plus éligibles, sans jamais les resélectionner.
     config(['ops.purge.batch_size' => 1]);
@@ -658,10 +660,8 @@ it('efface pseudo, forme normalisée du pseudo, empreinte du jeton et pseudo fig
     // sélection du lot et le verrou n'est pas effacé.
     $revived = RetentionRows::soloSeat($cutoff->subHours(2));
 
-    // Dans une transaction : l'effacement de l'un échoue sur sa ligne
-    // `player`, celui de l'autre sur ses pseudos figés. Quel que soit l'ordre
-    // des deux écritures, l'une est faite quand l'autre échoue : rien ne doit
-    // en rester.
+    // Un effacement échoue sur sa ligne `player` : rien n'en reste, et le
+    // siège suivant est effacé quand même.
     $failsOnSeat = RetentionRows::soloSeat($cutoff->subHours(4));
     $failsOnFrozen = RetentionRows::soloSeat($cutoff->subHours(5));
 
@@ -672,7 +672,7 @@ it('efface pseudo, forme normalisée du pseudo, empreinte du jeton et pseudo fig
     $identities = [];
     $rests = [];
 
-    foreach ([$edge, $recent, $roomSeat, $revived, $failsOnSeat, $failsOnFrozen] as $seat) {
+    foreach ([$idle, $forgotten, $edge, $recent, $roomSeat, $revived, $failsOnSeat, $failsOnFrozen] as $seat) {
         $identities[$seat->id] = retentionPurgeSoloIdentity($seat);
     }
 
@@ -683,7 +683,7 @@ it('efface pseudo, forme normalisée du pseudo, empreinte du jeton et pseudo fig
     $reviving = true;
     $failing = true;
 
-    DB::beforeExecuting(static function (string $query, array $bindings) use (&$reviving, &$failing, $revived, $failsOnSeat, $failsOnFrozen, $now): void {
+    DB::beforeExecuting(static function (string $query, array $bindings) use (&$reviving, &$failing, $revived, $failsOnSeat, $now): void {
         if ($reviving
             && preg_match('/^select ["`]id["`] from ["`]player["`] where /i', $query) === 1
             && in_array($revived->id, $bindings, true)) {
@@ -695,10 +695,8 @@ it('efface pseudo, forme normalisée du pseudo, empreinte du jeton et pseudo fig
             return;
         }
 
-        foreach (['player' => $failsOnSeat->id, 'game_player' => $failsOnFrozen->id] as $table => $seatId) {
-            if (preg_match('/^update ["`]'.$table.'["`] /i', $query) === 1 && in_array($seatId, $bindings, true)) {
-                throw new QueryException('testing', $query, $bindings, new PDOException('écriture refusée', 23000));
-            }
+        if (preg_match('/^update ["`]player["`] /i', $query) === 1 && in_array($failsOnSeat->id, $bindings, true)) {
+            throw new QueryException('testing', $query, $bindings, new PDOException('écriture refusée', 23000));
         }
     });
 
@@ -712,39 +710,31 @@ it('efface pseudo, forme normalisée du pseudo, empreinte du jeton et pseudo fig
 
     $run = retentionPurgeRun()[PurgeScope::OrphanPlayer->value];
 
-    // Le périmètre a tourné jusqu'au bout, un lot par siège éligible : deux
-    // sièges effacés, deux lignes en échec comptées, jamais le lot annulé.
+    // Le périmètre a tourné jusqu'au bout, un lot par siège éligible : trois
+    // sièges effacés, une ligne en échec comptée, jamais le lot annulé.
     expect($reviving)->toBeFalse()
         ->and($run->status)->toBe(PurgeRunStatus::Completed)
-        ->and($run->rows_deleted)->toBe(2)
+        ->and($run->rows_deleted)->toBe(3)
         ->and($run->batches)->toBe(5)
-        ->and($run->error)->toContain('2 ligne(s) en échec')
+        ->and($run->error)->toContain('1 ligne(s) en échec')
         ->and($run->error)->toContain(QueryException::class);
 
-    // Effacés : pseudo, forme normalisée, empreinte du jeton et son créneau
-    // d'unicité, et le pseudo figé de chacune des parties du siège.
-    expect(retentionPurgeSoloIdentity($idle))->toBe([
-        'nickname' => null,
-        'nickname_normalized' => null,
-        'player_token_hash' => null,
-        'solo_token_hash' => null,
-        'display_nicknames' => [null, null],
-    ])->and(retentionPurgeSoloIdentity($forgotten))->toBe([
-        'nickname' => null,
-        'nickname_normalized' => null,
-        'player_token_hash' => null,
-        'solo_token_hash' => null,
-        'display_nicknames' => [null],
-    ]);
+    // Effacés : l'empreinte du jeton et son créneau d'unicité. Le pseudo, sa
+    // forme normalisée et les pseudos figés restent (D62 du 06/10).
+    foreach ([$idle, $forgotten, $failsOnFrozen] as $seat) {
+        expect(retentionPurgeSoloIdentity($seat))->toBe([
+            ...$identities[$seat->id],
+            'player_token_hash' => null,
+            'solo_token_hash' => null,
+        ]);
+    }
 
-    // Dans une transaction : un effacement qui échoue en cours de route ne
-    // laisse rien d'effacé, ni sur le siège ni sur ses participations.
-    foreach ([$edge, $recent, $roomSeat, $revived, $failsOnSeat, $failsOnFrozen] as $seat) {
+    // Un effacement qui échoue ne laisse rien d'effacé.
+    foreach ([$edge, $recent, $roomSeat, $revived, $failsOnSeat] as $seat) {
         expect(retentionPurgeSoloIdentity($seat))->toBe($identities[$seat->id]);
     }
 
-    expect($identities[$failsOnSeat->id]['player_token_hash'])->not->toBeNull()
-        ->and($identities[$failsOnFrozen->id]['display_nicknames'])->not->toContain(null);
+    expect($identities[$failsOnSeat->id]['player_token_hash'])->not->toBeNull();
 
     // Effacement de colonnes, jamais suppression de ligne : rien d'autre ne
     // change, `last_seen_at` compris, et aucune ligne ne part.
@@ -754,26 +744,24 @@ it('efface pseudo, forme normalisée du pseudo, empreinte du jeton et pseudo fig
 
     expect($deletes->getArrayCopy())->toBe([])
         ->and(retentionPurgeRoomCounts())->toBe($counts)
-        ->and($handler->eligibleCount())->toBe(2);
+        ->and($handler->eligibleCount())->toBe(1);
 
     // Une seconde plus tard, le siège resté à la borne est échu à son tour, et
-    // les deux lignes en échec sont reprises ; aucun autre siège n'est touché.
+    // la ligne en échec est reprise ; aucun autre siège n'est touché.
     $failing = false;
     $this->travel(1)->seconds();
 
     $next = retentionPurgeRun()[PurgeScope::OrphanPlayer->value];
 
-    expect($next->rows_deleted)->toBe(3)
-        ->and($next->batches)->toBe(3)
+    expect($next->rows_deleted)->toBe(2)
+        ->and($next->batches)->toBe(2)
         ->and($next->error)->toBeNull();
 
-    foreach ([$edge, $failsOnSeat, $failsOnFrozen] as $seat) {
+    foreach ([$edge, $failsOnSeat] as $seat) {
         expect(retentionPurgeSoloIdentity($seat))->toBe([
-            'nickname' => null,
-            'nickname_normalized' => null,
+            ...$identities[$seat->id],
             'player_token_hash' => null,
             'solo_token_hash' => null,
-            'display_nicknames' => [null],
         ]);
     }
 
@@ -820,11 +808,9 @@ it('n\'efface pas un siège solo dont une partie n\'est pas figée, et le journa
 
     expect(retentionPurgeRun()[PurgeScope::OrphanPlayer->value]->rows_deleted)->toBe(1)
         ->and(retentionPurgeSoloIdentity($seat))->toBe([
-            'nickname' => null,
-            'nickname_normalized' => null,
+            ...$identity,
             'player_token_hash' => null,
             'solo_token_hash' => null,
-            'display_nicknames' => [null, null],
         ]);
 });
 
@@ -894,4 +880,38 @@ it('compte les lignes éligibles de chaque périmètre par le prédicat même de
             ->and($handler->eligibleCount())->toBe(0, $scope->value)
             ->and(RetentionRows::seeded($scope))->toBe($seeded[$scope->value]['kept'], $scope->value);
     }
+});
+
+it('anonymise le pseudo d\'un siège 12 mois après sa dernière activité, sans supprimer de ligne', function (): void {
+    expect(RetentionWindows::GUEST_NICKNAME_MONTHS)->toBe(12);
+
+    $now = CarbonImmutable::now();
+    $cutoff = RetentionRows::cutoff(PurgeScope::GuestNickname, $now);
+
+    // Échu, siège solo comme siège de salon archivé ; gardés : à la borne
+    // exacte, et récent.
+    $due = RetentionRows::nicknameSeat($cutoff->subSecond());
+    $room = Room::factory()->create(['last_activity_at' => $cutoff->subDays(3), 'archived_at' => $cutoff->subDays(2)]);
+    $roomSeat = Player::factory()->for($room)->create(['joined_at' => $cutoff->subDays(3), 'last_seen_at' => $cutoff->subDays(3), 'player_token_hash' => null]);
+    $edge = RetentionRows::nicknameSeat($cutoff);
+    $recent = RetentionRows::nicknameSeat($now->subMonth());
+
+    $counts = retentionPurgeRoomCounts();
+    $run = retentionPurgeRun()[PurgeScope::GuestNickname->value];
+
+    expect($run->status)->toBe(PurgeRunStatus::Completed)
+        ->and($run->rows_deleted)->toBe(2);
+
+    foreach ([$due, $roomSeat] as $seat) {
+        expect(retentionPurgeSoloIdentity($seat))->toMatchArray(['nickname' => null, 'nickname_normalized' => null])
+            ->and(DB::table('game_player')->where('player_id', $seat->id)->whereNotNull('display_nickname')->exists())->toBeFalse();
+    }
+
+    foreach ([$edge, $recent] as $seat) {
+        expect(retentionPurgeSoloIdentity($seat)['nickname'])->not->toBeNull()
+            ->and(retentionPurgeSoloIdentity($seat)['display_nicknames'])->not->toContain(null);
+    }
+
+    // Anonymiser, jamais supprimer.
+    expect(retentionPurgeRoomCounts())->toBe($counts);
 });

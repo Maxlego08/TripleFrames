@@ -1,6 +1,7 @@
+import SeatAvatarController from '@/actions/App/Http/Controllers/Room/SeatAvatarController';
 import type { FormDataConvertible } from '@inertiajs/core';
 import { Form, Head, router, usePage } from '@inertiajs/react';
-import { CircleAlert, Play } from 'lucide-react';
+import { ArrowLeft, CircleAlert, Play, Settings, X } from 'lucide-react';
 import { useEffect, useId, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import LaunchController from '@/actions/App/Http/Controllers/Room/LaunchController';
@@ -9,7 +10,8 @@ import { GameHelp } from '@/components/game/game-help';
 import { GameStage } from '@/components/game/game-stage';
 import { NextRoundButton } from '@/components/game/next-round-button';
 import { Podium } from '@/components/game/podium';
-import { LobbyAvatarPicker } from '@/components/room/lobby-avatar-picker';
+import { AuthBrand } from '@/components/auth/auth-brand';
+import { CinemaSeatMap } from '@/components/room/cinema-seat-map';
 import { PoolStatus } from '@/components/room/pool-status';
 import { PresetPicker } from '@/components/room/preset-picker';
 import type { PresetOption } from '@/components/room/preset-picker';
@@ -23,6 +25,15 @@ import { ShareCode } from '@/components/room/share-code';
 import { ReadOnlyNotice } from '@/components/state/read-only-notice';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import {
+    Dialog,
+    DialogClose,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+} from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Spinner } from '@/components/ui/spinner';
 import { useLobbyState } from '@/hooks/game/use-lobby-state';
@@ -32,7 +43,7 @@ import { useNextRound } from '@/hooks/game/use-next-round';
 import { useRoundStage } from '@/hooks/game/use-round-stage';
 import { useTranslations } from '@/hooks/use-translations';
 import { announce } from '@/lib/game/announcer';
-import { otherSeatsAvatarSignature } from '@/lib/game/lobby-avatars';
+import { cycleLobbyAvatar } from '@/lib/game/lobby-avatars';
 import type { LobbyAvatars } from '@/lib/game/lobby-avatars';
 import { show } from '@/routes/room';
 import { update as updateSettings } from '@/routes/room/settings';
@@ -192,6 +203,8 @@ export default function Lobby({
 
     const [remedyPending, setRemedyPending] = useState(false);
     const [remedyError, setRemedyError] = useState<string | null>(null);
+    const [settingsOpen, setSettingsOpen] = useState(false);
+    const [avatarPending, setAvatarPending] = useState(false);
     const motiveId = useId();
     const titleRef = useRef<HTMLHeadingElement>(null);
     const previousPhase = useRef(phase);
@@ -230,15 +243,10 @@ export default function Lobby({
             : typeof errors.publicId === 'string'
               ? errors.publicId
               : null;
-    // Refus du changement d'avatar (prise par un autre siège, partie
-    // lancée entre-temps), rendu sous le sélecteur.
-    const avatarError =
-        typeof errors.avatar === 'string' ? errors.avatar : null;
     const shareUrl = new URL(
         show.url({ room: room.code }),
         window.location.origin,
     ).href;
-
     const connectedSeats = state.seats.filter(
         (seat) => seat.connection === 'connected' && !seat.kicked,
     ).length;
@@ -307,6 +315,37 @@ export default function Lobby({
     };
     const leaveGesture: RoomGestureContext = { ...gestures, disabled: !active };
 
+    // L'avatar du siège, choisi par les flèches ‹ › de la salle d'attente
+    // (D55 du 02/10, amendé le 06/10) : un clic envoie l'avatar libre voisin,
+    // un seul envoi en vol ; le serveur reste juge (clé prise entre-temps,
+    // partie lancée) et sa réponse relit la prop `avatars`.
+    const cycleAvatar = (direction: 1 | -1): void => {
+        const target = cycleLobbyAvatar(avatars, direction);
+
+        if (target === null || avatarPending) {
+            return;
+        }
+
+        router.post(
+            SeatAvatarController.update.url({ room: room.code }),
+            { avatar: target },
+            {
+                preserveScroll: true,
+                preserveState: true,
+                onHttpException,
+                onStart: () => setAvatarPending(true),
+                onError: (failed) => {
+                    const message = firstError(failed);
+
+                    if (message !== null) {
+                        announce(message);
+                    }
+                },
+                onFinish: () => setAvatarPending(false),
+            },
+        );
+    };
+
     // En partie, les sièges sont les participations gelées au lancement
     // (`firstRoundNumber` 1) ou à l'admission d'un retardataire (sa manche
     // d'entrée) : un siège qui n'y figure pas, ou qui n'y figure qu'en vue de
@@ -370,6 +409,120 @@ export default function Lobby({
         </>
     );
 
+    const lobbySettings = (
+        <div className="waiting-room-dialog__sections">
+            {isHost && (
+                <PresetPicker
+                    roomCode={room.code}
+                    presets={presets}
+                    disabled={!canWrite}
+                    onHttpException={onHttpException}
+                    onRefused={announce}
+                />
+            )}
+
+            {settingsChanges !== null && (
+                <SettingsChanges changes={settingsChanges} />
+            )}
+
+            <RoomSettingsForm
+                roomCode={room.code}
+                state={settings}
+                bounds={bounds}
+                headcount={headcount}
+                editable={isHost}
+                lateJoinAvailable={editor.lateJoinAvailable}
+                disabled={!canWrite}
+                onHttpException={onHttpException}
+                onRefused={announce}
+            />
+
+            <PoolStatus
+                pool={pool}
+                remedies={
+                    isHost
+                        ? {
+                              disabled: remedyPending || !canWrite,
+                              onApply: applyRemedy,
+                              error: remedyError,
+                          }
+                        : null
+                }
+            />
+
+            <SeatList
+                seats={state.seats}
+                selfPublicId={state.self.publicId}
+                capacity={settings.settings.capacity}
+                actions={isHost ? gestures : null}
+                reports={gestures}
+            />
+
+            {speedBonusMaxPercent !== undefined && (
+                <GameHelp speedBonusMaxPercent={speedBonusMaxPercent} />
+            )}
+        </div>
+    );
+
+    const launchControl = isHost ? (
+        <Form
+            {...LaunchController.store.form({ room: room.code })}
+            options={{ preserveScroll: true, preserveState: true }}
+            onHttpException={onHttpException}
+            onError={(formErrors) => {
+                const message = firstError(formErrors);
+
+                if (message !== null) {
+                    announce(message);
+                }
+            }}
+            className="waiting-room-launch"
+        >
+            {({ processing }) => (
+                <>
+                    <Button
+                        type="submit"
+                        disabled={processing || !canWrite || motives.length > 0}
+                        aria-busy={processing}
+                        aria-describedby={
+                            motives.length > 0 ? motiveId : undefined
+                        }
+                        className="waiting-room-action waiting-room-action--launch"
+                    >
+                        {processing
+                            ? t('room.lobby.launching')
+                            : t('room.lobby.launch')}
+                        {processing ? (
+                            <Spinner
+                                aria-hidden="true"
+                                role="presentation"
+                                aria-label={undefined}
+                                className="motion-reduce:animate-none"
+                            />
+                        ) : (
+                            <Play aria-hidden="true" />
+                        )}
+                    </Button>
+
+                    {motives.length > 0 && (
+                        <ul
+                            id={motiveId}
+                            className="waiting-room-launch__motives"
+                        >
+                            {motives.map((motive) => (
+                                <li key={motive}>{motive}</li>
+                            ))}
+                        </ul>
+                    )}
+                </>
+            )}
+        </Form>
+    ) : (
+        <p className="waiting-room__host-status">
+            {t('room.lobby.waiting_for_host')}
+        </p>
+    );
+
     return (
         <>
             <Head title={t('room.lobby.title')} />
@@ -382,213 +535,128 @@ export default function Lobby({
                     banners={banners}
                     seatsPanel={seatsPanel}
                 />
+            ) : phase === 'lobby' ? (
+                <div className="waiting-room-scroll h-full overflow-auto">
+                    <div className="waiting-room">
+                        <h1 ref={titleRef} tabIndex={-1} className="sr-only">
+                            {t('room.lobby.title')}
+                        </h1>
+
+                        <div className="waiting-room__topbar">
+                            <AuthBrand />
+                            <p className="waiting-room__players">
+                                {t('room.lobby.player_count', {
+                                    count: number.format(headcount),
+                                    capacity: number.format(
+                                        settings.settings.capacity,
+                                    ),
+                                })}
+                            </p>
+                        </div>
+
+                        <div className="waiting-room__notices">{banners}</div>
+
+                        <ShareCode code={room.code} url={shareUrl} />
+
+                        <CinemaSeatMap
+                            seats={state.seats}
+                            selfPublicId={state.self.publicId}
+                            onCycleAvatar={cycleAvatar}
+                            avatarBusy={avatarPending || !canWrite}
+                        />
+
+                        <div className="waiting-room__actions">
+                            <div className="waiting-room-leave">
+                                <LeaveRoomAction
+                                    {...leaveGesture}
+                                    icon={ArrowLeft}
+                                />
+                            </div>
+
+                            {launchControl}
+
+                            <Dialog
+                                open={settingsOpen}
+                                onOpenChange={setSettingsOpen}
+                            >
+                                <DialogTrigger asChild>
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        className="waiting-room-action waiting-room-action--settings"
+                                    >
+                                        <Settings aria-hidden="true" />
+                                        {t('room.lobby.configure')}
+                                    </Button>
+                                </DialogTrigger>
+
+                                <DialogContent className="waiting-room-dialog [&>button:last-child]:hidden">
+                                    <DialogHeader className="waiting-room-dialog__header">
+                                        <div className="waiting-room-dialog__heading">
+                                            <DialogTitle>
+                                                {t('room.lobby.settings_title')}
+                                            </DialogTitle>
+                                            <DialogClose asChild>
+                                                <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    size="sm"
+                                                >
+                                                    <X aria-hidden="true" />
+                                                    {t('common.action.close')}
+                                                </Button>
+                                            </DialogClose>
+                                        </div>
+                                        <DialogDescription>
+                                            {isHost
+                                                ? t('room.lobby.you_are_host')
+                                                : t('room.lobby.read_only')}
+                                        </DialogDescription>
+                                    </DialogHeader>
+
+                                    <ScrollArea className="waiting-room-dialog__scroll">
+                                        {lobbySettings}
+                                    </ScrollArea>
+                                </DialogContent>
+                            </Dialog>
+                        </div>
+                    </div>
+                </div>
             ) : (
                 <ScrollArea className="h-full">
                     <div className="mx-auto flex w-full max-w-2xl flex-col gap-6 px-4 py-6">
-                        <header className="flex flex-col gap-1">
-                            <h1
-                                ref={titleRef}
-                                tabIndex={-1}
-                                className="text-2xl font-semibold tracking-tight focus-visible:outline-none"
-                            >
-                                {t('room.lobby.title')}
-                            </h1>
-                            {phase === 'lobby' && (
-                                <p className="text-muted-foreground">
-                                    {isHost
-                                        ? t('room.lobby.you_are_host')
-                                        : t('room.lobby.waiting_for_host')}
-                                </p>
-                            )}
-                        </header>
+                        <h1
+                            ref={titleRef}
+                            tabIndex={-1}
+                            className="text-2xl font-semibold tracking-tight focus-visible:outline-none"
+                        >
+                            {t('room.lobby.title')}
+                        </h1>
 
                         {banners}
 
-                        {phase === 'lobby' ? (
-                            <>
-                                <ShareCode code={room.code} url={shareUrl} />
-
-                                <LobbyAvatarPicker
-                                    {...gestures}
-                                    avatars={avatars}
-                                    seatAvatar={selfSeat?.avatar ?? null}
-                                    error={avatarError}
-                                    othersSignature={otherSeatsAvatarSignature(
-                                        state.seats,
-                                        state.self.publicId,
-                                    )}
-                                />
-
-                                {isHost && (
-                                    <PresetPicker
-                                        roomCode={room.code}
-                                        presets={presets}
-                                        disabled={!canWrite}
-                                        onHttpException={onHttpException}
-                                        onRefused={announce}
-                                    />
-                                )}
-
-                                {settingsChanges !== null && (
-                                    <SettingsChanges
-                                        changes={settingsChanges}
-                                    />
-                                )}
-
-                                <RoomSettingsForm
-                                    roomCode={room.code}
-                                    state={settings}
-                                    bounds={bounds}
-                                    headcount={headcount}
-                                    editable={isHost}
-                                    lateJoinAvailable={editor.lateJoinAvailable}
-                                    disabled={!canWrite}
-                                    onHttpException={onHttpException}
-                                    onRefused={announce}
-                                />
-
-                                <PoolStatus
-                                    pool={pool}
-                                    remedies={
-                                        isHost
-                                            ? {
-                                                  disabled:
-                                                      remedyPending ||
-                                                      !canWrite,
-                                                  onApply: applyRemedy,
-                                                  error: remedyError,
-                                              }
-                                            : null
-                                    }
-                                />
-
-                                {isHost && (
-                                    <Form
-                                        {...LaunchController.store.form({
-                                            room: room.code,
-                                        })}
-                                        options={{
-                                            preserveScroll: true,
-                                            preserveState: true,
-                                        }}
-                                        onHttpException={onHttpException}
-                                        onError={(formErrors) => {
-                                            const message =
-                                                firstError(formErrors);
-
-                                            if (message !== null) {
-                                                announce(message);
-                                            }
-                                        }}
-                                        className="flex flex-col gap-2"
-                                    >
-                                        {({ processing }) => (
-                                            <>
-                                                <Button
-                                                    type="submit"
-                                                    disabled={
-                                                        processing ||
-                                                        !canWrite ||
-                                                        motives.length > 0
-                                                    }
-                                                    aria-busy={processing}
-                                                    aria-describedby={
-                                                        motives.length > 0
-                                                            ? motiveId
-                                                            : undefined
-                                                    }
-                                                    className="min-h-11 w-full sm:w-auto sm:self-start"
-                                                >
-                                                    {processing ? (
-                                                        <Spinner
-                                                            aria-hidden="true"
-                                                            role="presentation"
-                                                            aria-label={
-                                                                undefined
-                                                            }
-                                                            className="motion-reduce:animate-none"
-                                                        />
-                                                    ) : (
-                                                        <Play aria-hidden="true" />
-                                                    )}
-                                                    {processing
-                                                        ? t(
-                                                              'room.lobby.launching',
-                                                          )
-                                                        : t(
-                                                              'room.lobby.launch',
-                                                          )}
-                                                </Button>
-
-                                                {motives.length > 0 && (
-                                                    <ul
-                                                        id={motiveId}
-                                                        className="flex flex-col gap-1 text-sm text-muted-foreground"
-                                                    >
-                                                        {motives.map(
-                                                            (motive) => (
-                                                                <li
-                                                                    key={motive}
-                                                                >
-                                                                    {motive}
-                                                                </li>
-                                                            ),
-                                                        )}
-                                                    </ul>
-                                                )}
-                                            </>
-                                        )}
-                                    </Form>
-                                )}
-
-                                <SeatList
-                                    seats={state.seats}
-                                    selfPublicId={state.self.publicId}
-                                    capacity={settings.settings.capacity}
-                                    actions={isHost ? gestures : null}
-                                    reports={gestures}
-                                />
-
-                                <div>
-                                    <LeaveRoomAction {...leaveGesture} />
-                                </div>
-
-                                {speedBonusMaxPercent !== undefined && (
-                                    <div>
-                                        <GameHelp
-                                            speedBonusMaxPercent={
-                                                speedBonusMaxPercent
-                                            }
-                                        />
-                                    </div>
-                                )}
-                            </>
-                        ) : (
-                            <>
-                                {waitingNextGame && (
-                                    <p className="text-muted-foreground">
-                                        {t('room.lobby.waiting_next_game')}
-                                    </p>
-                                )}
-
-                                <Podium
-                                    podium={state.podium}
-                                    failed={!state.resyncing}
-                                    onRetry={() => store.requestResync('retry')}
-                                >
-                                    <ReplayButton
-                                        roomCode={room.code}
-                                        isHost={isHost}
-                                        disabled={!canWrite}
-                                        motives={replayMotives}
-                                        onHttpException={onHttpException}
-                                        onRefused={announce}
-                                    />
-                                </Podium>
-
-                                {seatsPanel}
-                            </>
+                        {waitingNextGame && (
+                            <p className="text-muted-foreground">
+                                {t('room.lobby.waiting_next_game')}
+                            </p>
                         )}
+
+                        <Podium
+                            podium={state.podium}
+                            failed={!state.resyncing}
+                            onRetry={() => store.requestResync('retry')}
+                        >
+                            <ReplayButton
+                                roomCode={room.code}
+                                isHost={isHost}
+                                disabled={!canWrite}
+                                motives={replayMotives}
+                                onHttpException={onHttpException}
+                                onRefused={announce}
+                            />
+                        </Podium>
+
+                        {seatsPanel}
                     </div>
                 </ScrollArea>
             )}

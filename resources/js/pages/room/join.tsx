@@ -1,9 +1,9 @@
 import { Head, Link, usePage } from '@inertiajs/react';
-import { Info, TriangleAlert } from 'lucide-react';
+import { House, Info, LogIn, TriangleAlert } from 'lucide-react';
+import { useId } from 'react';
 import RoomEntryController from '@/actions/App/Http/Controllers/Room/RoomEntryController';
 import { SeatForm } from '@/components/room/seat-form';
 import type { NicknameBounds } from '@/components/room/seat-form';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useTranslations } from '@/hooks/use-translations';
 import { home } from '@/routes';
 import type { TranslationKey } from '@/types/translations';
@@ -38,19 +38,20 @@ const OPEN_ENTRY_KEYS: Partial<Record<RoomEntryState, TranslationKey>> = {
 };
 
 /**
- * Entrée dans un salon — `room.entry` (spec 50 § 7), dans `PublicLayout` :
- * le code ou le lien suffit, dans la limite des
- * sièges ; l'hôte ne valide pas chaque arrivée.
+ * Entrée dans un salon — `room.entry` (spec 50 § 7), dans `PublicLayout`,
+ * au gabarit des pages d'entrée (`room-entry.scss`, partagé avec la
+ * création) : le code ou le lien suffit, dans la limite des sièges ; l'hôte
+ * ne valide pas chaque arrivée.
  *
  * C'est la cible du lien partagé `/r/{code}` (D55 du 02/10) : le code est
- * déjà dans l'adresse, la page ne demande QUE le pseudo. Aucun avatar :
- * le serveur l'attribue à la prise de siège, et il se change au lobby.
- * Un visiteur sans siège ne voit pas qui est dans le salon : aucun pseudo,
- * aucun identifiant, aucun avatar. Le titre ne porte ni code ni paramètre
- * (§ 6.5).
+ * déjà dans l'adresse, la page ne demande QUE le pseudo, et rappelle le code
+ * en étiquette du billet. Aucun avatar : le serveur l'attribue à la prise de
+ * siège, et il se change dans la salle d'attente. Un visiteur sans siège ne
+ * voit pas qui est dans le salon : aucun pseudo, aucun identifiant, aucun
+ * avatar. Le titre de l'onglet ne porte ni code ni paramètre (§ 6.5).
  *
  * États : `kicked` et `full` sans formulaire ni mention des CGU, avec un
- * lien vers l'accueil ; `late_join` avec le formulaire (le siège entrera à
+ * retour à l'accueil ; `late_join` avec le formulaire (le siège entrera à
  * la manche suivante, sans aucun point) ; `in_progress` avec le formulaire
  * (le siège attendra la partie suivante) ; `open`. Un refus rendu APRÈS
  * l'envoi (salon devenu complet, jeton expulsé entre-temps) revient sous
@@ -62,6 +63,7 @@ const OPEN_ENTRY_KEYS: Partial<Record<RoomEntryState, TranslationKey>> = {
 export default function RoomJoin({ room, entry, nickname }: RoomJoinProps) {
     const { t } = useTranslations();
     const { errors } = usePage().props;
+    const headingId = useId();
     const closedKey = CLOSED_ENTRY_KEYS[entry];
     const noticeKey = OPEN_ENTRY_KEYS[entry];
 
@@ -69,56 +71,76 @@ export default function RoomJoin({ room, entry, nickname }: RoomJoinProps) {
         <>
             <Head title={t('room.join.title')} />
 
-            <section className="mx-auto flex w-full max-w-2xl flex-col gap-6 px-4 py-8">
-                <h1 className="text-2xl font-semibold tracking-tight">
-                    {t('room.join.title')}
-                </h1>
+            <section className="auth-stage room-entry-stage">
+                <section
+                    className="auth-ticket room-entry-ticket"
+                    aria-labelledby={headingId}
+                >
+                    <div className="auth-ticket__form-panel">
+                        <header className="auth-heading">
+                            <h1 id={headingId}>{t('room.join.title')}</h1>
+                            {closedKey === undefined && (
+                                <p>{t('room.join.intro')}</p>
+                            )}
+                        </header>
 
-                {closedKey !== undefined ? (
-                    <>
-                        <Alert role="note">
-                            <Info aria-hidden="true" />
-                            <AlertDescription className="text-foreground">
-                                {t(closedKey)}
-                            </AlertDescription>
-                        </Alert>
+                        <div className="auth-content">
+                            {closedKey !== undefined ? (
+                                <>
+                                    <p
+                                        role="note"
+                                        className="room-entry-notice room-entry-notice--closed"
+                                    >
+                                        <Info aria-hidden="true" />
+                                        <span>{t(closedKey)}</span>
+                                    </p>
 
-                        <Link
-                            href={home()}
-                            className="inline-flex min-h-11 items-center self-start rounded-sm underline underline-offset-4 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                        >
-                            {t('common.nav.home')}
-                        </Link>
-                    </>
-                ) : (
-                    <>
-                        {noticeKey !== undefined && (
-                            <Alert role="note">
-                                <Info aria-hidden="true" />
-                                <AlertDescription className="text-foreground">
-                                    {t(noticeKey)}
-                                </AlertDescription>
-                            </Alert>
-                        )}
+                                    <Link
+                                        href={home()}
+                                        className="room-entry-home"
+                                    >
+                                        <House aria-hidden="true" />
+                                        {t('common.nav.home')}
+                                    </Link>
+                                </>
+                            ) : (
+                                <>
+                                    {noticeKey !== undefined && (
+                                        <p
+                                            role="note"
+                                            className="room-entry-notice"
+                                        >
+                                            <Info aria-hidden="true" />
+                                            <span>{t(noticeKey)}</span>
+                                        </p>
+                                    )}
 
-                        {errors.room !== undefined && (
-                            <Alert variant="destructive">
-                                <TriangleAlert aria-hidden="true" />
-                                <AlertDescription>
-                                    {errors.room}
-                                </AlertDescription>
-                            </Alert>
-                        )}
+                                    {errors.room !== undefined && (
+                                        <p
+                                            role="alert"
+                                            className="room-entry-notice room-entry-notice--error"
+                                        >
+                                            <TriangleAlert aria-hidden="true" />
+                                            <span>{errors.room}</span>
+                                        </p>
+                                    )}
 
-                        <SeatForm
-                            form={RoomEntryController.store.form({
-                                room: room.code,
-                            })}
-                            nickname={nickname}
-                            submitLabel={t('room.join.submit')}
-                        />
-                    </>
-                )}
+                                    <SeatForm
+                                        form={RoomEntryController.store.form({
+                                            room: room.code,
+                                        })}
+                                        nickname={nickname}
+                                        submitLabel={t('room.join.submit')}
+                                        submitIcon={
+                                            <LogIn aria-hidden="true" />
+                                        }
+                                        className="room-entry-form"
+                                    />
+                                </>
+                            )}
+                        </div>
+                    </div>
+                </section>
             </section>
         </>
     );

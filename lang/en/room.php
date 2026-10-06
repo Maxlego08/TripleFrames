@@ -64,6 +64,8 @@ return [
 
     'join' => [
         'title' => 'Join the room',
+        'intro' => 'Pick a nickname to come in: you choose your avatar afterwards in the waiting room.',
+        'code' => 'Room',
         'submit' => 'Join',
         'kicked' => 'The host removed you from this room: you cannot come back.',
         'full' => 'This room is full.',
@@ -239,12 +241,18 @@ return [
 
     'lobby' => [
         'title' => 'Room',
-        'code_label' => 'Code',
+        'code_label' => 'Game code',
+        'copy_code' => 'Copy',
+        'copy_room_code' => 'Copy code',
+        'code_copied' => 'Code copied',
+        'show_code' => 'Show',
+        'hide_code' => 'Hide',
         'copy_link' => 'Copy link',
         'link_copied' => 'Link copied',
         'share_hint' => 'Share this link or code with your friends.',
         'share' => 'Share',
         'players' => 'Players (:count of :capacity)',
+        'player_count' => ':count / :capacity players',
         'host_badge' => 'Host',
         'you' => 'You',
         'seat' => [
@@ -270,6 +278,8 @@ return [
         'leave' => 'Leave room',
         'leave_confirm' => 'Leave the room? You can come back with the link.',
         'settings_title' => 'Settings',
+        'configure' => 'Configure',
+        'screen_waiting' => 'The show is about to begin',
         'presets_title' => 'Presets',
         'changes_title' => 'Settings adjusted',
         'preset_grayed' => 'Not enough movies for this preset: playable with :frames frames per round.',
@@ -282,6 +292,8 @@ return [
             'change' => 'Change avatar',
             'done' => 'Done',
             'apply' => 'Use this avatar',
+            'previous' => 'Previous avatar',
+            'next' => 'Next avatar',
         ],
     ],
 

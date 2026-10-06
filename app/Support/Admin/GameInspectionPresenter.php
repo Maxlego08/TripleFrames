@@ -258,7 +258,7 @@ final class GameInspectionPresenter
             ];
         }
 
-        $player->loadMissing(['room', 'user']);
+        $player->loadMissing(['room', 'user', 'visitor']);
 
         return [
             'player' => [
@@ -268,7 +268,15 @@ final class GameInspectionPresenter
                 'left_at' => self::moment($player->left_at),
                 'kicked_at' => self::moment($player->kicked_at),
                 'nickname_masked_at' => self::moment($player->nickname_masked_at),
+                // L'appareil grossier, pour un visiteur consentant seulement
+                // (D62 du 06/10) ; nul sinon.
+                'device' => $player->device_class === null ? null : [
+                    'class' => $player->device_class,
+                    'browser' => $player->browser_family,
+                    'os' => $player->os_family,
+                ],
             ],
+            'visitor' => self::visitorOf($player),
             'games' => $games,
         ];
     }
@@ -492,6 +500,46 @@ final class GameInspectionPresenter
             'user' => $user === null ? null : ['id' => $user->id, 'name' => $user->name],
             'joined_at' => self::moment($player->joined_at),
             'last_seen_at' => self::moment($player->last_seen_at),
+        ];
+    }
+
+    /**
+     * Le visiteur consentant du siège et ses AUTRES sièges, du plus récent au
+     * plus ancien (D62 du 06/10) : de quoi voir qu'un joueur revient, sous
+     * quel pseudo et sur quel appareil. Nul sans visiteur.
+     *
+     * @return array{consented_at: string|null, first_seen_at: string|null, last_seen_at: string|null, seats: list<array<string, mixed>>}|null
+     */
+    private static function visitorOf(Player $player): ?array
+    {
+        $visitor = $player->visitor;
+
+        if ($visitor === null) {
+            return null;
+        }
+
+        $seats = array_values(Player::query()
+            ->with(['room', 'user'])
+            ->where('visitor_id', $visitor->id)
+            ->whereKeyNot($player->id)
+            ->orderByDesc('joined_at')
+            ->orderByDesc('id')
+            ->get()
+            ->map(static fn (Player $seat): array => [
+                ...self::playerIdentity($seat),
+                'device' => $seat->device_class === null ? null : [
+                    'class' => $seat->device_class,
+                    'browser' => $seat->browser_family,
+                    'os' => $seat->os_family,
+                ],
+            ])
+            ->all());
+
+        return [
+            'consented_at' => self::moment($visitor->consented_at),
+            'first_seen_at' => self::moment($visitor->first_seen_at),
+            'last_seen_at' => self::moment($visitor->last_seen_at),
+            'seats' => $seats,
         ];
     }
 

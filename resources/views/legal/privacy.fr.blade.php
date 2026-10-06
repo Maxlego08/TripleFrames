@@ -27,11 +27,12 @@
     <li>la langue d’interface ;</li>
     <li>l’avatar choisi parmi ceux proposés ;</li>
     <li>l’adresse IP, dans les journaux techniques du serveur et dans la session ;</li>
-    <li>les scores et les horodatages des parties.</li>
+    <li>les scores et les horodatages des parties ;</li>
+    <li>seulement si vous l’acceptez (bannière « Être reconnu d’une partie à l’autre ? ») : un identifiant de visiteur, qui relie vos sièges successifs, et le type de votre appareil, réduit à trois familles (classe d’appareil, navigateur, système), sans version ni modèle.</li>
 </ul>
 
 <h2>Base légale</h2>
-<p>Ces données sont traitées pour l’exécution du service : permettre de jouer.</p>
+<p>Ces données sont traitées pour l’exécution du service : permettre de jouer. L’identifiant de visiteur et le type d’appareil reposent sur votre consentement, retirable à tout moment (section « Vos préférences de cookies » en bas de cette page) ; le retrait supprime l’identifiant.</p>
 
 <h2>Destinataires</h2>
 <ul>
@@ -41,10 +42,14 @@
 </ul>
 
 <h2>Durées de conservation</h2>
-<p>[À FOURNIR : tableau des durées de conservation]</p>
+<ul>
+    <li>Pseudo d’un siège : 12 mois après la dernière activité du siège, puis anonymisé ; le jeton de joueur est effacé dès l’archivage du salon (24 heures sans activité).</li>
+    <li>Identifiant de visiteur et type d’appareil : 13 mois après la dernière visite pour l’identifiant, 12 mois pour son lien aux sièges ; supprimés dès le retrait du consentement.</li>
+    <li>[À FOURNIR : le reste du tableau des durées de conservation]</li>
+</ul>
 
 <h2 id="legal-cookies-heading">Cookies et stockage local</h2>
-<p>Tous les cookies posés par le site sont strictement nécessaires à son fonctionnement ou mémorisent un choix que vous avez exprimé. Le site n’affiche donc aucune bannière de consentement.</p>
+<p>Les cookies posés par le site sont strictement nécessaires à son fonctionnement ou mémorisent un choix que vous avez exprimé, à une exception : le cookie <code>visitor</code>, qui n’est déposé qu’avec votre accord, donné ou refusé sur la bannière de consentement. Refuser est aussi simple qu’accepter, et ne change rien au jeu.</p>
 <div role="region" aria-labelledby="legal-cookies-heading" tabindex="0">
     <table>
         <thead>
@@ -85,6 +90,18 @@
                 <td>Langue choisie</td>
                 <td>1 an</td>
                 <td>En clair ; préférence</td>
+            </tr>
+            <tr>
+                <td><code>consent</code></td>
+                <td>Votre choix sur la bannière de consentement</td>
+                <td>13 mois si vous acceptez, 6 mois si vous refusez</td>
+                <td>HttpOnly, chiffré ; mémorise un choix</td>
+            </tr>
+            <tr>
+                <td><code>visitor</code></td>
+                <td>Identifiant de visiteur : relier vos parties successives pour améliorer le jeu</td>
+                <td>13 mois</td>
+                <td>HttpOnly, chiffré ; soumis à votre consentement</td>
             </tr>
             <tr>
                 <td><code>sidebar_state</code></td>

@@ -20,12 +20,17 @@ import {
 import { formatInteger, formatMoment } from '@/lib/admin-format';
 import { dashboard as adminDashboard } from '@/routes/admin';
 import { show as gamesShow } from '@/routes/admin/games';
-import { index as playersIndex } from '@/routes/admin/players';
+import {
+    index as playersIndex,
+    show as playersShow,
+} from '@/routes/admin/players';
 import { show as usersShow } from '@/routes/admin/users';
 import type {
     InspectionConnectionState,
+    InspectionDevice,
     InspectionPlayer,
     InspectionPlayerGame,
+    InspectionVisitor,
 } from '@/types/admin';
 import type { BreadcrumbItem } from '@/types/navigation';
 
@@ -36,7 +41,9 @@ type Props = {
         left_at: string | null;
         kicked_at: string | null;
         nickname_masked_at: string | null;
+        device: InspectionDevice | null;
     };
+    visitor: InspectionVisitor | null;
     games: InspectionPlayerGame[];
 };
 
@@ -50,7 +57,18 @@ const breadcrumbs: BreadcrumbItem[] = [
  * identité, et chacune de ses parties, manche par manche, avec sa bonne
  * réponse et ses réponses fausses (règle 3 tenue par le serveur).
  */
-export default function AdminPlayersShow({ player, games }: Props) {
+/** « mobile · chrome · android » : les trois familles, jointes, sans traduction (ce sont des noms de famille techniques). */
+function deviceLabel(device: InspectionDevice | null, none: string): string {
+    if (device === null) {
+        return none;
+    }
+
+    return [device.class, device.browser, device.os]
+        .filter((part): part is string => part !== null)
+        .join(' · ');
+}
+
+export default function AdminPlayersShow({ player, visitor, games }: Props) {
     const { t, locale } = useTranslations();
     const name = player.nickname ?? t('admin.inspection.erased');
     const none = t('admin.common.none');
@@ -100,6 +118,10 @@ export default function AdminPlayersShow({ player, games }: Props) {
             t('admin.inspection.player.identity.kicked_at'),
             formatMoment(player.kicked_at, locale) ?? none,
         ],
+        [
+            t('admin.inspection.player.identity.device'),
+            deviceLabel(player.device, none),
+        ],
     ];
 
     return (
@@ -145,6 +167,81 @@ export default function AdminPlayersShow({ player, games }: Props) {
                                 </div>
                             ))}
                         </dl>
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader>
+                        <AdminCardTitle>
+                            {t('admin.inspection.player.visitor.heading')}
+                        </AdminCardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3 text-sm">
+                        {visitor === null ? (
+                            <p className="text-muted-foreground">
+                                {t('admin.inspection.player.visitor.none')}
+                            </p>
+                        ) : (
+                            <>
+                                <p className="text-muted-foreground">
+                                    {t(
+                                        'admin.inspection.player.visitor.since',
+                                        {
+                                            consented:
+                                                formatMoment(
+                                                    visitor.consented_at,
+                                                    locale,
+                                                ) ?? none,
+                                            first:
+                                                formatMoment(
+                                                    visitor.first_seen_at,
+                                                    locale,
+                                                ) ?? none,
+                                        },
+                                    )}
+                                </p>
+                                {visitor.seats.length === 0 ? (
+                                    <p className="text-muted-foreground">
+                                        {t(
+                                            'admin.inspection.player.visitor.no_other',
+                                        )}
+                                    </p>
+                                ) : (
+                                    <ul className="space-y-2">
+                                        {visitor.seats.map((seat) => (
+                                            <li
+                                                key={seat.public_id}
+                                                className="flex flex-wrap items-center gap-x-3 gap-y-1"
+                                            >
+                                                <Link
+                                                    href={playersShow(
+                                                        seat.public_id,
+                                                    )}
+                                                    className="font-medium text-foreground underline-offset-4 hover:underline"
+                                                >
+                                                    {seat.nickname ??
+                                                        t(
+                                                            'admin.inspection.erased',
+                                                        )}
+                                                </Link>
+                                                <span className="text-muted-foreground">
+                                                    {formatMoment(
+                                                        seat.joined_at,
+                                                        locale,
+                                                    ) ?? none}
+                                                </span>
+                                                <span className="text-muted-foreground">
+                                                    {deviceLabel(
+                                                        seat.device,
+                                                        none,
+                                                    )}
+                                                </span>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                )}
+                            </>
+                        )}
                     </CardContent>
                 </Card>
 
@@ -231,6 +328,9 @@ export default function AdminPlayersShow({ player, games }: Props) {
                                                     round.participation
                                                 }
                                                 showPlayer={false}
+                                                movieId={
+                                                    round.movie?.id ?? null
+                                                }
                                             />
                                         )}
                                     </div>

@@ -6,9 +6,10 @@ use App\Enums\ImportRunKind;
 use App\Enums\ImportRunStatus;
 use App\Models\ImportRun;
 use App\Models\User;
+use App\Support\Catalog\DiscoverCursor;
 use App\Support\Catalog\ImportSnapshotGuard;
 use Carbon\CarbonImmutable;
-use Illuminate\Contracts\Queue\ShouldBeUnique;
+use Illuminate\Contracts\Queue\ShouldBeUniqueUntilProcessing;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Artisan;
@@ -40,8 +41,21 @@ use Throwable;
  *
  * `$tries = 1` n'est pas une frilosité : un réessai rejouerait un curseur déjà
  * consommé et fausserait les quatre compteurs, qui sont la preuve opposable de
- * ce qu'un balayage a fait. `ShouldBeUnique` sur l'identifiant du balayage
- * empêche deux workers de traiter le même curseur.
+ * ce qu'un balayage a fait. L'unicité sur l'identifiant du balayage
+ * (`ShouldBeUniqueUntilProcessing`) empêche deux jobs en file pour le même
+ * curseur ; elle tombe au début du traitement, pour qu'un passage puisse
+ * mettre en file le suivant. Deux traitements simultanés restent exclus : la
+ * reprise manuelle exige un balayage inactif depuis cinq minutes
+ * (`ImportLauncher::resume()`), et un passage avance `last_request_at` à
+ * chaque appel.
+ *
+ * **Par passages** (D60 du 06/10) : un balayage de 100 pages, soit 2 000
+ * fiches et autant d'appels de détail, dépasse de loin le délai d'un job. Un
+ * passage enchaîne les pages une à une, au plus {@see self::BUDGET_SECONDS}
+ * secondes, puis met en file le passage suivant avec les pages restantes ;
+ * le curseur `tmdb_page_cursor`, écrit après chaque page, fait reprendre
+ * exactement où le passage s'est arrêté. Entre deux passages, les jobs
+ * d'image de la file `default` passent.
  *
  * **Ce qui borne réellement la durée ici, et ce qui ne la borne pas.**
  * `$timeout` et `$failOnTimeout` sont inertes dans cet environnement : Laravel
@@ -61,7 +75,7 @@ use Throwable;
  * job relit donc le seuil avant d'appeler la commande. Un `actor_id` nul
  * passe : un compte supprimé n'invalide pas un journal de provenance.
  */
-class RunCatalogImport implements ShouldBeUnique, ShouldQueue
+class RunCatalogImport implements ShouldBeUniqueUntilProcessing, ShouldQueue
 {
     use Queueable;
 
@@ -72,6 +86,13 @@ class RunCatalogImport implements ShouldBeUnique, ShouldQueue
     public int $timeout = 900;
 
     public bool $failOnTimeout = true;
+
+    /**
+     * Secondes de travail d'un passage de balayage, bien sous `$timeout` : la
+     * page en cours au moment du budget (une vingtaine de détails) doit finir
+     * avant que le worker ne tue le job.
+     */
+    public const int BUDGET_SECONDS = 600;
 
     /**
      * Durée de vie du verrou d'unicité. Sans elle, un job tué par le parent
@@ -136,20 +157,20 @@ class RunCatalogImport implements ShouldBeUnique, ShouldQueue
         // garde d'instantané des commandes lancées à la main n'y joue pas. Un
         // vidage complet par balayage placerait un geste d'exploitation sur le
         // chemin du curateur (D10 du 23/09).
-        $status = ImportSnapshotGuard::ordinaryPath(fn (): int => $this->kind === ImportRunKind::Paste
-            ? Artisan::call('catalog:import-ids', [
-                // La commande n'accepte que des chaînes en argument variadique :
-                // un entier nu serait silencieusement ignoré par sa lecture, et
-                // le collage partirait vide.
-                'ids' => array_map(strval(...), $this->identifiers),
-                '--resume' => true,
-                '--run' => $this->runId,
-            ])
-            : Artisan::call('catalog:import-discover', [
-                '--resume' => true,
-                '--run' => $this->runId,
-                '--pages' => $this->pages,
-            ]));
+        if ($this->kind === ImportRunKind::Discover) {
+            ImportSnapshotGuard::ordinaryPath(fn () => $this->sweepInPasses());
+
+            return;
+        }
+
+        $status = ImportSnapshotGuard::ordinaryPath(fn (): int => Artisan::call('catalog:import-ids', [
+            // La commande n'accepte que des chaînes en argument variadique :
+            // un entier nu serait silencieusement ignoré par sa lecture, et
+            // le collage partirait vide.
+            'ids' => array_map(strval(...), $this->identifiers),
+            '--resume' => true,
+            '--run' => $this->runId,
+        ]));
 
         // La commande clôt elle-même le balayage dans tous les cas qu'elle
         // connaît — suspendu, terminé, échoué. Reste le refus d'entrée : sans
@@ -160,6 +181,62 @@ class RunCatalogImport implements ShouldBeUnique, ShouldQueue
         if ($status !== 0) {
             $this->closeAsFailed(onlyIfNeverStarted: true);
         }
+    }
+
+    /**
+     * Un passage de balayage : une page par appel de la commande, tant que le
+     * budget de temps et les pages demandées le permettent ; puis, s'il reste
+     * des pages et que le balayage avance, le passage suivant en file.
+     *
+     * Trois arrêts, et la commande les connaît tous : balayage terminé ou
+     * échoué (la ligne n'est plus `running`) ; balayage suspendu sur une panne
+     * TMDB (le curseur n'a pas bougé : la page sera rejouée par « Reprendre »,
+     * jamais en boucle ici) ; refus d'entrée (code non nul avant tout
+     * démarrage).
+     */
+    private function sweepInPasses(): void
+    {
+        $deadline = CarbonImmutable::now()->addSeconds(self::BUDGET_SECONDS);
+        $remaining = $this->pages;
+
+        while ($remaining > 0) {
+            $before = self::cursorOf(ImportRun::query()->find($this->runId));
+
+            $status = Artisan::call('catalog:import-discover', [
+                '--resume' => true,
+                '--run' => $this->runId,
+                '--pages' => 1,
+            ]);
+
+            if ($status !== 0) {
+                $this->closeAsFailed(onlyIfNeverStarted: true);
+
+                return;
+            }
+
+            $run = ImportRun::query()->find($this->runId);
+
+            if (! $run instanceof ImportRun || $run->status !== ImportRunStatus::Running || self::cursorOf($run) === $before) {
+                return;
+            }
+
+            $remaining--;
+
+            if ($remaining > 0 && CarbonImmutable::now()->greaterThanOrEqualTo($deadline)) {
+                dispatch(self::discover($run, $remaining));
+
+                return;
+            }
+        }
+    }
+
+    /**
+     * La position du balayage, un curseur nul valant le début : la première
+     * page manquée écrit `0`, ce qui n'est pas une avancée.
+     */
+    private static function cursorOf(?ImportRun $run): int
+    {
+        return DiscoverCursor::fromColumn($run?->tmdb_page_cursor)->toColumn();
     }
 
     /**

@@ -12,6 +12,7 @@ import {
     ResumeButton,
 } from '@/components/admin/admin-import-run-table';
 import { AdminInputError } from '@/components/admin/admin-input-error';
+import { AdminSelect } from '@/components/admin/admin-select';
 import { AdminLoadingState } from '@/components/admin/admin-loading-state';
 import { AdminPageHeading } from '@/components/admin/admin-page-heading';
 import { AdminPagination } from '@/components/admin/admin-pagination';
@@ -52,6 +53,9 @@ import type {
     Paginated,
 } from '@/types/admin';
 import type { BreadcrumbItem } from '@/types/navigation';
+
+/** Fiches par page de `discover` : TMDB en rend vingt, une unité de son API, pas un réglage. */
+const TMDB_MOVIES_PER_PAGE = 20;
 
 type Props = {
     runs: Paginated<AdminImportRunRow>;
@@ -439,18 +443,28 @@ export default function AdminImportIndex({
                                                     'admin.import.discover.pages.label',
                                                 )}
                                             </Label>
-                                            <Input
+                                            <AdminSelect
                                                 id="discover-pages"
                                                 name="pages"
-                                                type="number"
-                                                min={defaults.pages_min}
-                                                max={defaults.pages_max}
-                                                step={1}
-                                                defaultValue={
-                                                    defaults.pages_default
-                                                }
+                                                defaultValue={String(
+                                                    defaults.pages_default,
+                                                )}
                                                 disabled={!tmdb_configured}
                                                 aria-describedby="discover-pages-hint"
+                                                options={defaults.pages_choices.map(
+                                                    (pages) => ({
+                                                        value: String(pages),
+                                                        label: t(
+                                                            'admin.import.discover.pages.option',
+                                                            {
+                                                                pages,
+                                                                movies:
+                                                                    pages *
+                                                                    TMDB_MOVIES_PER_PAGE,
+                                                            },
+                                                        ),
+                                                    }),
+                                                )}
                                             />
                                             <p
                                                 id="discover-pages-hint"
@@ -458,10 +472,6 @@ export default function AdminImportIndex({
                                             >
                                                 {t(
                                                     'admin.import.discover.pages.hint',
-                                                    {
-                                                        min: defaults.pages_min,
-                                                        max: defaults.pages_max,
-                                                    },
                                                 )}
                                             </p>
                                             <AdminInputError

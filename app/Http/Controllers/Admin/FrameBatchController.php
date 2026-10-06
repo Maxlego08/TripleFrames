@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\FrameBatchImportRequest;
 use App\Http\Requests\Admin\FrameBatchStoreRequest;
+use App\Http\Requests\Admin\ImportIdsRequest;
 use App\Jobs\Curation\ImportFrameBatch;
 use App\Models\User;
 use App\Support\Curation\FrameBatchImport;
@@ -28,12 +29,21 @@ class FrameBatchController extends Controller
 {
     public function index(Request $request): Response
     {
-        $state = FrameBatchImport::latest($this->userId($request));
+        /** @var User $user */
+        $user = $request->user();
+
+        // Un lot encore à l'aperçu relit l'état de ses films à chaque
+        // affichage : un film collé depuis le dépôt passe d'« absent » à
+        // « prêt » sans redéposer le fichier (amendé le 06/10).
+        $state = FrameBatchImport::refreshPreview($user, FrameBatchImport::latest($user->id));
 
         return Inertia::render('admin/frame-batch/index', [
             'frame_batch' => $state === null ? null : FrameBatchImport::toProps($state),
             'poll_seconds' => Config::integer('catalog.curation.poll_seconds'),
             'max_kilobytes' => FrameBatchStoreRequest::MAX_KILOBYTES,
+            // Les films absents se collent par tranches de ce plafond : un
+            // envoi plus large serait refusé par le collage (amendé le 06/10).
+            'paste_max_ids' => ImportIdsRequest::pasteMaxIds(),
         ]);
     }
 

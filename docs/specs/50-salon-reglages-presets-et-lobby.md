@@ -697,7 +697,7 @@ type LobbyPageProps = {
 - Les **sièges** viennent de `state.seats` (`SeatView`, contrat C7), triés par `joined_at` croissant par `GameStateBuilder`. `state.self.isHost` décide de la vue.
 - **`avatars`** (D55 du 02/10 — amendé le 02/10) est calculée côté serveur, jamais dérivée de `state.seats` : `SeatView` ne porte pas la clé d'un prédéfini, et le prédéfini de repli d'un siège `upload`/`provider` n'y est jamais visible, alors qu'il compte comme pris. `current` applique la même règle de visibilité que `Player::avatarRef()` : une image de compte masquée, supprimée ou déliée fait redescendre `current` au prédéfini de repli, et la tuile « Mon avatar » disparaît (`account` nul).
 
-**Changement d'avatar au lobby** (D55 du 02/10 — amendé le 02/10). Chaque siège, hôte compris, peut changer **son propre** avatar par le sélecteur `avatar-picker.tsx` (`40` § 7.4), **tant que `room.status = lobby`** : avant le lancement et après « Rejouer » (§ 13). Pendant une partie et sur le podium, le sélecteur n'est pas montré et le serveur refuse. Ce n'est pas un geste d'hôte.
+**Changement d'avatar au lobby** (D55 du 02/10 — amendé le 02/10). Chaque siège, hôte compris, peut changer **son propre** avatar par le sélecteur `avatar-picker.tsx` (`40` § 7.4), **tant que `room.status = lobby`** : avant le lancement et après « Rejouer » (§ 13). Pendant une partie et sur le podium, le sélecteur n'est pas montré et le serveur refuse. Ce n'est pas un geste d'hôte. **Amendé le 06/10, à la demande du porteur** : le choix se fait par les **flèches ‹ › du siège du joueur dans la salle d'attente** (`cinema-seat-map.tsx`, libellés `room.lobby.avatar.previous` / `next`), qui envoient aussitôt l'avatar libre voisin — en boucle, « Mon avatar » d'abord s'il est offert, les clés tenues par un autre siège sautées (`cycleLobbyAvatar()` de `lib/game/lobby-avatars.ts`), un seul envoi en vol, refus annoncé ; le sélecteur n'est plus dans la boîte « Configurer », et `lobby-avatar-picker.tsx` est retiré. Route, action et refus ci-dessous inchangés.
 - **Route** `room.avatar.update`, POST `/r/{room}/avatar`, `App\Http\Controllers\Room\SeatAvatarController@update`, FormRequest `App\Http\Requests\Room\ChangeSeatAvatarRequest` (champ `avatar` = clé du catalogue ou `account`, par `PlayerIdentityValidationRules::seatAvatarRules()`), middleware `seat.active` et `throttle:game-write`, policy `RoomPolicy::changeAvatar` (§ 17.1).
 - **Action** `App\Actions\Room\ChangeSeatAvatar`, dans une transaction, **verrou du salon puis verrou du siège** (même ordre que `LeaveRoom` et `KickSeat`) :
   1. salon hors `lobby` → refus `RoomRefusal::NotInLobby` : 303 `back()` avec `errors.avatar` = `room.refusal.not_in_lobby` ;
@@ -1181,6 +1181,8 @@ Ce ne sont pas des valeurs de jeu : ce sont des durées de conservation, publié
 - le **battement de présence** de `60`, qui alimente `room.last_activity_at` (10 § 7.1).
 
 ### 16.2 `ArchiveRoom` et le balayage
+
+**Amendé par D62 du 06/10** : l'archivage n'efface plus que `player.player_token_hash` ; pseudo, forme normalisée et `game_player.display_nickname` survivent, anonymisés 12 mois après la dernière activité du siège par le périmètre `guest_nickname` (`10` § 11.1). Les étapes ci-dessous qui nomment l'effacement du pseudo se lisent à cette aune.
 
 `App\Actions\Room\ArchiveRoom` [nouveau], `handle(Room $room, CarbonImmutable $idleBefore, bool $lobbyOnly = false): bool`. Dans une transaction, sous verrou du salon, avec `$now` pris après le verrou :
 

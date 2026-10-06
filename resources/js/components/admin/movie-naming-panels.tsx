@@ -403,17 +403,24 @@ export function MovieAliasesCard({
     enabledLocales,
     canCurate,
     preview,
+    initialAlias = null,
 }: {
     movieId: number;
     aliases: AdminMovieAlias[];
     enabledLocales: string[];
     canCurate: boolean;
     preview: AdminTextPreview | null | undefined;
+    /**
+     * Une réponse de joueur à proposer en alias (`?alias=` de la fiche,
+     * depuis l'inspection d'une partie) : la boîte d'ajout s'ouvre déjà
+     * remplie, l'aperçu d'ambiguïté restant à vérifier avant l'envoi.
+     */
+    initialAlias?: string | null;
 }) {
     const { t } = useTranslations();
     const headingId = useId();
     const focus = useGestureFocus();
-    const [adding, setAdding] = useState(false);
+    const [adding, setAdding] = useState(canCurate && initialAlias !== null);
     const [removing, setRemoving] = useState<AdminMovieAlias | null>(null);
 
     function openAdd(): void {
@@ -537,7 +544,11 @@ export function MovieAliasesCard({
             </section>
 
             <TextGestureDialog
-                gesture={adding ? { kind: 'alias' } : null}
+                gesture={
+                    adding
+                        ? { kind: 'alias', initial: initialAlias ?? undefined }
+                        : null
+                }
                 movieId={movieId}
                 enabledLocales={enabledLocales}
                 preview={preview}

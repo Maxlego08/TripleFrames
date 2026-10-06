@@ -29,7 +29,21 @@ return [
 
     'french_only' => 'These pages are only available in French.',
 
+    // D62 du 06/10 : la bannière de consentement et les préférences.
+    'consent' => [
+        'title' => 'Be recognised from one game to the next?',
+        'body' => 'With your consent, TripleFrames stores an identifier in your browser to link your successive games — nickname and device type — and improve the game. It is kept for 13 months, and you can withdraw your consent at any time. Without consent, you play exactly the same.',
+        'accept' => 'Accept',
+        'refuse' => 'Refuse',
+        'more' => 'Learn more',
+        'settings_heading' => 'Your cookie preferences',
+        'current_accepted' => 'You have agreed to be recognised from one game to the next.',
+        'current_refused' => 'You have refused to be recognised from one game to the next.',
+        'current_none' => 'You have not made a choice yet.',
+    ],
+
     'footer' => [
+        'cookies' => 'Cookies',
         'label' => 'Legal information',
         'notice' => 'Legal notice',
         'privacy' => 'Privacy policy',

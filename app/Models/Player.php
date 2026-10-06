@@ -66,6 +66,10 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  * @property string $public_id
  * @property int|null $room_id `#[Hidden]` : la liste des joueurs EST la charge utile du lobby, et `room.id` y partirait douze fois par salon.
  * @property int|null $user_id `#[Hidden]`.
+ * @property int|null $visitor_id Visiteur consentant du siège (D62 du 06/10), anonymisé à 12 mois.
+ * @property string|null $device_class `mobile`, `tablet` ou `desktop`, pour un visiteur consentant seulement.
+ * @property string|null $browser_family Famille de navigateur, pour un visiteur consentant seulement.
+ * @property string|null $os_family Famille de système, pour un visiteur consentant seulement.
  * @property string|null $nickname
  * @property string|null $nickname_normalized `#[Hidden]` : forme repliée, jamais affichée.
  * @property CarbonImmutable|null $nickname_masked_at
@@ -102,7 +106,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
     'avatar_kind',
     'avatar_preset',
 ])]
-#[Hidden(['id', 'room_id', 'user_id', 'user', 'player_token_hash', 'solo_token_hash', 'active_seat_token', 'nickname_normalized', 'kicked_at'])]
+#[Hidden(['id', 'room_id', 'user_id', 'user', 'visitor_id', 'visitor', 'device_class', 'browser_family', 'os_family', 'player_token_hash', 'solo_token_hash', 'active_seat_token', 'nickname_normalized', 'kicked_at'])]
 class Player extends Model
 {
     /** @use HasFactory<PlayerFactory> */
@@ -171,6 +175,17 @@ class Player extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    /**
+     * Le visiteur consentant qui a pris le siège (D62 du 06/10) : relie les
+     * sièges successifs d'un même navigateur.
+     *
+     * @return BelongsTo<Visitor, $this>
+     */
+    public function visitor(): BelongsTo
+    {
+        return $this->belongsTo(Visitor::class);
     }
 
     /**

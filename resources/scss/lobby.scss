@@ -1,0 +1,1099 @@
+@use 'auth/tokens' as *;
+@use 'auth/mixins' as mix;
+
+#game-main:has(.waiting-room) {
+    background: repeating-linear-gradient(
+        90deg,
+        $violet 0 5.5rem,
+        $violet-light 5.5rem 9rem,
+        $violet-dark 9rem 13rem
+    );
+}
+
+// `waiting-room.html` occupe tout l'écran : la barre basse repliée de la
+// coquille de jeu disparaît uniquement au lobby, jamais pendant la partie.
+#game-main:has(.waiting-room) + div {
+    display: none;
+}
+
+.waiting-room-scroll {
+    color: $ink;
+    font-family: $body;
+
+    a:focus-visible,
+    button:focus-visible,
+    input:focus-visible {
+        @include mix.focus-ring;
+    }
+}
+
+.waiting-room {
+    position: relative;
+    display: grid;
+    width: min(100% - 2rem, 82rem);
+    height: 100%;
+    min-height: 100%;
+    margin-inline: auto;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    gap: 3rem;
+    padding-block: 1.1rem;
+
+    &__topbar {
+        display: contents;
+
+        .auth-brand {
+            @include mix.hard-shadow(0.22rem, $night);
+            position: fixed;
+            z-index: 35;
+            top: 1rem;
+            left: 1.25rem;
+            border: 0.125rem solid $ink;
+            border-radius: 999px;
+            padding: 0.38rem 0.8rem 0.38rem 0.48rem;
+            background: $paper;
+        }
+    }
+
+    &__players {
+        @include mix.hard-shadow(0.22rem, $night);
+        position: fixed;
+        z-index: 35;
+        top: 1rem;
+        right: 1.25rem;
+        margin: 0;
+        border: 0.125rem solid $ink;
+        border-radius: 999px;
+        padding: 0.55rem 0.85rem;
+        background: $yellow;
+        color: $ink;
+        font-size: 0.72rem;
+        font-weight: 900;
+        white-space: nowrap;
+    }
+
+    &__notices {
+        --background: #{$paper};
+        --foreground: #{$ink};
+        --muted-foreground: #{$muted};
+        --border: #{$ink};
+        position: fixed;
+        z-index: 45;
+        top: 5.6rem;
+        left: 50%;
+        display: grid;
+        width: min(calc(100% - 2rem), 82rem);
+        gap: 0.5rem;
+        transform: translateX(-50%);
+
+        &:empty {
+            display: none;
+        }
+
+        > * {
+            border: 0.125rem solid $ink;
+            background: $paper;
+            color: $ink;
+            box-shadow: 0.2rem 0.2rem 0 $night;
+        }
+
+        .text-foreground,
+        .text-muted-foreground {
+            color: $ink;
+        }
+    }
+
+    &__actions {
+        display: grid;
+        grid-template-columns:
+            minmax(8rem, 0.7fr) minmax(18rem, 2fr)
+            minmax(8rem, 0.7fr);
+        gap: 1.25rem;
+    }
+}
+
+.room-code {
+    @include mix.hard-shadow(0.3rem, $night);
+    position: relative;
+    display: grid;
+    width: min(100%, 39rem);
+    min-height: 4.1rem;
+    margin-inline: auto;
+    grid-template-columns: 6.5rem 1fr 6.5rem;
+    column-gap: 0.8rem;
+    align-items: center;
+    border: $line solid $ink;
+    border-radius: 1.1rem;
+    padding-inline: 0.65rem;
+    background: $paper;
+
+    &__copy {
+        height: 100%;
+
+        .room-code__action {
+            width: 100%;
+        }
+    }
+
+    &__display {
+        display: grid;
+        align-self: stretch;
+        border-inline: 0.125rem dashed $lavender;
+        place-content: center;
+        text-align: center;
+
+        p {
+            margin: 0 0 0.08rem;
+            color: $muted;
+            font-size: 0.67rem;
+            font-weight: 800;
+        }
+
+        output {
+            min-width: 8ch;
+            font-family: $display;
+            font-size: 1.55rem;
+            font-weight: 900;
+            letter-spacing: 0.24em;
+            line-height: 1;
+        }
+    }
+
+    &__action {
+        display: grid;
+        height: 100%;
+        border: 0;
+        padding: 0.45rem;
+        background: transparent;
+        color: $ink;
+        font-family: $body;
+        font-size: 0.68rem;
+        font-weight: 900;
+        cursor: pointer;
+        gap: 0.12rem;
+        place-content: center;
+
+        &:hover .room-code__action-icon {
+            translate: 0 -0.1rem;
+            box-shadow: 0 0.16rem 0 $ink;
+        }
+
+        &[aria-pressed='true'] .room-code__action-icon {
+            background: $yellow;
+        }
+    }
+
+    &__action-icon {
+        display: grid;
+        width: 1.55rem;
+        height: 1.55rem;
+        margin-inline: auto;
+        border: 0.125rem solid $ink;
+        border-radius: 0.45rem;
+        background: $cyan;
+        place-items: center;
+        transition:
+            translate 120ms ease,
+            box-shadow 120ms ease;
+
+        svg {
+            width: 0.85rem;
+            height: 0.85rem;
+        }
+    }
+}
+
+.room-copy-menu {
+    --popover: #{$paper};
+    --popover-foreground: #{$ink};
+    --accent: #{$cyan};
+    --accent-foreground: #{$ink};
+    --muted-foreground: #{$ink};
+    z-index: 70;
+    min-width: 12.5rem;
+    border: 0.125rem solid $ink;
+    border-radius: $radius-small;
+    padding: 0.3rem;
+    background: $paper;
+    color: $ink;
+    box-shadow: 0.25rem 0.25rem 0 $night;
+    font-family: $body;
+
+    &__item {
+        min-height: 2.75rem;
+        border-radius: 0.4rem;
+        color: $ink;
+        font-weight: 900;
+        cursor: pointer;
+
+        svg {
+            color: $ink !important;
+        }
+
+        &:focus {
+            background: $cyan;
+            color: $ink;
+        }
+    }
+}
+
+.room-copy-toast {
+    @include mix.hard-shadow(0.28rem, $night);
+    position: fixed;
+    z-index: 80;
+    top: 1rem;
+    right: 1rem;
+    display: inline-flex;
+    max-width: min(24rem, calc(100% - 2rem));
+    min-height: 3rem;
+    align-items: center;
+    gap: 0.55rem;
+    border: $line solid $ink;
+    border-radius: $radius-medium;
+    padding: 0.7rem 1rem;
+    background: $cyan;
+    color: $ink;
+    font-family: $body;
+    font-size: 0.82rem;
+    font-weight: 900;
+    animation: room-copy-toast-in 160ms ease-out;
+
+    svg {
+        width: 1rem;
+        height: 1rem;
+    }
+}
+
+@keyframes room-copy-toast-in {
+    from {
+        opacity: 0;
+        translate: 0 -0.5rem;
+    }
+
+    to {
+        opacity: 1;
+        translate: 0;
+    }
+}
+
+.cinema-room {
+    --cinema-rotate-x: 0deg;
+    --cinema-rotate-y: 0deg;
+    position: relative;
+    min-height: 0;
+    overflow: hidden;
+    border: $line solid $ink;
+    border-radius: 2.8rem 2.8rem 1.45rem 1.45rem;
+    background: oklch(0.21 0.075 293);
+    box-shadow:
+        0.58rem 0.58rem 0 $night,
+        -0.42rem -0.35rem 0 $yellow;
+
+    &__scene {
+        position: absolute;
+        inset: 0;
+        perspective: 62rem;
+        perspective-origin: 50% 38%;
+        transform: rotateX(var(--cinema-rotate-x))
+            rotateY(var(--cinema-rotate-y));
+        transform-origin: center 55%;
+        transform-style: preserve-3d;
+        transition: transform 180ms ease-out;
+    }
+
+    &__screen {
+        position: absolute;
+        z-index: 4;
+        top: 5.5%;
+        left: 50%;
+        display: grid;
+        width: min(43vw, 35rem);
+        height: auto;
+        aspect-ratio: 16 / 9;
+        border: 0.38rem solid $ink;
+        border-radius: 1rem;
+        background: $paper;
+        box-shadow:
+            0 0 0 0.34rem oklch(0.48 0.15 322),
+            0 0.72rem 0 $night;
+        transform: translateX(-50%);
+        transform-origin: center top;
+        place-items: center;
+    }
+
+    &__screen-content {
+        display: flex;
+        align-items: center;
+        flex-direction: column;
+        color: $ink;
+
+        .auth-brand__logo {
+            width: 3.8rem;
+            height: auto;
+        }
+
+        strong {
+            margin-top: 0.15rem;
+            font-family: $display;
+            font-size: 1.25rem;
+        }
+
+        span {
+            margin-top: 0.08rem;
+            color: $muted;
+            font-size: 0.68rem;
+            font-weight: 900;
+        }
+    }
+
+    &__tiers {
+        position: absolute;
+        z-index: 3;
+        inset: 0;
+        pointer-events: none;
+    }
+
+    &__tier {
+        position: absolute;
+        left: 50%;
+        height: 15%;
+        border: 0.13rem solid oklch(0.58 0.13 322 / 0.72);
+        border-bottom: 0.72rem solid $night;
+        border-radius: 50% 50% 0.75rem 0.75rem;
+        background: oklch(0.3 0.1 293);
+        transform: translateX(-50%) rotateX(4deg);
+
+        &--back {
+            top: 59%;
+            width: 76%;
+        }
+
+        &--mobile-middle-one,
+        &--mobile-middle-two {
+            display: none;
+        }
+
+        &--front {
+            top: 79%;
+            width: 93%;
+        }
+    }
+
+    &__seats {
+        position: absolute;
+        z-index: 5;
+        inset: 0;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+    }
+}
+
+.cinema-seat {
+    --seat-depth: 0rem;
+    --seat-scale: 1;
+    position: absolute;
+    width: 9rem;
+    height: 8rem;
+    transform: translate3d(-50%, -50%, var(--seat-depth));
+    transform-origin: center bottom;
+    transform-style: preserve-3d;
+
+    &--position-1,
+    &--position-2,
+    &--position-3,
+    &--position-4,
+    &--position-5,
+    &--position-6 {
+        --seat-scale: 0.78;
+        z-index: 6;
+        top: 66%;
+    }
+
+    &--position-1 {
+        left: 25%;
+    }
+
+    &--position-2 {
+        left: 35%;
+    }
+
+    &--position-3 {
+        left: 45%;
+    }
+
+    &--position-4 {
+        left: 55%;
+    }
+
+    &--position-5 {
+        left: 65%;
+    }
+
+    &--position-6 {
+        left: 75%;
+    }
+
+    &--position-7,
+    &--position-8,
+    &--position-9,
+    &--position-10,
+    &--position-11,
+    &--position-12 {
+        z-index: 12;
+        top: 86%;
+    }
+
+    &--position-7 {
+        left: 17%;
+    }
+
+    &--position-8 {
+        left: 30.2%;
+    }
+
+    &--position-9 {
+        left: 43.4%;
+    }
+
+    &--position-10 {
+        left: 56.6%;
+    }
+
+    &--position-11 {
+        left: 69.8%;
+    }
+
+    &--position-12 {
+        left: 83%;
+    }
+
+    &__chair {
+        position: absolute;
+        z-index: 1;
+        right: 0.45rem;
+        bottom: 0.25rem;
+        left: 0.45rem;
+        height: 5.5rem;
+        scale: var(--seat-scale);
+        transform-origin: center bottom;
+    }
+
+    &__back {
+        position: absolute;
+        z-index: 1;
+        top: 0.45rem;
+        right: 0.6rem;
+        left: 0.6rem;
+        height: 4.35rem;
+        border: 0.17rem solid $ink;
+        border-radius: 2rem 2rem 0.9rem 0.9rem;
+        background: $coral;
+        box-shadow: 0 0.48rem 0 oklch(0.32 0.12 25);
+    }
+
+    &__cushion {
+        position: absolute;
+        z-index: 4;
+        right: 0.95rem;
+        bottom: 0;
+        left: 0.95rem;
+        height: 1.65rem;
+        border: 0.16rem solid $ink;
+        border-radius: 0.75rem;
+        background: oklch(0.65 0.19 31);
+        transform: skewX(-4deg);
+    }
+
+    &__arm {
+        position: absolute;
+        z-index: 5;
+        bottom: 0.1rem;
+        width: 1.05rem;
+        height: 3.15rem;
+        border: 0.15rem solid $ink;
+        border-radius: 0.65rem;
+        background: $yellow;
+
+        &--left {
+            left: 0;
+        }
+
+        &--right {
+            right: 0;
+        }
+    }
+
+    &__occupant {
+        position: absolute;
+        z-index: 3;
+        bottom: 0.35rem;
+        left: 50%;
+        display: grid;
+        justify-items: center;
+        transform: translateX(-50%);
+
+        .player-avatar {
+            grid-column: 1;
+            grid-row: 1;
+        }
+    }
+
+    &__name {
+        position: relative;
+        z-index: 5;
+        grid-column: 1;
+        min-width: 6.4rem;
+        max-width: 8.5rem;
+        overflow: hidden;
+        margin-top: -0.15rem;
+        border: 0.125rem solid $ink;
+        border-radius: 999px;
+        padding: 0.26rem 0.65rem;
+        background: $yellow;
+        box-shadow: 0.14rem 0.14rem 0 $ink;
+        font-size: 0.9rem;
+        font-weight: 900;
+        line-height: 1;
+        text-align: center;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    &__arrow {
+        @include mix.hard-shadow(0.14rem);
+        z-index: 7;
+        display: grid;
+        width: 2.35rem;
+        height: 2.35rem;
+        align-self: center;
+        border: 0.14rem solid $ink;
+        border-radius: 50%;
+        padding: 0;
+        background: $paper;
+        color: $ink;
+        cursor: pointer;
+        place-items: center;
+
+        svg {
+            width: 1.15rem;
+            height: 1.15rem;
+        }
+
+        &--previous {
+            grid-column: 1;
+            grid-row: 1;
+        }
+
+        &--next {
+            grid-column: 3;
+            grid-row: 1;
+        }
+
+        &:hover {
+            background: $yellow;
+            translate: 0 -0.08rem;
+        }
+
+        // Changement en vol, ou geste indisponible (connexion temps réel
+        // absente, onglet supplanté) : visible, mais inactive.
+        &[aria-disabled='true'] {
+            cursor: not-allowed;
+            opacity: 0.45;
+
+            &:hover {
+                background: $paper;
+                translate: none;
+            }
+        }
+    }
+
+    &--current {
+        .cinema-seat__back {
+            background: $cyan;
+            outline: 0.2rem solid $yellow;
+            outline-offset: 0.16rem;
+        }
+
+        .cinema-seat__cushion {
+            background: oklch(0.72 0.14 195);
+        }
+
+        .cinema-seat__occupant {
+            grid-template-columns: 2.35rem auto 2.35rem;
+            column-gap: 0.38rem;
+        }
+
+        .player-avatar {
+            grid-column: 2;
+        }
+
+        .cinema-seat__name {
+            grid-column: 1 / -1;
+        }
+    }
+
+    &[data-disconnected] {
+        filter: grayscale(0.55);
+        opacity: 0.72;
+    }
+
+    &--empty {
+        opacity: 0.43;
+
+        .cinema-seat__back {
+            background: oklch(0.48 0.08 296);
+        }
+
+        .cinema-seat__cushion {
+            background: oklch(0.39 0.1 296);
+        }
+
+        .cinema-seat__arm {
+            background: oklch(0.31 0.09 296);
+        }
+    }
+}
+
+.player-avatar {
+    position: relative;
+    width: 3.6rem;
+    height: 3.6rem;
+    border: 0.16rem solid $ink;
+    background: $coral;
+    box-shadow: 0.18rem 0.18rem 0 $ink;
+    scale: var(--seat-scale);
+    transform-origin: center bottom;
+
+    &--large {
+        width: 4.15rem;
+        height: 4.15rem;
+        box-shadow: 0.28rem 0.28rem 0 $ink;
+    }
+}
+
+.waiting-room-action,
+.waiting-room-leave [data-slot='dialog-trigger'],
+.waiting-room__host-status {
+    @include mix.hard-shadow(0.26rem, $night);
+    display: inline-flex;
+    width: 100%;
+    min-height: 3.45rem;
+    align-items: center;
+    justify-content: center;
+    gap: 0.55rem;
+    border: $line solid $ink;
+    border-radius: $radius-medium;
+    padding: 0.65rem 1rem;
+    color: $ink;
+    font-family: $body;
+    font-weight: 900;
+    transition:
+        translate 120ms ease,
+        box-shadow 120ms ease;
+
+    &:hover:not(:disabled) {
+        translate: 0 -0.1rem;
+        box-shadow: 0.34rem 0.36rem 0 $night;
+    }
+
+    &:active:not(:disabled) {
+        translate: 0.12rem 0.12rem;
+        box-shadow: 0.08rem 0.08rem 0 $night;
+    }
+}
+
+.waiting-room-action--launch,
+.waiting-room__host-status {
+    margin: 0;
+    background: $coral;
+    font-size: 1rem;
+}
+
+.waiting-room-action--settings {
+    background: $cyan;
+}
+
+.waiting-room-leave [data-slot='dialog-trigger'] {
+    background: $paper;
+}
+
+.waiting-room-launch {
+    min-width: 0;
+
+    &__motives {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
+        clip-path: inset(50%);
+        white-space: nowrap;
+    }
+}
+
+.waiting-room-dialog {
+    --background: #{$paper};
+    --foreground: #{$ink};
+    --card: #{$white};
+    --card-foreground: #{$ink};
+    --popover: #{$paper};
+    --popover-foreground: #{$ink};
+    --primary: #{$ink};
+    --primary-foreground: #{$paper};
+    --secondary: #{$lavender};
+    --secondary-foreground: #{$ink};
+    --muted: #{$lavender};
+    --muted-foreground: #{$muted};
+    --accent: #{$cyan};
+    --accent-foreground: #{$ink};
+    --border: #{$ink};
+    --input: #{$ink};
+    --ring: #{$cyan};
+    @include mix.hard-shadow(0.65rem, $cyan);
+    width: min(calc(100% - 2rem), 54rem);
+    max-width: 54rem;
+    max-height: min(90dvh, 56rem);
+    grid-template-rows: auto minmax(0, 1fr);
+    gap: 1rem;
+    overflow: hidden;
+    border: $line solid $ink;
+    border-radius: $radius-large;
+    padding: 1.25rem;
+    background: $paper;
+    color: $ink;
+    font-family: $body;
+
+    &__heading {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+
+        [data-slot='dialog-title'] {
+            @include mix.display-type;
+            font-size: clamp(1.55rem, 3vw, 2rem);
+        }
+
+        [data-slot='button'] {
+            min-height: 2.75rem;
+            border: 0.125rem solid $ink;
+            background: $white;
+            color: $ink;
+            font-weight: 900;
+            box-shadow: 0.14rem 0.14rem 0 $ink;
+        }
+    }
+
+    &__header [data-slot='dialog-description'] {
+        color: $muted;
+    }
+
+    &__scroll {
+        min-height: 0;
+        border-top: 0.125rem dashed $lavender;
+        padding-top: 1rem;
+    }
+
+    &__sections {
+        display: flex;
+        padding: 0.1rem 0.8rem 1rem 0.1rem;
+        flex-direction: column;
+        gap: 1.5rem;
+
+        > * + * {
+            border-top: 0.125rem dashed $lavender;
+            padding-top: 1.5rem;
+        }
+    }
+}
+
+@media (max-width: 55rem) {
+    .waiting-room {
+        display: flex;
+        width: min(100% - 1rem, 46rem);
+        min-height: auto;
+        height: auto;
+        gap: 1rem;
+        padding-block: 0.85rem 2rem;
+        flex-direction: column;
+
+        &__topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+
+            .auth-brand {
+                position: relative;
+                top: auto;
+                left: auto;
+                align-self: flex-start;
+            }
+        }
+
+        &__players {
+            position: relative;
+            top: auto;
+            right: auto;
+        }
+
+        &__notices {
+            position: relative;
+            top: auto;
+            left: auto;
+            order: 1;
+            width: 100%;
+            transform: none;
+        }
+
+        .room-code {
+            order: 2;
+        }
+
+        .cinema-room {
+            order: 3;
+        }
+
+        &__actions {
+            order: 4;
+            grid-template-columns: 1fr 1fr;
+
+            .waiting-room-launch,
+            .waiting-room__host-status {
+                grid-column: 1 / -1;
+                grid-row: 1;
+            }
+        }
+    }
+
+    .cinema-room {
+        width: calc(100% - 1rem);
+        min-height: 47rem;
+        margin-inline: auto;
+        align-self: center;
+
+        &__scene {
+            transform: none;
+        }
+
+        &__screen {
+            top: 1.5rem;
+            left: 50%;
+            width: min(68%, 19rem);
+            transform: none;
+            translate: -50% 0;
+        }
+
+        &__tier {
+            height: 12%;
+
+            &--back {
+                top: 31%;
+                width: 70%;
+            }
+
+            &--mobile-middle-one {
+                top: 48%;
+                display: block;
+                width: 80%;
+            }
+
+            &--mobile-middle-two {
+                top: 65%;
+                display: block;
+                width: 90%;
+            }
+
+            &--front {
+                top: 82%;
+                width: 98%;
+            }
+        }
+
+        &__seats {
+            top: 31%;
+            right: 10%;
+            bottom: 6%;
+            left: 10%;
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            grid-template-rows: repeat(4, 19.0476%);
+            row-gap: 7.9365%;
+        }
+    }
+
+    .cinema-seat {
+        position: relative;
+        top: auto;
+        left: auto;
+        align-self: end;
+        justify-self: center;
+        transform: none;
+
+        &--position-1,
+        &--position-2,
+        &--position-10 {
+            --seat-scale: 0.66;
+        }
+
+        &--position-3,
+        &--position-4,
+        &--position-5 {
+            --seat-scale: 0.76;
+        }
+
+        &--position-6,
+        &--position-7,
+        &--position-8 {
+            --seat-scale: 0.86;
+        }
+
+        &--position-9,
+        &--position-11,
+        &--position-12 {
+            --seat-scale: 0.96;
+        }
+
+        &--position-1 {
+            grid-area: 1 / 1;
+        }
+
+        &--position-10 {
+            grid-area: 1 / 2;
+        }
+
+        &--position-2 {
+            grid-area: 1 / 3;
+        }
+
+        &--position-3 {
+            grid-area: 2 / 1;
+        }
+
+        &--position-4 {
+            grid-area: 2 / 2;
+        }
+
+        &--position-5 {
+            grid-area: 2 / 3;
+        }
+
+        &--position-6 {
+            grid-area: 3 / 1;
+        }
+
+        &--position-7 {
+            grid-area: 3 / 2;
+        }
+
+        &--position-8 {
+            grid-area: 3 / 3;
+        }
+
+        &--position-9 {
+            grid-area: 4 / 1;
+        }
+
+        &--position-11 {
+            grid-area: 4 / 2;
+        }
+
+        &--position-12 {
+            grid-area: 4 / 3;
+        }
+    }
+}
+
+@media (max-width: 32rem) {
+    .waiting-room {
+        &__topbar .auth-brand__name {
+            display: none;
+        }
+
+        &__actions {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    .room-code {
+        grid-template-columns: 4.35rem 1fr 4.35rem;
+        column-gap: 0.2rem;
+        padding-inline: 0.25rem;
+
+        &__action > span:last-child {
+            display: none;
+        }
+    }
+
+    .cinema-room {
+        min-height: 40rem;
+
+        &__screen {
+            width: min(72%, 18rem);
+        }
+
+        &__screen-content {
+            .auth-brand__logo {
+                width: 2.5rem;
+            }
+
+            strong,
+            span {
+                display: none;
+            }
+        }
+    }
+
+    .cinema-seat {
+        width: 6rem;
+
+        &__chair {
+            right: 0.5rem;
+            left: 0.5rem;
+        }
+
+        .player-avatar {
+            width: 2.8rem;
+            height: 2.8rem;
+        }
+
+        &__name {
+            min-width: 4.2rem;
+            max-width: 4.8rem;
+            padding-inline: 0.3rem;
+            font-size: 0.7rem;
+        }
+
+        &--position-1,
+        &--position-2,
+        &--position-10 {
+            --seat-scale: 0.55;
+        }
+    }
+
+    .waiting-room-dialog {
+        width: calc(100% - 1rem);
+        max-height: 94dvh;
+        padding: 1rem;
+
+        &__heading {
+            align-items: flex-start;
+        }
+
+        &__heading [data-slot='button'] {
+            padding-inline: 0.65rem;
+        }
+
+        &__sections {
+            padding-right: 0.45rem;
+        }
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .waiting-room *,
+    .waiting-room *::before,
+    .waiting-room *::after {
+        scroll-behavior: auto !important;
+        transition-duration: 0.01ms !important;
+    }
+}

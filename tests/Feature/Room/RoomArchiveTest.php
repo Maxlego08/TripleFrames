@@ -179,9 +179,11 @@ test('archive un salon au-delà de l\'échéance d\'inactivité et libère son c
 
     expect(Room::query()->where('room_code_active', $code)->sole()->is($recycled))->toBeTrue();
 
-    // Les sièges restent des lignes, identités effacées.
+    // Les sièges restent des lignes, jeton effacé, pseudo gardé pour
+    // l'analyse jusqu'à `guest_nickname` (D62 du 06/10).
     foreach ([$host, $guest] as $seat) {
-        expect(roomArchiveIdentity($seat))->toBe(['nickname' => null, 'nickname_normalized' => null, 'player_token_hash' => null]);
+        expect(roomArchiveIdentity($seat))->toMatchArray(['player_token_hash' => null])
+            ->and(roomArchiveIdentity($seat)['nickname'])->not->toBeNull();
     }
 
     // L'archivage à 24 h est une action, pas une purge : seule la ligne du
@@ -202,7 +204,7 @@ test('archive un salon au-delà de l\'échéance d\'inactivité et libère son c
         ]);
 });
 
-test('efface pseudo, forme normalisée, hash du jeton et pseudo gelé dans une seule transaction', function (): void {
+test('efface le hash du jeton et garde pseudo, forme normalisée et pseudo gelé, dans une seule transaction', function (): void {
     [$room, $host] = roomArchiveRoom(RoomExpiry::roomIdleBefore($this->now)->subMinute(), launched: true);
     [$left] = HostGestures::seat($room, 20, ['connection_state' => PlayerConnectionState::Left, 'left_at' => $this->now->subDay()]);
     [$kicked] = HostGestures::seat($room, 15, [
@@ -264,9 +266,9 @@ test('efface pseudo, forme normalisée, hash du jeton et pseudo gelé dans une s
 
     roomArchiveSweep();
 
-    // Les quatre effacements, et rien d'autre de ces colonnes.
+    // Le jeton effacé, le pseudo gardé (D62 du 06/10), et rien d'autre.
     foreach ($seats as $seat) {
-        expect(roomArchiveIdentity($seat))->toBe(['nickname' => null, 'nickname_normalized' => null, 'player_token_hash' => null]);
+        expect(roomArchiveIdentity($seat))->toMatchArray(['player_token_hash' => null]);
 
         $seat->refresh();
 
@@ -274,7 +276,7 @@ test('efface pseudo, forme normalisée, hash du jeton et pseudo gelé dans une s
     }
 
     expect(GamePlayer::query()->whereIn('game_id', Game::query()->select('id')->where('room_id', $room->id))->count())->toBe(6)
-        ->and(GamePlayer::query()->whereIn('game_id', Game::query()->select('id')->where('room_id', $room->id))->whereNotNull('display_nickname')->count())->toBe(0);
+        ->and(GamePlayer::query()->whereIn('game_id', Game::query()->select('id')->where('room_id', $room->id))->whereNull('display_nickname')->count())->toBe(0);
 
     // Les témoins, intacts.
     expect(roomArchiveIdentity($activeHost))->toBe($witnesses['active'])
@@ -282,25 +284,26 @@ test('efface pseudo, forme normalisée, hash du jeton et pseudo gelé dans une s
         ->and(GamePlayer::query()->where('game_id', $activeGame->id)->value('display_nickname'))->toBe($witnesses['frozen'])
         ->and($active->refresh()->archived_at)->toBeNull();
 
-    // Une seule transaction : salon, sièges et participations.
+    // Une seule transaction : salon et sièges ; les participations gardent
+    // leur pseudo figé.
     $tables = array_values(array_unique(array_column($writes, 'table')));
     sort($tables);
 
-    expect($tables)->toBe(['game_player', 'player', 'room'])
+    expect($tables)->toBe(['player', 'room'])
         ->and(array_unique(array_column($writes, 'transaction')))->toHaveCount(1)
         ->and(array_unique(array_column($writes, 'inside')))->toBe([true])
         ->and(collect($writes)->contains(static fn (array $write): bool => $write['table'] === 'player' && str_contains($write['sql'], 'player_token_hash')))->toBeTrue()
-        ->and(collect($writes)->contains(static fn (array $write): bool => $write['table'] === 'game_player' && str_contains($write['sql'], 'display_nickname')))->toBeTrue();
+        ->and(collect($writes)->contains(static fn (array $write): bool => str_contains($write['sql'], 'nickname')))->toBeFalse();
 
     // Atomicité : un échec au dernier effacement annule tout — ni salon
-    // archivé, ni pseudo effacé.
+    // archivé, ni jeton effacé.
     [$other, $otherHost] = roomArchiveRoom(RoomExpiry::roomIdleBefore($this->now)->subMinute(), launched: true);
     $otherGame = Game::factory()->forRoom($other)->completed()->create(['started_at' => $this->now->subDays(2)]);
     GamePlayer::factory()->for($otherGame)->frozenFrom($otherHost)->create();
     $identity = roomArchiveIdentity($otherHost);
     $failing = true;
     DB::beforeExecuting(static function (string $query) use (&$failing): void {
-        if ($failing && preg_match('/^\s*update\s+[`"]?game_player\b/i', $query) === 1) {
+        if ($failing && preg_match('/^\s*update\s+[`"]?player\b/i', $query) === 1) {
             throw new RuntimeException('échec simulé');
         }
     });
@@ -361,7 +364,7 @@ test('archive par anticipation un lobby jamais lancé et journalise stale_lobby'
         ->and($stale->archived_at?->equalTo($this->now))->toBeTrue()
         ->and($stale->room_code_active)->toBeNull()
         ->and($stale->host_player_id)->toBeNull()
-        ->and(roomArchiveIdentity($staleHost))->toBe(['nickname' => null, 'nickname_normalized' => null, 'player_token_hash' => null]);
+        ->and(roomArchiveIdentity($staleHost))->toMatchArray(['player_token_hash' => null]);
 
     foreach ([$edge, $replayed] as $room) {
         expect($room->refresh()->status)->toBe(RoomStatus::Lobby)
@@ -776,7 +779,7 @@ test('refuse d\'archiver un salon dont la dernière partie n\'est pas figée, sa
 
     expect(Room::query()->whereKey(array_map(static fn (Room $room): int => $room->id, $refused))->whereNull('archived_at')->count())->toBe(RoomExpiry::BATCH_SIZE)
         ->and($due->refresh()->status)->toBe(RoomStatus::Archived)
-        ->and(roomArchiveIdentity($dueHost)['nickname'])->toBeNull();
+        ->and(roomArchiveIdentity($dueHost)['player_token_hash'])->toBeNull();
 
     $sample = $refused[0];
     $game = Game::query()->where('room_id', $sample->id)->sole();

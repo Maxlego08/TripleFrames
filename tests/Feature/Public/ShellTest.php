@@ -420,6 +420,36 @@ it("monte le bandeau de maintenance sous l'en-tête public, au rôle note, sur s
         ->and($header < $mounted && $mounted < $main)->toBeTrue();
 });
 
+it('superpose le bandeau de consentement en bas des coquilles publique et de jeu', function () {
+    $banner = shellSource('components/public/consent-banner.tsx');
+
+    expect($banner)->toContain('absolute')
+        ->toContain('inset-x-0')
+        ->toContain('bottom-0')
+        ->toContain('z-50')
+        ->toContain('bg-background/80')
+        ->not->toContain('bg-transparent')
+        ->not->toContain('bg-card')
+        ->not->toContain('border-');
+
+    foreach ([
+        'publique' => ['layouts/public/public-layout.tsx', '<SiteFooter variant="full" />'],
+        'jeu' => ['layouts/game/game-layout.tsx', '<SiteFooter variant="collapsed" />'],
+    ] as $label => [$file, $footerTag]) {
+        $layout = shellSource($file);
+        $footer = strpos($layout, $footerTag);
+        $consent = strpos($layout, '<ConsentBanner />');
+        $announcer = strpos($layout, '<GameAnnouncer />');
+
+        expect($layout)->toMatch('/className=(?:\{`|\")[^\n]*\brelative\b/')
+            ->and(substr_count($layout, '<ConsentBanner />'))->toBe(1, "{$label} : bandeau absent ou répété")
+            ->and($footer)->toBeInt()
+            ->and($consent)->toBeInt()
+            ->and($announcer)->toBeInt()
+            ->and($footer < $consent && $consent < $announcer)->toBeTrue("{$label} : ordre DOM du bandeau incorrect");
+    }
+});
+
 it('envoie la sortie de connexion vers les réglages et retire le dashboard joueur', function () {
     expect(config('fortify.home'))->toBe(parse_url(route('profile.edit'), PHP_URL_PATH));
 

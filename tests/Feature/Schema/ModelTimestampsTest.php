@@ -123,8 +123,8 @@ function rawModelAttribute(mixed $value): string
     return is_scalar($value) ? (string) $value : gettype($value);
 }
 
-it('sweeps the forty-three models of the schema', function () {
-    expect(schemaModels())->toHaveCount(43);
+it('sweeps the forty-four models of the schema', function () {
+    expect(schemaModels())->toHaveCount(44);
 });
 
 it('never declares a timestamp column its table does not carry', function (string $model) {

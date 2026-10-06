@@ -23,6 +23,7 @@ use App\Support\Identity\PlayerToken;
 use App\Support\Identity\PlayerTokenManager;
 use App\Support\Room\SeatPublicId;
 use App\Support\Room\TakenAvatars;
+use App\Support\Visitor\VisitorTracker;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\Request;
@@ -102,6 +103,7 @@ final readonly class TakeSeat
     public function __construct(
         private PlayerTokenManager $tokens,
         private TransferHost $transferHost,
+        private VisitorTracker $visitors,
     ) {}
 
     /**
@@ -214,6 +216,10 @@ final readonly class TakeSeat
             'last_seen_at' => $now,
             'connection_state' => PlayerConnectionState::Connected,
         ])->save();
+
+        // Le visiteur consentant et l'appareil du siège (D62 du 06/10) ; sans
+        // consentement, rien.
+        $this->visitors->stamp($seat, $request);
 
         // S7 — salon en partie : admission d'un retardataire (§ 15.2), ou
         // attente de la partie suivante, sans participation.

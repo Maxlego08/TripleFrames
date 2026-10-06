@@ -2,6 +2,8 @@ import { createInertiaApp } from '@inertiajs/react';
 import '../scss/auth.scss';
 import '../scss/home.scss';
 import '../scss/legal.scss';
+import '../scss/lobby.scss';
+import '../scss/room-entry.scss';
 import '../scss/settings.scss';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import AdminLayout from '@/layouts/admin/admin-layout';

@@ -170,6 +170,38 @@ trait CatalogImportValidationRules
     }
 
     /** Plafond d'identifiants par collage web. */
+    /**
+     * Les tailles de balayage proposées à l'écran, bornées par
+     * [`pagesMin()`, `pagesMax()`], croissantes et sans doublon (D60 du 06/10).
+     * La validation reste celle des bornes : la liste est un confort.
+     *
+     * @return list<int>
+     */
+    public static function pagesChoices(): array
+    {
+        $choices = [];
+
+        foreach (Config::array('catalog.import.pages_choices', []) as $choice) {
+            if (is_int($choice) && $choice >= self::pagesMin() && $choice <= self::pagesMax()) {
+                $choices[] = $choice;
+            }
+        }
+
+        $choices = array_values(array_unique($choices));
+        sort($choices);
+
+        return $choices === [] ? [self::pagesMin()] : $choices;
+    }
+
+    /** La taille présélectionnée : la valeur configurée si elle est proposée, sinon la plus petite. */
+    public static function pagesDefault(): int
+    {
+        $default = Config::integer('catalog.import.pages_default', self::pagesMin());
+        $choices = self::pagesChoices();
+
+        return in_array($default, $choices, true) ? $default : $choices[0];
+    }
+
     public static function pasteMaxIds(): int
     {
         return max(1, Config::integer('catalog.import.paste_max_ids', 50));

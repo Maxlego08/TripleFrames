@@ -8,30 +8,8 @@
     font-family: $body;
     line-height: 1.5;
 
-    .site-footer {
-        border-top: $line solid $ink;
-        background: $yellow;
-        color: $ink;
-
-        &__inner {
-            width: min(100% - 2rem, 76rem);
-            max-width: none;
-            flex-direction: row;
-            align-items: center;
-            justify-content: space-between;
-            gap: 0.75rem 1.5rem;
-            padding-block: 1rem;
-            color: $ink;
-        }
-
-        a,
-        p {
-            color: $ink;
-        }
-
-        a {
-            font-weight: 800;
-        }
+    > .site-footer {
+        @include mix.public-site-footer;
     }
 
     a:focus-visible,

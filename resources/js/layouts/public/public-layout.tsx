@@ -1,3 +1,4 @@
+import { ConsentBanner } from '@/components/public/consent-banner';
 import { usePage } from '@inertiajs/react';
 import type { ReactNode } from 'react';
 import { GameAnnouncer } from '@/components/game/game-announcer';
@@ -17,9 +18,10 @@ const MAIN_ID = 'public-main';
  *
  * De haut en bas : le lien d'évitement (première cible de tabulation), l'en-
  * tête, le bandeau de maintenance (rendu seulement pendant un drainage,
- * § 3.3), le contenu, le pied de page complet, l'annonceur — pour la seule
- * annonce du changement de langue du sélecteur de l'en-tête (`common.language.
- * changed`, § 7.4) — et le `Toaster`.
+ * § 3.3), le contenu, le pied de page complet, le bandeau de consentement
+ * superposé en bas, l'annonceur — pour la seule annonce du changement de
+ * langue du sélecteur de l'en-tête (`common.language.changed`, § 7.4) — et
+ * le `Toaster`.
  *
  * `<Toaster />` est monté ICI et non plus dans `app.tsx` (spec 90 § 2.3) : la
  * section que rend sonner est une région `aria-live` toujours présente, même
@@ -33,15 +35,21 @@ export default function PublicLayout({ children }: { children: ReactNode }) {
     const component = usePage().component;
     const isHomePage = component === 'welcome';
     const isLegalPage = component.startsWith('legal/');
+    // Créer et rejoindre un salon partagent le gabarit des pages d'entrée
+    // (`room-entry.scss`).
+    const isRoomEntryPage =
+        component === 'room/create' || component === 'room/join';
     const shellVariant = isHomePage
         ? 'public-shell--home'
         : isLegalPage
           ? 'public-shell--legal'
-          : '';
+          : isRoomEntryPage
+            ? 'public-shell--room-entry'
+            : '';
 
     return (
         <div
-            className={`public-shell ${shellVariant} flex min-h-svh flex-col bg-background text-foreground`}
+            className={`public-shell ${shellVariant} relative flex min-h-svh flex-col bg-background text-foreground`}
         >
             <a
                 href={`#${MAIN_ID}`}
@@ -63,6 +71,8 @@ export default function PublicLayout({ children }: { children: ReactNode }) {
             </main>
 
             <SiteFooter variant="full" />
+
+            <ConsentBanner />
 
             <GameAnnouncer />
 

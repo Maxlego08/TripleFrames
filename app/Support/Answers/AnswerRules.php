@@ -32,7 +32,7 @@ use App\Support\Catalog\AnswerKeyNormalizer;
 final class AnswerRules
 {
     /** Écrite dans `game.validation_version` au lancement (contrat C6). */
-    public const int VERSION = 1;
+    public const int VERSION = 2;
 
     /**
      * Barème de tolérance : longueur compacte maximale de la clé visée →
@@ -66,6 +66,13 @@ final class AnswerRules
     public const string SUBTITLE_RULE = 'after-first-separator;titles-only;collision';
 
     public const string TRANSLITERATION = 'Str::transliterate;strict=false';
+
+    /**
+     * Étape (d′) du verdict, version 2 (D61 du 06/10) : un titre, un alias ou
+     * un préfixe non partagé de la cible, suivi d'autres mots, le plus long
+     * début porté par un film décidant, chiffres identiques.
+     */
+    public const string LEADING_RULE = 'leading-words;exact+unshared-prefix;longest-carried;same-digits';
 
     /**
      * Distance maximale admise pour une clé de longueur compacte donnée : la
@@ -118,6 +125,7 @@ final class AnswerRules
             'nearMissMargin' => self::NEAR_MISS_MARGIN,
             'maxNormalizedLength' => AnswerKeyNormalizer::MAX_NORMALIZED_LENGTH,
             'transliteration' => self::TRANSLITERATION,
+            'leading' => self::LEADING_RULE,
         ]);
 
         return hash('sha256', json_encode(

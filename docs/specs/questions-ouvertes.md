@@ -714,6 +714,51 @@ Le porteur signale que « le QCM n'apparaît pas pour certains films », sans co
 |---|---|---|---|---|
 | D59 | Publier les films prêts d'un coup | **oui, J1** : écran `admin.catalog.ready` depuis le catalogue, lot = prêts à publier (brouillons), avertissement du lot, publication tout ou rien ; pas de commande artisan | **oui** — la publication devient aussi un geste de lot ; aucune migration | `20` § 2.2 (ligne 47), § 8.1 bis, L20-38 |
 
+### D60. Peut-on balayer des milliers de films d'un geste ? — **oui : 1 à 100 pages par balayage, choisies dans une liste, exécutées par passages**
+
+**Demande du porteur.** « Je veux que tu améliores l'importation de films […], que je puisse avoir une task qui va importer des films sur 10, 20, 50, 100 pages, dans un job, et ainsi avoir des milliers de films rapidement. » (La demande nommait IMDb : il s'agit du balayage `discover` de TMDB, seule source d'import du projet.)
+
+**Ce que la décision arrête** (`20` § 3, § 3.9) :
+
+1. **Taille** : `catalog.import.pages_max` passe de 5 à 100 ; l'écran propose `pages_choices` (1, 5, 10, 20, 50, 100), 10 présélectionné ; une page rend une vingtaine de fiches. La reprise d'un balayage suspendu repart au plafond, donc 100 pages.
+2. **Exécution** : `RunCatalogImport` travaille par passages de 600 s, une page à la fois, et met en file la suite avec les pages restantes ; le curseur écrit après chaque page rend tout passage reprenable sans rien rejouer. Les jobs d'image de la file `default` passent entre deux passages.
+3. **Rien d'autre ne change** : filtre de notoriété, filtres de contenu, débit TMDB (35 requêtes/s), compteurs et journal du balayage, un seul balayage ouvert à la fois.
+
+**Écart assumé.** Les films entrent `draft` et ne jouent qu'une fois curés et publiés : le volume importé ne change ni le vivier ni le temps de curation, seule la file de curation s'allonge. L'unicité du job tombe au début du traitement (`ShouldBeUniqueUntilProcessing`) pour qu'un passage puisse mettre le suivant en file ; deux traitements simultanés d'un même balayage restent exclus par la règle de reprise (cinq minutes d'inactivité). Aucune migration. Une décision : elle se cite « D60 du 06/10 ».
+
+| # | Décision | Réponse retenue | Écart | Inscrite dans |
+|---|---|---|---|---|
+| D60 | Balayage de grande taille | **oui, J1** : 1 à 100 pages, liste 1/5/10/20/50/100 (défaut 10), job par passages de 600 s qui se relance sur les pages restantes | **oui** — `pages_max` 5 → 100 ; unicité du job jusqu'au traitement seulement ; aucune migration | `20` § 3, § 3.9 ; `config/catalog.php` |
+
+### D61. Un titre suivi d'autres mots est-il une bonne réponse ? — **oui : le titre, l'alias ou le préfixe non partagé de la cible, suivi d'autres mots, est accepté**
+
+**Demande du porteur.** « Pourquoi "Solo a star wars movie" est refusé mais pas "Solo A Star Wars Story" ? Alors que les deux doivent être acceptés. » Trois options présentées (préfixe seul, titre complet aussi, statu quo avec alias au cas par cas) ; retenue : **le titre complet aussi**, contre la recommandation du préfixe seul.
+
+**Ce que la décision arrête** (règle complète : `70` § 6.2, étape (d′)) : une saisie dont le **plus long début en mots entiers porté par un film** est un titre, un alias ou un préfixe non partagé de la cible est acceptée, à suite de chiffres identique. `AnswerRules::VERSION` passe à 2 ; une troisième lecture inconditionnelle (L) garde le travail constant.
+
+**Écart assumé.** Pour un titre court, une saisie qui désigne un autre film **non publié** passe : pour « Up », « up in the air » est accepté tant que ce film n'est pas au catalogue publié. La garde du plus long début et celle des chiffres limitent le reste. Aucune migration. Une décision : elle se cite « D61 du 06/10 ».
+
+| # | Décision | Réponse retenue | Écart | Inscrite dans |
+|---|---|---|---|---|
+| D61 | Titre suivi d'autres mots | **oui, J1** : étape (d′) — plus long début porté, clé exacte ou préfixe non partagé de la cible, mêmes chiffres ; `validation_version` 2 | **oui** — faux positif assumé sur un titre court face à un film non publié | `70` § 6.2 ; `CLAUDE.md` § 2 |
+
+### D62. Peut-on suivre les joueurs pour analyser les parties ? — **oui : pseudos gardés 12 mois, identifiant de visiteur avec consentement**
+
+**Demande du porteur.** « Dans l'action ArchiveRoom, il ne faudrait pas supprimer le nickname du joueur aussi rapidement : pour analyser les parties des joueurs il faut pouvoir garder les nicknames 12 mois, puis les anonymiser. […] J'ai besoin de savoir si des joueurs vont revenir, avec quel pseudo, sur quel appareil. » Trois options présentées (sans traceur, identifiant avec consentement, pseudo seulement) ; retenue : **l'identifiant avec consentement**, contre la recommandation « sans traceur ».
+
+**Ce que la décision arrête :**
+
+1. **Pseudo** : l'archivage n'efface plus que le hash du jeton ; pseudo, forme normalisée et pseudo figé des parties sont anonymisés **12 mois** après la dernière activité du siège (`guest_nickname`, `10` § 11.1). Sièges solo : jetons à 24 h, pseudo à 12 mois.
+2. **Bannière** (`90` § 4.6) : affichée tant que le visiteur n'a pas répondu ; accepter et refuser ont le même poids ; on joue pareil sans répondre. Choix dans le cookie `consent` (13 mois / 6 mois), modifiable à tout moment depuis la politique de confidentialité.
+3. **Identifiant** : à l'accord seulement, cookie `visitor` (13 mois) et ligne `visitor` (empreinte du jeton, version et instant de l'accord) ; chaque siège pris ensuite porte le visiteur et l'appareil grossier (classe, navigateur, système). Retrait : visiteur supprimé, sièges déliés. Visiteur purgé 13 mois après sa dernière activité (`visitor`).
+4. **Analyse** : la fiche d'un joueur (inspection admin) montre son appareil et les autres sièges du même visiteur, pseudo et date compris.
+
+**Écart assumé.** Révise le principe 12 de `00` (« pas de bannière en v1 ») et l'effacement des identifiants d'invité à l'archivage (`00`, `10` § 7.1 et § 11.1, `40` § 2.1 et § 2.3, `50` § 16.2). Seuls les visiteurs consentants sont reconnus : les retours mesurés sont une borne basse. La politique de confidentialité dit les deux cookies, les durées et la base légale du consentement ; sa section « Mesure d'audience » (« aucune ») contredit déjà D48 du 01/10 et reste à reprendre. Une migration (`visitor`, colonnes de `player`, index `player_last_seen_idx`). Une décision : elle se cite « D62 du 06/10 ».
+
+| # | Décision | Réponse retenue | Écart | Inscrite dans |
+|---|---|---|---|---|
+| D62 | Suivi des joueurs pour l'analyse | **oui, J1** : pseudo anonymisé à 12 mois (`guest_nickname`) ; bannière de consentement ; cookie et table `visitor` (13 mois) ; appareil grossier par siège ; autres sièges du visiteur dans l'inspection | **oui** — révise le principe 12 et l'effacement à l'archivage ; une migration | `00` principe 12 ; `10` § 7.1 bis, § 11.1 ; `40` § 2.3 ; `50` § 16.2 ; `90` § 4.6 ; `CLAUDE.md` § 2 |
+
 ## Seule question encore ouverte — le nom de domaine (décision 5)
 
 La réponse est **« à acheter »**, mais **le nom n'a pas été fourni**. C'est le dernier point du questionnaire, et il bloque plus tôt qu'annoncé : le montage de développement retenu — `dev.<DOMAINE>` résolu en 127.0.0.1, certificat par défi DNS-01, RP ID de passkey fixé à `<DOMAINE>` — est le **seul** qui satisfasse simultanément Google, Discord, WebAuthn et les cookies `Secure`. `tripleframes.test` ne conviendra jamais : Google refuse tout redirect URI en `http` hors `localhost` et les TLD non enregistrés. **Le domaine conditionne donc le développement d'OAuth et des passkeys, pas seulement la mise en production.** C'est un achat à une dizaine d'euros par an, et c'est le seul achat réellement sur le chemin critique. Amendé le 23/09 (D1 du 23/09) : il conditionne aussi le jalon 1 lui-même, dont le back-office et la curation naissent en production sur `<DOMAINE>` ; l'achat est donc placé **avant la semaine 4**.

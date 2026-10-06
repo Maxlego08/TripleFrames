@@ -1,3 +1,4 @@
+import { CONSENT_SETTINGS_ID } from '@/components/public/consent-banner';
 import { Link } from '@inertiajs/react';
 import { TmdbAttribution } from '@/components/public/tmdb-attribution';
 import { Button } from '@/components/ui/button';
@@ -33,6 +34,11 @@ const LEGAL_LINKS: readonly LegalLink[] = [
     { label: 'legal.footer.notice', href: notice() },
     { label: 'legal.footer.terms', href: terms() },
     { label: 'legal.footer.privacy', href: privacy() },
+    // D62 du 06/10 : revenir sur son choix de consentement à tout moment.
+    {
+        label: 'legal.footer.cookies',
+        href: { ...privacy(), url: `${privacy().url}#${CONSENT_SETTINGS_ID}` },
+    },
     { label: 'legal.footer.report', href: reportContent() },
 ];
 

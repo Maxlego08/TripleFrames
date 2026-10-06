@@ -827,6 +827,20 @@ Plafond de **20 par utilisateur** : non exprimable en contrainte portable, appli
 
 **Deux déclencheurs d'effacement des identifiants d'invité, pas un** : `room.archived_at` pour un siège de salon, et `room_id IS NULL AND last_seen_at < now − 24 h` pour un siège solo, servi par `player_solo_expiry_idx`. Plus le troisième geste, distinct : l'anonymisation de compte (§ 5.5).
 
+### 7.1 bis `visitor` — le visiteur consentant [J1, D62 du 06/10]
+
+Un navigateur qui a **accepté** d'être reconnu d'une partie à l'autre (bannière de consentement, `90` § 4.6). Créé à l'accord seulement (`VisitorTracker::accept()`), supprimé au retrait ou 13 mois après sa dernière activité (§ 11.1, `visitor`).
+
+| Colonne | Type | Nullable | Rôle |
+|---|---|---|---|
+| `id` | bigint | non | PK |
+| `token_hash` | char(64) | non | SHA-256 du jeton du cookie `visitor` — jamais le jeton ; UNIQUE `visitor_token_uq` |
+| `consent_version` | string(20) | non | version de la bannière acceptée (`ConsentCookie::VERSION`) — preuve du consentement |
+| `consented_at` | timestamp(3) | non | instant de l'accord — preuve du consentement |
+| `first_seen_at`, `last_seen_at` | timestamp(3) | non | activité ; `visitor_last_seen_idx (last_seen_at, id)` pilote la purge |
+
+**Sur `player`** (même migration) : `visitor_id` (FK `nullOnDelete`, `player_visitor_idx`), `device_class` string(10) (`mobile`/`tablet`/`desktop`), `browser_family` et `os_family` string(20), tous nullables, écrits à la prise d'un siège **pour un visiteur consentant seulement** (`VisitorTracker::stamp()`), `#[Hidden]`, anonymisés avec le pseudo à 12 mois. Aucune adresse IP, aucune empreinte d'appareil : trois familles lues dans `User-Agent` (`UserAgentFamily`). **Le pseudo n'est plus effacé à l'archivage** : il vit 12 mois après la dernière activité du siège (`guest_nickname`), pour l'analyse des parties ; le hash du jeton, lui, tombe toujours à l'archivage.
+
 ### 7.2 `game` — la partie
 
 | Colonne | Type | Null | Défaut | Raison |
@@ -1302,8 +1316,10 @@ Le plafond d'**entrée** est distinct des deux plafonds de sortie de ce tableau 
 | Parties dont le job de clôture n'a jamais tourné | 13 mois | `game.started_at` (`game_started_idx`) avec `ended_at IS NULL` → clôture forcée **par l'action de gel** `FinalizeGame(Interrupted, lastKnownActivity())` de `80` — seule écrivaine de `ended_at` et des agrégats —, puis purge (— amendé le 23/09). | `stale_game` |
 | Salons dont le job d'archivage n'a jamais tourné | 48 h | `room.last_activity_at` avec `archived_at IS NULL` → archivage forcé. | `stale_room` |
 | **Lobby jamais lancé** — **archivage anticipé du lobby** (— amendé le 23/09) | **2 h** sans activité | `room.launched_at IS NULL AND archived_at IS NULL AND last_activity_at < now − 2 h`, servi par `room_archived_activity_idx`. **Archivage forcé, jamais suppression** : le geste emprunte l'unique chemin d'archivage et hérite de ses trois effets (recyclage du `room_code`, effacement de `nickname`, de `nickname_normalized` et du hash de `player_token` — amendé le 23/09 —, fermeture du rattachement tardif). Exécuté par le balayage de `50`, qui écrit sa ligne `purge_run` à chaque passage, même à zéro salon archivé (`50`, `100` — amendé le 23/09). Supprimer la ligne se heurterait de toute façon au `restrict` de `game_player` dès qu'une partie existe — et un lobby jamais lancé n'en a aucune, ce qui rend la distinction invisible et donc dangereuse. C'est la **troisième** des trois échéances nommées différemment, avec la clôture de partie (15 min, `game.paused_at`) et l'archivage (24 h, `room.archived_at`). | `stale_lobby` |
-| Identifiants d'invité : `player.nickname`, `player.nickname_normalized`, `player.player_token_hash`, `game_player.display_nickname` — **les quatre dans la même transaction** (— amendé le 23/09) | 24 h après la dernière activité | `room.archived_at`. L'archivage est l'unique événement qui efface ces quatre colonnes, recycle le `room_code` et ferme le rattachement tardif. | — (action, pas purge) |
-| Idem, **sièges solo**, plus `player.solo_token_hash` (— amendé le 23/09) | 24 h | `room_id IS NULL AND last_seen_at < now − 24 h` (`player_solo_expiry_idx`). Un siège solo n'appartient à aucun salon : sans ce second déclencheur, son pseudo vit douze mois. | `orphan_player` |
+| Jeton d'invité : `player.player_token_hash` (D62 du 06/10 — amendé le 06/10) — le pseudo n'y est plus | 24 h après la dernière activité | `room.archived_at` : l'archivage efface le hash du jeton, ce qui ferme le rattachement tardif et lève le refus d'un siège expulsé | — (action, pas purge) |
+| Idem, **sièges solo** : `player.player_token_hash` et `player.solo_token_hash` (D62 du 06/10 — amendé le 06/10) | 24 h | `room_id IS NULL AND last_seen_at < now − 24 h` (`player_solo_expiry_idx`) | `orphan_player` |
+| **Pseudo d'invité** : `player.nickname`, `player.nickname_normalized`, `game_player.display_nickname`, et le lien au visiteur avec l'appareil (`player.visitor_id`, `device_class`, `browser_family`, `os_family`) — anonymisés ensemble, jamais supprimés (D62 du 06/10 — amendé le 06/10) | **12 mois** après la dernière activité du siège | `player.last_seen_at < now − 12 mois` (`player_last_seen_idx`), siège de salon comme siège solo | `guest_nickname` |
+| Visiteur consentant : `visitor` (D62 du 06/10 — amendé le 06/10) | **13 mois** après sa dernière activité, ou dès le retrait du consentement | `visitor.last_seen_at` (`visitor_last_seen_idx`) ; suppression de ligne, les sièges perdent leur lien par `nullOnDelete` | `visitor` |
 | Lignes `player` et `room` | dépendante | Après que **toutes** les parties du salon sont sorties de leur fenêtre. `DELETE … WHERE NOT EXISTS (game_player) AND NOT EXISTS (round_player) AND NOT EXISTS (guess) AND NOT EXISTS (wrong_answer)` (— amendé le 01/10, D46). **Jamais piloté par `player.created_at`.** | `orphan_player` |
 | `seen_frame` | **90 jours OU 500 manches**, la borne atteinte en premier | `seen_frame.last_seen_at` antérieur à **`RoomMemoryWindow::since()`**, bâtie sur `PlatformLimits::roomMemoryWindowDays()` et `roomMemoryWindowRounds()` : **source unique** partagée par la non-répétition, la préférence de variante et la purge (§ 7.9 — amendé le 23/09) ; la borne des manches se calcule **au moment de la purge** depuis `round (room_id, started_at)`, manches démarrées seulement. Aucune colonne compteur. Fenêtre **totalement indépendante** des 12 mois. | `seen_frame` |
 | `audience_daily` (D48 du 01/10 — amendé le 01/10) | **13 mois** | `day`, indexée. `audience_presence` : 10 minutes, effacée par l'enregistreur. | `audience` |

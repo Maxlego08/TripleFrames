@@ -42,6 +42,20 @@ final class RetentionWindows
     public const int PURGE_RUN_MONTHS = 13;
 
     /**
+     * `guest_nickname` : pseudo, forme normalisée et pseudos figés d'un
+     * siège, anonymisés 12 mois après sa dernière activité (`last_seen_at`) —
+     * la durée des faits de partie qu'ils servent à analyser (D62 du 06/10).
+     */
+    public const int GUEST_NICKNAME_MONTHS = 12;
+
+    /**
+     * `visitor` : le visiteur consentant, supprimé 13 mois après sa dernière
+     * activité — la durée maximale d'un traceur selon la CNIL, celle du
+     * cookie `visitor` (D62 du 06/10).
+     */
+    public const int VISITOR_MONTHS = 13;
+
+    /**
      * Filet `stale_room` : un salon non archivé 48 h après sa dernière
      * activité, archivé de force par l'action d'archivage de 50
      * (`StaleRoomHandler`). La sonde n° 2 de 10 § 11.3 lit la même durée.
@@ -49,10 +63,10 @@ final class RetentionWindows
     public const int STALE_ROOM_HOURS = 48;
 
     /**
-     * Branche sièges solo d'`orphan_player` : pseudo, forme normalisée,
-     * empreintes du jeton et pseudos figés d'un siège solo effacés 24 h
-     * après sa dernière activité (`last_seen_at`), en minutes
-     * (`OrphanPlayerHandler`).
+     * Branche sièges solo d'`orphan_player` : empreintes du jeton d'un siège
+     * solo effacées 24 h après sa dernière activité (`last_seen_at`), en
+     * minutes (`OrphanPlayerHandler`) ; le pseudo, lui, vit
+     * {@see self::GUEST_NICKNAME_MONTHS} mois (D62 du 06/10).
      *
      * **Lue chez 50, jamais recopiée.** 10 § 11.1 écrit cette ligne
      * « Idem » de celle des identifiants d'invité d'un siège de salon :

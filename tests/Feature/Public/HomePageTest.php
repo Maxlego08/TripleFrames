@@ -55,6 +55,10 @@ function homePageKeys(): array
         'common.home.room_code_label',
         'common.home.room_code_help',
         'common.home.room_code_placeholder',
+        // Le bouton œil du code, masqué par défaut (diffusion d'écran,
+        // amendé le 06/10).
+        'common.home.room_code_show',
+        'common.home.room_code_hide',
         'common.home.room_code_invalid',
         'common.home.nickname_label',
         'common.home.nickname_placeholder',

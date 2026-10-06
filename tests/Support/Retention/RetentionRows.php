@@ -11,6 +11,7 @@ use App\Models\PerfSample;
 use App\Models\Player;
 use App\Models\PurgeRun;
 use App\Models\Room;
+use App\Models\Visitor;
 use App\Support\Retention\RetentionWindows;
 use App\Support\Room\RoomCode;
 use App\Support\Room\SeatPublicId;
@@ -60,6 +61,9 @@ final class RetentionRows
      */
     public const string SEAT_ID_MARKER = 'SEED';
 
+    /** Marqueur des sièges du périmètre `guest_nickname` (D62 du 06/10). */
+    public const string NICKNAME_SEAT_ID_MARKER = 'NICK';
+
     /** Rang du prochain salon marqué, pour des codes distincts dans un test. */
     private static int $rooms = 0;
 
@@ -96,6 +100,8 @@ final class RetentionRows
         return match ($scope) {
             PurgeScope::StaleRoom => $now->subHours(RetentionWindows::STALE_ROOM_HOURS),
             PurgeScope::OrphanPlayer => $now->subMinutes(RetentionWindows::SOLO_SEAT_IDLE_MINUTES),
+            PurgeScope::GuestNickname => $now->subMonths(RetentionWindows::GUEST_NICKNAME_MONTHS),
+            PurgeScope::Visitor => $now->subMonthsNoOverflow(RetentionWindows::VISITOR_MONTHS),
             PurgeScope::FrameworkSessions => $now->subMinutes(RetentionWindows::sessionLifetimeMinutes()),
             PurgeScope::FrameworkFailedJobs => $now->subDays(RetentionWindows::FAILED_JOBS_DAYS),
             PurgeScope::FrameworkResetTokens => $now->subMinutes(RetentionWindows::resetTokenMinutes()),
@@ -114,6 +120,8 @@ final class RetentionRows
         match ($scope) {
             PurgeScope::StaleRoom => self::room($at),
             PurgeScope::OrphanPlayer => self::soloSeat($at),
+            PurgeScope::GuestNickname => self::nicknameSeat($at),
+            PurgeScope::Visitor => self::visitor($key, $at),
             PurgeScope::FrameworkSessions => self::session($key, $at),
             PurgeScope::FrameworkFailedJobs => self::failedJob($at),
             PurgeScope::FrameworkResetTokens => self::resetToken($key.'@example.com', $at),
@@ -143,11 +151,18 @@ final class RetentionRows
                 ->whereNull('room_id')
                 ->where('public_id', 'like', self::SEAT_ID_MARKER.'%')
                 ->where(static fn (Builder $identity): Builder => $identity
+                    ->whereNotNull('player_token_hash')
+                    ->orWhereNotNull('solo_token_hash'))
+                ->count(),
+            PurgeScope::GuestNickname => Player::query()
+                ->where('public_id', 'like', self::NICKNAME_SEAT_ID_MARKER.'%')
+                ->where(static fn (Builder $nickname): Builder => $nickname
                     ->whereNotNull('nickname')
                     ->orWhereNotNull('nickname_normalized')
-                    ->orWhereNotNull('player_token_hash')
-                    ->orWhereNotNull('solo_token_hash')
                     ->orWhereHas('gamePlayers', static fn (Builder $participation): Builder => $participation->whereNotNull('display_nickname')))
+                ->count(),
+            PurgeScope::Visitor => Visitor::query()
+                ->where('consent_version', self::MARKER)
                 ->count(),
             PurgeScope::FrameworkSessions => DB::table(Config::string('session.table'))
                 ->where('id', 'like', self::MARKER.'%')
@@ -206,10 +221,10 @@ final class RetentionRows
      * du jeton et créneau d'unicité `solo_token_hash` (sa copie, dans la même
      * écriture) ; une partie solo figée y garde le pseudo figé.
      */
-    public static function soloSeat(CarbonImmutable $lastSeenAt): Player
+    public static function soloSeat(CarbonImmutable $lastSeenAt, string $marker = self::SEAT_ID_MARKER): Player
     {
         $tokenHash = hash('sha256', self::MARKER.Str::random(40));
-        $publicId = self::SEAT_ID_MARKER;
+        $publicId = $marker;
 
         while (strlen($publicId) < SeatPublicId::LENGTH) {
             $publicId .= SeatPublicId::ALPHABET[random_int(0, strlen(SeatPublicId::ALPHABET) - 1)];
@@ -234,6 +249,33 @@ final class RetentionRows
     }
 
     /** Une session, avec l'adresse IP et l'agent que la migration du starter y stocke. */
+    /**
+     * Un siège dont le jeton est déjà effacé — archivé, ou siège solo passé
+     * par `orphan_player` —, qui ne porte plus que son pseudo et le pseudo
+     * figé d'une partie : la ligne du périmètre `guest_nickname`.
+     */
+    public static function nicknameSeat(CarbonImmutable $lastSeenAt): Player
+    {
+        $seat = self::soloSeat($lastSeenAt, self::NICKNAME_SEAT_ID_MARKER);
+
+        Player::query()->whereKey($seat->id)->update(['player_token_hash' => null, 'solo_token_hash' => null]);
+
+        return $seat->refresh();
+    }
+
+    /** Un visiteur consentant marqué, dernière activité à `$lastSeenAt`. */
+    public static function visitor(string $key, CarbonImmutable $lastSeenAt): void
+    {
+        $visitor = new Visitor;
+        $visitor->forceFill([
+            'token_hash' => hash('sha256', $key),
+            'consent_version' => self::MARKER,
+            'consented_at' => $lastSeenAt,
+            'first_seen_at' => $lastSeenAt,
+            'last_seen_at' => $lastSeenAt,
+        ])->save();
+    }
+
     public static function session(string $id, CarbonImmutable $lastActivity): void
     {
         DB::table(Config::string('session.table'))->insert([

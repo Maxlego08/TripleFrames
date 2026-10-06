@@ -2108,7 +2108,8 @@ return [
             ],
             'pages' => [
                 'label' => 'Pages TMDB',
-                'hint' => 'Entre :min et :max par envoi. Une page rend une vingtaine de fiches.',
+                'option' => ':pages page(s) — jusqu’à :movies fiches',
+                'hint' => 'Le balayage tourne en tâche de fond, par passages de dix minutes : vous pouvez quitter l’écran. Les fiches déjà au catalogue ou hors filtre ne comptent pas, et un balayage reprend où le précédent s’est arrêté.',
             ],
             'widened_warning' => 'Ce balayage ÉLARGIT le filtre par défaut : il sera marqué élargi, et tous les films qu’il fera entrer seront marqués « entrés par exception » avec leur motif.',
             'submit' => 'Lancer le balayage',
@@ -2389,8 +2390,9 @@ return [
         ],
         'missing' => [
             'title' => 'Films absents du catalogue',
-            'description' => 'Importez d’abord ces films par le collage, puis déposez de nouveau le lot : seules leurs images manqueront.',
-            'import' => 'Importer ces :count film(s)',
+            'description' => 'Importez d’abord ces films par le collage. Une fois le collage terminé, revenez sur cet écran : les films importés deviennent prêts, sans redéposer le lot.',
+            'sliced' => 'Un collage importe au plus :max films : :total sont absents. Relancez le bouton une fois chaque collage terminé.',
+            'import' => 'Importer :count film(s) absent(s)',
         ],
         'next' => 'Les images ajoutées attendent leur traitement, puis votre revue : ouvrez la file de revue pour les valider film par film.',
         'open_review' => 'Ouvrir la file de revue',
@@ -3281,6 +3283,8 @@ return [
             'wrong_line' => ':source · palier :tier · à :seconds s',
             'attempt' => 'tentative :number',
             'no_wrong' => 'Aucune réponse fausse.',
+            'add_alias' => 'Ajouter en alias',
+            'add_alias_label' => 'Ajouter « :answer » en alias du film',
         ],
         'players' => [
             'title' => 'Joueurs',
@@ -3332,6 +3336,14 @@ return [
                 'last_seen_at' => 'Dernière présence',
                 'left_at' => 'Départ',
                 'kicked_at' => 'Expulsion',
+                'device' => 'Appareil',
+            ],
+            // D62 du 06/10 : le visiteur consentant et ses autres sièges.
+            'visitor' => [
+                'heading' => 'Visiteur',
+                'none' => 'Aucun visiteur reconnu : ce joueur n’a pas accepté d’être reconnu, ou son lien a été anonymisé.',
+                'since' => 'Consentement du :consented, premier passage le :first.',
+                'no_other' => 'Aucun autre siège pour ce visiteur.',
             ],
             'games' => [
                 'heading' => 'Parties',

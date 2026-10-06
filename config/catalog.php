@@ -109,7 +109,12 @@ return [
         'paste_max_ids' => 50,
         'paste_max_themes' => 10,
         'pages_min' => 1,
-        'pages_max' => 5,
+        'pages_max' => 100,
+        // Les tailles proposées à l'écran du balayage (D60 du 06/10) : une
+        // page rend une vingtaine de fiches ; au-delà de quelques pages, le
+        // job travaille par passages (`RunCatalogImport::BUDGET_SECONDS`).
+        'pages_choices' => [1, 5, 10, 20, 50, 100],
+        'pages_default' => 10,
         'language_choices' => ['fr', 'en', 'ja', 'ko', 'it', 'es', 'de', 'zh', 'ru', 'sv'],
         'preview_ttl_minutes' => 60,
         'seed_list_path' => 'database/data/tmdb-seed-list.txt',

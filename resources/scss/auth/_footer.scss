@@ -1,38 +1,5 @@
-@use 'tokens' as *;
+@use 'mixins' as mix;
 
 .auth-shell > footer {
-    position: relative;
-    z-index: 2;
-    margin: 0;
-    border-top: $line solid $ink;
-    background: $yellow;
-    color: $ink;
-
-    > div {
-        display: flex;
-        width: min(100% - 2rem, 72rem);
-        max-width: none;
-        min-height: 3.25rem;
-        margin-inline: auto;
-        flex-flow: row wrap;
-        align-items: center;
-        justify-content: center;
-        gap: 0.2rem 1.25rem;
-        padding: 0.35rem 0;
-        color: $ink;
-    }
-
-    ul {
-        gap: 0 1rem;
-    }
-
-    a {
-        min-height: 2rem;
-        color: $ink;
-        font-weight: 800;
-    }
-
-    p {
-        color: $ink;
-    }
+    @include mix.full-site-footer;
 }

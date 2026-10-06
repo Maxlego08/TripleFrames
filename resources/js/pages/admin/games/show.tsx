@@ -341,6 +341,10 @@ export default function AdminGamesShow({
                                                             participant={
                                                                 participant
                                                             }
+                                                            movieId={
+                                                                round.movie
+                                                                    ?.id ?? null
+                                                            }
                                                         />
                                                     ),
                                                 )}
