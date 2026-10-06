@@ -64,6 +64,8 @@ return [
 
     'join' => [
         'title' => 'Join the room',
+        'intro' => 'Pick a nickname to come in: you choose your avatar afterwards in the waiting room.',
+        'code' => 'Room',
         'submit' => 'Join',
         'kicked' => 'The host removed you from this room: you cannot come back.',
         'full' => 'This room is full.',

@@ -43,6 +43,8 @@ return [
 
     'join' => [
         'title' => 'Rejoindre le salon',
+        'intro' => 'Choisissez un pseudo pour entrer : votre avatar se choisit ensuite dans la salle d’attente.',
+        'code' => 'Salon',
         'submit' => 'Entrer',
         'kicked' => 'L’hôte vous a retiré de ce salon : vous ne pouvez pas y revenir.',
         'full' => 'Ce salon est complet.',

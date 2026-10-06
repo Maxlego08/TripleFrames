@@ -105,11 +105,49 @@
         }
     }
 
-    // Le code : monospace et capitales, lisible caractère par caractère.
+    // Le code : monospace et capitales, lisible caractère par caractère ;
+    // la place du bouton œil réservée à droite.
     &__input--code[data-slot='input'] {
+        padding-right: 3.4rem;
         font-family: ui-monospace, monospace;
         letter-spacing: 0.18em;
         text-transform: uppercase;
+    }
+
+    // Champ + bouton œil : le code est masqué par défaut (diffusion d'écran).
+    &__control {
+        position: relative;
+    }
+
+    &__reveal {
+        position: absolute;
+        top: 50%;
+        right: 0.5rem;
+        display: grid;
+        width: 2.5rem;
+        height: 2.5rem;
+        border: 0;
+        border-radius: 0.6rem;
+        padding: 0;
+        background: transparent;
+        color: $ink;
+        cursor: pointer;
+        place-items: center;
+        translate: 0 -50%;
+
+        svg {
+            width: 1.25rem;
+            height: 1.25rem;
+        }
+
+        &:hover {
+            background: $cyan;
+        }
+
+        &:focus-visible {
+            outline: $line solid $cyan;
+            outline-offset: 0.125rem;
+        }
     }
 
     // Le pseudo : tel que le joueur l'écrit, jamais transformé à l'affichage.

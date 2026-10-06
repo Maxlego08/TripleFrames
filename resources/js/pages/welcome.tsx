@@ -1,5 +1,5 @@
 import { Head, Link, router, usePage } from '@inertiajs/react';
-import { Sparkles } from 'lucide-react';
+import { Eye, EyeOff, Sparkles } from 'lucide-react';
 import { useId, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import RoomEntryController from '@/actions/App/Http/Controllers/Room/RoomEntryController';
@@ -94,6 +94,9 @@ export default function Welcome() {
     const nicknameInput = useRef<HTMLInputElement>(null);
     const attempts = useRef(0);
     const [code, setCode] = useState('');
+    // Code masqué par défaut, pour qu'un joueur qui diffuse son écran ne
+    // le montre pas à ses spectateurs ; le bouton œil l'affiche à la demande.
+    const [codeVisible, setCodeVisible] = useState(false);
     const [nickname, setNickname] = useState('');
     const [navigating, setNavigating] = useState(false);
     const [failure, setFailure] = useState<{
@@ -196,39 +199,68 @@ export default function Welcome() {
                             <Label htmlFor={codeId}>
                                 {t('common.home.room_code_label')}
                             </Label>
-                            <Input
-                                ref={codeInput}
-                                id={codeId}
-                                type="text"
-                                value={code}
-                                placeholder={t(
-                                    'common.home.room_code_placeholder',
-                                )}
-                                onChange={(event) => {
-                                    setCode(event.target.value);
-                                    setFailure(null);
-                                    setEdited((before) => ({
-                                        ...before,
-                                        room: true,
-                                    }));
-                                }}
-                                autoComplete="off"
-                                autoCorrect="off"
-                                autoCapitalize="characters"
-                                spellCheck={false}
-                                enterKeyHint="go"
-                                aria-invalid={
-                                    failure?.kind === 'invalid'
-                                        ? true
-                                        : undefined
-                                }
-                                aria-describedby={
-                                    failure === null
-                                        ? codeHelpId
-                                        : `${codeHelpId} ${failureId}`
-                                }
-                                className="home-field__input home-field__input--code"
-                            />
+                            <div className="home-field__control">
+                                <Input
+                                    ref={codeInput}
+                                    id={codeId}
+                                    // Masqué : `password` sans en être un — les
+                                    // gestionnaires de mots de passe sont priés
+                                    // de l'ignorer, et rien n'est mémorisé.
+                                    type={codeVisible ? 'text' : 'password'}
+                                    data-1p-ignore
+                                    data-lpignore="true"
+                                    data-bwignore
+                                    data-form-type="other"
+                                    value={code}
+                                    placeholder={t(
+                                        'common.home.room_code_placeholder',
+                                    )}
+                                    onChange={(event) => {
+                                        setCode(event.target.value);
+                                        setFailure(null);
+                                        setEdited((before) => ({
+                                            ...before,
+                                            room: true,
+                                        }));
+                                    }}
+                                    autoComplete="off"
+                                    autoCorrect="off"
+                                    autoCapitalize="characters"
+                                    spellCheck={false}
+                                    enterKeyHint="go"
+                                    aria-invalid={
+                                        failure?.kind === 'invalid'
+                                            ? true
+                                            : undefined
+                                    }
+                                    aria-describedby={
+                                        failure === null
+                                            ? codeHelpId
+                                            : `${codeHelpId} ${failureId}`
+                                    }
+                                    className="home-field__input home-field__input--code"
+                                />
+                                <button
+                                    type="button"
+                                    className="home-field__reveal"
+                                    aria-controls={codeId}
+                                    aria-pressed={codeVisible}
+                                    aria-label={
+                                        codeVisible
+                                            ? t('common.home.room_code_hide')
+                                            : t('common.home.room_code_show')
+                                    }
+                                    onClick={() =>
+                                        setCodeVisible((visible) => !visible)
+                                    }
+                                >
+                                    {codeVisible ? (
+                                        <EyeOff aria-hidden="true" />
+                                    ) : (
+                                        <Eye aria-hidden="true" />
+                                    )}
+                                </button>
+                            </div>
 
                             <p id={codeHelpId} className="home-field__help">
                                 {t('common.home.room_code_help')}

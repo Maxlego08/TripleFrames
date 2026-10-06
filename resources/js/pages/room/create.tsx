@@ -33,9 +33,9 @@ export default function RoomCreate({ nickname }: RoomCreateProps) {
         <>
             <Head title={t('room.create.title')} />
 
-            <section className="auth-stage room-create-stage">
+            <section className="auth-stage room-entry-stage">
                 <section
-                    className="auth-ticket room-create-ticket"
+                    className="auth-ticket room-entry-ticket"
                     aria-labelledby={headingId}
                 >
                     <div className="auth-ticket__form-panel">
@@ -50,7 +50,7 @@ export default function RoomCreate({ nickname }: RoomCreateProps) {
                                 nickname={nickname}
                                 submitLabel={t('room.create.submit')}
                                 submitIcon={<Sparkles aria-hidden="true" />}
-                                className="room-create-form"
+                                className="room-entry-form"
                             />
                         </div>
                     </div>
