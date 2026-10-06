@@ -88,8 +88,11 @@ export function SoloPresetField({
     const number = new Intl.NumberFormat(locale);
 
     return (
-        <div className="grid gap-3">
-            <p id={legendId} className="text-sm font-medium">
+        <div className="solo-preset grid gap-3">
+            <p
+                id={legendId}
+                className="solo-preset__legend text-sm font-medium"
+            >
                 {legend}
             </p>
 
@@ -101,7 +104,7 @@ export function SoloPresetField({
                 aria-labelledby={legendId}
                 aria-describedby={error !== undefined ? errorId : undefined}
                 aria-invalid={error !== undefined ? true : undefined}
-                className="grid gap-2 sm:grid-cols-2"
+                className="solo-preset__options grid gap-2 sm:grid-cols-2"
             >
                 {presets.map((preset) => {
                     const keys = PRESET_KEYS[preset.key];
@@ -115,7 +118,7 @@ export function SoloPresetField({
                         <label
                             key={preset.key}
                             htmlFor={itemId}
-                            className="flex min-h-11 cursor-pointer items-start gap-3 rounded-md border border-border p-3 has-focus-visible:border-ring has-data-[state=checked]:border-primary has-data-[state=checked]:bg-accent"
+                            className="solo-preset__option flex min-h-11 cursor-pointer items-start gap-3 rounded-md border border-border p-3 has-focus-visible:border-ring has-data-[state=checked]:border-primary has-data-[state=checked]:bg-accent"
                         >
                             <RadioGroupItem
                                 id={itemId}
@@ -131,19 +134,22 @@ export function SoloPresetField({
                                 className="mt-0.5"
                             />
                             <span className="flex flex-col gap-1">
-                                <span id={labelId} className="font-semibold">
+                                <span
+                                    id={labelId}
+                                    className="solo-preset__label font-semibold"
+                                >
                                     {t(keys.label)}
                                 </span>
                                 <span
                                     id={descriptionId}
-                                    className="text-sm text-muted-foreground"
+                                    className="solo-preset__description text-sm text-muted-foreground"
                                 >
                                     {t(keys.description)}
                                 </span>
                                 {preset.grayed && (
                                     <span
                                         id={motiveId}
-                                        className="inline-flex items-start gap-1 text-sm"
+                                        className="solo-preset__motive inline-flex items-start gap-1 text-sm"
                                     >
                                         <TriangleAlert
                                             aria-hidden="true"
@@ -165,7 +171,10 @@ export function SoloPresetField({
             </RadioGroup>
 
             {error !== undefined && (
-                <p id={errorId} className="text-sm text-destructive">
+                <p
+                    id={errorId}
+                    className="solo-preset__error text-sm text-destructive"
+                >
                     {error}
                 </p>
             )}

@@ -36,6 +36,86 @@
 
 .room-entry-ticket.auth-ticket {
     width: min(100%, 42rem);
+
+    // Le solo : quatre presets côte à côte, un billet plus large.
+    &.room-entry-ticket--wide {
+        width: min(100%, 52rem);
+    }
+}
+
+// Les quatre presets du solo, en cartes du billet : la carte cochée prend
+// le cyan et l'ombre ; un preset limité le dit en texte, jamais par la
+// seule couleur.
+.room-entry-form .solo-preset {
+    gap: 0.6rem;
+
+    &__legend {
+        color: $ink;
+        font-size: 0.82rem;
+        font-weight: 900;
+    }
+
+    &__options {
+        gap: 0.75rem;
+    }
+
+    &__option {
+        border: $line solid $ink;
+        border-radius: $radius-medium;
+        padding: 0.85rem 0.95rem;
+        background: $white;
+        color: $ink;
+        transition:
+            translate 120ms ease,
+            box-shadow 120ms ease;
+
+        &:hover {
+            translate: -0.06rem -0.06rem;
+            box-shadow: 0.2rem 0.2rem 0 $ink;
+        }
+
+        &:has([data-state='checked']) {
+            border-color: $ink;
+            background: $cyan;
+            box-shadow: 0.25rem 0.25rem 0 $ink;
+        }
+
+        &:has(:focus-visible) {
+            @include mix.focus-ring;
+        }
+
+        [data-slot='radio-group-item'] {
+            border: 0.125rem solid $ink;
+            background: $white;
+        }
+    }
+
+    &__label {
+        font-size: 0.95rem;
+        font-weight: 900;
+    }
+
+    &__description,
+    &__motive {
+        color: $muted;
+        font-size: 0.8rem;
+        line-height: 1.4;
+    }
+
+    &__option:has([data-state='checked']) &__description,
+    &__option:has([data-state='checked']) &__motive {
+        color: $ink;
+    }
+
+    &__motive {
+        font-weight: 800;
+    }
+
+    &__error {
+        color: $error;
+        font-size: 0.8rem;
+        font-weight: 800;
+    }
 }
 
 .room-entry-form {

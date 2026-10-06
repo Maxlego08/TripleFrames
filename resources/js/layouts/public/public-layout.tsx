@@ -35,10 +35,12 @@ export default function PublicLayout({ children }: { children: ReactNode }) {
     const component = usePage().component;
     const isHomePage = component === 'welcome';
     const isLegalPage = component.startsWith('legal/');
-    // Créer et rejoindre un salon partagent le gabarit des pages d'entrée
-    // (`room-entry.scss`).
+    // Créer, rejoindre un salon et jouer en solo partagent le gabarit des
+    // pages d'entrée (`room-entry.scss`).
     const isRoomEntryPage =
-        component === 'room/create' || component === 'room/join';
+        component === 'room/create' ||
+        component === 'room/join' ||
+        component === 'room/solo';
     const shellVariant = isHomePage
         ? 'public-shell--home'
         : isLegalPage
