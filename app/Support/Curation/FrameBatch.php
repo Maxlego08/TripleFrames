@@ -169,6 +169,52 @@ final readonly class FrameBatch
             && in_array($frame->availability, [ContentAvailability::Draft, ContentAvailability::Published], true);
     }
 
+    /**
+     * Le lot découpé en lots qui tiennent chacun sous les plafonds de
+     * l'import : au plus {@see self::MAX_MOVIES} films, et un texte JSON d'au
+     * plus `$maxBytes` octets (amendé le 06/10). Découpage glouton, ordre des
+     * films conservé ; un film seul au-delà de `$maxBytes` forme son propre
+     * lot, que l'import refusera avec son motif.
+     *
+     * @return list<string> le texte JSON de chaque lot, prêt à écrire
+     *
+     * @throws JsonException
+     */
+    public function encodedChunks(int $maxBytes, ?CarbonImmutable $exportedAt = null): array
+    {
+        $exportedAt ??= CarbonImmutable::now();
+        $chunks = [];
+        $current = [];
+
+        foreach ($this->movies as $movie) {
+            $candidate = [...$current, $movie];
+
+            if ($current !== [] && (count($candidate) > self::MAX_MOVIES || strlen((new self($candidate))->encode($exportedAt)) > $maxBytes)) {
+                $chunks[] = (new self($current))->encode($exportedAt);
+                $candidate = [$movie];
+            }
+
+            $current = $candidate;
+        }
+
+        if ($current !== []) {
+            $chunks[] = (new self($current))->encode($exportedAt);
+        }
+
+        return $chunks;
+    }
+
+    /**
+     * Le texte JSON du lot, tel que l'export l'écrit.
+     *
+     * @throws JsonException
+     */
+    public function encode(?CarbonImmutable $exportedAt = null): string
+    {
+        return json_encode($this->toArray($exportedAt), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR).'
+';
+    }
+
     /** Le nombre total d'images du lot. */
     public function framesCount(): int
     {
