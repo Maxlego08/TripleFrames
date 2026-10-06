@@ -26,6 +26,7 @@ use App\Support\Identity\NicknameNormalizer;
 use App\Support\Identity\PlayerToken;
 use App\Support\Identity\PlayerTokenManager;
 use App\Support\Room\SeatPublicId;
+use App\Support\Visitor\VisitorTracker;
 use App\ValueObjects\Game\SoloStartOutcome;
 use App\ValueObjects\Room\LaunchOutcome;
 use Carbon\CarbonImmutable;
@@ -117,6 +118,7 @@ final readonly class StartSoloGame
         private CatchUpGame $catchUp,
         private FinalizeGame $finalize,
         private OpenGame $openGame,
+        private VisitorTracker $visitors,
     ) {}
 
     /**
@@ -190,6 +192,11 @@ final readonly class StartSoloGame
         if ($seat === null) {
             $account = $request->user() instanceof User ? $request->user() : null;
             [$seat, $created] = $this->seat($token, $account, $nickname, $current?->avatar, $locale, $now);
+
+            // Le visiteur consentant et l'appareil du siège (D62 du 06/10).
+            if ($created) {
+                $this->visitors->stamp($seat, $request);
+            }
         }
 
         // 7. La partie solo en cours du siège : interrompue.

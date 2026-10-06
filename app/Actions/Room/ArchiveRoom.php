@@ -5,7 +5,6 @@ namespace App\Actions\Room;
 use App\Enums\RoomStatus;
 use App\Events\Game\RoomArchived;
 use App\Models\Game;
-use App\Models\GamePlayer;
 use App\Models\Player;
 use App\Models\Room;
 use Carbon\CarbonImmutable;
@@ -21,7 +20,10 @@ use Illuminate\Support\Facades\Log;
  * (`App\Jobs\Room\ArchiveIdleRooms`), le filet `stale_room` à 48 h par la
  * purge de `100` ; tous appellent cette action, jamais une écriture directe.
  * L'archivage est l'**unique** événement qui recycle le `room_code`, efface
- * les identifiants d'invité et ferme la fenêtre de rattachement tardif.
+ * le jeton des sièges et ferme la fenêtre de rattachement tardif. **Le pseudo
+ * survit** à l'archivage (D62 du 06/10) : il sert l'analyse des parties
+ * pendant 12 mois, puis le périmètre `guest_nickname` de la purge
+ * l'anonymise.
  *
  * Dans une transaction, sous le verrou du salon (premier verrou de l'ordre
  * global `room → player → game`, E10-51), `$now` pris après le verrou :
@@ -41,15 +43,15 @@ use Illuminate\Support\Facades\Log;
  *    (le code redevient attribuable), par mise à jour ciblée, jamais par
  *    `save()` sur une instance dont `settings` a été lu (§ 2.5) ; puis
  *    {@see TransferHost::clear()} ;
- * 4. tous les sièges du salon — partis et expulsés compris — : `nickname`,
- *    `nickname_normalized` et `player_token_hash` à NULL, par une mise à
- *    jour Eloquent (`updated_at` à la milliseconde, `$dateFormat` de
- *    `Player`) ;
- * 5. `game_player.display_nickname` à NULL pour toutes les parties du salon.
+ * 4. tous les sièges du salon — partis et expulsés compris — :
+ *    `player_token_hash` à NULL, par une mise à jour Eloquent (`updated_at` à
+ *    la milliseconde, `$dateFormat` de `Player`) ; ce qui ferme le
+ *    rattachement tardif et lève le refus d'un siège expulsé. Pseudo, forme
+ *    normalisée et pseudo figé des parties restent (D62 du 06/10).
  *
- * **Les effacements dans la même transaction** (10 § 11.1) : aucune
- * interruption ne laisse un salon archivé qui porterait encore un pseudo, ni
- * un pseudo effacé sur un salon resté actif.
+ * **L'effacement dans la même transaction** (10 § 11.1) : aucune
+ * interruption ne laisse un salon archivé dont un jeton ouvrirait encore un
+ * siège.
  *
  * **Après validation** : `room.archived` au canal du salon
  * (`ShouldDispatchAfterCommit`), charge `{}` hors enveloppe, sans partie — la
@@ -114,14 +116,8 @@ final readonly class ArchiveRoom
             $this->transferHost->clear($locked, $now);
 
             Player::query()->whereBelongsTo($locked)->update([
-                'nickname' => null,
-                'nickname_normalized' => null,
                 'player_token_hash' => null,
             ]);
-
-            GamePlayer::query()
-                ->whereIn('game_id', Game::query()->select('id')->whereBelongsTo($locked))
-                ->update(['display_nickname' => null]);
 
             RoomArchived::dispatch($locked, null, []);
 

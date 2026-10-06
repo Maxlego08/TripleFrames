@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Legal\ConsentController;
 use App\Http\Controllers\Legal\LegalPageController;
 use App\Http\Middleware\RobotsDirectives;
 use App\Http\Middleware\VaryOnLanguage;
@@ -52,3 +53,9 @@ Route::middleware('translations:legal')->group(function () {
         ->name('takedown.create')
         ->defaults(VaryOnLanguage::ROUTE_FLAG, true);
 });
+
+// Le choix de la bannière de consentement (D62 du 06/10, spec 90 § 4.6) :
+// accepter dépose l'identifiant de visiteur, refuser le retire.
+Route::post('consent', [ConsentController::class, 'store'])
+    ->middleware('throttle:30,1')
+    ->name('consent.store');

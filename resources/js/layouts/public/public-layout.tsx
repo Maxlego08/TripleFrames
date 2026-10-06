@@ -1,3 +1,4 @@
+import { ConsentBanner } from '@/components/public/consent-banner';
 import { usePage } from '@inertiajs/react';
 import type { ReactNode } from 'react';
 import { GameAnnouncer } from '@/components/game/game-announcer';
@@ -53,6 +54,8 @@ export default function PublicLayout({ children }: { children: ReactNode }) {
             <PublicHeader />
 
             <MaintenanceBanner />
+
+            <ConsentBanner />
 
             <main
                 id={MAIN_ID}

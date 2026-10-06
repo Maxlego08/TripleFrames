@@ -1,3 +1,4 @@
+import { ConsentBanner } from '@/components/public/consent-banner';
 import { CircleAlert } from 'lucide-react';
 import { GameAnnouncer } from '@/components/game/game-announcer';
 import LanguageSwitcher from '@/components/language-switcher';
@@ -54,6 +55,8 @@ export default function GameLayout({ children }: GameLayoutProps) {
     return (
         <div className="flex h-[var(--game-viewport-height,100dvh)] flex-col overflow-hidden bg-background text-foreground">
             <MaintenanceBanner />
+
+            <ConsentBanner />
 
             {notice !== null && (
                 <div className="border-b border-border bg-muted">

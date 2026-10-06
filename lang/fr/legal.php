@@ -20,7 +20,21 @@ return [
 
     'french_only' => 'Ces textes ne sont disponibles qu’en français.',
 
+    // D62 du 06/10 : la bannière de consentement et les préférences.
+    'consent' => [
+        'title' => 'Être reconnu d’une partie à l’autre ?',
+        'body' => 'Avec votre accord, TripleFrames dépose un identifiant dans votre navigateur pour relier vos parties successives — pseudo et type d’appareil — et améliorer le jeu. Il est conservé 13 mois, et vous pouvez retirer votre accord à tout moment. Sans accord, vous jouez exactement pareil.',
+        'accept' => 'Accepter',
+        'refuse' => 'Refuser',
+        'more' => 'En savoir plus',
+        'settings_heading' => 'Vos préférences de cookies',
+        'current_accepted' => 'Vous avez accepté d’être reconnu d’une partie à l’autre.',
+        'current_refused' => 'Vous avez refusé d’être reconnu d’une partie à l’autre.',
+        'current_none' => 'Vous n’avez pas encore fait de choix.',
+    ],
+
     'footer' => [
+        'cookies' => 'Cookies',
         'label' => 'Informations légales',
         'notice' => 'Mentions légales',
         'privacy' => 'Politique de confidentialité',

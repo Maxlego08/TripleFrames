@@ -1182,6 +1182,8 @@ Ce ne sont pas des valeurs de jeu : ce sont des durées de conservation, publié
 
 ### 16.2 `ArchiveRoom` et le balayage
 
+**Amendé par D62 du 06/10** : l'archivage n'efface plus que `player.player_token_hash` ; pseudo, forme normalisée et `game_player.display_nickname` survivent, anonymisés 12 mois après la dernière activité du siège par le périmètre `guest_nickname` (`10` § 11.1). Les étapes ci-dessous qui nomment l'effacement du pseudo se lisent à cette aune.
+
 `App\Actions\Room\ArchiveRoom` [nouveau], `handle(Room $room, CarbonImmutable $idleBefore, bool $lobbyOnly = false): bool`. Dans une transaction, sous verrou du salon, avec `$now` pris après le verrou :
 
 1. **Le critère est relu sous verrou.** Salon déjà archivé, `last_activity_at ≥ $idleBefore`, ou (`$lobbyOnly` et `launched_at` non nul) → `false`, sans écriture. Pourquoi : entre la sélection du balayage et le verrou, un joueur a pu entrer ou battre, et archiver un salon redevenu actif effacerait les pseudos de joueurs présents.

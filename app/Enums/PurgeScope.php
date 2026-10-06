@@ -15,6 +15,14 @@ enum PurgeScope: string
 
     case OrphanPlayer = 'orphan_player';
 
+    // D62 du 06/10 : les pseudos d'invité, anonymisés 12 mois après la
+    // dernière activité du siège.
+    case GuestNickname = 'guest_nickname';
+
+    // D62 du 06/10 : le visiteur consentant, 13 mois après sa dernière
+    // activité.
+    case Visitor = 'visitor';
+
     case SeenFrame = 'seen_frame';
 
     case NearMiss = 'near_miss';
@@ -77,6 +85,8 @@ enum PurgeScope: string
         return [
             self::StaleRoom,
             self::OrphanPlayer,
+            self::GuestNickname,
+            self::Visitor,
             self::Perf,
             self::GameTrace,
             self::Audience,

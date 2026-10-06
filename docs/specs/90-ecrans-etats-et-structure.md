@@ -256,6 +256,8 @@ Page statique `takedown.create`, **sans formulaire** : route, lien de pied de pa
 
 ### 4.6 Inventaire des cookies — normatif, publié sur la page de confidentialité
 
+**Amendé par D62 du 06/10** : une bannière de consentement existe (`components/public/consent-banner.tsx`, montée dans `PublicLayout` et `GameLayout`, région nommée sans `aria-live`, deux boutons de même poids, « En savoir plus » vers la politique de confidentialité) ; elle porte le seul cookie soumis à consentement, `visitor`. Le choix se change à tout moment depuis « Vos préférences de cookies » de la page de confidentialité (`ConsentSettings`, ancre `#cookies`), liée depuis le pied de page (« Cookies »). Le paragraphe qui suit décrit l'état antérieur pour les autres cookies, qui restent strictement nécessaires ou de préférence.
+
 « Pas de bannière » repose sur une conclusion écrite, pas supposée : tous les cookies posés sont strictement nécessaires ou mémorisent une préférence exprimée par l'utilisateur (principe 12). L'inventaire du principe 12 était incomplet face au code (n° 73) ; voici la liste normative, reprise telle quelle par le partiel de confidentialité :
 
 | Nom | Finalité | Durée | Nature |
@@ -265,6 +267,8 @@ Page statique `takedown.create`, **sans formulaire** : route, lien de pied de pa
 | `remember_web_*` | « Se souvenir de moi », seulement si l'utilisateur l'a coché | durée par défaut du garde de Laravel (400 jours) | HttpOnly, chiffré ; demandé par l'utilisateur |
 | `player_token` | Siège d'invité et reprise, langue et avatar prédéfini (C4) | 30 jours après la dernière prise de siège ou le dernier changement de langue (`PlayerTokenCookie::LIFETIME`, glissant à chaque re-signature : `resign()` repose le cookie avec `LIFETIME`, C4 I4.5 et I4.8 ; 40 § 3.2) | HttpOnly, chiffré ; strictement nécessaire |
 | `locale` | Langue choisie | 1 an (`LocaleCookie::LIFETIME`) | en clair ; préférence |
+| `consent` | Choix de la bannière de consentement et version de la bannière (D62 du 06/10 — amendé le 06/10) | 13 mois si accord, 6 mois si refus (`ConsentCookie`) | HttpOnly, chiffré ; mémorise un choix |
+| `visitor` | Identifiant de visiteur : relier les sièges successifs d'un navigateur pour l'analyse des parties (D62 du 06/10 — amendé le 06/10) | 13 mois (`VisitorTracker::LIFETIME`) | HttpOnly, chiffré ; **soumis au consentement**, déposé à l'accord seulement, supprimé au retrait |
 | `sidebar_state` | Barre latérale ouverte ou repliée (back-office, écrans de compte) | 7 jours | en clair ; préférence |
 
 Le partiel de confidentialité reprend ce tableau ligne à ligne ; le nom et la durée du cookie de session y sont rendus depuis `config('session.cookie')` et `config('session.lifetime')`, pour que la page dise ce que le serveur pose, les autres durées étant écrites comme ci-dessus — amendé le 25/09 (E16-3). L'« état OAuth » du principe 12 est une clé de session, pas un cookie distinct (J2). Le cookie `appearance` et son miroir en stockage local sont retirés du tableau et de la page de confidentialité avec le choix d'apparence (D56 du 02/10 — amendé le 02/10). Tout nouveau cookie amende ce tableau **avant** sa mise en service ; le test qui échoue sur un nom de cookie non inventorié appartient à 100.

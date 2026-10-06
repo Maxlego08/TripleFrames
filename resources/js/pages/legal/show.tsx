@@ -1,3 +1,4 @@
+import { ConsentSettings } from '@/components/public/consent-banner';
 import { Head } from '@inertiajs/react';
 import { InfoIcon } from 'lucide-react';
 import { useMemo } from 'react';
@@ -140,6 +141,12 @@ export default function LegalShow({
                                     __html: document.html,
                                 }}
                             />
+
+                            {page === 'privacy' && (
+                                <div className="legal-body">
+                                    <ConsentSettings />
+                                </div>
+                            )}
 
                             <ContactBlock email={contactEmail} />
 

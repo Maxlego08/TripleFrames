@@ -1595,6 +1595,21 @@ export type InspectionPlayer = {
 
 export type InspectionPlayerRow = InspectionPlayer & { games_count: number };
 
+/** L'appareil grossier d'un siège de visiteur consentant (D62 du 06/10). */
+export type InspectionDevice = {
+    class: string;
+    browser: string | null;
+    os: string | null;
+};
+
+/** Le visiteur consentant d'un siège et ses autres sièges (D62 du 06/10). */
+export type InspectionVisitor = {
+    consented_at: string | null;
+    first_seen_at: string | null;
+    last_seen_at: string | null;
+    seats: (InspectionPlayer & { device: InspectionDevice | null })[];
+};
+
 export type InspectionGameRow = {
     id: number;
     mode: InspectionGameMode;

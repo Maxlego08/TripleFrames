@@ -95,7 +95,7 @@ Le siège **solo** suit les étapes 2 à 6 sans unicité de pseudo ni expulsion 
 ### 2.3 Ce qui n'est jamais stocké
 
 - **Le pseudo n'est jamais dans le jeton**, ni dans aucun stockage du navigateur. Raison : le jeton vit 30 jours, alors que les identifiants d'invité doivent disparaître 24 h après la dernière activité du salon (10 § 11.1) ; un pseudo porté par le cookie survivrait à l'archivage et rendrait fausse une durée de conservation publiée. Et le « pseudo persistant » est un avantage **du compte** (00 § Comptes & profils), pas de l'invité. Un invité ressaisit donc son pseudo à chaque nouveau salon ; la reprise d'un siège existant ne le redemande jamais, et la requête qui la porte n'exige ni ne valide aucun champ `nickname` (§ 5.8), et aucune requête d'entrée ne lit plus de champ `avatar` (D55 du 02/10 — amendé le 02/10).
-- **Aucun consentement** n'est stocké pour un invité, ni en base ni dans le jeton.
+- **Aucun consentement** n'est stocké pour un invité dans le jeton ; **amendé par D62 du 06/10** : le choix de la bannière vit dans le cookie `consent`, et un accord crée une ligne `visitor` (preuve : version et instant), qui relie les sièges successifs du navigateur avec l'appareil grossier (`10` § 7.1 bis). Le pseudo d'un invité survit à l'archivage, anonymisé 12 mois après la dernière activité du siège (`guest_nickname`) ; le hash du jeton tombe toujours à l'archivage.
 - **Aucune adresse IP**, aucun identifiant de session : le jeton n'est pas la session PHP (I4.6), et `active_seat_token` n'est jamais l'identifiant de session (10 § 7.1).
 
 ### 2.4 Un compte connecté au J1

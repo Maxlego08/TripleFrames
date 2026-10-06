@@ -11,6 +11,7 @@ use App\Support\I18n\Translations;
 use App\Support\Identity\AccountSwitches;
 use App\Support\Identity\OAuthProviders;
 use App\Support\Realtime\RealtimeClientConfig;
+use App\Support\Visitor\ConsentCookie;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\App;
 use Inertia\Middleware;
@@ -77,6 +78,11 @@ class HandleInertiaRequests extends Middleware
             // 01/10) : boutons de connexion, et lien « Se connecter » de
             // l'en-tête public même inscription fermée.
             'oauthProviders' => OAuthProviders::values(),
+
+            // Le choix de la bannière de consentement (D62 du 06/10) :
+            // `accepted`, `refused`, ou null tant que le visiteur n'a pas
+            // répondu à la version courante — la bannière s'affiche alors.
+            'consent' => ConsentCookie::read($request)?->value,
 
             // Format fixe de la frame servable (spec 90 § 7.1, contrat C16 ;
             // C9) : deux entiers, globaux et identiques pour tous, sans

@@ -3336,6 +3336,14 @@ return [
                 'last_seen_at' => 'Dernière présence',
                 'left_at' => 'Départ',
                 'kicked_at' => 'Expulsion',
+                'device' => 'Appareil',
+            ],
+            // D62 du 06/10 : le visiteur consentant et ses autres sièges.
+            'visitor' => [
+                'heading' => 'Visiteur',
+                'none' => 'Aucun visiteur reconnu : ce joueur n’a pas accepté d’être reconnu, ou son lien a été anonymisé.',
+                'since' => 'Consentement du :consented, premier passage le :first.',
+                'no_other' => 'Aucun autre siège pour ce visiteur.',
             ],
             'games' => [
                 'heading' => 'Parties',

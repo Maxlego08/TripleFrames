@@ -742,6 +742,23 @@ Le porteur signale que « le QCM n'apparaît pas pour certains films », sans co
 |---|---|---|---|---|
 | D61 | Titre suivi d'autres mots | **oui, J1** : étape (d′) — plus long début porté, clé exacte ou préfixe non partagé de la cible, mêmes chiffres ; `validation_version` 2 | **oui** — faux positif assumé sur un titre court face à un film non publié | `70` § 6.2 ; `CLAUDE.md` § 2 |
 
+### D62. Peut-on suivre les joueurs pour analyser les parties ? — **oui : pseudos gardés 12 mois, identifiant de visiteur avec consentement**
+
+**Demande du porteur.** « Dans l'action ArchiveRoom, il ne faudrait pas supprimer le nickname du joueur aussi rapidement : pour analyser les parties des joueurs il faut pouvoir garder les nicknames 12 mois, puis les anonymiser. […] J'ai besoin de savoir si des joueurs vont revenir, avec quel pseudo, sur quel appareil. » Trois options présentées (sans traceur, identifiant avec consentement, pseudo seulement) ; retenue : **l'identifiant avec consentement**, contre la recommandation « sans traceur ».
+
+**Ce que la décision arrête :**
+
+1. **Pseudo** : l'archivage n'efface plus que le hash du jeton ; pseudo, forme normalisée et pseudo figé des parties sont anonymisés **12 mois** après la dernière activité du siège (`guest_nickname`, `10` § 11.1). Sièges solo : jetons à 24 h, pseudo à 12 mois.
+2. **Bannière** (`90` § 4.6) : affichée tant que le visiteur n'a pas répondu ; accepter et refuser ont le même poids ; on joue pareil sans répondre. Choix dans le cookie `consent` (13 mois / 6 mois), modifiable à tout moment depuis la politique de confidentialité.
+3. **Identifiant** : à l'accord seulement, cookie `visitor` (13 mois) et ligne `visitor` (empreinte du jeton, version et instant de l'accord) ; chaque siège pris ensuite porte le visiteur et l'appareil grossier (classe, navigateur, système). Retrait : visiteur supprimé, sièges déliés. Visiteur purgé 13 mois après sa dernière activité (`visitor`).
+4. **Analyse** : la fiche d'un joueur (inspection admin) montre son appareil et les autres sièges du même visiteur, pseudo et date compris.
+
+**Écart assumé.** Révise le principe 12 de `00` (« pas de bannière en v1 ») et l'effacement des identifiants d'invité à l'archivage (`00`, `10` § 7.1 et § 11.1, `40` § 2.1 et § 2.3, `50` § 16.2). Seuls les visiteurs consentants sont reconnus : les retours mesurés sont une borne basse. La politique de confidentialité dit les deux cookies, les durées et la base légale du consentement ; sa section « Mesure d'audience » (« aucune ») contredit déjà D48 du 01/10 et reste à reprendre. Une migration (`visitor`, colonnes de `player`, index `player_last_seen_idx`). Une décision : elle se cite « D62 du 06/10 ».
+
+| # | Décision | Réponse retenue | Écart | Inscrite dans |
+|---|---|---|---|---|
+| D62 | Suivi des joueurs pour l'analyse | **oui, J1** : pseudo anonymisé à 12 mois (`guest_nickname`) ; bannière de consentement ; cookie et table `visitor` (13 mois) ; appareil grossier par siège ; autres sièges du visiteur dans l'inspection | **oui** — révise le principe 12 et l'effacement à l'archivage ; une migration | `00` principe 12 ; `10` § 7.1 bis, § 11.1 ; `40` § 2.3 ; `50` § 16.2 ; `90` § 4.6 ; `CLAUDE.md` § 2 |
+
 ## Seule question encore ouverte — le nom de domaine (décision 5)
 
 La réponse est **« à acheter »**, mais **le nom n'a pas été fourni**. C'est le dernier point du questionnaire, et il bloque plus tôt qu'annoncé : le montage de développement retenu — `dev.<DOMAINE>` résolu en 127.0.0.1, certificat par défi DNS-01, RP ID de passkey fixé à `<DOMAINE>` — est le **seul** qui satisfasse simultanément Google, Discord, WebAuthn et les cookies `Secure`. `tripleframes.test` ne conviendra jamais : Google refuse tout redirect URI en `http` hors `localhost` et les TLD non enregistrés. **Le domaine conditionne donc le développement d'OAuth et des passkeys, pas seulement la mise en production.** C'est un achat à une dizaine d'euros par an, et c'est le seul achat réellement sur le chemin critique. Amendé le 23/09 (D1 du 23/09) : il conditionne aussi le jalon 1 lui-même, dont le back-office et la curation naissent en production sur `<DOMAINE>` ; l'achat est donc placé **avant la semaine 4**.

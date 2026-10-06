@@ -6,7 +6,6 @@ use App\Actions\Game\StartSoloGame;
 use App\Actions\Room\ArchiveRoom;
 use App\Enums\PurgeScope;
 use App\Models\Game;
-use App\Models\GamePlayer;
 use App\Models\Player;
 use App\Support\Retention\PurgeHandler;
 use App\Support\Retention\PurgeRow;
@@ -73,10 +72,11 @@ use Illuminate\Support\Facades\Log;
 final readonly class OrphanPlayerHandler implements PurgeHandler
 {
     /**
-     * Les identifiants d'invité que la ligne `player` d'un siège solo porte,
-     * effacés ensemble ; le pseudo figé des participations s'y ajoute.
+     * Les jetons que la ligne `player` d'un siège solo porte, effacés
+     * ensemble. Le pseudo n'y est plus (D62 du 06/10) : il vit 12 mois, puis
+     * `guest_nickname` l'anonymise.
      */
-    private const array SEAT_IDENTITY = ['nickname', 'nickname_normalized', 'player_token_hash', 'solo_token_hash'];
+    private const array SEAT_IDENTITY = ['player_token_hash', 'solo_token_hash'];
 
     public function scope(): PurgeScope
     {
@@ -152,11 +152,6 @@ final readonly class OrphanPlayerHandler implements PurgeHandler
             // (`$dateFormat` de `Player`), `last_seen_at` jamais touchée.
             Player::query()->whereKey($seat->id)->update(array_fill_keys(self::SEAT_IDENTITY, null));
 
-            GamePlayer::query()
-                ->where('player_id', $seat->id)
-                ->whereNotNull('display_nickname')
-                ->update(['display_nickname' => null]);
-
             return 1;
         });
     }
@@ -194,11 +189,6 @@ final readonly class OrphanPlayerHandler implements PurgeHandler
                 foreach (self::SEAT_IDENTITY as $column) {
                     $identity->orWhereNotNull($column);
                 }
-
-                $identity->orWhereHas(
-                    'gamePlayers',
-                    static fn (Builder $participation) => $participation->whereNotNull('display_nickname'),
-                );
             });
     }
 }
