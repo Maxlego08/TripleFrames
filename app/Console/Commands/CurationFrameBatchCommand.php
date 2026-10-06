@@ -16,6 +16,7 @@ use App\Support\Curation\TmdbFrameIntake;
 use App\Support\Frames\CropRect;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\App;
+use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
@@ -54,7 +55,14 @@ class CurationFrameBatchCommand extends Command
         {file? : Chemin d’un lot d’images JSON (format tripleframes.frame-batch)}
         {--batch= : Jeton d’un lot ouvert par le back-office}
         {--actor= : Identifiant ou e-mail du compte curateur auteur des images}
-        {--dry-run : N’écrit rien ; affiche l’aperçu du lot}';
+        {--dry-run : N’écrit rien ; affiche l’aperçu du lot}
+        {--budget=0 : Avec --batch : secondes de travail avant de rendre la main (0 = sans borne)}';
+
+    /**
+     * Code de sortie d'un lot du back-office interrompu par son budget de
+     * temps : les films traités sont enregistrés, le job relance la suite.
+     */
+    public const int PARTIAL = 3;
 
     /**
      * @var string
@@ -164,7 +172,30 @@ class CurationFrameBatchCommand extends Command
 
         FrameBatchImport::start($actor->id, $token);
 
+        // Un lot de 200 films demande des dizaines de minutes de
+        // téléchargements TMDB, bien au-delà du délai d'un job (amendé le
+        // 06/10) : au-delà du budget, la commande rend la main entre deux
+        // films, et le job relance la suite. Un film déjà traité par un
+        // passage précédent n'est jamais rejoué.
+        $budget = max(0, (int) $this->option('budget'));
+        $deadline = $budget > 0 ? Date::now()->addSeconds($budget) : null;
+        $done = [];
+
+        foreach ($state['rows'] as $row) {
+            if ($row['done']) {
+                $done[$row['tmdb_id']] = true;
+            }
+        }
+
         foreach ($batch->movies as $entry) {
+            if (isset($done[$entry['tmdb_id']])) {
+                continue;
+            }
+
+            if ($deadline !== null && Date::now()->greaterThanOrEqualTo($deadline)) {
+                return self::PARTIAL;
+            }
+
             [$added, $skipped, $refused] = $this->importMovie($intake, $actor, $entry);
             FrameBatchImport::record($actor->id, $token, $entry['tmdb_id'], $added, $skipped, $refused);
         }
