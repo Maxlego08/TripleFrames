@@ -338,6 +338,7 @@ function runningRound(currentTierIndex: number): RoundState {
         revealStartsAt: null,
         revealEndsAt: null,
         reveal: null,
+        choicesUnavailable: false,
     };
 }
 
@@ -503,6 +504,7 @@ describe('echo : souscription des canaux du siège', () => {
                 tierIndex: 2,
                 opensAt: iso(T_N),
                 next: null,
+                choicesUnavailable: false,
             }),
         );
         wire.broadcast(

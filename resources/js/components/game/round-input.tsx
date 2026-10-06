@@ -1,7 +1,7 @@
 import { CircleCheck } from 'lucide-react';
 import { useEffect, useEffectEvent, useId, useRef } from 'react';
 import { AnswerInput } from '@/components/game/answer-input';
-import { ChoiceGrid } from '@/components/game/choice-grid';
+import { ChoiceGrid, ChoicesUnavailable } from '@/components/game/choice-grid';
 import { LoadingState } from '@/components/state/loading-state';
 import type { AnswerSubmission } from '@/hooks/game/use-answer-submission';
 import { useTranslations } from '@/hooks/use-translations';
@@ -26,6 +26,11 @@ export type RoundInputProps = {
     input: SeatInputView | null;
     /** Les quatre propositions du siège pour cette manche, ou nulles. */
     choices: ChoicesPayload | null;
+    /**
+     * Le palier du QCM s'est ouvert sans propositions (`RoundState`, cas
+     * terminal de 70 § 10.7, D54 du 02/10) : su du serveur, jamais déduit.
+     */
+    choicesUnavailable: boolean;
     /** Tentatives restantes (repli : `attemptsPerRound` des réglages figés). */
     attemptsLeft: number;
     /** `maxAnswerLength` de la partie : un confort, la borne reste serveur. */
@@ -52,7 +57,8 @@ export type RoundInputProps = {
  *   d'une saisie close se dit sous la grille.
  * - **Normal** : le texte libre, puis le QCM à `T_N`, annoncé sans voler le
  *   focus ; « texte épuisé, QCM attendu » se dit sous le champ (D20 du
- *   23/09).
+ *   23/09). Si le serveur dit le QCM indisponible (D54 du 02/10),
+ *   `game.choices.unavailable` prend la place de la grille.
  * - **Expert** : le texte libre seul.
  * - **Joueur verrouillé** : ni champ ni grille, mais {@link LockedPanel} —
  *   points gagnés, position d'arrivée —, jamais le titre ni la réponse
@@ -66,6 +72,7 @@ export function RoundInput({
     difficulty,
     input,
     choices,
+    choicesUnavailable,
     attemptsLeft,
     maxLength,
     submission,
@@ -115,13 +122,13 @@ export function RoundInput({
                     onChoose={submission.submitChoice}
                     message={choiceMessage}
                 />
+            ) : easy ? (
+                <LoadingState
+                    label={t('common.state.loading')}
+                    className="py-2"
+                />
             ) : (
-                easy && (
-                    <LoadingState
-                        label={t('common.state.loading')}
-                        className="py-2"
-                    />
-                )
+                choicesUnavailable && <ChoicesUnavailable roundKey={roundKey} />
             )}
         </div>
     );

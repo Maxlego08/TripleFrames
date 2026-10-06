@@ -19,12 +19,12 @@ return [
 
     'create' => [
         'title' => 'Créer un salon',
-        'intro' => 'Choisissez un pseudo et un avatar : vous réglerez la partie dans le salon.',
+        'intro' => 'Choisissez un pseudo : vous réglerez la partie, et votre avatar, dans le salon.',
         'submit' => 'Créer le salon',
     ],
 
     /*
-    | Pseudo et avatar d’un siège, champs communs aux formulaires de création
+    | Pseudo d’un siège (aucun avatar à l’entrée, D55 du 02/10), champ commun aux formulaires de création
     | et d’entrée (spec 50 § 6.2 et § 7.2). Les bornes arrivent en props,
     | depuis `NicknameNormalizer`, et le client les formate.
     */
@@ -60,7 +60,7 @@ return [
 
     'solo' => [
         'title' => 'Jouer en solo',
-        'intro' => 'Entraînez-vous seul sur le catalogue : choisissez un preset, un pseudo et un avatar.',
+        'intro' => 'Entraînez-vous seul sur le catalogue : choisissez un preset et un pseudo.',
         'choose_preset' => 'Choisissez un preset',
         'start' => 'Commencer l’entraînement',
         'nickname_hint' => 'Entre :min et :max caractères.',
@@ -253,6 +253,15 @@ return [
         'changes_title' => 'Réglages ajustés',
         'preset_grayed' => 'Pas assez de films pour ce preset : jouable avec :frames images par manche.',
         'preset_unplayable' => 'Pas assez de films pour ce preset.',
+        'avatar_taken' => 'Un autre joueur a déjà cet avatar.',
+        // Sélecteur d’avatar du siège, au lobby seulement (D55 du 02/10).
+        'avatar' => [
+            'title' => 'Votre avatar',
+            'hint' => 'Vous pouvez le changer jusqu’au lancement de la partie.',
+            'change' => 'Changer d’avatar',
+            'done' => 'Terminé',
+            'apply' => 'Choisir cet avatar',
+        ],
     ],
 
     /*

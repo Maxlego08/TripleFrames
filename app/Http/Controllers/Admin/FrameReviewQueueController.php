@@ -25,6 +25,13 @@ use Inertia\Response;
  * d'une image rejetée aussi (`admin.catalog.frames.unpublish`), le
  * re-recadrage vit dans l'éditeur de la banque.
  *
+ * **Chaque liste est plafonnée à {@see self::MOVIES_PER_LIST} films** (amendé
+ * le 05/10, D57) : un lot d'images importé met des centaines de films en
+ * revue d'un coup, et la file entière ne tient ni dans la mémoire de la
+ * requête ni dans une page. La file reste une file — premier prêt, premier
+ * revu — : un film revu en sort, le suivant y entre. `queue_totals` donne les
+ * vrais totaux de chaque onglet.
+ *
  * `unpublish_preview` est une prop FACULTATIVE, calculée au seul
  * rechargement partiel qui ouvre la confirmation d'une dépublication :
  * l'avertissement de couverture (§ 8.4) précède alors tout envoi, comme dans
@@ -32,14 +39,18 @@ use Inertia\Response;
  */
 class FrameReviewQueueController extends Controller
 {
+    /** Films envoyés par liste : les premiers de la file, jamais toute la file. */
+    public const int MOVIES_PER_LIST = 20;
+
     public function index(Request $request, CoverageLossPreview $coverageLoss): Response
     {
         $queue = new ReviewQueue;
 
         return Inertia::render('admin/review/index', [
             'queue' => fn (): array => $this->queue($queue),
-            // Les lots de validation en une fois, un par film qui en a un
-            // (D42 du 30/09, § 7.9) — lus sur la file déjà chargée.
+            'queue_totals' => fn (): array => $this->totals($queue),
+            // Les lots de validation en une fois, un par film affiché qui en a
+            // un (D42 du 30/09, § 7.9) — lus sur la file déjà chargée.
             'review_batches' => fn (): array => $this->batches($queue),
             'unpublish_preview' => Inertia::optional(fn (): ?array => $this->unpublishPreview($request, $coverageLoss)),
             // La cadence du battement de débit (§ 10.1) : la revue d'une image
@@ -64,6 +75,10 @@ class FrameReviewQueueController extends Controller
                 $last = array_key_last($groups);
 
                 if ($last === null || $groups[$last]['movie']['id'] !== $frame->movie_id) {
+                    if (count($groups) >= self::MOVIES_PER_LIST) {
+                        break;
+                    }
+
                     $groups[] = [
                         'movie' => AdminCatalogPresenter::reviewMovie($frame->movie),
                         'frames' => [],
@@ -81,6 +96,55 @@ class FrameReviewQueueController extends Controller
     }
 
     /**
+     * Les vrais totaux de chaque liste : films et images.
+     *
+     * @return array<string, array{movies: int, frames: int}>
+     */
+    private function totals(ReviewQueue $queue): array
+    {
+        $totals = [];
+
+        foreach (ReviewList::cases() as $list) {
+            $frames = $queue->frames($list);
+            $totals[$list->value] = [
+                'movies' => count(array_unique(array_map(static fn (Frame $frame): int => $frame->movie_id, $frames))),
+                'frames' => count($frames),
+            ];
+        }
+
+        return $totals;
+    }
+
+    /**
+     * Les films affichés : les {@see self::MOVIES_PER_LIST} premiers de chaque
+     * liste.
+     *
+     * @return array<int, true>
+     */
+    private function shownMovies(ReviewQueue $queue): array
+    {
+        $shown = [];
+
+        foreach (ReviewList::cases() as $list) {
+            $movies = [];
+
+            foreach ($queue->frames($list) as $frame) {
+                $movies[$frame->movie_id] = true;
+
+                if (count($movies) > self::MOVIES_PER_LIST) {
+                    unset($movies[$frame->movie_id]);
+
+                    break;
+                }
+            }
+
+            $shown += $movies;
+        }
+
+        return $shown;
+    }
+
+    /**
      * Les lots de la file, un par film, dans l'ordre de l'écran.
      *
      * @return list<array{movie_id: int, grid_version: int, frames: list<array{id: int, hash: string}>}>
@@ -88,8 +152,13 @@ class FrameReviewQueueController extends Controller
     private function batches(ReviewQueue $queue): array
     {
         $batches = [];
+        $shown = $this->shownMovies($queue);
 
         foreach ($queue->batches() as $movieId => $frames) {
+            if (! isset($shown[$movieId])) {
+                continue;
+            }
+
             $batch = AdminCatalogPresenter::reviewBatch($frames);
 
             if ($batch !== null) {

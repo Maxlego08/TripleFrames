@@ -45,6 +45,12 @@ class AvatarController extends Controller
                 'maxKilobytes' => PlatformLimits::avatarUploadMaxKilobytes(),
                 'sourceSize' => AvatarImage::SOURCE_SIZE_PX,
             ],
+            // La copie de la photo du fournisseur, seulement visible (spec 40
+            // § 12.6) : un choix de plus, jamais téléversé ici.
+            'provider' => [
+                'url' => $user->hasVisibleProviderAvatar() ? UploadedAvatars::url((string) $user->avatar_provider_path) : null,
+                'source' => $user->avatar_provider_source?->value,
+            ],
         ]);
     }
 

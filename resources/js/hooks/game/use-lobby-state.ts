@@ -180,8 +180,11 @@ function useSettingsChanges(): SettingsChangeReport | null {
     return changes;
 }
 
-/** Props rechargées au lobby : ni le paquet ni le jeton d'onglet. */
-const RELOADED_PROPS = ['settings', 'presets'];
+/**
+ * Props rechargées au lobby : ni le paquet ni le jeton d'onglet. `avatars`
+ * (D55 du 02/10) suit : après « Rejouer », les clés prises sont relues.
+ */
+const RELOADED_PROPS = ['settings', 'presets', 'avatars'];
 
 /** Code du 409 de `seat.active`, miroir de `EnsureActiveSeat::SUPERSEDED`. */
 const SEAT_SUPERSEDED = 'seat_superseded';
@@ -312,7 +315,7 @@ export function useLobbyState(options: UseLobbyStateOptions): LobbyStateView {
         }
     }, [heartbeatStatus, store]);
 
-    // --- Rechargement partiel des réglages et des presets (§ 8.2) -----------
+    // --- Rechargement partiel des réglages, presets et avatars (§ 8.2) -----
 
     const reloadSettings = useEffectEvent((): void => {
         router.reload({ only: RELOADED_PROPS, onHttpException });

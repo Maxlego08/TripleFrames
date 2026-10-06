@@ -78,6 +78,9 @@ return [
         'label' => 'Propositions',
         'wrong' => 'Mauvaise proposition : la saisie est close pour cette manche.',
         'invalid' => 'Cette proposition n’existe pas.',
+        // D54 du 02/10 (70 § 10.7) : cas terminal en Normal, à la place de la
+        // grille, et lu par l’annonceur.
+        'unavailable' => 'Les propositions ne sont pas disponibles pour ce film.',
     ],
 
     // Spec 80 § 15 (lot L80-6) : valeur du palier, score, classement, podium,
@@ -116,6 +119,9 @@ return [
         'images' => 'Images de la manche',
         'finders' => 'Ont trouvé',
         'finder_tier' => 'Image :index',
+        // D58 du 06/10 : fiche Letterboxd du film, toujours dans un nouvel onglet.
+        'letterboxd' => 'Voir sur Letterboxd',
+        'letterboxd_label' => ':title sur Letterboxd (nouvel onglet)',
     ],
 
     // Spec 60 § 14 (lot L60-14) : la pause, et l’heure de clôture formatée

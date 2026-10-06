@@ -21,7 +21,6 @@ use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
 use Tests\Support\Draw\PoolFixtures;
-use Tests\Support\Room\SeatEntry;
 
 /*
 |--------------------------------------------------------------------------
@@ -149,7 +148,6 @@ test("deux premiers lancements solo concurrents sous le même jeton ne créent q
         soloConcurrencyRequest($token),
         $preset,
         $nickname,
-        SeatEntry::avatar(2),
         Locale::French,
     );
 

@@ -754,6 +754,33 @@ export type AdminPublicationPreview = {
 };
 
 /**
+ * Un film du lot « Publier les films prêts » (spec 20 § 8.1 bis, D59 du
+ * 06/10) : son identité et les formes que sa publication rendra ambiguës, le
+ * lot entier compté comme publié — miroir de `ReadyBatch` (`ReadyEntry`).
+ */
+export type AdminReadyMovie = {
+    id: number;
+    title_original: string;
+    release_year: number | null;
+    lines: AdminAmbiguityLine[];
+};
+
+/** Un film prêt mis de côté, avec ses conditions manquantes (`SkippedEntry`). */
+export type AdminSkippedReadyMovie = {
+    id: number;
+    title_original: string;
+    release_year: number | null;
+    blockers: AdminPublicationBlocker[];
+};
+
+/** La prop `batch` de l'écran — `ReadyBatch::preview()`. */
+export type AdminReadyBatch = {
+    movies: AdminReadyMovie[];
+    skipped: AdminSkippedReadyMovie[];
+    digest: string;
+};
+
+/**
  * Clé d'un libellé ou d'une aide de la grille d'exclusion
  * (`admin.exclusion_grid.v{n}.{slug}.label` et `.help`, spec 20 § 7.1).
  * Le serveur les envoie ; un item sans ses deux feuilles fait échouer
@@ -964,6 +991,43 @@ export type AdminPastePreview = {
         | 'admin.import.preview.failed'
         | 'admin.tmdb.error.rate_limited_interactive'
         | 'admin.tmdb.error.not_configured'
+        | null;
+    expires_at: string;
+};
+
+/** L'état d'un lot d'images (`FrameBatchImport`, spec 20 § 5.10, D57 du 05/10). */
+export type AdminFrameBatchStatus =
+    | 'previewed'
+    | 'pending'
+    | 'running'
+    | 'completed'
+    | 'failed';
+
+/** Le sort d'un film du lot, calculé à l'aperçu sur la base seule. */
+export type AdminFrameBatchRowStatus = 'ready' | 'missing' | 'locked';
+
+export type AdminFrameBatchRow = {
+    tmdb_id: number;
+    title: string | null;
+    movie_id: number | null;
+    status: AdminFrameBatchRowStatus;
+    frames: number;
+    known: number;
+    added: number;
+    skipped: number;
+    /** Les motifs traduits des images refusées. */
+    refused: string[];
+    done: boolean;
+};
+
+/** Le dernier lot de l'auteur — miroir de `FrameBatchImport::toProps()`. */
+export type AdminFrameBatch = {
+    token: string;
+    status: AdminFrameBatchStatus;
+    rows: AdminFrameBatchRow[];
+    error_key:
+        | 'admin.frame_batch.failed'
+        | 'admin.frame_batch.snapshot_failed'
         | null;
     expires_at: string;
 };

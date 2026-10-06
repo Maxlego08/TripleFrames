@@ -102,6 +102,17 @@ class RoomPolicy
     }
 
     /**
+     * Changer l'avatar de son siège (`room.avatar.update`, D55 du 02/10) :
+     * même clause que {@see self::leave()} — le siège appartient au salon.
+     * Geste de tout joueur sur son propre siège, jamais un geste d'hôte ; le
+     * statut du salon (lobby seulement) est relu sous verrou par l'action.
+     */
+    public function changeAvatar(?User $user, Room $room, ?Player $seat): bool
+    {
+        return $seat !== null && $seat->room_id === $room->id;
+    }
+
+    /**
      * `$seat` appartient au salon et `room.host_player_id = $seat->id`. La
      * référence d'hôte est souple (sans clé étrangère) : NULL ne désigne
      * personne.

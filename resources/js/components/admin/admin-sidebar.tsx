@@ -8,6 +8,7 @@ import {
     CircleUserRound,
     Gamepad2,
     Gauge,
+    Images,
     LayoutDashboard,
     ListChecks,
     ListOrdered,
@@ -52,6 +53,7 @@ import { index as audienceIndex } from '@/routes/admin/audience';
 import { index as avatarsIndex } from '@/routes/admin/avatars';
 import { index as catalogIndex } from '@/routes/admin/catalog';
 import { index as curationIndex } from '@/routes/admin/curation';
+import { index as frameBatchIndex } from '@/routes/admin/frame_batch';
 import { index as gamesIndex } from '@/routes/admin/games';
 import { index as importIndex } from '@/routes/admin/import';
 import { index as journalIndex } from '@/routes/admin/journal';
@@ -163,6 +165,12 @@ export function AdminSidebar() {
             title: t('admin.nav.import'),
             href: importIndex(),
             icon: DownloadCloud,
+        },
+        // Les lots d'images (spec 20 § 5.10, D57 du 05/10).
+        {
+            title: t('admin.nav.frame_batch'),
+            href: frameBatchIndex(),
+            icon: Images,
         },
         {
             title: t('admin.nav.throughput'),

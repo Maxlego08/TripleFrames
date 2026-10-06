@@ -59,7 +59,8 @@ use LogicException;
  *    de drainage et de vivier (40 § 11, ligne `60`) : un démarrage refusé ne
  *    pose aucun `Set-Cookie` sur un visiteur sans jeton ;
  * 6. **siège solo** : repris tel quel s'il existe (le cookie glisse), sinon
- *    créé — pseudo et avatar validés, locale de la requête, `solo_token_hash`
+ *    créé — pseudo validé, avatar attribué par le serveur (D55 du 02/10 :
+ *    aucun choix en solo), locale de la requête, `solo_token_hash`
  *    écrit dans la même écriture que `player_token_hash`. Deux premiers
  *    lancements concurrents n'ont aucune ligne à verrouiller :
  *    `player_solo_token_uq` (E10-N3) en refuse un, qui relit alors le siège
@@ -73,7 +74,7 @@ use LogicException;
  *    drainage et de vivier rejouées, graine, partie, participation, tirage,
  *    matérialisation, programmation de la manche 1 à `now +
  *    launchCountdownMs` ;
- * 9. après la validation : re-signature du jeton avec l'avatar choisi, pour
+ * 9. après la validation : re-signature du jeton avec le prédéfini attribué, pour
  *    un siège neuf (I4.5).
  *
  * **Tout refus annule la transaction entière, interruption comprise** — y
@@ -123,24 +124,22 @@ final readonly class StartSoloGame
      *                            et du jeton frappé à l'écriture du siège.
      * @param  string|null  $nickname  Forme canonique validée ; nulle seulement
      *                                 quand le jeton tient déjà un siège solo.
-     * @param  string|null  $avatarPreset  Clé du catalogue validée ; même règle.
      * @param  Locale  $locale  Locale effective de la requête (`SetLocale`).
      *
      * @throws PoolTooSmallException Le tirage retient moins de `M` œuvres
      *                               (projection périmée) : échec technique.
-     * @throws LogicException Siège neuf sans pseudo ni avatar validés, ou
+     * @throws LogicException Siège neuf sans pseudo validé, ou
      *                        défaut d'un appelant sous la transaction.
      */
     public function handle(
         Request $request,
         SettingPresetKey $preset,
         ?string $nickname,
-        ?string $avatarPreset,
         Locale $locale,
     ): SoloStartOutcome {
         try {
             return DB::transaction(
-                fn (): SoloStartOutcome => $this->begin($request, $preset, $nickname, $avatarPreset, $locale),
+                fn (): SoloStartOutcome => $this->begin($request, $preset, $nickname, $locale),
                 self::ATTEMPTS,
             );
         } catch (SoloStartRefused $refused) {
@@ -160,7 +159,6 @@ final readonly class StartSoloGame
         Request $request,
         SettingPresetKey $preset,
         ?string $nickname,
-        ?string $avatarPreset,
         Locale $locale,
     ): SoloStartOutcome {
         // 1. Le drainage d'abord : rien n'est lu ni écrit en base.
@@ -191,7 +189,7 @@ final readonly class StartSoloGame
 
         if ($seat === null) {
             $account = $request->user() instanceof User ? $request->user() : null;
-            [$seat, $created] = $this->seat($token, $account, $nickname, $avatarPreset, $current?->avatar, $locale, $now);
+            [$seat, $created] = $this->seat($token, $account, $nickname, $current?->avatar, $locale, $now);
         }
 
         // 7. La partie solo en cours du siège : interrompue.
@@ -205,7 +203,7 @@ final readonly class StartSoloGame
             throw new SoloStartRefused(self::refusedByOpenGame($outcome));
         }
 
-        // 9. Après la validation : l'avatar choisi rejoint le jeton (I4.5).
+        // 9. Après la validation : le prédéfini attribué rejoint le jeton (I4.5).
         if ($created && $seat->avatar_preset !== null) {
             $chosen = $seat->avatar_preset;
             DB::afterCommit(fn (): PlayerToken => $this->tokens->resign($request, $token->withAvatar($chosen)));
@@ -228,7 +226,7 @@ final readonly class StartSoloGame
      *
      * @return array{0: Player, 1: bool} le siège, et s'il vient d'être créé
      *
-     * @throws LogicException Siège neuf sans pseudo ni avatar validés.
+     * @throws LogicException Siège neuf sans pseudo validé.
      * @throws UniqueConstraintViolationException Une collision qu'aucun siège
      *                                            solo de ce jeton n'explique.
      */
@@ -236,17 +234,17 @@ final readonly class StartSoloGame
         PlayerToken $token,
         ?User $account,
         ?string $nickname,
-        ?string $avatarPreset,
         ?string $preferred,
         Locale $locale,
         CarbonImmutable $now,
     ): array {
-        if ($nickname === null || $avatarPreset === null) {
-            throw new LogicException('StartSoloGame : un siège solo neuf exige un pseudo et un avatar validés.');
+        if ($nickname === null) {
+            throw new LogicException('StartSoloGame : un siège solo neuf exige un pseudo validé.');
         }
 
-        // L'avatar, relu sur le compte (spec 40 § 11.4) ; aucun avatar pris en solo.
-        $avatar = SeatAvatar::resolve($avatarPreset, $account, $preferred, []);
+        // L'avatar, attribué par le serveur et relu sur le compte (spec 40
+        // § 11.4, D55 du 02/10) ; aucun avatar pris en solo.
+        $avatar = SeatAvatar::assign($account, $preferred, []);
 
         $seat = new Player;
 

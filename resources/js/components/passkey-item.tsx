@@ -1,4 +1,4 @@
-import { KeyRound, Trash2 } from 'lucide-react';
+import { KeyRound, Trash2, XIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import {
@@ -28,9 +28,9 @@ export default function PasskeyItem({ passkey, onDelete }: Props) {
     };
 
     return (
-        <div className="flex items-center justify-between border-b p-4 last:border-b-0">
+        <div className="settings-credential-item flex items-center justify-between border-b p-4 last:border-b-0">
             <div className="flex items-center gap-4">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-muted">
+                <div className="settings-credential-icon flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-muted">
                     <KeyRound className="h-5 w-5 text-muted-foreground" />
                 </div>
                 <div className="space-y-1">
@@ -75,7 +75,18 @@ export default function PasskeyItem({ passkey, onDelete }: Props) {
                         </span>
                     </Button>
                 </DialogTrigger>
-                <DialogContent>
+                <DialogContent className="settings-dialog [&>button:last-child]:hidden">
+                    <DialogClose asChild>
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            aria-label={t('common.action.close')}
+                            className="settings-dialog__close absolute top-3 right-3 min-h-11 min-w-11"
+                        >
+                            <XIcon aria-hidden="true" />
+                        </Button>
+                    </DialogClose>
                     <DialogTitle>{t('account.passkeys.remove')}</DialogTitle>
                     <DialogDescription>
                         {t('account.passkeys.remove_confirm', {

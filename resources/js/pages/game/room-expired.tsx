@@ -8,7 +8,7 @@ import { create } from '@/routes/room';
 
 /**
  * Le salon expiré — `room.show` sur un salon archivé, en 410 (spec 50
- * § 16.3 ; 90 § 10), sous `GameLayout`, forcée en sombre.
+ * § 16.3 ; 90 § 10), sous `GameLayout`.
  *
  * On y arrive par un vieux lien, ou depuis la page du salon encore ouverte :
  * à `room.archived`, le magasin de 60 pose la sortie et la page visite

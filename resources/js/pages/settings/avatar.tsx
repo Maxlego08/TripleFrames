@@ -3,6 +3,10 @@ import { CircleAlert, XIcon } from 'lucide-react';
 import { useRef, useState } from 'react';
 import AvatarController from '@/actions/App/Http/Controllers/Settings/AvatarController';
 import { AvatarCropper } from '@/components/account/avatar-cropper';
+import {
+    isOAuthProvider,
+    useProviderName,
+} from '@/components/account/oauth-buttons';
 import { AvatarPicker } from '@/components/game/avatar-picker';
 import type { AvatarPickerOption } from '@/components/game/avatar-picker';
 import { PlayerAvatar } from '@/components/game/player-avatar';
@@ -27,7 +31,7 @@ import {
 } from '@/lib/game/avatar-keys';
 import { edit } from '@/routes/avatar';
 import type { BreadcrumbItem } from '@/types';
-import { ACCOUNT_AVATAR_CHOICE } from '@/types/player';
+import { ACCOUNT_AVATAR_CHOICE, PROVIDER_AVATAR_CHOICE } from '@/types/player';
 import type {
     AvatarData,
     AvatarPresetOption,
@@ -39,6 +43,8 @@ type Props = {
     kind: 'preset' | 'provider' | 'upload' | null;
     preset: string | null;
     options: AvatarPresetOption[];
+    /** La copie de la photo du fournisseur, seulement visible (spec 40 § 12.6). */
+    provider: { url: string | null; source: string | null };
     upload: {
         /** `avatar.show`, seulement pour une image visible. */
         url: string | null;
@@ -76,6 +82,7 @@ export default function AvatarSettings({
     preset,
     options,
     upload,
+    provider,
 }: Props) {
     const { t } = useTranslations();
     const { errors } = usePage<{ errors: Partial<Record<string, string>> }>()
@@ -94,12 +101,20 @@ export default function AvatarSettings({
             taken: false,
         }));
 
+    const providerName = useProviderName();
+    const providerLabel =
+        provider.source !== null && isOAuthProvider(provider.source)
+            ? providerName(provider.source)
+            : '';
+
     const initial: SeatAvatarChoice | null =
         kind === 'upload' && upload.url !== null
             ? ACCOUNT_AVATAR_CHOICE
-            : preset !== null && isAvatarPresetKey(preset)
-              ? preset
-              : (pickerOptions[0]?.key ?? null);
+            : kind === 'provider' && provider.url !== null
+              ? PROVIDER_AVATAR_CHOICE
+              : preset !== null && isAvatarPresetKey(preset)
+                ? preset
+                : (pickerOptions[0]?.key ?? null);
     const [choice, setChoice] = useState<SeatAvatarChoice | null>(initial);
 
     const send = (image: File): void => {
@@ -122,14 +137,14 @@ export default function AvatarSettings({
 
             <h1 className="sr-only">{t('account.avatar.title')}</h1>
 
-            <div className="space-y-6">
+            <div className="settings-section space-y-6">
                 <Heading
                     variant="small"
                     title={t('account.avatar.heading')}
                     description={t('account.avatar.description')}
                 />
 
-                <div className="flex items-center gap-4">
+                <div className="settings-avatar-current flex items-center gap-4">
                     <PlayerAvatar
                         avatar={avatar}
                         alt={t(avatarAltKey(avatar.altKey))}
@@ -170,6 +185,23 @@ export default function AvatarSettings({
                                                   ),
                                               }
                                     }
+                                    extraAccounts={
+                                        provider.url === null
+                                            ? []
+                                            : [
+                                                  {
+                                                      url: provider.url,
+                                                      label: t(
+                                                          'account.avatar.use_provider',
+                                                          {
+                                                              provider:
+                                                                  providerLabel,
+                                                          },
+                                                      ),
+                                                      value: PROVIDER_AVATAR_CHOICE,
+                                                  },
+                                              ]
+                                    }
                                     value={choice}
                                     onValueChange={setChoice}
                                     legend={t('account.avatar.choice_legend')}
@@ -193,7 +225,7 @@ export default function AvatarSettings({
                 )}
             </div>
 
-            <div className="space-y-6">
+            <div className="settings-section space-y-6">
                 <Heading
                     variant="small"
                     title={t('account.avatar.upload_heading')}
@@ -277,14 +309,14 @@ export default function AvatarSettings({
                                 {t('account.avatar.delete')}
                             </Button>
                         </DialogTrigger>
-                        <DialogContent className="sm:max-w-md [&>button:last-child]:hidden">
+                        <DialogContent className="settings-dialog sm:max-w-md [&>button:last-child]:hidden">
                             <DialogClose asChild>
                                 <Button
                                     type="button"
                                     variant="ghost"
                                     size="icon"
                                     aria-label={t('common.action.close')}
-                                    className="absolute top-3 right-3 min-h-11 min-w-11"
+                                    className="settings-dialog__close absolute top-3 right-3 min-h-11 min-w-11"
                                 >
                                     <XIcon aria-hidden="true" />
                                 </Button>

@@ -80,6 +80,8 @@ export interface RevealTitle {
  * titre par locale activée, le titre original (et sa translittération), sa
  * langue et l'année. Aussi le « paquet de titres » du récapitulatif de fin
  * de partie (`TitlePacket` de `types/scoring.ts`, contrat C13).
+ * `letterboxdUrl` : la fiche Letterboxd du film, nulle sans `tmdb_id`
+ * (catalogue de démonstration ; D58 du 06/10).
  */
 export interface RevealMovie {
     titles: Record<LocaleCode, RevealTitle>;
@@ -87,6 +89,7 @@ export interface RevealMovie {
     originalTitleLatin: string | null;
     originalLanguage: string;
     year: number | null;
+    letterboxdUrl: string | null;
 }
 
 // --- L60-4 : sièges, chronologie, paquet de resynchronisation ---------------
@@ -129,7 +132,9 @@ export interface RoundTimeline {
  * dérivée côté serveur. `images` : au plus deux URL pendant la manche
  * (palier courant, palier suivant dans sa fenêtre de préchargement) ; en
  * révélation, les paliers ouverts. `reveal` n'est non nul qu'à partir de
- * `revealStartsAt` : avant, aucun titre ne voyage.
+ * `revealStartsAt` : avant, aucun titre ne voyage. `choicesUnavailable` :
+ * le palier du QCM est ouvert sans propositions — cas terminal en Normal
+ * (70 § 10.7, D54 du 02/10) —, booléen de manche identique pour tous.
  */
 export interface RoundState extends RoundTimeline {
     phase: 'scheduled' | 'running' | 'closed' | 'revealing' | 'cancelled';
@@ -140,6 +145,7 @@ export interface RoundState extends RoundTimeline {
     revealStartsAt: IsoMs | null;
     revealEndsAt: IsoMs | null;
     reveal: { movie: RevealMovie; finders: RoundFinder[] } | null;
+    choicesUnavailable: boolean;
 }
 
 /**
@@ -263,13 +269,18 @@ export interface GameEventPayloads {
     'room.archived': EmptyPayload;
     /** La manche programmée et l'image de son palier 1. */
     'round.scheduled': { round: RoundTimeline; image: TierImageRef };
-    /** `opensAt` = `Tᵢ` théorique ; `next` = palier `i + 1`, nul au dernier. */
+    /**
+     * `opensAt` = `Tᵢ` théorique ; `next` = palier `i + 1`, nul au dernier ;
+     * `choicesUnavailable` : vrai au seul palier du QCM d'une manche Normal
+     * sans propositions (cas terminal, D54 du 02/10).
+     */
     'tier.opened': {
         sequenceIndex: number;
         roundNumber: number;
         tierIndex: number;
         opensAt: IsoMs;
         next: TierImageRef | null;
+        choicesUnavailable: boolean;
     };
     'player.locked': {
         sequenceIndex: number;

@@ -3,7 +3,6 @@
 namespace App\Http\Controllers\Room;
 
 use App\Actions\Room\TakeSeat;
-use App\Avatars\AvatarPresetCatalog;
 use App\Enums\JoinRefusal;
 use App\Enums\RoomStatus;
 use App\Http\Controllers\Controller;
@@ -26,8 +25,7 @@ use Symfony\Component\HttpFoundation\Response;
  * L'entrée libre dans un salon, par son code ou son lien (spec 50 § 7).
  *
  * **Le code ou le lien suffit**, dans la limite des sièges : l'hôte ne valide
- * pas chaque arrivée (§ 7.1). Deux routes, hors de `game.appearance` : la
- * page d'entrée suit l'apparence du visiteur, et un GET ne frappe jamais de
+ * pas chaque arrivée (§ 7.1). Deux routes ; un GET ne frappe jamais de
  * jeton (C4 I4.1).
  *
  * - `room.entry`, `GET /r/{room}/join` : le formulaire `room/join`
@@ -64,9 +62,9 @@ class RoomEntryController extends Controller
     private const string ENTRY_OPEN = 'open';
 
     /**
-     * Props : `room: { code }`, `entry`, `avatars: { options, taken,
-     * suggested }` et `nickname: { min, max }` (§ 7.2). `taken` = les avatars
-     * des sièges tenus, jamais un pseudo ni un `public_id` : un visiteur sans
+     * Props : `room: { code }`, `entry` et `nickname: { min, max }` (§ 7.2).
+     * Aucun avatar (D55 du 02/10) : la prise de siège l'attribue. Rien sur
+     * les sièges tenus, ni pseudo ni `public_id` ni avatar : un visiteur sans
      * siège ne voit pas qui est dans le salon.
      *
      * `entry` est INDICATIF : la prise de siège le recalcule sous verrou.
@@ -77,28 +75,25 @@ class RoomEntryController extends Controller
             return to_route('room.show', $room, Response::HTTP_SEE_OTHER);
         }
 
-        $holding = Player::query()
+        $headcount = Player::query()
             ->whereBelongsTo($room)
             ->holdingSeat()
-            ->pluck('avatar_preset');
-
-        $taken = array_flip(array_filter($holding->all(), is_string(...)));
+            ->count();
 
         return Inertia::render('room/join', [
             'room' => ['code' => $room->room_code],
-            'entry' => $this->entry($request, $room, $tokens, $holding->count()),
-            'avatars' => $this->avatarProps(
-                $tokens->current($request),
-                array_values(array_filter(AvatarPresetCatalog::keys(), static fn (string $key): bool => isset($taken[$key]))),
-            ),
+            'entry' => $this->entry($request, $room, $tokens, $headcount),
             'nickname' => $this->nicknameProps(),
         ]);
     }
 
     /**
      * Refus : `Archived` → 303 vers `room.show`, sans erreur, qui rend
-     * « salon expiré » ; `Kicked` et `Full` → retour au formulaire d'entrée,
-     * erreur `room` traduite dans la langue de la requête (§ 7.3). Un pseudo
+     * « salon expiré » ; `Kicked` et `Full` → retour à la page qui a posté —
+     * formulaire d'entrée, ou carte « Rejoindre » de l'accueil (D55 du
+     * 02/10) —, erreur `room` traduite dans la langue de la requête (§ 7.3).
+     * Un visiteur qui tient déjà un siège est repris sous son siège, le
+     * pseudo saisi ignoré. Un pseudo
      * pris revient en erreur de champ (`ValidationException`).
      *
      * @throws ValidationException
@@ -109,7 +104,6 @@ class RoomEntryController extends Controller
             $room,
             $request,
             $request->nickname(),
-            $request->avatarPreset(),
             $this->effectiveLocale(),
         );
 

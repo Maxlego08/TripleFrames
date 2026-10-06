@@ -117,6 +117,26 @@ class Movie extends Model
     }
 
     /**
+     * La réserve non publiée des leurres (spec 70 § 10.3, rang R6, D53 du
+     * 02/10) : films `draft` ou `unpublished` — écartés compris —, **jamais**
+     * `suspended` ni `withdrawn`, et **toujours** `clear` : le filtre de
+     * contenu n'est contournable par aucune voie. Servie par le même index
+     * `movie_pool_idx (availability, content_flag, id)`.
+     *
+     * Lue par `PoolQuery` seul, pour un périmètre `PoolScope::asDecoyReserve()` :
+     * un film de la réserve n'est **jamais** une cible, seulement un titre
+     * proposé en dernier recours.
+     *
+     * @param  Builder<self>  $query
+     */
+    #[Scope]
+    protected function inDecoyReserve(Builder $query): void
+    {
+        $query->whereIn('availability', [ContentAvailability::Draft, ContentAvailability::Unpublished])
+            ->where('content_flag', ContentFlag::Clear);
+    }
+
+    /**
      * Miroir EXACT des défauts SQL de `movie` (§ 1.7).
      *
      * Un défaut de base ne remplit que la LIGNE : l'instance qui vient de

@@ -9,8 +9,8 @@ return [
     |
     | Domaine normatif de la spec 05. Couvre les écrans réellement présents
     | dans le dépôt : connexion, inscription, mot de passe, vérification
-    | d’adresse, 2FA, passkeys, profil, sécurité, apparence, suppression de
-    | compte. Les comptes liés (Discord, Google) et les avatars n’ont pas
+    | d’adresse, 2FA, passkeys, profil, sécurité, suppression de compte (aucun
+    | choix d’apparence, D56 du 02/10). Les comptes liés (Discord, Google) et les avatars n’ont pas
     | encore d’écran : leurs clés naîtront avec eux (spec 40).
     |
     | `title` = titre de document, `heading` = titre affiché, `description` =
@@ -35,8 +35,8 @@ return [
         'description' => 'Manage your profile and account settings',
         'heading' => 'Settings',
         'nav' => [
-            'appearance' => 'Appearance',
             'avatar' => 'Avatar',
+            'linked' => 'Linked accounts',
             'profile' => 'Profile',
             'security' => 'Security',
         ],
@@ -196,6 +196,7 @@ return [
         'current' => 'Current avatar',
         'choice_legend' => 'Displayed avatar',
         'use_upload' => 'Use my image',
+        'use_provider' => 'My :provider photo',
         'use_preset' => 'Use a preset avatar',
         'presets' => 'Preset avatars',
         'save' => 'Save',
@@ -229,6 +230,61 @@ return [
         ],
     ],
 
+    // Sign-in with Discord and Google (spec 40 § 12, D51 of 01/10).
+    // `:provider`: the provider name, `common.provider.*`.
+    'oauth' => [
+        'continue_with' => 'Continue with :provider',
+        'confirm_with' => 'Confirm with :provider',
+        'separator' => 'or',
+        'finish' => [
+            'title' => 'Finish signing up',
+            'heading' => 'Welcome!',
+            'description' => 'Your :provider account is almost ready. Choose your name and accept the terms.',
+            'email' => 'Address received from :provider: :email',
+            'no_email' => ':provider did not share an email address: you can add one in your profile.',
+            'name' => 'Account name',
+            'terms' => 'I accept the terms of use',
+            'terms_link' => 'Read the terms of use',
+            'age' => 'I declare that I am at least 15 years old',
+            'submit' => 'Create my account',
+            'terms_required' => 'You must accept the terms of use to create an account.',
+            'age_required' => 'You must be at least 15 years old to create an account.',
+        ],
+        'errors' => [
+            'failed' => 'Signing in with this provider did not work. Please try again.',
+            'two_factor_link' => 'An account protected by two-factor authentication uses this address. Sign in with your password, then link this provider from your settings.',
+            'email_taken' => 'An account already uses this address. Sign in with it, then link this provider from your settings.',
+            'linked_elsewhere' => 'This account is already linked to another TripleFrames account.',
+            'provider_taken' => 'Another account from this provider is already linked to yours.',
+            'confirm_mismatch' => 'This provider account is not linked to yours.',
+            'last_method' => 'This is your last way to sign in: set a password or link another provider first.',
+            'pending_expired' => 'Sign-up expired. Please sign in again.',
+        ],
+    ],
+
+    // Linked accounts (spec 40 § 12.5).
+    'linked' => [
+        'title' => 'Linked accounts',
+        'heading' => 'Linked accounts',
+        'description' => 'Sign in with Discord or Google in addition to your password.',
+        'linked_on' => 'Linked on :date',
+        'not_linked' => 'Not linked',
+        'link' => 'Link',
+        'unlink' => 'Unlink',
+        'unlink_title' => 'Unlink :provider?',
+        'unlink_body' => 'You will no longer be able to sign in with this :provider account. A photo copied from it is deleted.',
+        'code_label' => 'Two-factor authentication code',
+        'code_help' => 'The code from your app, or a recovery code.',
+        'cancel' => 'Cancel',
+        'linked' => 'Account linked.',
+        'unlinked' => 'Account unlinked.',
+        'none' => 'No sign-in provider is available right now.',
+        'errors' => [
+            'not_linked' => 'This provider is not linked to your account.',
+            'code' => 'Two-factor authentication code missing or incorrect.',
+        ],
+    ],
+
     'profile' => [
         'description' => 'Update your name and email address',
         'heading' => 'Profile',
@@ -240,19 +296,12 @@ return [
     ],
 
     'security' => [
+        'set_heading' => 'Set a password',
+        'set_description' => 'Your account has no password yet: set one to also sign in without Discord or Google.',
         'description' => 'Ensure your account is using a long, random password to stay secure',
         'heading' => 'Update password',
         'submit' => 'Save',
         'title' => 'Security settings',
-    ],
-
-    'appearance' => [
-        'dark' => 'Dark',
-        'description' => 'Update the appearance settings for your account',
-        'heading' => 'Appearance settings',
-        'light' => 'Light',
-        'system' => 'System',
-        'title' => 'Appearance settings',
     ],
 
     'delete_account' => [

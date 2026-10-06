@@ -1,6 +1,5 @@
 <?php
 
-use App\Avatars\AvatarPresetCatalog;
 use App\Enums\Locale;
 use App\Rules\ValidNickname;
 use App\Support\I18n\LocaleCookie;
@@ -52,7 +51,7 @@ function nicknameProbeUri(): string
 }
 
 /**
- * Un envoi de siège réduit à son identité, avatar valide, dans une langue.
+ * Un envoi de siège réduit à son pseudo (aucun avatar, D55 du 02/10), dans une langue.
  */
 function nicknameSubmit(mixed $nickname, Locale $locale = Locale::English): TestResponse
 {
@@ -60,7 +59,7 @@ function nicknameSubmit(mixed $nickname, Locale $locale = Locale::English): Test
         ->withUnencryptedCookie(LocaleCookie::NAME, $locale->value)
         ->post(
             nicknameProbeUri(),
-            ['nickname' => $nickname, 'avatar' => AvatarPresetCatalog::keys()[0]],
+            ['nickname' => $nickname],
             ['Accept' => 'application/json'],
         );
 }

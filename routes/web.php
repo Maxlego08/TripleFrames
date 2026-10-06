@@ -30,14 +30,8 @@ Route::inertia('/', 'welcome')
 // différentes, le code de salon doit désigner un salon et pas une langue.
 Route::post('locale', [LocaleController::class, 'update'])->name('locale.update');
 
-// Page du starter conservée au jalon 1 comme cible de `fortify.home` (spec 90
-// § 2.1). Rendue dans `AppLayout`, elle porte le pied de page joueur : `legal`
-// est déclaré sur toute route joueur (spec 90 § 6.3).
-Route::middleware(['auth', 'verified', 'translations:account,legal'])->group(function () {
-    Route::inertia('dashboard', 'dashboard')->name('dashboard');
-});
-
 require __DIR__.'/admin.php';
+require __DIR__.'/auth.php';
 require __DIR__.'/game.php';
 require __DIR__.'/legal.php';
 require __DIR__.'/settings.php';

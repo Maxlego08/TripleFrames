@@ -28,6 +28,30 @@ return [
         'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Connexion Discord et Google — spec 40 § 12, D51 du 01/10
+    |--------------------------------------------------------------------------
+    |
+    | Un fournisseur est ACTIF si et seulement si ses deux clés sont posées
+    | (`App\Support\Identity\OAuthProviders`). Clés vides dans `.env.example`
+    | (CI à zéro secret). `redirect` est RELATIF : Socialite le résout contre
+    | `APP_URL`, et aucun nom de domaine n'entre dans le dépôt.
+    |
+    */
+
+    'google' => [
+        'client_id' => env('GOOGLE_CLIENT_ID'),
+        'client_secret' => env('GOOGLE_CLIENT_SECRET'),
+        'redirect' => '/auth/google/callback',
+    ],
+
+    'discord' => [
+        'client_id' => env('DISCORD_CLIENT_ID'),
+        'client_secret' => env('DISCORD_CLIENT_SECRET'),
+        'redirect' => '/auth/discord/callback',
+    ],
+
     'slack' => [
         'notifications' => [
             'bot_user_oauth_token' => env('SLACK_BOT_USER_OAUTH_TOKEN'),

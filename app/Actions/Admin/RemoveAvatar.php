@@ -3,6 +3,7 @@
 namespace App\Actions\Admin;
 
 use App\Actions\Account\DeleteAvatar;
+use App\Avatars\AccountImage;
 use App\Avatars\UploadedAvatars;
 use App\Enums\AdminActionType;
 use App\Models\User;
@@ -27,11 +28,11 @@ final class RemoveAvatar
     /**
      * @throws ValidationException Le compte ne porte aucune image.
      */
-    public function handle(User $actor, User $target, string $reason): void
+    public function handle(User $actor, User $target, string $reason, AccountImage $image = AccountImage::Upload): void
     {
-        $oldPath = DB::transaction(function () use ($actor, $target, $reason): string {
+        $oldPath = DB::transaction(function () use ($actor, $target, $reason, $image): string {
             $locked = User::query()->lockForUpdate()->findOrFail($target->id);
-            $oldPath = $locked->avatar_upload_path;
+            $oldPath = $image->path($locked);
 
             if ($oldPath === null) {
                 $message = __('admin.avatars.errors.no_image');
@@ -41,11 +42,17 @@ final class RemoveAvatar
                 ]);
             }
 
-            $locked->forceFill([
-                'avatar_upload_path' => null,
-                'avatar_upload_hidden_at' => $locked->avatar_upload_hidden_at ?? Date::now(),
-                'avatar_kind' => DeleteAvatar::fallbackKind($locked),
-            ])->save();
+            $changes = [
+                $image->pathColumn() => null,
+                $image->hiddenColumn() => $image->hiddenAt($locked) ?? Date::now(),
+                'avatar_kind' => DeleteAvatar::fallbackKind($locked, $image),
+            ];
+
+            if ($image === AccountImage::Provider) {
+                $changes['avatar_provider_source'] = null;
+            }
+
+            $locked->forceFill($changes)->save();
 
             $this->journal->record($actor, AdminActionType::AvatarRemoved, $locked->id, $reason);
 

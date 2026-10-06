@@ -44,8 +44,14 @@ final class AmbiguityPreview
     /**
      * Ce que la publication de ce film rendra ambigu : toutes ses clés
      * projetées, confrontées au catalogue publié.
+     *
+     * `$alsoPublishing` : les films publiés **par le même geste** (« Publier
+     * les films prêts », D59 du 06/10), comptés comme déjà publiés — sans
+     * quoi l'aperçu du lot tairait les formes que ses films se disputent.
+     *
+     * @param  list<int>  $alsoPublishing
      */
-    public function forPublication(Movie $movie): AmbiguityReport
+    public function forPublication(Movie $movie, array $alsoPublishing = []): AmbiguityReport
     {
         /** @var array<string, AnswerKeyKind> $forms */
         $forms = [];
@@ -58,7 +64,7 @@ final class AmbiguityPreview
             $forms[(string) $key->normalized] = $key->key_kind;
         }
 
-        return $this->report($movie, $forms);
+        return $this->report($movie, $forms, $alsoPublishing);
     }
 
     /**
@@ -112,8 +118,9 @@ final class AmbiguityPreview
      * Confronte des formes du film au catalogue publié, hors ce film.
      *
      * @param  array<string, AnswerKeyKind>  $forms  forme normalisée → nature sous laquelle CE film la porte
+     * @param  list<int>  $alsoPublishing  films comptés comme publiés (lot du même geste)
      */
-    private function report(Movie $movie, array $forms): AmbiguityReport
+    private function report(Movie $movie, array $forms, array $alsoPublishing = []): AmbiguityReport
     {
         if ($forms === []) {
             return new AmbiguityReport([]);
@@ -127,7 +134,13 @@ final class AmbiguityPreview
             ->join('movie', 'movie.id', '=', 'answer_key.movie_id')
             ->whereIn('answer_key.normalized', $normalized)
             ->where('answer_key.movie_id', '!=', $movie->id)
-            ->where('movie.availability', ContentAvailability::Published->value)
+            ->where(static function ($query) use ($alsoPublishing): void {
+                $query->where('movie.availability', ContentAvailability::Published->value);
+
+                if ($alsoPublishing !== []) {
+                    $query->orWhereIn('movie.id', $alsoPublishing);
+                }
+            })
             ->toBase()
             ->get([
                 'answer_key.normalized as normalized',

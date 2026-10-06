@@ -9,9 +9,12 @@ namespace App\Events\Game;
  * Émetteur : `OpenTier` à `Tᵢ`, `i` = 1..N.
  *
  * Charge, hors enveloppe : `{ sequenceIndex, roundNumber, tierIndex,
- * opensAt: IsoMs, next: TierImageRef | null }` : `opensAt` = `Tᵢ`
- * théorique, `next` = palier `i+1` frappé dans la même transition, nul au
- * dernier palier (§ 11.5).
+ * opensAt: IsoMs, next: TierImageRef | null, choicesUnavailable: bool }` :
+ * `opensAt` = `Tᵢ` théorique, `next` = palier `i+1` frappé dans la même
+ * transition, nul au dernier palier (§ 11.5) ; `choicesUnavailable` vrai au
+ * seul palier du QCM d'une manche Normal dont la composition a abouti au cas
+ * terminal (70 § 10.7, D54 du 02/10) — booléen identique pour tout le
+ * salon, qui ne dit rien de la réponse.
  */
 final class TierOpened extends RoomBroadcast
 {
@@ -22,6 +25,7 @@ final class TierOpened extends RoomBroadcast
         'tierIndex' => 'int',
         'opensAt' => 'iso',
         'next' => '?object',
+        'choicesUnavailable' => 'bool',
     ];
 
     /** Événement de partie : jamais émis sans partie. */

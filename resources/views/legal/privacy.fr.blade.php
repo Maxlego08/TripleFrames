@@ -87,22 +87,10 @@
                 <td>En clair ; préférence</td>
             </tr>
             <tr>
-                <td><code>appearance</code></td>
-                <td>Apparence choisie (clair, sombre, système)</td>
-                <td>365 jours</td>
-                <td>En clair ; préférence</td>
-            </tr>
-            <tr>
                 <td><code>sidebar_state</code></td>
                 <td>Barre latérale ouverte ou repliée (écrans de compte et d’administration)</td>
                 <td>7 jours</td>
                 <td>En clair ; préférence</td>
-            </tr>
-            <tr>
-                <td>Stockage local <code>appearance</code></td>
-                <td>Miroir, dans le navigateur, de l’apparence choisie</td>
-                <td>Persistant</td>
-                <td>Préférence</td>
             </tr>
         </tbody>
     </table>

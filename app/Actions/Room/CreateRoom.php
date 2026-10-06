@@ -29,7 +29,8 @@ use RuntimeException;
  *    RoomCode::generate()`, `status = lobby` ;
  * 4. {@see WriteRoomSettings}, qui insère la ligne avec sa projection ;
  * 5. {@see TakeSeat} pour le créateur, `repairHost: false` — sans garde de
- *    capacité à franchir, et sans poser l'hôte une première fois ;
+ *    capacité à franchir, et sans poser l'hôte une première fois ; l'avatar
+ *    est attribué par le serveur (D55 du 02/10) ;
  * 6. {@see TransferHost::to()} : **la création pose l'hôte par l'action de
  *    transfert, dans la même transaction** (E10-34bis) — un seul écrivain de
  *    `room.host_player_id`, un seul `host.changed`.
@@ -61,7 +62,6 @@ final readonly class CreateRoom
      * @param  Request  $request  La requête du geste, d'où la prise de siège
      *                            lit et frappe le jeton.
      * @param  string  $nickname  Forme canonique validée.
-     * @param  string  $avatarPreset  Clé du catalogue validée.
      * @param  Locale  $locale  Locale effective de la requête.
      * @param  User|null  $user  Compte connecté : au J1, sans effet (C4
      *                           I4.10) ; au J2, sa configuration par défaut.
@@ -69,7 +69,7 @@ final readonly class CreateRoom
      * @throws RuntimeException Code de salon introuvable après
      *                          `RoomCode::MAX_ATTEMPTS` collisions.
      */
-    public function handle(Request $request, string $nickname, string $avatarPreset, Locale $locale, ?User $user): Room
+    public function handle(Request $request, string $nickname, Locale $locale, ?User $user): Room
     {
         $attempt = 0;
 
@@ -77,7 +77,7 @@ final readonly class CreateRoom
             $attempt++;
 
             try {
-                return DB::transaction(fn (): Room => $this->create($request, $nickname, $avatarPreset, $locale));
+                return DB::transaction(fn (): Room => $this->create($request, $nickname, $locale));
             } catch (UniqueConstraintViolationException $exception) {
                 if ($attempt >= RoomCode::MAX_ATTEMPTS) {
                     throw new RuntimeException(sprintf(
@@ -94,7 +94,7 @@ final readonly class CreateRoom
      *
      * @throws ValidationException
      */
-    private function create(Request $request, string $nickname, string $avatarPreset, Locale $locale): Room
+    private function create(Request $request, string $nickname, Locale $locale): Room
     {
         $now = Date::now()->toImmutable();
         $settings = RoomSettings::defaults();
@@ -107,7 +107,7 @@ final readonly class CreateRoom
 
         $this->writer->handle($room, $settings, $now);
 
-        $seat = $this->takeSeat->handle($room, $request, $nickname, $avatarPreset, $locale, repairHost: false);
+        $seat = $this->takeSeat->handle($room, $request, $nickname, $locale, repairHost: false);
 
         if (! $seat instanceof Player) {
             throw new LogicException(sprintf(

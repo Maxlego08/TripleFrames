@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Avatars\AccountImage;
 use App\Avatars\AvatarRef;
 use App\Avatars\UploadedAvatars;
 use App\Enums\AvatarKind;
@@ -292,15 +293,14 @@ class Player extends Model
     {
         $initials = AvatarRef::initialsFrom($this->nickname);
 
-        if ($this->avatar_kind === AvatarKind::Upload) {
-            $path = UploadedAvatars::visiblePath($this->user_id);
+        $image = AccountImage::fromKind($this->avatar_kind);
+        $path = $image === null ? null : UploadedAvatars::visiblePath($this->user_id, $image);
 
-            if ($path !== null) {
-                return AvatarRef::upload($path, $initials);
-            }
+        if ($image !== null && $path !== null) {
+            return $image === AccountImage::Upload ? AvatarRef::upload($path, $initials) : AvatarRef::provider($path, $initials);
         }
 
-        if (in_array($this->avatar_kind, [AvatarKind::Preset, AvatarKind::Upload], true) && $this->avatar_preset !== null) {
+        if ($this->avatar_kind !== null && $this->avatar_preset !== null) {
             return AvatarRef::preset($this->avatar_preset, $initials);
         }
 

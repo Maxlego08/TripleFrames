@@ -38,13 +38,14 @@ final class SeatEntry
     }
 
     /**
-     * Le corps d'un formulaire de siège.
+     * Le corps d'un formulaire de siège : le pseudo seul — l'avatar est
+     * attribué par le serveur (D55 du 02/10).
      *
-     * @return array{nickname: string, avatar: string}
+     * @return array{nickname: string}
      */
-    public static function form(string $nickname = self::NICKNAME, ?string $avatar = null): array
+    public static function form(string $nickname = self::NICKNAME): array
     {
-        return ['nickname' => $nickname, 'avatar' => $avatar ?? self::avatar(3)];
+        return ['nickname' => $nickname];
     }
 
     /** La n-ième clé du catalogue des avatars prédéfinis (1 = la première). */

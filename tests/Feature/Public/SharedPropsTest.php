@@ -28,7 +28,7 @@ it("partage le format d'image fixe en deux entiers", function () {
         'accueil, invité' => fn () => $this->get(route('home')),
         'accueil, invité anglophone' => fn () => $this->withUnencryptedCookie('locale', 'en')->get(route('home')),
         'page légale, invité' => fn () => $this->get(route('legal.terms')),
-        'tableau de bord, connecté' => fn () => $this->actingAs($verified)->get(route('dashboard')),
+        'profil, connecté' => fn () => $this->actingAs($verified)->get(route('profile.edit')),
         'back-office, curateur' => fn () => $this->actingAs($curator)->get(route('admin.dashboard')),
     ];
 

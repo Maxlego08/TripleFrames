@@ -290,7 +290,7 @@ it("ne frappe qu'un player_token par requête, quel que soit le nombre d'appels 
     $seat = playerTokenSeated($this->postJson(playerTokenSeatUri($room), ['nickname' => 'Zoé', 'avatar' => 'preset-07']), $room);
 
     expect(playerTokenSetCookies($seat))->toHaveCount(1)
-        ->and(playerTokenClaims($seat)['avatar'])->toBe('preset-07')
+        ->and(playerTokenClaims($seat)['avatar'])->toBe('preset-01')
         ->and(Player::query()->count())->toBe(1);
 });
 
@@ -400,7 +400,7 @@ it("fait glisser l'expiration du cookie et réaligne la revendication de langue 
     expect(Player::query()->whereBelongsTo($roomA)->count())->toBe(1)
         ->and($resumed['locale'])->toBe('fr')
         ->and($resumed['tid'])->toBe($claims['tid'])
-        ->and($resumed['avatar'])->toBe('preset-07')
+        ->and($resumed['avatar'])->toBe('preset-01')
         ->and($second->getCookie(PlayerTokenCookie::NAME, decrypt: false)?->getExpiresTime())->toBe(now()->addDays(30)->getTimestamp());
 
     // Cinq jours plus tard, nouvelle prise de siège dans un autre salon, de
@@ -690,7 +690,7 @@ it('repart de 30 jours pleins à chaque re-signature, changement de langue compr
         ->and(playerTokenClaims($avatar))->toBe(['v' => PlayerToken::VERSION, 'tid' => $tid, 'locale' => 'fr', 'avatar' => 'preset-09']);
 });
 
-it("re-signe le player_token avec l'avatar choisi sous le même tid, que suggest() présélectionne au salon suivant s'il y est libre", function () {
+it("re-signe le player_token avec l'avatar attribué sous le même tid, que suggest() reprend au salon suivant s'il y est libre", function () {
     $roomA = Room::factory()->create();
     $free = Room::factory()->create();
     $busy = Room::factory()->create();
@@ -700,24 +700,26 @@ it("re-signe le player_token avec l'avatar choisi sous le même tid, que suggest
     // Un siège parti ne tient plus son avatar.
     Player::factory()->for($busy)->left()->create(['avatar_preset' => 'preset-02']);
 
+    // Aucun choix à l'entrée (D55 du 02/10) : un champ `avatar` est ignoré.
     $seated = playerTokenSeated($this->postJson(playerTokenSeatUri($roomA), ['nickname' => 'Zoé', 'avatar' => 'preset-07']), $roomA);
     $claims = playerTokenClaims($seated);
 
-    expect($claims['avatar'])->toBe('preset-07')
-        ->and(Player::query()->whereBelongsTo($roomA)->sole()->avatar_preset)->toBe('preset-07');
+    expect($claims['avatar'])->toBe('preset-01')
+        ->and(Player::query()->whereBelongsTo($roomA)->sole()->avatar_preset)->toBe('preset-01');
 
     $this->withUnencryptedCookie(PlayerTokenCookie::NAME, playerTokenRaw($seated));
 
-    // Libre au salon suivant : présélectionné.
-    $this->getJson(playerTokenSuggestUri($free))->assertOk()->assertJson(['suggested' => 'preset-07']);
+    // Libre au salon suivant : repris.
+    $this->getJson(playerTokenSuggestUri($free))->assertOk()->assertJson(['suggested' => 'preset-01']);
 
     // Pris : le premier libre dans l'ordre du catalogue.
     $this->getJson(playerTokenSuggestUri($busy))->assertOk()->assertJson(['suggested' => 'preset-02']);
 
-    // Un autre choix au salon suivant re-signe le jeton sous le même tid.
-    $next = playerTokenSeated($this->postJson(playerTokenSeatUri($free), ['nickname' => 'Zoé', 'avatar' => 'preset-03']), $free);
+    // La prise de siège suivante attribue ce premier libre et re-signe le
+    // jeton sous le même tid.
+    $next = playerTokenSeated($this->postJson(playerTokenSeatUri($busy), ['nickname' => 'Zoé']), $busy);
 
-    expect(playerTokenClaims($next)['avatar'])->toBe('preset-03')
+    expect(playerTokenClaims($next)['avatar'])->toBe('preset-02')
         ->and(playerTokenClaims($next)['tid'])->toBe($claims['tid'])
         ->and(Player::query()->where('player_token_hash', hash('sha256', (string) $claims['tid']))->count())->toBe(2);
 });
@@ -735,7 +737,7 @@ it("prend le siège d'un compte connecté sous le pseudo saisi et le rattache au
         // I4.10 amendé par D49 du 01/10 : la prise de siège rattache le compte.
         ->and($seat->user_id)->toBe($user->id)
         ->and($seat->avatar_kind)->toBe(AvatarKind::Preset)
-        ->and($seat->avatar_preset)->toBe('preset-04')
+        ->and($seat->avatar_preset)->toBe('preset-01')
         // Le compte ne passe jamais dans le jeton : quatre revendications, aucune du compte.
         ->and(array_keys(playerTokenClaims($seated)))->toBe(['v', 'tid', 'locale', 'avatar'])
         ->and(json_encode(playerTokenClaims($seated), JSON_THROW_ON_ERROR))
@@ -794,7 +796,7 @@ it('re-signe le player_token avec la nouvelle langue et le même tid', function 
         ->assertCookie(LocaleCookie::NAME, Locale::French->value, encrypted: false);
 
     expect(playerTokenSetCookies($changed))->toHaveCount(1)
-        ->and(playerTokenClaims($changed))->toBe(['v' => PlayerToken::VERSION, 'tid' => $claims['tid'], 'locale' => 'fr', 'avatar' => 'preset-07'])
+        ->and(playerTokenClaims($changed))->toBe(['v' => PlayerToken::VERSION, 'tid' => $claims['tid'], 'locale' => 'fr', 'avatar' => 'preset-01'])
         ->and(playerTokenRaw($changed))->not->toBe(playerTokenRaw($seated))
         ->and($changed->getCookie(PlayerTokenCookie::NAME, decrypt: false)?->getExpiresTime())->toBe(now()->addDays(30)->getTimestamp());
 
@@ -805,7 +807,7 @@ it('re-signe le player_token avec la nouvelle langue et le même tid', function 
 
     $this->getJson(playerTokenPrefix().'/probe')
         ->assertOk()
-        ->assertJson(['present' => true, 'hash' => $seat->player_token_hash, 'locale' => 'fr', 'avatar' => 'preset-07']);
+        ->assertJson(['present' => true, 'hash' => $seat->player_token_hash, 'locale' => 'fr', 'avatar' => 'preset-01']);
 
     playerTokenSeated($this->postJson(playerTokenSeatUri($room)), $room);
 
@@ -817,7 +819,7 @@ it('re-signe le player_token avec la nouvelle langue et le même tid', function 
         ->assertRedirect('/');
 
     expect(playerTokenSetCookies($again))->toHaveCount(1)
-        ->and(playerTokenClaims($again))->toBe(['v' => PlayerToken::VERSION, 'tid' => $claims['tid'], 'locale' => 'fr', 'avatar' => 'preset-07'])
+        ->and(playerTokenClaims($again))->toBe(['v' => PlayerToken::VERSION, 'tid' => $claims['tid'], 'locale' => 'fr', 'avatar' => 'preset-01'])
         ->and(Player::query()->sole()->is($seat))->toBeTrue()
         ->and(Player::query()->sole()->locale)->toBe(Locale::French)
         ->and(Player::query()->sole()->player_token_hash)->toBe(hash('sha256', (string) $claims['tid']));
@@ -833,7 +835,7 @@ it('re-signe le player_token avec la nouvelle langue et le même tid', function 
         ->assertRedirect('/');
 
     expect($user->refresh()->locale)->toBe(Locale::English)
-        ->and(playerTokenClaims($account))->toBe(['v' => PlayerToken::VERSION, 'tid' => $claims['tid'], 'locale' => 'en', 'avatar' => 'preset-07'])
+        ->and(playerTokenClaims($account))->toBe(['v' => PlayerToken::VERSION, 'tid' => $claims['tid'], 'locale' => 'en', 'avatar' => 'preset-01'])
         ->and(Player::query()->sole()->locale)->toBe(Locale::English);
 });
 

@@ -1,0 +1,77 @@
+@use '../auth/tokens' as *;
+@use '../auth/mixins' as mix;
+
+.home-stage {
+    position: relative;
+    isolation: isolate;
+    min-height: calc(100svh - 5rem);
+    overflow: hidden;
+    flex: 1;
+    padding: clamp(2.75rem, 6vw, 5.5rem) 1rem clamp(4rem, 8vw, 7rem);
+    background: repeating-linear-gradient(
+        90deg,
+        $violet 0 5.5rem,
+        oklch(0.44 0.15 295) 5.5rem 9rem,
+        oklch(0.34 0.14 295) 9rem 13rem
+    );
+}
+
+.home-hero {
+    position: relative;
+    display: grid;
+    width: min(100%, 68rem);
+    margin-inline: auto;
+    grid-template-columns: minmax(0, 1.08fr) minmax(19rem, 0.92fr);
+    border: $line solid $ink;
+    border-radius: 2rem 2rem 2rem 0.65rem;
+    background: $paper;
+    box-shadow: 0.75rem 0.75rem 0 $ink;
+
+    &::before {
+        position: absolute;
+        z-index: -1;
+        inset: -1.2rem 2.4rem auto -1.2rem;
+        height: 100%;
+        border: $line solid $ink;
+        border-radius: 2rem 0.8rem 2rem 2rem;
+        background: $yellow;
+        content: '';
+        rotate: -1.5deg;
+    }
+
+    &__content {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: clamp(1.75rem, 4vw, 3.25rem);
+        padding: clamp(2rem, 5vw, 4.4rem);
+    }
+
+    &__logo.auth-brand__logo {
+        width: clamp(8.5rem, 17vw, 11.5rem);
+        filter: drop-shadow(0.35rem 0.35rem 0 $ink);
+    }
+
+    &__text {
+        h1,
+        p {
+            margin-top: 0;
+        }
+
+        h1 {
+            @include mix.display-type;
+            max-width: 12ch;
+            margin-bottom: 1.1rem;
+            font-size: clamp(2.25rem, 5vw, 4.3rem);
+            line-height: 0.95;
+            letter-spacing: -0.065em;
+        }
+
+        p {
+            max-width: 34rem;
+            margin-bottom: 1.35rem;
+            color: oklch(0.39 0.04 292);
+            font-size: clamp(1rem, 1.6vw, 1.15rem);
+        }
+    }
+}

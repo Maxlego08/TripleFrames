@@ -1026,7 +1026,7 @@ it('un salon créé sur le catalogue de démonstration peut lancer une partie de
 
     // 1. La création, par la route de l'hôte : le salon naît TOUT DE SUITE,
     //    aux réglages par défaut (spec 50 § 6.1).
-    $created = $this->post(route('room.store'), SeatEntry::form(SeatEntry::NICKNAME, SeatEntry::avatar(1)));
+    $created = $this->post(route('room.store'), SeatEntry::form(SeatEntry::NICKNAME));
     $room = Room::query()->sole();
 
     $created->assertStatus(Response::HTTP_SEE_OTHER)
@@ -1063,7 +1063,7 @@ it('un salon créé sur le catalogue de démonstration peut lancer une partie de
     for ($seatNumber = 2; $seatNumber <= RoomSettingsBounds::MIN_CONNECTED_PLAYERS_TO_LAUNCH; $seatNumber++) {
         $this->flushSession();
 
-        $this->post(route('room.join', $room), SeatEntry::form('Invitée '.$seatNumber, SeatEntry::avatar($seatNumber)))
+        $this->post(route('room.join', $room), SeatEntry::form('Invitée '.$seatNumber))
             ->assertStatus(Response::HTTP_SEE_OTHER)
             ->assertRedirect(route('room.show', $room))
             ->assertSessionHasNoErrors();

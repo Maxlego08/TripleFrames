@@ -93,45 +93,85 @@ final class PublishMovie
         $first = DB::transaction(function () use ($movie, $curator, $ambiguityDigest): bool {
             $locked = Movie::query()->whereKey($movie->id)->lockForUpdate()->firstOrFail();
 
-            Gate::forUser($curator)->authorize('publish', $locked);
+            $this->assertPublishable($locked, $curator);
 
-            $projection = $this->projector->recompute($locked);
-
-            $this->guard($locked, $projection, $ambiguityDigest);
-
-            $now = Date::now()->toImmutable();
-            $first = $locked->first_published_at === null;
-
-            $attributes = [
-                'availability' => ContentAvailability::Published,
-                'availability_changed_at' => $now,
-                'availability_reason' => null,
-            ];
-
-            if ($first) {
-                $attributes['first_published_at'] = $now;
+            if (! hash_equals($this->preview->forPublication($locked)->digest(), $ambiguityDigest)) {
+                throw ValidationException::withMessages([
+                    'ambiguity_digest' => __(self::MESSAGE_PREFIX.'preview_stale'),
+                ]);
             }
 
-            if ($locked->curated_by_id === null) {
-                $attributes['curated_by_id'] = $curator->id;
-            }
-
-            $locked->forceFill($attributes)->save();
-
-            $this->journal->record(
-                $curator,
-                $first ? AdminActionType::MoviePublished : AdminActionType::MovieRepublished,
-                $locked->id,
-            );
-
-            // Le film entre au catalogue publié : ses formes pèsent de nouveau
-            // dans le recompte, dans la transaction du geste.
-            $this->answerKeys->recomputeAmbiguity(self::formsOf($locked));
-
-            return $first;
+            return $this->write($locked, $curator);
         });
 
         $movie->refresh();
+
+        return $first;
+    }
+
+    /**
+     * L'autorisation et les trois gardes de transition, projection
+     * recalculée d'abord — **sous le verrou du film, dans la transaction de
+     * l'appelant**. Partagée avec {@see PublishReadyMovies}, qui confronte
+     * ensuite l'empreinte de SON aperçu, celui du lot (D59 du 06/10).
+     *
+     * @throws AuthorizationException le film a quitté `draft` et `unpublished` entre la garde et le verrou
+     * @throws ValidationException une condition manquante, sans aucune écriture
+     */
+    public function assertPublishable(Movie $locked, User $curator): void
+    {
+        Gate::forUser($curator)->authorize('publish', $locked);
+
+        $projection = $this->projector->recompute($locked);
+        $conditions = self::conditions($locked, $projection);
+        $blocker = $conditions['blockers'][0] ?? null;
+
+        if ($blocker !== null) {
+            $replace = $blocker === self::COVERAGE_MISSING
+                ? ['levels' => implode((string) __('admin.common.list_separator'), $conditions['missing_levels'])]
+                : [];
+
+            throw ValidationException::withMessages([
+                'movie' => __(self::MESSAGE_PREFIX.$blocker, $replace),
+            ]);
+        }
+    }
+
+    /**
+     * Les écritures de la publication, gardes déjà tenues — sous le verrou du
+     * film, dans la transaction de l'appelant. Rend `true` si c'était la
+     * première publication.
+     */
+    public function write(Movie $locked, User $curator): bool
+    {
+        $now = Date::now()->toImmutable();
+        $first = $locked->first_published_at === null;
+
+        $attributes = [
+            'availability' => ContentAvailability::Published,
+            'availability_changed_at' => $now,
+            'availability_reason' => null,
+        ];
+
+        if ($first) {
+            $attributes['first_published_at'] = $now;
+        }
+
+        if ($locked->curated_by_id === null) {
+            $attributes['curated_by_id'] = $curator->id;
+        }
+
+        $locked->forceFill($attributes)->save();
+
+        $this->journal->record(
+            $curator,
+            $first ? AdminActionType::MoviePublished : AdminActionType::MovieRepublished,
+            $locked->id,
+        );
+
+        // Le film entre au catalogue publié : ses formes pèsent de nouveau
+        // dans le recompte, dans la transaction du geste.
+        $this->answerKeys->recomputeAmbiguity(self::formsOf($locked));
 
         return $first;
     }
@@ -184,34 +224,6 @@ final class PublishMovie
             static fn (mixed $form): string => (string) $form,
             AnswerKey::query()->where('movie_id', $movie->id)->pluck('normalized')->all(),
         ));
-    }
-
-    /**
-     * Les gardes de transition, dans l'ordre du § 8.1 ; la première qui
-     * manque refuse le geste.
-     *
-     * @throws ValidationException
-     */
-    private function guard(Movie $movie, MovieProjection $projection, string $ambiguityDigest): void
-    {
-        $conditions = self::conditions($movie, $projection);
-        $blocker = $conditions['blockers'][0] ?? null;
-
-        if ($blocker !== null) {
-            $replace = $blocker === self::COVERAGE_MISSING
-                ? ['levels' => implode((string) __('admin.common.list_separator'), $conditions['missing_levels'])]
-                : [];
-
-            throw ValidationException::withMessages([
-                'movie' => __(self::MESSAGE_PREFIX.$blocker, $replace),
-            ]);
-        }
-
-        if (! hash_equals($this->preview->forPublication($movie)->digest(), $ambiguityDigest)) {
-            throw ValidationException::withMessages([
-                'ambiguity_digest' => __(self::MESSAGE_PREFIX.'preview_stale'),
-            ]);
-        }
     }
 
     /**

@@ -1,3 +1,4 @@
+import { usePage } from '@inertiajs/react';
 import type { ReactNode } from 'react';
 import { GameAnnouncer } from '@/components/game/game-announcer';
 import { MaintenanceBanner } from '@/components/public/maintenance-banner';
@@ -11,8 +12,8 @@ const MAIN_ID = 'public-main';
 /**
  * Coquille des pages publiques (spec 90 § 2.4, contrat C16 § 2.4) : pages
  * légales, page d'erreur, pages d'entrée `room/*` et, par le cas par défaut
- * d'`app.tsx`, toute page qui n'a pas de coquille propre. Elle suit
- * l'apparence du visiteur : seules les pages `game/*` sont forcées en sombre.
+ * d'`app.tsx`, toute page qui n'a pas de coquille propre. Sombre comme tout
+ * le site (D56 du 02/10).
  *
  * De haut en bas : le lien d'évitement (première cible de tabulation), l'en-
  * tête, le bandeau de maintenance (rendu seulement pendant un drainage,
@@ -29,9 +30,19 @@ const MAIN_ID = 'public-main';
  */
 export default function PublicLayout({ children }: { children: ReactNode }) {
     const { t } = useTranslations();
+    const component = usePage().component;
+    const isHomePage = component === 'welcome';
+    const isLegalPage = component.startsWith('legal/');
+    const shellVariant = isHomePage
+        ? 'public-shell--home'
+        : isLegalPage
+          ? 'public-shell--legal'
+          : '';
 
     return (
-        <div className="flex min-h-svh flex-col bg-background text-foreground">
+        <div
+            className={`public-shell ${shellVariant} flex min-h-svh flex-col bg-background text-foreground`}
+        >
             <a
                 href={`#${MAIN_ID}`}
                 className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:rounded-md focus:bg-primary focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:text-primary-foreground focus:ring-2 focus:ring-ring focus:outline-none"

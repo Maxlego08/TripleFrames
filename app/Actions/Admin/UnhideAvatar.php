@@ -2,6 +2,7 @@
 
 namespace App\Actions\Admin;
 
+use App\Avatars\AccountImage;
 use App\Enums\AdminActionType;
 use App\Models\User;
 use App\Support\Admin\AdminJournal;
@@ -25,12 +26,12 @@ final class UnhideAvatar
     /**
      * @throws ValidationException L'avatar n'est ni masqué ni retiré.
      */
-    public function handle(User $actor, User $target, ?string $reason): void
+    public function handle(User $actor, User $target, ?string $reason, AccountImage $image = AccountImage::Upload): void
     {
-        DB::transaction(function () use ($actor, $target, $reason): void {
+        DB::transaction(function () use ($actor, $target, $reason, $image): void {
             $locked = User::query()->lockForUpdate()->findOrFail($target->id);
 
-            if ($locked->avatar_upload_hidden_at === null) {
+            if ($image->hiddenAt($locked) === null) {
                 $message = __('admin.avatars.errors.not_hidden');
 
                 throw ValidationException::withMessages([
@@ -39,8 +40,8 @@ final class UnhideAvatar
             }
 
             $locked->forceFill([
-                'avatar_upload_hidden_at' => null,
-                'avatar_upload_reports_from' => Date::now(),
+                $image->hiddenColumn() => null,
+                $image->reportsFromColumn() => Date::now(),
             ])->save();
 
             $this->journal->record($actor, AdminActionType::AvatarUnhidden, $locked->id, $reason);

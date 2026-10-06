@@ -145,7 +145,7 @@ function eventPayloadClosedList(): array
         'game.launched' => [GameLaunched::class, 'room', ['mode', 'roundsCount', 'framesPerRound', 'inputDifficulty', 'revealDurationMs', 'speedBonus', 'seats']],
         'room.archived' => [RoomArchived::class, 'room', []],
         'round.scheduled' => [RoundScheduled::class, 'room', ['round', 'image']],
-        'tier.opened' => [TierOpened::class, 'room', ['sequenceIndex', 'roundNumber', 'tierIndex', 'opensAt', 'next']],
+        'tier.opened' => [TierOpened::class, 'room', ['sequenceIndex', 'roundNumber', 'tierIndex', 'opensAt', 'next', 'choicesUnavailable']],
         'player.locked' => [PlayerLocked::class, 'room', ['sequenceIndex', 'publicId', 'lockRank']],
         'round.closed' => [RoundClosed::class, 'room', ['sequenceIndex', 'roundNumber', 'endedAt', 'revealStartsAt', 'revealEndsAt']],
         'round.revealed' => [RoundRevealed::class, 'room', ['sequenceIndex', 'roundNumber', 'revealEndsAt', 'movie', 'images', 'finders', 'leaderboard']],
@@ -1143,6 +1143,7 @@ it("chaque titre de la révélation porte l'attribut lang de la locale atteinte"
             'originalTitleLatin' => $movie->title_original_latin,
             'originalLanguage' => $movie->original_language,
             'year' => $movie->release_year,
+            'letterboxdUrl' => "https://letterboxd.com/tmdb/{$movie->tmdb_id}/",
         ], $label)
             // Une entrée par locale activée, dans l'ordre du registre.
             ->and(array_keys($packet['titles'] ?? []))->toBe(array_map(static fn (Locale $locale): string => $locale->value, Locale::cases()), $label);
@@ -1247,6 +1248,7 @@ it('un passage de rattrapage ne libère que l\'état courant de chaque manche et
         'tierIndex' => 2,
         'opensAt' => WireTime::iso(CarbonImmutable::parse('2026-09-23 14:05:13.000')),
         'next' => null,
+        'choicesUnavailable' => false,
     ]);
 
     app(TransitionBroadcasts::class)->coalesce(static function () use ($events, $laterTier): void {

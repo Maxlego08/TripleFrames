@@ -17,6 +17,15 @@ class PasswordUpdateRequest extends FormRequest
      */
     public function rules(): array
     {
+        // Un compte créé par un fournisseur n'a pas de mot de passe : il en
+        // DÉFINIT un, sans ancien à saisir, derrière la confirmation fraîche
+        // que la route exige déjà (spec 40 § 12.4, D51 du 01/10).
+        if ($this->user()?->password === null) {
+            return [
+                'password' => $this->passwordRules(),
+            ];
+        }
+
         return [
             'current_password' => $this->currentPasswordRules(),
             'password' => $this->passwordRules(),

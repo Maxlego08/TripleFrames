@@ -66,7 +66,7 @@ beforeEach(function (): void {
 
 /** Les props de page du § 8.1, dans l'ordre de `LobbyPageProps`. */
 const LOBBY_PAGE_PROPS = [
-    'room', 'state', 'seatToken', 'settings', 'bounds', 'limits', 'presets', 'launch', 'editor', 'themes', 'configs',
+    'room', 'state', 'seatToken', 'settings', 'bounds', 'limits', 'presets', 'launch', 'editor', 'themes', 'configs', 'avatars',
 ];
 
 /**

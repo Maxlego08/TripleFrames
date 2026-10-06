@@ -40,7 +40,7 @@ use Tests\TestCase;
 |
 | La partie multijoueur est un ÉTAT de la page `game/lobby`, jamais une page
 | `game/room` (écart (m) du § 22 bis, fermé par 50 § 7.2) : `room.show` rend
-| la même page du lancement au podium, forcée en sombre, avec le paquet de
+| la même page du lancement au podium, en sombre, avec le paquet de
 | resynchronisation (`state`), le jeton d'onglet (`seatToken`) et la prop
 | partagée `realtime`. Avant la révélation, rien de la page ne nomme le film
 | de la manche (règle 3) : ni titre, ni alias, ni année, ni identifiant.
@@ -147,7 +147,7 @@ it('rend la page du salon en état de manche, en sombre, avec state, seatToken e
     ] = roomPageGame(EngineFixtures::settings());
 
     // La manche 1 s'ouvre à `T₁` ; le joueur (re)charge la page une seconde
-    // plus tard, en préférant le thème clair.
+    // plus tard, avec un cookie `appearance` clair hérité d'avant D56.
     EngineFixtures::openTier($round, 1);
     $this->withUnencryptedCookie('appearance', 'light');
 
@@ -161,9 +161,9 @@ it('rend la page du salon en état de manche, en sombre, avec state, seatToken e
         ->has('seatToken')
         ->has('realtime'));
 
-    // Forcée en sombre malgré la préférence claire du visiteur.
+    // Sombre comme tout le site (D56 du 02/10) : le cookie n'y change rien.
     expect(preg_match('/<html\b[^>]*>/i', (string) $response->getContent(), $html))->toBe(1)
-        ->and($html[0])->toContain('data-appearance-forced="dark"')
+        ->and($html[0])->not->toContain('data-appearance-forced')
         ->and(preg_match('/\sclass="[^"]*\bdark\b/', $html[0]))->toBe(1);
 
     $props = $response->inertiaPage()['props'];

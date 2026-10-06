@@ -7,6 +7,7 @@ use App\Models\Round;
 use App\Models\Theme;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
+use InvalidArgumentException;
 use stdClass;
 
 /**
@@ -19,7 +20,11 @@ use stdClass;
  * fonction unique rend impossible (spec 10 § 12 point (1)).
  *
  * Le prédicat, toutes clauses en ET (§ 3.3) :
- * 1. **catalogue** — `published` ET `clear`, par {@see Movie::inPool()} ;
+ * 1. **catalogue** — `published` ET `clear`, par {@see Movie::inPool()} ; pour
+ *    la seule réserve non publiée des leurres ({@see PoolScope::asDecoyReserve()},
+ *    rang R6 de la spec 70 § 10.3, D53 du 02/10), `draft` ou `unpublished` ET
+ *    `clear`, par {@see Movie::inDecoyReserve()} — jamais compté, jamais tiré
+ *    comme film de manche — amendé le 02/10 ;
  * 2. **éligibilité à `N`** — `movie_projection.levels_count >= N`, jamais le
  *    masque 1-3-5 (garde de transition de la publication, pas de jeu, § 2.5) ;
  * 3. **thèmes** — `EXISTS movie_theme` actif sur les thèmes demandés ∩ publiés,
@@ -72,6 +77,8 @@ final readonly class PoolQuery
      */
     public function countWorks(PoolScope $scope): int
     {
+        self::refuseDecoyReserve($scope, 'countWorks');
+
         $works = $this->pool($scope)
             ->toBase()
             ->selectRaw(
@@ -91,6 +98,8 @@ final readonly class PoolQuery
      */
     public function candidates(PoolScope $scope): array
     {
+        self::refuseDecoyReserve($scope, 'candidates');
+
         $rows = $this->pool($scope)
             ->toBase()
             ->select(['movie.id', 'movie.group_id', 'movie_projection.levels_mask'])
@@ -191,8 +200,15 @@ final readonly class PoolQuery
     private function pool(PoolScope $scope): Builder
     {
         $query = Movie::query()
-            ->join('movie_projection', 'movie_projection.movie_id', '=', 'movie.id')
-            ->inPool();
+            ->join('movie_projection', 'movie_projection.movie_id', '=', 'movie.id');
+
+        // Clause 1 : le catalogue publié, sauf pour la réserve non publiée des
+        // leurres, que seul `movies()` lit (D53 du 02/10).
+        if ($scope->decoyReserve) {
+            $query->inDecoyReserve();
+        } else {
+            $query->inPool();
+        }
 
         if ($scope->framesPerRound !== null) {
             $query->where('movie_projection.levels_count', '>=', $scope->framesPerRound);
@@ -244,6 +260,23 @@ final readonly class PoolQuery
         }
 
         return $query;
+    }
+
+    /**
+     * La réserve non publiée des leurres n'est ni comptée ni tirée : ses films
+     * ne sont jamais des œuvres du vivier, seulement des titres proposés en
+     * dernier recours par {@see self::movies()} (spec 70 § 10.3, D53 du 02/10).
+     *
+     * @throws InvalidArgumentException
+     */
+    private static function refuseDecoyReserve(PoolScope $scope, string $method): void
+    {
+        if ($scope->decoyReserve) {
+            throw new InvalidArgumentException(sprintf(
+                'PoolQuery::%s : la réserve non publiée des leurres n’est ni comptée ni tirée.',
+                $method,
+            ));
+        }
     }
 
     /**

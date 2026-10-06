@@ -21,6 +21,7 @@ const TRANSLITERATED: RevealMovie = {
     originalTitleLatin: 'Chōchin-mori no tabi',
     originalLanguage: 'ja',
     year: 2003,
+    letterboxdUrl: 'https://letterboxd.com/tmdb/1/',
 };
 
 /**
@@ -36,6 +37,7 @@ const SAME_AS_ORIGINAL: RevealMovie = {
     originalTitleLatin: null,
     originalLanguage: 'fr',
     year: null,
+    letterboxdUrl: null,
 };
 
 /** Un film espagnol traduit, sans translittération. */
@@ -48,6 +50,7 @@ const TRANSLATED: RevealMovie = {
     originalTitleLatin: null,
     originalLanguage: 'es',
     year: 1987,
+    letterboxdUrl: null,
 };
 
 describe('reveal-titles', () => {

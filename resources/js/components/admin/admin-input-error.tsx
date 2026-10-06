@@ -10,8 +10,8 @@ type Props = {
  *
  * Ce n'est PAS `<InputError>` du site joueur : celui-ci peint son texte avec
  * deux utilitaires de couleur littérale et une variante de thème sombre, que
- * le back-office s'interdit — il suit l'apparence du visiteur par les seuls
- * tokens, et un re-skin ne doit toucher que les tokens (règle 5). Ici,
+ * le back-office s'interdit — il se peint par les seuls tokens, et un re-skin
+ * ne doit toucher que les tokens (règle 5). Ici,
  * `text-destructive`, et rien d'autre.
  *
  * `role="alert"` : une erreur de validation arrive APRÈS un aller-retour

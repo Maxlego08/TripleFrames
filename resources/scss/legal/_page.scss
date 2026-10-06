@@ -1,0 +1,128 @@
+@use '../auth/tokens' as *;
+@use '../auth/mixins' as mix;
+
+.public-shell--legal {
+    min-width: 20rem;
+    background-color: $violet;
+    background-image: repeating-linear-gradient(
+        90deg,
+        $violet 0 5.5rem,
+        oklch(0.44 0.15 295) 5.5rem 9rem,
+        oklch(0.34 0.14 295) 9rem 13rem
+    );
+    color: $ink;
+    font-family: $body;
+    line-height: 1.55;
+
+    > footer {
+        border-top: $line solid $ink;
+        background: $yellow;
+        color: $ink;
+
+        > div {
+            display: flex;
+            width: min(100% - 2rem, 76rem);
+            max-width: none;
+            min-height: 4.5rem;
+            margin-inline: auto;
+            flex-flow: row wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.5rem 1.5rem;
+            padding: 0.5rem 0;
+            color: $ink;
+        }
+
+        a,
+        p {
+            color: $ink;
+            font-weight: 800;
+        }
+    }
+
+    a:focus-visible,
+    button:focus-visible,
+    [tabindex='0']:focus-visible {
+        @include mix.focus-ring;
+    }
+}
+
+.legal-page {
+    flex: 1;
+
+    &__inner {
+        width: min(100% - 2rem, 76rem);
+        margin-inline: auto;
+        padding-block: clamp(2rem, 5vw, 4rem);
+    }
+}
+
+.legal-hero {
+    max-width: 54rem;
+    margin-bottom: 1.35rem;
+    color: $paper;
+    text-shadow: 0.16rem 0.16rem 0 $ink;
+
+    h1,
+    p {
+        margin: 0;
+    }
+
+    h1 {
+        @include mix.display-type;
+        max-width: 18ch;
+        font-size: clamp(2.4rem, 6vw, 4.5rem);
+        line-height: 0.98;
+    }
+
+    p {
+        max-width: 58ch;
+        margin-top: 0.7rem;
+        font-size: clamp(1rem, 2vw, 1.15rem);
+        font-weight: 800;
+    }
+}
+
+.public-shell--legal .legal-note {
+    display: flex;
+    margin-bottom: 1.25rem;
+    grid-template-columns: none;
+    align-items: flex-start;
+    gap: 0.75rem;
+    border: 0.125rem solid $ink;
+    border-radius: $radius-small;
+    padding: 0.85rem 1rem;
+    background: $yellow;
+    color: $ink;
+    font-weight: 800;
+
+    svg {
+        width: 1.35rem;
+        height: 1.35rem;
+        flex: 0 0 auto;
+    }
+
+    [data-slot='alert-description'] {
+        color: $ink;
+    }
+}
+
+.legal-language-note {
+    width: fit-content;
+    margin: 0 0 1.25rem;
+    border: 0.125rem solid $ink;
+    border-radius: $radius-small;
+    padding: 0.65rem 0.85rem;
+    background: $cyan;
+    color: $ink;
+    font-size: 0.82rem;
+    font-weight: 800;
+}
+
+.legal-surface {
+    overflow: hidden;
+    border: $line solid $ink;
+    border-radius: $radius-large;
+    background: $paper;
+    box-shadow: 0.65rem 0.65rem 0 $ink;
+}

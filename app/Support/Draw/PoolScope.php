@@ -28,12 +28,16 @@ use InvalidArgumentException;
  * - **vivier catalogue** ({@see self::catalogue()}) : thèmes et `N` seulement,
  *   **aucune clause de salon** — supervision, sélecteur et solo ;
  * - **mesure d'un thème** ({@see self::themeProbe()}) : vivier catalogue d'un
- *   seul thème, publié ou non — l'écran des thèmes du back-office seul.
+ *   seul thème, publié ou non — l'écran des thèmes du back-office seul ;
+ * - **réserve non publiée des leurres** ({@see self::asDecoyReserve()}) : le
+ *   rang R6 des leurres seul (spec 70 § 10.3, D53 du 02/10) — films `draft` ou
+ *   `unpublished` et `clear`, jamais un film en jeu.
  *
  * Invariants gardés au constructeur, jamais écrêtés : `memorySince` et
  * `playedUntil` sont non nuls si et seulement si `roomId` l'est ; la
  * non-répétition exige un salon ; un `N` non nul est dans les bornes de
- * {@see RoomSettingsBounds}.
+ * {@see RoomSettingsBounds} ; la réserve des leurres n'a ni thème, ni `N`, ni
+ * non-répétition, et exclut au moins la cible.
  */
 final readonly class PoolScope
 {
@@ -49,6 +53,8 @@ final readonly class PoolScope
      * @param  list<int>  $excludedGroupIds  `movie_group` exclus, croissants et sans doublon.
      * @param  bool  $themesUnpublishedIncluded  Vrai pour {@see self::themeProbe()} seul : les thèmes
      *                                           demandés ne sont PAS intersectés avec les publiés (§ 3.3 clause 3).
+     * @param  bool  $decoyReserve  Vrai pour {@see self::asDecoyReserve()} seul : la clause de catalogue
+     *                              devient la réserve non publiée des leurres (§ 3.3 clause 1, D53 du 02/10).
      *
      * @throws InvalidArgumentException Un invariant du périmètre est violé.
      */
@@ -62,6 +68,7 @@ final readonly class PoolScope
         public array $excludedMovieIds,
         public array $excludedGroupIds,
         public bool $themesUnpublishedIncluded = false,
+        public bool $decoyReserve = false,
     ) {
         if ($framesPerRound !== null
             && ($framesPerRound < RoomSettingsBounds::MIN_FRAMES_PER_ROUND
@@ -89,6 +96,21 @@ final readonly class PoolScope
         if ($themesUnpublishedIncluded && ($roomAxis || count($themeIds) !== 1)) {
             throw new InvalidArgumentException(
                 'PoolScope : les thèmes non publiés ne sont comptés que par la mesure d’un thème seul, hors salon.',
+            );
+        }
+
+        // La réserve non publiée ne sert que le dernier recours des leurres :
+        // aucun thème, aucun `N`, aucune non-répétition, la cible toujours
+        // exclue. Un vivier de salon, un tirage ou un compteur qui la
+        // porteraient mettraient en jeu un film non publié.
+        if ($decoyReserve
+            && ($themeIds !== []
+                || $framesPerRound !== null
+                || $noRepeatMovies
+                || $themesUnpublishedIncluded
+                || $excludedMovieIds === [])) {
+            throw new InvalidArgumentException(
+                'PoolScope : la réserve non publiée ne sert que le dernier recours des leurres — ni thème, ni N, ni non-répétition, cible exclue.',
             );
         }
     }
@@ -219,6 +241,33 @@ final readonly class PoolScope
     }
 
     /**
+     * Réserve non publiée des leurres (spec 70 § 10.3, rang R6, D53 du 02/10) :
+     * le même périmètre d'exclusions — cible, son `movie_group`, films des
+     * manches démarrées —, mais la clause de catalogue devient « `draft` ou
+     * `unpublished`, et `clear` » ({@see Movie::inDecoyReserve()}) ; thèmes,
+     * `N` et non-répétition levés.
+     *
+     * **Dernier recours des leurres seul** : aucun vivier de salon, aucun
+     * tirage de films, aucun compteur ne la construit ({@see PoolQuery}
+     * refuse de la compter ou d'en tirer des candidats), et le constructeur
+     * refuse de lui rendre un thème, un `N` ou la non-répétition.
+     */
+    public function asDecoyReserve(): self
+    {
+        return new self(
+            themeIds: [],
+            framesPerRound: null,
+            roomId: $this->roomId,
+            memorySince: $this->memorySince,
+            playedUntil: $this->playedUntil,
+            noRepeatMovies: false,
+            excludedMovieIds: $this->excludedMovieIds,
+            excludedGroupIds: $this->excludedGroupIds,
+            decoyReserve: true,
+        );
+    }
+
+    /**
      * Même périmètre, autres thèmes demandés (`[]` = branche sans thème).
      *
      * @param  list<int>  $themeIds
@@ -243,13 +292,16 @@ final readonly class PoolScope
             excludedMovieIds: $this->excludedMovieIds,
             excludedGroupIds: $this->excludedGroupIds,
             themesUnpublishedIncluded: $this->themesUnpublishedIncluded,
+            decoyReserve: $this->decoyReserve,
         );
     }
 
     /**
      * Même périmètre sans la clause de non-répétition — au diagnostic du rapport
-     * seulement (§ 4.3), **jamais aux leurres** (§ 10.1). La mémoire du salon est
-     * conservée : elle sert encore la préférence de variante.
+     * (§ 4.3), et aux leurres **au seul rang R5 de dernier recours** (spec 70
+     * § 10.3, D53 du 02/10), après tous les rangs qui la conservent (§ 10.1) —
+     * amendé le 02/10. La mémoire du salon est conservée : elle sert encore la
+     * préférence de variante.
      */
     public function withoutNoRepeat(): self
     {
@@ -293,6 +345,7 @@ final readonly class PoolScope
             excludedMovieIds: $excludedMovieIds ?? $this->excludedMovieIds,
             excludedGroupIds: $excludedGroupIds ?? $this->excludedGroupIds,
             themesUnpublishedIncluded: $this->themesUnpublishedIncluded,
+            decoyReserve: $this->decoyReserve,
         );
     }
 

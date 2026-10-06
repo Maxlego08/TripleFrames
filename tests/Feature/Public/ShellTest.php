@@ -1,7 +1,6 @@
 <?php
 
 use App\Enums\Locale;
-use App\Http\Middleware\ForceGameAppearance;
 use App\Models\Player;
 use App\Models\Room;
 use App\Models\User;
@@ -11,7 +10,6 @@ use Illuminate\Routing\Route as RoutingRoute;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Route;
-use Illuminate\Support\Facades\View;
 use Illuminate\Testing\TestResponse;
 use Inertia\Inertia;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -24,18 +22,16 @@ use Tests\Support\Room\LobbyWrites;
 |--------------------------------------------------------------------------
 |
 | Créé par L90-1, complété par L90-3b (bandeau de maintenance), L90-7
-| (coquille de jeu, forçage sombre de `game/*`, région vivante unique) et
-| L90-9 (solo et salon expiré forcés, donc chaque page `game/*`). « rend le
-| lobby en sombre quelle que soit l'apparence du visiteur » y est écrit par
+| (coquille de jeu, région vivante unique) et L90-9 (solo et salon expiré,
+| donc chaque page `game/*`). « rend le lobby en sombre » y est écrit par
 | L50-4, première page `game/*` servie par une vraie route (dépendance
 | inversée, R-04).
 |
-| Un seul forçage d'apparence existe dans le produit : les pages `game/*`, en
-| sombre. Le back-office a perdu le sien (D8 du 23/09) : forcer le clair
-| n'avait d'autre motif qu'une préférence, alors que la revue d'une image
-| exige de la voir telle qu'elle sera servie en jeu — ce que seul un cadre
-| sombre LOCAL donne. Il suit donc l'apparence du visiteur, lue dans le
-| cookie `appearance` par `HandleAppearance`, comme tout le reste du site.
+| Aucun choix d'apparence n'existe dans le produit (D56 du 02/10, qui révise
+| D8 du 23/09) : tout le site est sombre, `<html class="dark">` étant écrit en
+| dur dans `app.blade.php`. Ni cookie `appearance`, ni sélecteur, ni page de
+| réglage, ni forçage propre aux pages `game/*` ; le back-office garde le
+| design du starter, en sombre lui aussi.
 |
 | Aucun DOM au jalon 1, ni en Pest ni en Vitest (C18 § 2.4) : ce que rend la
 | coquille côté client se prouve sur la source sans ses commentaires
@@ -325,44 +321,44 @@ function shellRoutePages(RoutingRoute $route): ?array
     return count($calls[0]) === count($names[2]) ? array_values($names[2]) : null;
 }
 
-it("laisse le back-office suivre l'apparence du visiteur", function () {
+it("rend le back-office en sombre, sans aucun choix d'apparence", function () {
     // Les pages React ne sont pas en cause ici : seule compte la balise
     // `<html>` que Blade rend autour d'elles.
     $this->withoutVite();
 
     $curator = User::factory()->curator()->create();
 
-    // Le retrait est entier : ni classe, ni alias, ni middleware sur le groupe.
-    expect(class_exists('App\\Http\\Middleware\\ForceAdminAppearance'))->toBeFalse()
-        ->and(array_keys(app('router')->getMiddleware()))->not->toContain('admin.appearance')
+    // Le retrait est entier (D56 du 02/10) : ni middleware d'apparence, ni
+    // alias, ni page de réglage.
+    foreach (['ForceAdminAppearance', 'ForceGameAppearance', 'HandleAppearance'] as $class) {
+        expect(class_exists('App\\Http\\Middleware\\'.$class))->toBeFalse("{$class} existe encore");
+    }
+
+    expect(array_keys(app('router')->getMiddleware()))->not->toContain('admin.appearance', 'game.appearance')
         ->and(Route::getRoutes()->getByName('admin.dashboard')?->gatherMiddleware())
-        ->not->toContain('admin.appearance');
+        ->not->toContain('admin.appearance')
+        ->and(Route::has('appearance.edit'))->toBeFalse();
 
-    // `appearance` est exclu du chiffrement des cookies (`bootstrap/app.php`) :
-    // le front l'écrit en clair, le test aussi.
-    $dark = $this->actingAs($curator)
-        ->withUnencryptedCookie('appearance', 'dark')
-        ->get(route('admin.dashboard'))
-        ->assertOk();
+    $this->actingAs($curator)->get('/settings/appearance')->assertNotFound();
 
-    $darkTag = shellHtmlTag($dark);
+    // Un cookie `appearance` hérité d'avant D56 n'a plus aucun effet : la
+    // classe `dark` est toujours là, rendue par le serveur.
+    foreach ([null, 'light', 'system', 'dark'] as $appearance) {
+        if ($appearance !== null) {
+            $this->withUnencryptedCookie('appearance', $appearance);
+        }
 
-    expect($darkTag)->not->toContain('data-appearance-forced')
-        ->and(shellHtmlClasses($darkTag))->toContain('dark');
+        $response = $this->actingAs($curator)->get(route('admin.dashboard'))->assertOk();
+        $tag = shellHtmlTag($response);
+        $label = $appearance ?? 'sans cookie';
 
-    $light = $this->actingAs($curator)
-        ->withUnencryptedCookie('appearance', 'light')
-        ->get(route('admin.dashboard'))
-        ->assertOk();
+        expect(shellHtmlClasses($tag))->toContain('dark')
+            ->and($tag)->not->toContain('data-appearance-forced', "{$label} : attribut de forçage");
 
-    $lightTag = shellHtmlTag($light);
-
-    expect($lightTag)->not->toContain('data-appearance-forced')
-        ->and(shellHtmlClasses($lightTag))->not->toContain('dark');
-
-    // Le script en ligne ne force rien non plus : il ne lit que la préférence
-    // (`light` ici), et n'ajoute `dark` qu'en préférence « système ».
-    expect((string) $light->getContent())->toContain("const appearance = 'light';");
+        // Aucun script de détection de la préférence système.
+        expect((string) $response->getContent())->not->toContain('const appearance')
+            ->not->toContain('prefers-color-scheme');
+    }
 });
 
 it("monte le bandeau de maintenance sous l'en-tête public, au rôle note, sur sa seule clé sans paramètre", function () {
@@ -424,16 +420,16 @@ it("monte le bandeau de maintenance sous l'en-tête public, au rôle note, sur s
         ->and($header < $mounted && $mounted < $main)->toBeTrue();
 });
 
-it('garde le tableau de bord du starter dans AppLayout', function () {
-    // Côté serveur : la cible de `fortify.home` rend toujours la page du
-    // starter `dashboard`, conservée au jalon 1 (spec 90 § 2.1) ; son retrait
-    // relève de 40 au jalon 2.
-    expect(config('fortify.home'))->toBe(parse_url(route('dashboard'), PHP_URL_PATH));
+it('envoie la sortie de connexion vers les réglages et retire le dashboard joueur', function () {
+    expect(config('fortify.home'))->toBe(parse_url(route('profile.edit'), PHP_URL_PATH));
 
     $this->actingAs(User::factory()->create())
-        ->get(route('dashboard'))
+        ->get(route('profile.edit'))
         ->assertOk()
-        ->assertInertia(fn (Assert $page) => $page->component('dashboard'));
+        ->assertInertia(fn (Assert $page) => $page->component('settings/profile'));
+
+    expect(Route::getRoutes()->getByName('dashboard'))->toBeNull();
+    $this->get('/dashboard')->assertNotFound();
 
     // Côté client : le `switch` d'`app.tsx`, dans l'ordre de C16 § 2.1.
     // `welcome` a rejoint `PublicLayout` à sa réécriture en accueil (L90-8) :
@@ -446,21 +442,20 @@ it('garde le tableau de bord du starter dans AppLayout', function () {
         ['conditions' => ["name.startsWith('admin/')"], 'layout' => 'AdminLayout'],
         ['conditions' => ["name.startsWith('auth/')"], 'layout' => 'AuthLayout'],
         ['conditions' => ["name.startsWith('settings/')"], 'layout' => '[AppLayout, SettingsLayout]'],
-        ['conditions' => ["name === 'dashboard'"], 'layout' => 'AppLayout'],
         ['conditions' => ['default'], 'layout' => 'PublicLayout'],
     ]);
 });
 
-it("ne marque jamais une page publique comme d'apparence forcée", function () {
+it("rend chaque page publique en sombre, quel que soit le cookie d'apparence", function () {
     // Seule compte ici la balise `<html>` que Blade rend autour des pages ;
     // la page d'erreur est celle de la production, hors mode debug.
     $this->withoutVite();
     config(['app.debug' => false]);
 
     // 1. Les pages joueurs hors `game/*` qui existent : accueil, pages
-    //    légales, « signaler un contenu », écrans de compte, tableau de bord,
-    //    réglages, page d'erreur d'une URL inconnue. Chacune suit le cookie
-    //    `appearance`, jamais un forçage.
+    //    légales, « signaler un contenu », écrans de compte,
+    //    réglages, page d'erreur d'une URL inconnue. Chacune est sombre, et un
+    //    cookie `appearance` hérité d'avant D56 n'y change rien.
     $user = User::factory()->create();
 
     $pages = [
@@ -471,11 +466,10 @@ it("ne marque jamais une page publique comme d'apparence forcée", function () {
         'signaler un contenu' => fn () => $this->get(route('takedown.create')),
         'connexion' => fn () => $this->get(route('login')),
         'URL inconnue' => fn () => $this->get('/__shell/introuvable'),
-        'tableau de bord' => fn () => $this->actingAs($user)->get(route('dashboard')),
         'profil' => fn () => $this->actingAs($user)->get(route('profile.edit')),
     ];
 
-    foreach (['light', 'dark'] as $appearance) {
+    foreach (['light', 'system', 'dark'] as $appearance) {
         foreach ($pages as $label => $visit) {
             // Requête neuve : ni domaines ni compte hérités de la visite
             // précédente (un invité connecté serait renvoyé de `login`).
@@ -490,117 +484,44 @@ it("ne marque jamais une page publique comme d'apparence forcée", function () {
 
             $tag = shellHtmlTag($response);
 
-            expect($tag)->not->toContain('data-appearance-forced', "{$label} ({$appearance}) : forcée")
-                ->and(in_array('dark', shellHtmlClasses($tag), true))->toBe($appearance === 'dark', "{$label} ({$appearance}) : classe dark");
+            expect($tag)->not->toContain('data-appearance-forced', "{$label} ({$appearance}) : attribut de forçage")
+                ->and(in_array('dark', shellHtmlClasses($tag), true))->toBeTrue("{$label} ({$appearance}) : classe dark absente");
         }
     }
 
-    // 2. La moitié serveur existe, sous son alias, et force bien une page de
-    //    jeu malgré un cookie clair : sans quoi son absence ailleurs ne
-    //    prouverait rien. Route d'essai déclarée ici, comme le fera le groupe
-    //    `game/*` de `routes/game.php`. Jouée APRÈS les pages publiques : le
-    //    partage de vue survit d'une requête à l'autre dans l'application du
-    //    test, jamais d'une requête à l'autre en production.
-    expect(app('router')->getMiddleware())->toHaveKey('game.appearance')
-        ->and(app('router')->getMiddleware()['game.appearance'])->toBe(ForceGameAppearance::class);
-
-    Route::middleware(['web', 'game.appearance', 'translations:game,room,legal'])
-        ->get('/__shell/game', fn () => Inertia::render('game/lobby'));
-
-    app()->forgetInstance(TranslationDomains::class);
-
-    $forced = shellHtmlTag($this->withUnencryptedCookie('appearance', 'light')->get('/__shell/game')->assertOk());
-
-    expect($forced)->toContain('data-appearance-forced="dark"')
-        ->and(shellHtmlClasses($forced))->toContain('dark');
-
-    // 3. Règle de groupe (spec 90 § 2.2) : une route qui porte
-    //    `game.appearance` ne rend QUE des pages `game/*` — le partage a lieu
-    //    avant le contrôleur, qui ne peut plus rien décider après coup. Garde
-    //    auto-activée : `room.show` le porte depuis L50-3b. Les pages d'entrée
-    //    `room/*` ne le portent jamais.
+    // 2. Côté client, plus rien ne lit, n'écrit ni ne bascule une apparence :
+    //    ni hook, ni bascule, ni cookie, ni détection de la préférence
+    //    système. Fichiers générés compris (Wayfinder, types de traduction) :
+    //    une route ou une clé `appearance` oubliée y réapparaîtrait.
     $violations = [];
 
-    foreach (Route::getRoutes()->getRoutes() as $route) {
-        /** @var RoutingRoute $route */
-        if (! in_array('game.appearance', $route->gatherMiddleware(), true) || str_starts_with($route->uri(), '__shell/')) {
-            continue;
-        }
-
-        $label = $route->getName() ?? $route->uri();
-
-        if (! in_array('web', $route->gatherMiddleware(), true)) {
-            $violations[] = "{$label} : hors du groupe web";
-        }
-
-        $pages = shellRoutePages($route);
-
-        if ($pages === null) {
-            $violations[] = "{$label} : action {$route->getActionName()} illisible ou nom de page non littéral, le rendu n'est pas vérifiable";
-
-            continue;
-        }
-
-        foreach ($pages as $name) {
-            if (! str_starts_with($name, 'game/')) {
-                $violations[] = "{$label} : rend {$name}";
-            }
-        }
-    }
-
-    foreach (['room.create', 'room.entry', 'solo.create'] as $name) {
-        $route = Route::getRoutes()->getByName($name);
-
-        if ($route !== null && in_array('game.appearance', $route->gatherMiddleware(), true)) {
-            $violations[] = "{$name} : page d'entrée room/* forcée";
+    foreach (shellFrontFiles(['']) as $file) {
+        if (preg_match('/appearance|initializeTheme|prefers-color-scheme/i', shellSource($file), $match) === 1) {
+            $violations[] = "{$file} : {$match[0]}";
         }
     }
 
     expect($violations)->toBe([]);
 
-    // 4. Moitié cliente : `useForcedAppearance` n'est appelé que par
-    //    `GameLayout`, en sombre ; aucune autre coquille ne force rien.
-    $callers = [];
-
-    foreach (shellFrontFiles(['']) as $file) {
-        if ($file === 'hooks/use-forced-appearance.ts' || str_starts_with($file, 'components/ui/')) {
-            continue;
-        }
-
-        preg_match_all('/\buseForcedAppearance\(([^)]*)\)/', shellSource($file), $calls);
-
-        foreach ($calls[1] as $argument) {
-            $callers[] = "{$file} : {$argument}";
-        }
+    foreach (['hooks/use-appearance.tsx', 'hooks/use-forced-appearance.ts', 'components/appearance-tabs.tsx', 'components/public/appearance-toggle.tsx', 'pages/settings/appearance.tsx'] as $removed) {
+        expect(file_exists(resource_path("js/{$removed}")))->toBeFalse("{$removed} existe encore");
     }
-
-    expect($callers)->toBe(["layouts/game/game-layout.tsx : 'dark'"]);
 });
 
-it("rend le lobby en sombre quelle que soit l'apparence du visiteur", function () {
+it('rend le lobby en sombre', function () {
     // Écrit par L50-4 (dépendance inversée, spec 90 § L90-7) : `game/lobby`
     // est la première page `game/*` servie par une vraie route, `room.show`.
-    // Le forçage a trois moitiés (spec 90 § 2.2) : le serveur force le
-    // document quel que soit le cookie `appearance`, l'attribut
-    // `data-appearance-forced` empêche `initializeTheme()` de reposer la
-    // préférence stockée, et `GameLayout`, coquille de toute page `game/*`,
-    // tient la moitié cliente pour une navigation Inertia.
+    // Tout le site est sombre (D56 du 02/10) : la page du salon l'est donc
+    // aussi, sans forçage propre, quel que soit un cookie `appearance` hérité.
     $this->withoutVite();
 
     $token = PlayerToken::mint(Locale::French);
     [$room] = LobbyWrites::hostedRoom($token);
     LobbyWrites::actAs($this, $token);
 
-    expect(Route::getRoutes()->getByName('room.show')?->gatherMiddleware())->toContain('game.appearance');
-
-    // Sans cookie d'abord, puis chaque préférence : le partage de vue survit
-    // d'une requête à l'autre dans l'application du test, il est donc remis à
-    // zéro avant chacune — chaque réponse doit forcer d'elle-même.
     foreach ([null, 'light', 'system', 'dark'] as $appearance) {
         app()->forgetInstance(TranslationDomains::class);
         Cache::flush();
-        View::share('appearanceForced', false);
-        View::share('appearance', null);
 
         if ($appearance !== null) {
             $this->withUnencryptedCookie('appearance', $appearance);
@@ -613,11 +534,11 @@ it("rend le lobby en sombre quelle que soit l'apparence du visiteur", function (
 
         $tag = shellHtmlTag($response);
 
-        expect(str_contains($tag, 'data-appearance-forced="dark"'))->toBeTrue("{$label} : non forcée")
+        expect($tag)->not->toContain('data-appearance-forced', "{$label} : attribut de forçage")
             ->and(in_array('dark', shellHtmlClasses($tag), true))->toBeTrue("{$label} : classe dark absente");
     }
 
-    // Moitié cliente : la page prend `GameLayout`, qui force le sombre.
+    // La page prend `GameLayout`.
     $game = array_values(array_filter(
         shellLayoutSwitch(),
         static fn (array $group): bool => in_array("name.startsWith('game/')", $group['conditions'], true),
@@ -625,17 +546,15 @@ it("rend le lobby en sombre quelle que soit l'apparence du visiteur", function (
 
     expect($game)->toHaveCount(1)
         ->and($game[0]['layout'])->toBe('GameLayout')
-        ->and(is_file(resource_path('js/pages/game/lobby.tsx')))->toBeTrue()
-        ->and(substr_count(shellSource('layouts/game/game-layout.tsx'), "useForcedAppearance('dark')"))->toBe(1);
+        ->and(is_file(resource_path('js/pages/game/lobby.tsx')))->toBeTrue();
 });
 
-it("rend le solo et le salon expiré en sombre quelle que soit l'apparence du visiteur", function () {
-    // L90-9 (C16 § 4 : « chaque page `game/*` porte les trois moitiés du
-    // forçage sombre », spec 90 § 2.2). `game/lobby` est prouvée par le test
-    // précédent ; restent les deux autres pages `game/*` du jalon 1, servies
-    // par leurs vraies routes : `game/solo` par `solo.show` à un siège solo,
-    // et `game/room-expired` par `room.show` sur un salon archivé — en 410,
-    // mais rendue par Blade comme toute page, donc forcée comme elle.
+it('rend le solo et le salon expiré en sombre, dans la coquille de jeu', function () {
+    // L90-9 : `game/lobby` est prouvée par le test précédent ; restent les
+    // deux autres pages `game/*` du jalon 1, servies par leurs vraies routes :
+    // `game/solo` par `solo.show` à un siège solo, et `game/room-expired` par
+    // `room.show` sur un salon archivé — en 410, mais rendue par Blade comme
+    // toute page, donc sombre comme elle (D56 du 02/10).
     $this->withoutVite();
 
     $token = PlayerToken::mint(Locale::French);
@@ -648,14 +567,6 @@ it("rend le solo et le salon expiré en sombre quelle que soit l'apparence du vi
         'room.show' => ['component' => 'game/room-expired', 'status' => 410, 'url' => route('room.show', $expired)],
     ];
 
-    foreach (array_keys($visits) as $name) {
-        expect(Route::getRoutes()->getByName($name)?->gatherMiddleware())->toContain('game.appearance');
-    }
-
-    // Sans cookie d'abord, puis chaque préférence, `light` comprise : le
-    // partage de vue survit d'une requête à l'autre dans l'application du
-    // test, il est donc remis à zéro avant chacune — chaque réponse doit
-    // forcer d'elle-même.
     foreach ([null, 'light', 'system', 'dark'] as $appearance) {
         if ($appearance !== null) {
             $this->withUnencryptedCookie('appearance', $appearance);
@@ -664,8 +575,6 @@ it("rend le solo et le salon expiré en sombre quelle que soit l'apparence du vi
         foreach ($visits as $visit) {
             app()->forgetInstance(TranslationDomains::class);
             Cache::flush();
-            View::share('appearanceForced', false);
-            View::share('appearance', null);
 
             $label = $visit['component'].' ('.($appearance ?? 'sans cookie').')';
             $response = $this->get($visit['url'])->assertStatus($visit['status']);
@@ -674,13 +583,13 @@ it("rend le solo et le salon expiré en sombre quelle que soit l'apparence du vi
 
             $tag = shellHtmlTag($response);
 
-            expect(str_contains($tag, 'data-appearance-forced="dark"'))->toBeTrue("{$label} : non forcée")
+            expect($tag)->not->toContain('data-appearance-forced', "{$label} : attribut de forçage")
                 ->and(in_array('dark', shellHtmlClasses($tag), true))->toBeTrue("{$label} : classe dark absente");
         }
     }
 
     // Ce test et le précédent couvrent CHAQUE page `game/*` du dépôt : une
-    // page ajoutée sans la preuve de son forçage échoue ici.
+    // page ajoutée sans sa preuve échoue ici.
     $pages = array_map(
         static fn (string $file): string => substr($file, strlen('pages/'), -strlen('.tsx')),
         shellFrontFiles(['pages/game']),
@@ -688,10 +597,8 @@ it("rend le solo et le salon expiré en sombre quelle que soit l'apparence du vi
 
     expect($pages)->toBe(['game/lobby', 'game/room-expired', 'game/solo']);
 
-    // Moitié serveur, pour toutes : chaque route du groupe `web` qui rend une
-    // page `game/*` porte `game.appearance`, et chaque page en a au moins une
-    // (le sens inverse — une route forcée ne rend que des pages `game/*` —
-    // est prouvé par « ne marque jamais une page publique… »).
+    // Chaque page `game/*` est servie par au moins une route du groupe `web`,
+    // et le rendu de chacune de ces routes est vérifiable.
     $rendered = [];
     $violations = [];
 
@@ -711,14 +618,8 @@ it("rend le solo et le salon expiré en sombre quelle que soit l'apparence du vi
         }
 
         foreach ($routePages as $page) {
-            if (! str_starts_with($page, 'game/')) {
-                continue;
-            }
-
-            $rendered[] = $page;
-
-            if (! in_array('game.appearance', $route->gatherMiddleware(), true)) {
-                $violations[] = "{$label} : rend {$page} sans game.appearance";
+            if (str_starts_with($page, 'game/')) {
+                $rendered[] = $page;
             }
         }
     }
@@ -729,21 +630,20 @@ it("rend le solo et le salon expiré en sombre quelle que soit l'apparence du vi
     expect($violations)->toBe([])
         ->and($rendered)->toBe($pages);
 
-    // Moitié cliente : toute page `game/*` prend `GameLayout`, qui force le
-    // sombre, et aucune ne lui substitue sa coquille. Sous Inertia 3, un
-    // `layout` posé par la page remplace la coquille du `switch`, sauf un
-    // simple objet de props, qui la garde (`Page.layout = { … }`, espaces et
-    // retours à la ligne compris). Toute fonction est refusée, même un
-    // résolveur qui rendrait des props : une lecture du source ne le distingue
-    // pas d'une fonction de rendu, la garde reste donc du côté prudent.
+    // Toute page `game/*` prend `GameLayout`, et aucune ne lui substitue sa
+    // coquille. Sous Inertia 3, un `layout` posé par la page remplace la
+    // coquille du `switch`, sauf un simple objet de props, qui la garde
+    // (`Page.layout = { … }`, espaces et retours à la ligne compris). Toute
+    // fonction est refusée, même un résolveur qui rendrait des props : une
+    // lecture du source ne le distingue pas d'une fonction de rendu, la garde
+    // reste donc du côté prudent.
     $game = array_values(array_filter(
         shellLayoutSwitch(),
         static fn (array $group): bool => in_array("name.startsWith('game/')", $group['conditions'], true),
     ));
 
     expect($game)->toHaveCount(1)
-        ->and($game[0]['layout'])->toBe('GameLayout')
-        ->and(substr_count(shellSource('layouts/game/game-layout.tsx'), "useForcedAppearance('dark')"))->toBe(1);
+        ->and($game[0]['layout'])->toBe('GameLayout');
 
     foreach ($pages as $page) {
         expect(shellSource("pages/{$page}.tsx"))->not->toMatch('/\.layout\s*=(?!=)(?!\s*\{)/', "{$page} : coquille substituée");
@@ -753,7 +653,7 @@ it("rend le solo et le salon expiré en sombre quelle que soit l'apparence du vi
 it('garde le rendu côté serveur désactivé', function () {
     // Aucun SSR en v1 (n° 70, E10-13) : la production n'a aucun processus
     // Node, et un SSR actif en développement seulement ferait diverger le
-    // rendu initial, donc le forçage d'apparence et l'indexation.
+    // rendu initial, donc la balise `<html>` et l'indexation.
     expect(config('inertia.ssr.enabled'))->toBeFalse();
 
     // Écrit en dur, jamais lu d'une variable d'environnement qu'un
@@ -777,7 +677,7 @@ it('garde le rendu côté serveur désactivé', function () {
         ->toContain('<script data-page="app" type="application/json">');
 
     // Aucun docblock ne dit le contraire (E10-13).
-    foreach ([app_path('Models/User.php'), resource_path('js/hooks/use-forced-appearance.ts')] as $path) {
+    foreach ([app_path('Models/User.php'), resource_path('views/app.blade.php')] as $path) {
         $source = (string) file_get_contents($path);
 
         expect($source)->toContain('Aucun SSR en v1')
@@ -973,9 +873,9 @@ it('compose la coquille de jeu, de haut en bas, du bandeau, de la page, de la li
     // au jalon 1) ; ce test en garde les invariants dans la source.
     $layout = shellSource('layouts/game/game-layout.tsx');
 
-    // Forcée en sombre, hauteur visible, geste de rafraîchissement bloqué,
-    // avis de page expirée : les quatre hooks de la coquille.
-    foreach (["useForcedAppearance('dark')", 'useVisualViewport()', 'useOverscrollLock()', 'useFlashNotice()'] as $hook) {
+    // Hauteur visible, geste de rafraîchissement bloqué, avis de page
+    // expirée : les trois hooks de la coquille.
+    foreach (['useVisualViewport()', 'useOverscrollLock()', 'useFlashNotice()'] as $hook) {
         expect(substr_count($layout, $hook))->toBe(1, "{$hook} absent ou répété");
     }
 
@@ -1015,10 +915,11 @@ it('compose la coquille de jeu, de haut en bas, du bandeau, de la page, de la li
     expect($layout)->toMatch('/\{notice !== null && \(\s*<div[^>]*>\s*<Alert\b[^>]*\brole="note"/');
 
     // La ligne basse contient exactement le sélecteur de langue en icône
-    // seule, à 44 px, et le déclencheur du pied replié.
+    // seule et le déclencheur du pied replié. Sa cible de 44 px appartient à
+    // sa feuille SCSS dédiée, jamais à un utilitaire Tailwind posé ici.
     expect(preg_match('/<LanguageSwitcher\b(.*?)\/>\s*<SiteFooter variant="collapsed" \/>\s*<\/div>/s', $layout, $line))->toBe(1)
         ->and($line[1])->toMatch('/\biconOnly\b/')
-        ->and($line[1])->toContain('min-h-11 min-w-11');
+        ->and($line[1])->not->toContain('className=');
 
     // `PublicLayout` monte aussi l'annonceur, une fois, après le pied et
     // avant le `Toaster`, pour la seule annonce du changement de langue

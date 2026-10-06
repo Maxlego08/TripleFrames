@@ -40,12 +40,12 @@ return [
 
     'create' => [
         'title' => 'Create a room',
-        'intro' => 'Pick a nickname and an avatar: you will set up the game in the room.',
+        'intro' => 'Pick a nickname: you will set up the game, and your avatar, in the room.',
         'submit' => 'Create room',
     ],
 
     /*
-    | Pseudo et avatar d’un siège, champs communs aux formulaires de création
+    | Pseudo d’un siège (aucun avatar à l’entrée, D55 du 02/10), champ commun aux formulaires de création
     | et d’entrée (spec 50 § 6.2 et § 7.2). Les bornes arrivent en props,
     | depuis `NicknameNormalizer`, et le client les formate.
     */
@@ -81,7 +81,7 @@ return [
 
     'solo' => [
         'title' => 'Play solo',
-        'intro' => 'Practise on your own on the catalogue: pick a preset, a nickname and an avatar.',
+        'intro' => 'Practise on your own on the catalogue: pick a preset and a nickname.',
         'choose_preset' => 'Choose a preset',
         'start' => 'Start training',
         'nickname_hint' => 'Between :min and :max characters.',
@@ -274,6 +274,15 @@ return [
         'changes_title' => 'Settings adjusted',
         'preset_grayed' => 'Not enough movies for this preset: playable with :frames frames per round.',
         'preset_unplayable' => 'Not enough movies for this preset.',
+        'avatar_taken' => 'Another player already has this avatar.',
+        // Seat avatar picker, in the lobby only (D55 of 02/10).
+        'avatar' => [
+            'title' => 'Your avatar',
+            'hint' => 'You can change it until the game starts.',
+            'change' => 'Change avatar',
+            'done' => 'Done',
+            'apply' => 'Use this avatar',
+        ],
     ],
 
     /*

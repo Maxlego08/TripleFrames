@@ -7,7 +7,6 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useFlashNotice } from '@/hooks/game/use-flash-notice';
 import { useOverscrollLock } from '@/hooks/game/use-overscroll-lock';
 import { useVisualViewport } from '@/hooks/game/use-visual-viewport';
-import { useForcedAppearance } from '@/hooks/use-forced-appearance';
 import type { GameLayoutProps } from '@/types/ui';
 
 /**
@@ -35,8 +34,6 @@ import type { GameLayoutProps } from '@/types/ui';
  * un `Alert` au rôle `note`, qui ne parle pas, et annoncé une fois.
  *
  * Comportement :
- * - **forcée en sombre** — moitié cliente du forçage (`useForcedAppearance`),
- *   la moitié serveur étant `ForceGameAppearance` ;
  * - **hauteur** : `--game-viewport-height`, hauteur visible clavier ouvert
  *   compris (`useVisualViewport`), repli `100dvh`, jamais `100vh` (principe
  *   5) ;
@@ -45,11 +42,10 @@ import type { GameLayoutProps } from '@/types/ui';
  *   `ScrollArea` à l'intérieur de `main` ; le geste « tirer pour rafraîchir »
  *   est désactivé tant que la coquille est montée (`useOverscrollLock`).
  *
- * Les trois hooks d'effet tiennent un compteur au niveau module : ils
+ * Les deux hooks d'effet tiennent un compteur au niveau module : ils
  * résistent au double montage de `strictMode`.
  */
 export default function GameLayout({ children }: GameLayoutProps) {
-    useForcedAppearance('dark');
     useVisualViewport();
     useOverscrollLock();
 
@@ -78,11 +74,7 @@ export default function GameLayout({ children }: GameLayoutProps) {
             </main>
 
             <div className="flex shrink-0 items-center justify-between gap-2 border-t border-border px-2">
-                <LanguageSwitcher
-                    iconOnly
-                    align="start"
-                    className="min-h-11 min-w-11"
-                />
+                <LanguageSwitcher iconOnly align="start" />
                 <SiteFooter variant="collapsed" />
             </div>
 

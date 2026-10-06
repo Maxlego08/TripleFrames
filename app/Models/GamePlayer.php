@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Avatars\AccountImage;
 use App\Avatars\AvatarRef;
 use App\Avatars\UploadedAvatars;
 use App\Enums\AvatarKind;
@@ -125,15 +126,14 @@ class GamePlayer extends Model
 
         // Nature gelée `upload` (spec 40 § 11.5) : la nature et le repli sont
         // gelés, l'image se lit VIVANTE sur le compte du siège.
-        if ($this->display_avatar_kind === AvatarKind::Upload) {
-            $path = UploadedAvatars::visiblePath($this->seatUserId());
+        $image = AccountImage::fromKind($this->display_avatar_kind);
+        $path = $image === null ? null : UploadedAvatars::visiblePath($this->seatUserId(), $image);
 
-            if ($path !== null) {
-                return AvatarRef::upload($path, $initials);
-            }
+        if ($image !== null && $path !== null) {
+            return $image === AccountImage::Upload ? AvatarRef::upload($path, $initials) : AvatarRef::provider($path, $initials);
         }
 
-        if (in_array($this->display_avatar_kind, [AvatarKind::Preset, AvatarKind::Upload], true) && $this->display_avatar_preset !== null) {
+        if ($this->display_avatar_kind !== null && $this->display_avatar_preset !== null) {
             return AvatarRef::preset($this->display_avatar_preset, $initials);
         }
 

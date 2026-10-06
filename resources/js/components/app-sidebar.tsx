@@ -1,5 +1,5 @@
 import { Link } from '@inertiajs/react';
-import { LayoutGrid } from 'lucide-react';
+import { Settings } from 'lucide-react';
 import AppLogo from '@/components/app-logo';
 import { NavMain } from '@/components/nav-main';
 import { NavUser } from '@/components/nav-user';
@@ -13,12 +13,12 @@ import {
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
 import { useTranslations } from '@/hooks/use-translations';
-import { dashboard } from '@/routes';
+import { edit as editProfile } from '@/routes/profile';
 import type { NavItem } from '@/types';
 
 /**
- * Barre latérale du starter, gardée au jalon 1 pour `dashboard` et
- * `settings/*` (spec 90 § 2.5 : dette assumée, soldée au jalon 2 par 40).
+ * Ancienne variante de barre latérale, conservée pour les gabarits qui la
+ * réutiliseraient hors de la coquille actuelle des réglages.
  *
  * Son pied ne porte plus les deux liens du starter (dépôt du kit,
  * documentation Laravel), retirés avec leurs clés (spec 90 § 6.6) : les liens
@@ -32,9 +32,9 @@ export function AppSidebar() {
     // un libellé calculé à l'import resterait figé dans la langue du bundle.
     const mainNavItems: NavItem[] = [
         {
-            title: t('common.nav.dashboard'),
-            href: dashboard(),
-            icon: LayoutGrid,
+            title: t('common.nav.settings'),
+            href: editProfile(),
+            icon: Settings,
         },
     ];
 
@@ -44,7 +44,7 @@ export function AppSidebar() {
                 <SidebarMenu>
                     <SidebarMenuItem>
                         <SidebarMenuButton size="lg" asChild>
-                            <Link href={dashboard()} prefetch>
+                            <Link href={editProfile()} prefetch>
                                 <AppLogo />
                             </Link>
                         </SidebarMenuButton>

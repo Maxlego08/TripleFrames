@@ -84,8 +84,11 @@ use LogicException;
  *    served_frame_id, last_seen_at = served_at)` (10 § 7.9) — sur la variante
  *    réellement servie, jamais sur celle du tirage ;
  * 7. après commit : en multijoueur, `tier.opened` `{ sequenceIndex,
- *    roundNumber, tierIndex, opensAt, next }` (`next` = palier `i+1` frappé
- *    à l'étape 5, nul au dernier palier), diffusion de frontière mesurée
+ *    roundNumber, tierIndex, opensAt, next, choicesUnavailable }` (`next` =
+ *    palier `i+1` frappé à l'étape 5, nul au dernier palier ;
+ *    `choicesUnavailable` vrai si et seulement si la composition de l'étape 4
+ *    a rendu faux — cas terminal en Normal, D54 du 02/10), diffusion de
+ *    frontière mesurée
  *    contre `Tᵢ` ; puis, au palier du QCM et **seulement si la composition a
  *    rendu vrai**, un `seat.choices` CIBLÉ par participation dont la saisie
  *    accepte un clic (`open` et `text_exhausted`, D20 du 23/09) et dont le
@@ -253,6 +256,9 @@ final readonly class OpenTier
                     'tierIndex' => $lockedTier->tier_index,
                     'opensAt' => WireTime::iso($opensAt),
                     'next' => $nextTier instanceof RoundTier ? TierImageRefPresenter::image($lockedGame, $nextTier) : null,
+                    // Cas terminal du QCM en Normal (D54 du 02/10) : la Facile
+                    // a annulé plus haut, l'Expert ne compose jamais (`null`).
+                    'choicesUnavailable' => $choicesComposed === false,
                 ]))->atBoundary($opensAt));
 
                 if ($choicesComposed === true) {

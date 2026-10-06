@@ -42,6 +42,9 @@ final class GameTraceWriter
 
     public const string ROUND_CANCELLED = 'round.cancelled';
 
+    /** Cas terminal du QCM (spec 70 § 10.7, D54 du 02/10). */
+    public const string CHOICES_UNAVAILABLE = 'choices.unavailable';
+
     public const string GAME_PAUSED = 'game.paused';
 
     public const string GAME_RESUMED = 'game.resumed';

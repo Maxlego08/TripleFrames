@@ -10,9 +10,10 @@ use Illuminate\Foundation\Http\FormRequest;
  * Création d'un salon — `room.store`, `POST /r` (spec 50 § 6.2 ; contrat C5,
  * 40 § 5.8).
  *
- * Pseudo et avatar de l'hôte, par le trait {@see PlayerIdentityValidationRules} :
+ * Pseudo de l'hôte, par le trait {@see PlayerIdentityValidationRules} :
  * `prepareForValidation()` remplace le pseudo par sa forme canonique, puis
- * `nicknameRules()` et `avatarPresetRules()`. La forme validée est celle
+ * `nicknameRules()`. Aucun avatar (D55 du 02/10) : la prise de siège
+ * l'attribue, un champ `avatar` envoyé est ignoré. La forme validée est celle
  * qu'écrit la prise de siège : aucune seconde normalisation. L'unicité du
  * pseudo (`taken`) n'est pas ici : elle se lit sous le verrou du salon, par
  * la prise de siège, jamais par {@see ValidNickname}.
@@ -31,7 +32,6 @@ class StoreRoomRequest extends FormRequest
     {
         return [
             'nickname' => $this->nicknameRules(),
-            'avatar' => $this->seatAvatarRules($this->authenticatedUser()),
         ];
     }
 
@@ -39,12 +39,6 @@ class StoreRoomRequest extends FormRequest
     public function nickname(): string
     {
         return (string) $this->validated('nickname');
-    }
-
-    /** La clé d'avatar prédéfini validée, dans le catalogue. */
-    public function avatarPreset(): string
-    {
-        return (string) $this->validated('avatar');
     }
 
     protected function prepareForValidation(): void

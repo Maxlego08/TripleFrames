@@ -473,6 +473,7 @@ final class MovieImporter
         $this->writeTmdbCompanies($tmdb);
         $this->writeCertifications($movie, $gate);
         $this->writeTmdbTitles($movie, $tmdb);
+        OriginalLanguageTitle::write($movie);
         $this->writeTmdbAliases($movie, $tmdb);
 
         // Appartenance aux thèmes, synchrone et dans la transaction du film
@@ -567,6 +568,7 @@ final class MovieImporter
                 ->where('origin', ContentOrigin::Tmdb->value)
                 ->delete();
             $this->writeTmdbTitles($movie, $tmdb);
+            OriginalLanguageTitle::write($movie);
 
             Alias::query()
                 ->where('movie_id', $movie->id)
@@ -690,7 +692,10 @@ final class MovieImporter
      *
      * **Aucun titre n'est jamais recopié d'une langue vers une autre** :
      * l'absence d'une ligne EST l'information (§ 3.4). Une traduction au titre
-     * vide ne produit donc aucune ligne.
+     * vide ne produit donc aucune ligne. Seule exception, écrite juste après
+     * par {@see OriginalLanguageTitle::write()} (D52 du 02/10) : la langue
+     * originale activée, dont TMDB rend la traduction vide, reçoit
+     * `title_original` — le titre dans sa propre langue, pas une recopie.
      */
     private function writeTmdbTitles(Movie $movie, TmdbMovie $tmdb): void
     {

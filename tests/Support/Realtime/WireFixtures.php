@@ -151,6 +151,7 @@ final class WireFixtures
                 'tierIndex' => 1,
                 'opensAt' => WireTime::iso(self::startedAt($running)),
                 'next' => self::image($game, $running, 2),
+                'choicesUnavailable' => false,
             ]),
             PlayerLocked::class => new PlayerLocked($room, $game, [
                 'sequenceIndex' => $revealed->sequence_index,

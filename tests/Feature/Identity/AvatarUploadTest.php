@@ -229,18 +229,17 @@ it('refuse de servir une image masquée, retirée ou inconnue', function () {
     $this->get('/a/../../.env')->assertNotFound();
 });
 
-it('propose « Mon avatar » au siège d’un compte et rattache le siège au compte', function () {
+it('attribue « Mon avatar » à la prise de siège d’un compte qui a choisi son image et rattache le siège au compte', function () {
     $user = User::factory()->withUploadedAvatar()->create();
     $room = Room::factory()->create();
 
+    // Aucun choix à l’entrée (D55 du 02/10) : le serveur attribue.
     $this->actingAs($user)
         ->get(route('room.entry', $room))
-        ->assertInertia(fn (Assert $page) => $page
-            ->where('avatars.account.url', UploadedAvatars::url((string) $user->avatar_upload_path))
-            ->where('avatars.suggested', SeatAvatar::ACCOUNT));
+        ->assertInertia(fn (Assert $page) => $page->missing('avatars')->etc());
 
     $joined = $this->actingAs($user)
-        ->post(route('room.join', $room), SeatEntry::form('Zoé', SeatAvatar::ACCOUNT))
+        ->post(route('room.join', $room), SeatEntry::form('Zoé'))
         ->assertSessionHasNoErrors();
 
     $seat = Player::query()->sole();
@@ -252,23 +251,22 @@ it('propose « Mon avatar » au siège d’un compte et rattache le siège au co
         ->and($identity['avatar']['kind'])->toBe('upload')
         ->and($identity['avatar']['url'])->toBe(UploadedAvatars::url((string) $user->avatar_upload_path))
         ->and($identity['avatar']['initials'])->toBe('Z')
-        // Le jeton porte le prédéfini de repli, jamais l'image du compte (I4.5).
+        // Le jeton porte le prédéfini de repli, jamais l’image du compte (I4.5).
         ->and(SeatEntry::claims($joined)['avatar'])->toBe($user->avatar_preset);
 });
 
-it('refuse « Mon avatar » à un invité et à un compte dont l’image est masquée', function () {
+it('n’attribue jamais une image masquée à la prise de siège : un prédéfini libre la remplace', function () {
     $room = Room::factory()->create();
-
-    $this->post(route('room.join', $room), SeatEntry::form('Zoé', SeatAvatar::ACCOUNT))
-        ->assertSessionHasErrors('avatar');
-
     $hidden = User::factory()->uploadedAvatarHidden()->create();
 
     $this->actingAs($hidden)
-        ->post(route('room.join', $room), SeatEntry::form('Léa', SeatAvatar::ACCOUNT))
-        ->assertSessionHasErrors('avatar');
+        ->post(route('room.join', $room), [...SeatEntry::form('Léa'), 'avatar' => SeatAvatar::ACCOUNT])
+        ->assertSessionHasNoErrors();
 
-    expect(Player::query()->count())->toBe(0);
+    $seat = Player::query()->sole();
+
+    expect($seat->avatar_kind)->toBe(AvatarKind::Preset)
+        ->and($seat->avatar_preset)->toBe(SeatEntry::avatar(1));
 });
 
 it('fait redescendre au prédéfini de repli un siège dont l’image est masquée, affichage gelé compris', function () {

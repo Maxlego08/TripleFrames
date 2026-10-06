@@ -17,6 +17,8 @@ import type { BreadcrumbItem } from '@/types';
 // oxfmt-ignore
 type Props = {
     passwordRules: string;
+    /** Faux pour un compte créé par un fournisseur : il DÉFINIT un mot de passe (spec 40 § 12.4). */
+    hasPassword: boolean;
 } & ManagePasskeysProps &
     ManageTwoFactorProps;
 
@@ -38,11 +40,19 @@ export default function Security(props: Props) {
 
             <h1 className="sr-only">{t('account.security.title')}</h1>
 
-            <div className="space-y-6">
+            <div className="settings-section space-y-6">
                 <Heading
                     variant="small"
-                    title={t('account.security.heading')}
-                    description={t('account.security.description')}
+                    title={
+                        props.hasPassword
+                            ? t('account.security.heading')
+                            : t('account.security.set_heading')
+                    }
+                    description={
+                        props.hasPassword
+                            ? t('account.security.description')
+                            : t('account.security.set_description')
+                    }
                 />
 
                 <Form
@@ -69,24 +79,28 @@ export default function Security(props: Props) {
                 >
                     {({ errors, processing }) => (
                         <>
-                            <div className="grid gap-2">
-                                <Label htmlFor="current_password">
-                                    {t('account.fields.current_password')}
-                                </Label>
+                            {props.hasPassword && (
+                                <div className="grid gap-2">
+                                    <Label htmlFor="current_password">
+                                        {t('account.fields.current_password')}
+                                    </Label>
 
-                                <PasswordInput
-                                    id="current_password"
-                                    ref={currentPasswordInput}
-                                    name="current_password"
-                                    className="mt-1 block w-full"
-                                    autoComplete="current-password"
-                                    placeholder={t(
-                                        'account.fields.current_password',
-                                    )}
-                                />
+                                    <PasswordInput
+                                        id="current_password"
+                                        ref={currentPasswordInput}
+                                        name="current_password"
+                                        className="mt-1 block w-full"
+                                        autoComplete="current-password"
+                                        placeholder={t(
+                                            'account.fields.current_password',
+                                        )}
+                                    />
 
-                                <InputError message={errors.current_password} />
-                            </div>
+                                    <InputError
+                                        message={errors.current_password}
+                                    />
+                                </div>
+                            )}
 
                             <div className="grid gap-2">
                                 <Label htmlFor="password">

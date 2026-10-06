@@ -372,6 +372,7 @@ export function GameStage({
                         ? state.offeredChoices.payload
                         : null)
                 }
+                choicesUnavailable={round.choicesUnavailable}
                 attemptsLeft={attemptsLeft ?? 0}
                 maxLength={maxAnswerLength}
                 submission={submission}

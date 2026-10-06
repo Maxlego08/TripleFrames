@@ -8,6 +8,7 @@ use App\Http\Controllers\Admin\CurationHeartbeatController;
 use App\Http\Controllers\Admin\CurationQueueController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\FrameBankController;
+use App\Http\Controllers\Admin\FrameBatchController;
 use App\Http\Controllers\Admin\FrameCaptureController;
 use App\Http\Controllers\Admin\FrameCropController;
 use App\Http\Controllers\Admin\FrameImageController;
@@ -28,6 +29,7 @@ use App\Http\Controllers\Admin\ImportSearchController;
 use App\Http\Controllers\Admin\ImportSeedListController;
 use App\Http\Controllers\Admin\JournalController;
 use App\Http\Controllers\Admin\MovieAliasController;
+use App\Http\Controllers\Admin\MovieBatchPublishController;
 use App\Http\Controllers\Admin\MovieContentVerifiedController;
 use App\Http\Controllers\Admin\MovieFramesReviewController;
 use App\Http\Controllers\Admin\MovieGroupController;
@@ -87,10 +89,10 @@ use Illuminate\Support\Facades\Route;
 |   donc PAS joint : toute clé appelée par une page d'administration vit dans
 |   `lang/fr/admin.php`, pied de page compris (`admin.footer.*`, jamais `legal`).
 |
-| **Aucun forçage d'apparence** : le back-office suit l'apparence choisie par
-| le visiteur (D8 du 23/09, spec 90 § 2.2). Seuls les cadres de revue et de
-| prévisualisation d'image passent en sombre, localement, sous les tokens du
-| jeu (spec 20 § 6.7) — jamais le document entier.
+| **Aucun choix d'apparence** : le back-office garde le design du starter
+| (tokens shadcn), en sombre comme tout le site (D56 du 02/10). Les cadres de
+| revue et de prévisualisation d'image restent sous la portée locale des
+| tokens du jeu (spec 20 § 6.7).
 |
 | **L'autorisation est posée route par route par `can:`, jamais par un test de
 | rôle dans un contrôleur.** Deux routes seulement n'en portent pas, parce que
@@ -161,6 +163,19 @@ Route::middleware(['auth', 'verified', 'role:curator', 'admin.2fa', 'admin.local
         Route::get('catalog', [CatalogController::class, 'index'])
             ->middleware('can:viewAny,'.Movie::class)
             ->name('catalog.index');
+
+        // « Publier les films prêts » (§ 8.1 bis, ligne 47, D59 du 06/10) :
+        // l'écran du lot — films prêts, avertissement d'ambiguïté de chacun,
+        // films mis de côté —, puis un envoi qui poste les identifiants et
+        // l'empreinte lus. Déclarées AVANT `catalog/{movie}`, qui prendrait
+        // sinon « ready » pour un film.
+        Route::get('catalog/ready', [MovieBatchPublishController::class, 'create'])
+            ->middleware('can:publishReady,'.Movie::class)
+            ->name('catalog.ready');
+
+        Route::post('catalog/ready', [MovieBatchPublishController::class, 'store'])
+            ->middleware(['can:publishReady,'.Movie::class, 'throttle:admin-curation'])
+            ->name('catalog.ready.publish');
 
         Route::get('catalog/{movie}', [CatalogController::class, 'show'])
             ->middleware('can:view,movie')
@@ -365,6 +380,22 @@ Route::middleware(['auth', 'verified', 'role:curator', 'admin.2fa', 'admin.local
         Route::get('review', [FrameReviewQueueController::class, 'index'])
             ->middleware('can:create,'.FrameReview::class)
             ->name('review.index');
+
+        // Les lots d'images (§ 5.10, D57 du 05/10, ligne 46) : déposer un
+        // lot préparé hors production, en voir l'aperçu à blanc, l'importer
+        // par la file. Les images entrent `draft` ; revue et publication
+        // restent les gestes ordinaires.
+        Route::get('frame-batch', [FrameBatchController::class, 'index'])
+            ->middleware('can:importBatch,'.Frame::class)
+            ->name('frame_batch.index');
+
+        Route::post('frame-batch', [FrameBatchController::class, 'store'])
+            ->middleware(['can:importBatch,'.Frame::class, 'throttle:admin-import'])
+            ->name('frame_batch.store');
+
+        Route::post('frame-batch/import', [FrameBatchController::class, 'import'])
+            ->middleware(['can:importBatch,'.Frame::class, 'throttle:admin-import'])
+            ->name('frame_batch.import');
 
         Route::get('import', [ImportController::class, 'index'])
             ->middleware('can:viewAny,'.ImportRun::class)

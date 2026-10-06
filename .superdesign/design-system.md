@@ -63,7 +63,7 @@ security workflows.
 - Security: current password, new password and confirmation; enable or disable
   two-factor authentication; view or regenerate recovery codes; list, add and
   remove passkeys.
-- Appearance: light, dark and system choices.
+- No appearance choice: the whole site is dark, set by the server (D56 du 02/10).
 - Account deletion is intentionally absent from the current Laravel routes and
   must not appear in this design.
 

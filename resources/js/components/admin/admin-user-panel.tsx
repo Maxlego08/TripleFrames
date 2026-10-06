@@ -9,7 +9,7 @@ import {
 } from '@/components/ui/sidebar';
 import { useInitials } from '@/hooks/use-initials';
 import { useTranslations } from '@/hooks/use-translations';
-import { dashboard } from '@/routes';
+import { edit as editProfile } from '@/routes/profile';
 import type { User } from '@/types/auth';
 
 type Props = {
@@ -70,7 +70,7 @@ export function AdminUserPanel({ user }: Props) {
                     asChild
                     tooltip={{ children: t('admin.nav.back_to_site') }}
                 >
-                    <Link href={dashboard()}>
+                    <Link href={editProfile()}>
                         <ArrowLeft aria-hidden />
                         <span>{t('admin.nav.back_to_site')}</span>
                     </Link>

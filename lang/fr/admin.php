@@ -46,6 +46,8 @@ return [
         // L'écran des thèmes (spec 20 § 9.6, D43 du 01/10).
         'themes' => 'Thèmes',
         'import' => 'Import',
+        // Les lots d'images (ligne 46, D57 du 05/10).
+        'frame_batch' => 'Lots d’images',
         'review' => 'Revue',
         'throughput' => 'Débit',
         'guide' => 'Premiers pas',
@@ -765,8 +767,27 @@ return [
     'catalog' => [
         'title' => 'Catalogue',
         'heading' => 'Catalogue des films',
-        'description' => 'Liste en lecture seule. Chaque film se publie, se dépublie, s’écarte et se corrige depuis sa fiche.',
+        'description' => 'Liste en lecture seule. Chaque film se publie, se dépublie, s’écarte et se corrige depuis sa fiche ; les films prêts se publient aussi ensemble.',
         'results' => ':total film(s) au filtre courant',
+
+        // « Publier les films prêts » (spec 20 § 8.1 bis, D59 du 06/10).
+        'publish_ready' => [
+            'action' => 'Publier les films prêts',
+            'title' => 'Publier les films prêts',
+            'description' => 'Les brouillons au contenu vérifié dont les niveaux 1, 3 et 5 sont en jeu. Chacun est publié comme depuis sa fiche, à votre nom, et entre au vivier des parties lancées ensuite. Les films dépubliés ou écartés n’y figurent pas : ils se republient depuis leur fiche.',
+            'list_heading' => 'Films publiés par ce geste',
+            'ambiguity_description' => 'Pour chaque film, les formes que la publication rendra ambiguës, les autres films du lot comptés comme publiés. Un préfixe ou un sous-titre ambigu n’est plus accepté seul ; les titres complets et les alias restent acceptés.',
+            'none_ambiguous' => 'Aucune forme ne deviendra ambiguë.',
+            'skipped_heading' => 'Prêts, mais pas publiables',
+            'skipped_description' => 'Ces films ne seront pas publiés : corrigez-les depuis leur fiche.',
+            'empty_title' => 'Aucun film prêt à publier',
+            'empty_description' => 'Un brouillon devient prêt quand son contenu est vérifié et que ses niveaux 1, 3 et 5 ont chacun une image en jeu.',
+            'movie' => ':title (:year)',
+            'movie_without_year' => ':title',
+            'submit' => 'Publier :count film|Publier les :count films',
+            'stale' => 'Le lot a changé depuis son affichage (un film n’est plus prêt, ou un avertissement d’ambiguïté a changé) : rien n’a été publié. Relisez le lot mis à jour, puis confirmez de nouveau.',
+            'flash' => ':count film publié : il entre au vivier des parties lancées désormais.|:count films publiés : ils entrent au vivier des parties lancées désormais.',
+        ],
 
         'filters' => [
             'heading' => 'Filtres',
@@ -1950,6 +1971,8 @@ return [
             'to_rereview' => 'À re-revoir (:count)',
             'rejected' => 'Rejetées (:count)',
         ],
+        // La file plafonnée à ses premiers films (amendé le 05/10, D57).
+        'truncated' => 'Affichage des :shown premiers films sur :total : un film revu sort de la liste, le suivant y entre.',
 
         'lists' => [
             'to_review' => [
@@ -2322,6 +2345,80 @@ return [
     | dépublier. Les refus des gestes sont des clés littérales, jamais
     | construites par concaténation.
     */
+    // L'écran « Lots d'images » (spec 20 § 5.10, D57 du 05/10).
+    'frame_batch' => [
+        'title' => 'Lots d’images',
+        'heading' => 'Lots d’images',
+        'description' => 'Déposez un lot d’images préparé et validé hors production : chaque image entre en brouillon dans la banque de son film, au niveau et au cadre du lot. La revue et la publication restent à faire, film par film.',
+        'upload' => [
+            'title' => 'Déposer un lot',
+            'description' => 'Un fichier .json au format des lots d’images, de :max Ko au plus. Rien n’est importé avant votre confirmation.',
+            'label' => 'Fichier du lot',
+            'submit' => 'Voir l’aperçu',
+        ],
+        'preview' => [
+            'title' => 'Aperçu du lot',
+            'description' => ':movies film(s), :frames image(s). Les films absents du catalogue et les films suspendus ou retirés ne reçoivent aucune image.',
+            'import' => 'Importer :frames image(s)',
+            'nothing' => 'Aucun film de ce lot ne peut recevoir d’images.',
+        ],
+        'progress' => ':done film(s) traité(s) sur :total',
+        'state' => [
+            'previewed' => 'Aperçu',
+            'pending' => 'En attente',
+            'running' => 'Import en cours',
+            'completed' => 'Terminé',
+            'failed' => 'Interrompu',
+        ],
+        'status' => [
+            'ready' => 'Prêt',
+            'missing' => 'Absent du catalogue',
+            'locked' => 'Suspendu ou retiré',
+        ],
+        'columns' => [
+            'movie' => 'Film',
+            'status' => 'État',
+            'frames' => 'Images',
+            'known' => 'Déjà en banque',
+            'result' => 'Résultat',
+        ],
+        'result' => [
+            'waiting' => 'À importer',
+            'summary' => ':added ajoutée(s), :skipped déjà présente(s), :refused refusée(s)',
+            'none' => '—',
+        ],
+        'missing' => [
+            'title' => 'Films absents du catalogue',
+            'description' => 'Importez d’abord ces films par le collage, puis déposez de nouveau le lot : seules leurs images manqueront.',
+            'import' => 'Importer ces :count film(s)',
+        ],
+        'next' => 'Les images ajoutées attendent leur traitement, puis votre revue : ouvrez la file de revue pour les valider film par film.',
+        'open_review' => 'Ouvrir la file de revue',
+        'new_batch' => 'Déposer un autre lot',
+        'empty' => 'Aucun lot déposé récemment.',
+        'toast' => [
+            'queued' => 'Import du lot lancé : l’avancement s’affiche ci-dessous.',
+        ],
+        'expired' => 'Ce lot a expiré ou a déjà été importé : déposez-le de nouveau.',
+        'failed' => 'L’import du lot s’est interrompu : les films déjà traités le restent. Déposez de nouveau le lot pour reprendre ; les images déjà ajoutées seront reconnues.',
+        'snapshot_failed' => 'La sauvegarde préalable a échoué : aucune image n’a été ajoutée.',
+        'frame_failed' => 'échec imprévu de l’ajout ; redéposez le lot plus tard.',
+        'blocked' => 'visuel suspendu ou retiré dans la banque du film : jamais réajouté par un lot.',
+        'invalid' => [
+            'required' => 'Choisissez le fichier du lot.',
+            'json' => 'Ce fichier n’est pas un lot lisible (JSON attendu).',
+            'format' => 'Ce fichier n’est pas un lot d’images de TripleFrames, ou d’une version inconnue.',
+            'empty' => 'Ce lot ne contient aucun film.',
+            'too_large' => 'Le fichier dépasse :max Ko.',
+            'too_many_movies' => 'Un lot compte au plus :max films.',
+            'duplicate_movie' => 'Le film TMDB :tmdb_id apparaît deux fois dans le lot.',
+            'movie' => 'Le film n° :position du lot est mal formé.',
+            'no_frames' => 'Le film TMDB :tmdb_id ne porte aucune image.',
+            'too_many_frames' => 'Le film TMDB :tmdb_id porte plus de :max images.',
+            'frame' => 'Une image du film TMDB :tmdb_id est mal formée.',
+        ],
+    ],
+
     'themes' => [
         'title' => 'Thèmes',
         'heading' => 'Thèmes',
@@ -3502,6 +3599,17 @@ return [
             'not_configured' => 'Aucune clé TMDB configurée : posez TMDB_API_READ_ACCESS_TOKEN ou TMDB_API_KEY dans .env. Rien n’a été appelé ni écrit.',
             'failed' => 'TMDB a refusé un appel : :reason. Sociétés déjà nommées et conservées : :named. Relancez la commande pour reprendre.',
             'done' => 'Noms de sociétés rattrapés. Nommées : :named ; inconnues de TMDB : :unknown.',
+        ],
+
+        /*
+        | Rattrapage du titre de la langue originale (spec 10 § 3.4, D52 du
+        | 02/10). Écrit `movie_title`, table de la règle 12 : l'instantané
+        | précède toute écriture.
+        */
+        'original_titles' => [
+            'dry_run' => 'Simulation : :count film(s) recevraient le titre de leur langue originale. Rien n’a été écrit.',
+            'snapshot_failed' => 'Instantané refusé : aucun titre n’a été écrit. Corrigez la cause signalée par backup:snapshot, puis relancez catalog:original-titles.',
+            'done' => 'Rattrapage terminé. Titres de langue originale écrits et films reprojetés : :count.',
         ],
 
         /*

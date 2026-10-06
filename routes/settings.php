@@ -3,6 +3,7 @@
 use App\Avatars\UploadedAvatars;
 use App\Http\Controllers\Avatar\AvatarFileController;
 use App\Http\Controllers\Settings\AvatarController;
+use App\Http\Controllers\Settings\LinkedAccountController;
 use App\Http\Controllers\Settings\ProfileController;
 use App\Http\Controllers\Settings\SecurityController;
 use Illuminate\Auth\Middleware\RequirePassword;
@@ -31,6 +32,15 @@ Route::middleware(['auth', 'translations:account,legal'])->group(function () {
         ->middleware('throttle:avatar-upload')
         ->name('avatar.store');
     Route::delete('settings/avatar', [AvatarController::class, 'destroy'])->name('avatar.destroy');
+
+    // Les comptes liés (spec 40 § 12.5, D51 du 01/10) : la déliaison exige une
+    // confirmation fraîche — par mot de passe, ou par le fournisseur pour un
+    // compte qui n'en a pas (§ 12.4).
+    Route::get('settings/accounts', [LinkedAccountController::class, 'edit'])->name('linked_accounts.edit');
+    Route::delete('settings/accounts/{provider}', [LinkedAccountController::class, 'destroy'])
+        ->whereIn('provider', ['google', 'discord'])
+        ->middleware(RequirePassword::class)
+        ->name('linked_accounts.destroy');
 });
 
 // Ce groupe ne porte plus `profile.destroy` : aucune suppression de compte au
@@ -46,8 +56,6 @@ Route::middleware(['auth', 'verified', 'translations:account,legal'])->group(fun
     Route::put('settings/password', [SecurityController::class, 'update'])
         ->middleware('throttle:6,1')
         ->name('user-password.update');
-
-    Route::inertia('settings/appearance', 'settings/appearance')->name('appearance.edit');
 });
 
 // Hors du groupe de Fortify, donc `accounts.switches` posé ici aussi : quand

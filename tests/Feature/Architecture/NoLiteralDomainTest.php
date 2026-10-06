@@ -66,6 +66,7 @@ function literalDomainAllowlist(): array
         // Tiers nommé : flux sortant d'import seulement (config/services.php, règle 6).
         'api.themoviedb.org' => 'API TMDB, import et curation seulement (règle 6)',
         'image.tmdb.org' => 'images TMDB, import et curation seulement (règle 6)',
+        'letterboxd.com' => 'lien sortant vers la fiche Letterboxd du film révélé, aucun appel serveur (D58 du 06/10)',
 
         // Documentation citée par les commentaires de configuration du framework.
         'inertiajs.com' => 'documentation, commentaire de config/inertia.php',

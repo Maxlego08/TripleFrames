@@ -87,6 +87,9 @@ return [
         'label' => 'Choices',
         'wrong' => 'Wrong choice: answers are closed for this round.',
         'invalid' => 'This choice does not exist.',
+        // D54 du 02/10 (70 § 10.7) : cas terminal en Normal, à la place de la
+        // grille, et lu par l’annonceur.
+        'unavailable' => 'Choices aren’t available for this film.',
     ],
 
     // Spec 80 § 15 (lot L80-6) : valeur du palier, score, classement, podium,
@@ -125,6 +128,9 @@ return [
         'images' => 'Frames of this round',
         'finders' => 'Found it',
         'finder_tier' => 'Frame :index',
+        // D58 du 06/10 : fiche Letterboxd du film, toujours dans un nouvel onglet.
+        'letterboxd' => 'View on Letterboxd',
+        'letterboxd_label' => ':title on Letterboxd (new tab)',
     ],
 
     // Spec 60 § 14 (lot L60-14) : la pause, et l’heure de clôture formatée

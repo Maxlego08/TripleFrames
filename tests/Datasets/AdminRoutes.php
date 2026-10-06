@@ -21,6 +21,7 @@ use App\Settings\PlatformLimits;
 use App\Support\Catalog\AmbiguityPreview;
 use App\Support\Catalog\AnswerKeyProjector;
 use App\Support\Curation\ExclusionGrid;
+use App\Support\Curation\ReadyBatch;
 use App\Support\Curation\ReviewQueue;
 use App\Support\Frames\FrameGeometry;
 use Illuminate\Http\UploadedFile;
@@ -357,6 +358,74 @@ function adminRoutesMatrix(): array
                 ];
             },
             redirect: fn (array $parameters): string => route('admin.catalog.show', ['movie' => $parameters['movie']]),
+        ),
+
+        // Ligne 46 — lots d'images (§ 5.10, D57 du 05/10) : curateur au
+        // moins. Le dépôt rend l'aperçu sans appel TMDB ; l'import d'un jeton
+        // inconnu de l'auteur revient à l'écran, message à l'appui, sans job.
+        'admin.frame_batch.index' => adminRoutesRow(
+            row: 46,
+            method: 'GET',
+            guards: ['can:importBatch,'.Frame::class],
+            curator: 200,
+            admin: 200,
+        ),
+
+        'admin.frame_batch.store' => adminRoutesRow(
+            row: 46,
+            method: 'POST',
+            guards: ['can:importBatch,'.Frame::class],
+            curator: 302,
+            admin: 302,
+            payload: fn (): array => [
+                'batch' => UploadedFile::fake()->createWithContent('lot.json', (string) json_encode([
+                    'format' => 'tripleframes.frame-batch',
+                    'version' => 1,
+                    'movies' => [[
+                        'tmdb_id' => 987654,
+                        'title' => null,
+                        'frames' => [['tmdb_file_path' => '/6a7b8c9d0e1f2a3b4c5d6e7f80912a3b.jpg', 'level' => 1, 'crop' => null]],
+                    ]],
+                ])),
+            ],
+            redirect: fn (array $parameters): string => route('admin.frame_batch.index'),
+        ),
+
+        'admin.frame_batch.import' => adminRoutesRow(
+            row: 46,
+            method: 'POST',
+            guards: ['can:importBatch,'.Frame::class],
+            curator: 302,
+            admin: 302,
+            payload: fn (): array => ['token' => bin2hex(random_bytes(16))],
+            redirect: fn (array $parameters): string => route('admin.frame_batch.index'),
+        ),
+
+        // Ligne 47 — publier les films prêts (§ 8.1 bis, D59 du 06/10) :
+        // curateur au moins. Un lot changé revient à l'écran, refus à
+        // l'appui, sans aucune écriture ; le 302 est ici la
+        // publication d'un lot d'un film prêt, retour au catalogue.
+        'admin.catalog.ready' => adminRoutesRow(
+            row: 47,
+            method: 'GET',
+            guards: ['can:publishReady,'.Movie::class],
+            curator: 200,
+            admin: 200,
+        ),
+
+        'admin.catalog.ready.publish' => adminRoutesRow(
+            row: 47,
+            method: 'POST',
+            guards: ['can:publishReady,'.Movie::class],
+            curator: 302,
+            admin: 302,
+            payload: function (): array {
+                adminRoutesPublishableParameters();
+                $batch = app(ReadyBatch::class)->preview();
+
+                return ['movie_ids' => array_column($batch['movies'], 'id'), 'ambiguity_digest' => $batch['digest']];
+            },
+            redirect: fn (array $parameters): string => route('admin.catalog.index'),
         ),
 
         // Ligne 27 — file agrégée de suggestions, reconstruction idempotente,

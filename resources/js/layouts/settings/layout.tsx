@@ -1,13 +1,11 @@
 import { Link } from '@inertiajs/react';
+import { CircleUserRound, Image, Link2, ShieldCheck } from 'lucide-react';
 import type { PropsWithChildren } from 'react';
-import Heading from '@/components/heading';
-import { Button } from '@/components/ui/button';
-import { Separator } from '@/components/ui/separator';
 import { useCurrentUrl } from '@/hooks/use-current-url';
 import { useTranslations } from '@/hooks/use-translations';
-import { cn, toUrl } from '@/lib/utils';
-import { edit as editAppearance } from '@/routes/appearance';
+import { toUrl } from '@/lib/utils';
 import { edit as editAvatar } from '@/routes/avatar';
+import { edit as editLinkedAccounts } from '@/routes/linked_accounts';
 import { edit } from '@/routes/profile';
 import { edit as editSecurity } from '@/routes/security';
 import type { NavItem } from '@/types';
@@ -20,66 +18,75 @@ export default function SettingsLayout({ children }: PropsWithChildren) {
         {
             title: t('account.settings.nav.profile'),
             href: edit(),
-            icon: null,
+            icon: CircleUserRound,
         },
         {
             title: t('account.settings.nav.avatar'),
             href: editAvatar(),
-            icon: null,
+            icon: Image,
+        },
+        {
+            title: t('account.settings.nav.linked'),
+            href: editLinkedAccounts(),
+            icon: Link2,
         },
         {
             title: t('account.settings.nav.security'),
             href: editSecurity(),
-            icon: null,
-        },
-        {
-            title: t('account.settings.nav.appearance'),
-            href: editAppearance(),
-            icon: null,
+            icon: ShieldCheck,
         },
     ];
 
     return (
-        <div className="px-4 py-6">
-            <Heading
-                title={t('account.settings.heading')}
-                description={t('account.settings.description')}
-            />
+        <div className="settings-page">
+            <header className="settings-page__hero">
+                <div className="settings-page__hero-copy">
+                    <h1>{t('account.settings.heading')}</h1>
+                    <p>{t('account.settings.description')}</p>
+                </div>
+                <div className="settings-page__frames" aria-hidden="true">
+                    <span />
+                    <span />
+                    <span />
+                </div>
+            </header>
 
-            <div className="flex flex-col lg:flex-row lg:space-x-12">
-                <aside className="w-full max-w-xl lg:w-48">
-                    <nav
-                        className="flex flex-col space-y-1 space-x-0"
-                        aria-label={t('account.settings.heading')}
-                    >
-                        {sidebarNavItems.map((item, index) => (
-                            <Button
-                                key={`${toUrl(item.href)}-${index}`}
-                                size="sm"
-                                variant="ghost"
-                                asChild
-                                className={cn('w-full justify-start', {
-                                    'bg-muted': isCurrentOrParentUrl(item.href),
-                                })}
-                            >
-                                <Link href={item.href}>
-                                    {item.icon && (
-                                        <item.icon className="h-4 w-4" />
-                                    )}
-                                    {item.title}
-                                </Link>
-                            </Button>
-                        ))}
+            <div className="settings-page__workspace">
+                <aside className="settings-nav">
+                    <nav aria-label={t('account.settings.heading')}>
+                        <ul>
+                            {sidebarNavItems.map((item) => {
+                                const active = isCurrentOrParentUrl(item.href);
+
+                                return (
+                                    <li key={toUrl(item.href)}>
+                                        <Link
+                                            href={item.href}
+                                            className="settings-nav__link"
+                                            aria-current={
+                                                active ? 'page' : undefined
+                                            }
+                                        >
+                                            <span className="settings-nav__icon">
+                                                {item.icon && (
+                                                    <item.icon aria-hidden="true" />
+                                                )}
+                                            </span>
+                                            <span>{item.title}</span>
+                                        </Link>
+                                    </li>
+                                );
+                            })}
+                        </ul>
                     </nav>
                 </aside>
 
-                <Separator className="my-6 lg:hidden" />
-
-                <div className="flex-1 md:max-w-2xl">
-                    <section className="max-w-xl space-y-12">
-                        {children}
-                    </section>
-                </div>
+                <section
+                    className="settings-panel"
+                    aria-label={t('account.settings.heading')}
+                >
+                    <div className="settings-panel__inner">{children}</div>
+                </section>
             </div>
         </div>
     );

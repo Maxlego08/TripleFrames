@@ -1,4 +1,5 @@
-import { Form, Head } from '@inertiajs/react';
+import { Form, Head, usePage } from '@inertiajs/react';
+import { OAuthButtons } from '@/components/account/oauth-buttons';
 import InputError from '@/components/input-error';
 import PasswordInput from '@/components/password-input';
 import TextLink from '@/components/text-link';
@@ -18,6 +19,8 @@ type Props = {
 export default function Register({ passwordRules }: Props) {
     const { t } = useTranslations();
 
+    const { oauthProviders } = usePage().props;
+
     return (
         <>
             <Head title={t('account.register.title')} />
@@ -25,7 +28,7 @@ export default function Register({ passwordRules }: Props) {
                 {...store.form()}
                 resetOnSuccess={['password', 'password_confirmation']}
                 disableWhileProcessing
-                className="flex flex-col gap-6"
+                className="auth-form auth-form--register flex flex-col gap-6"
             >
                 {({ processing, errors }) => (
                     <>
@@ -130,6 +133,19 @@ export default function Register({ passwordRules }: Props) {
                     </>
                 )}
             </Form>
+
+            {oauthProviders.length > 0 && (
+                <div className="auth-methods">
+                    <div className="auth-divider">
+                        <span>{t('account.oauth.separator')}</span>
+                    </div>
+                    <OAuthButtons
+                        providers={oauthProviders}
+                        intent="login"
+                        compact
+                    />
+                </div>
+            )}
         </>
     );
 }

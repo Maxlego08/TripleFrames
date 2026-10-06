@@ -19,8 +19,8 @@ use Tests\TestCase;
 |
 | La page du starter est réécrite en accueil, dans `PublicLayout` : le jeu
 | en une phrase, puis trois entrées sans compte — créer un salon, rejoindre
-| par un champ de code, jouer en solo. Domaines `common` et `legal`, et rien
-| d'autre.
+| par le code ET le pseudo en un seul envoi (D55 du 02/10), jouer en solo.
+| Domaines `common` et `legal`, et rien d'autre.
 |
 | Aucun DOM au jalon 1, ni en Pest ni en Vitest (C18 § 2.4) : ce que la page
 | RENDRA se prouve par sa réponse (composant, dictionnaire expédié) et par sa
@@ -29,15 +29,16 @@ use Tests\TestCase;
 | `ThemeTokensPerimeterTest`, la parité du miroir `room-code.ts` à
 | `RoomCodeTest` (50), la déclaration des domaines de toute route joueur à
 | `TranslationDomainDeclarationTest`, l'indexation de l'accueil à
-| `IndexingTest` (R-04). Le parcours réel du champ (saisie en minuscules ou
-| avec tiret, refus sans requête, clavier) se vérifie à la main, dans la liste
+| `IndexingTest` (R-04), la prise de siège elle-même à `SeatTakingTest`. Le
+| parcours réel des champs (saisie en minuscules ou avec tiret, refus sans
+| requête, pseudo refusé, clavier) se vérifie à la main, dans la liste
 | « terminé » du lot.
 |
 */
 
 /**
- * Les sept clés de l'accueil, figées par la spec 90 (§ 4.7, § 6.5), sans
- * placeholder.
+ * Les clés de l'accueil, figées par la spec 90 (§ 4.7, § 6.5), sans
+ * placeholder de traduction ; le pseudo s'ajoute par D55 du 02/10.
  *
  * @return list<string>
  */
@@ -46,10 +47,17 @@ function homePageKeys(): array
     return [
         'common.home.heading',
         'common.home.tagline',
+        'common.home.create_prompt',
+        'common.home.create_prompt_lead',
         'common.home.create_room',
+        'common.home.join_heading',
         'common.home.join_room',
         'common.home.room_code_label',
+        'common.home.room_code_help',
+        'common.home.room_code_placeholder',
         'common.home.room_code_invalid',
+        'common.home.nickname_label',
+        'common.home.nickname_placeholder',
         'common.home.play_solo',
     ];
 }
@@ -187,95 +195,128 @@ it("rend l'accueil avec les seuls domaines common et legal", function () {
         ->toBe([]);
 });
 
-it('propose créer un salon, un champ de code pour rejoindre et jouer en solo', function () {
+it('propose créer un salon, rejoindre par le code et le pseudo, et jouer en solo', function () {
     config(['app.debug' => false]);
     $this->withoutVite();
 
     $source = homePageSource();
 
     // Les trois entrées ont leur texte ; la page n'appelle aucune autre clé
-    // que celles de l'accueil, son titre et le message générique d'une visite
-    // qui n'a pas reçu de page.
+    // que celles de l'accueil, son titre, le message générique d'un envoi
+    // sans réponse et la mention des CGU (domaine `legal`, déjà expédié).
     $keys = FrontSource::literalKeys($source);
 
     expect(array_values(array_diff(homePageKeys(), $keys)))->toBe([], 'clé de l’accueil jamais appelée')
-        ->and(array_values(array_diff($keys, [...homePageKeys(), 'common.nav.home', 'common.state.error'])))
+        ->and(array_values(array_diff($keys, [
+            ...homePageKeys(),
+            'common.nav.home',
+            'common.state.error',
+            'legal.terms_notice',
+            'legal.new_tab',
+        ])))
         ->toBe([], 'clé inattendue sur l’accueil');
 
     // Créer un salon, jouer en solo : deux liens Wayfinder vers les routes
-    // d'entrée de 50 et de 60, qui existent.
-    expect(Route::has(['room.create', 'room.show', 'solo.create']))->toBeTrue();
+    // d'entrée de 50 et de 60, qui existent ; rejoindre vise `room.join`.
+    expect(Route::has(['room.create', 'room.join', 'solo.create', 'legal.terms']))->toBeTrue();
 
     $room = homePageImports($source, '@/routes/room');
     $solo = homePageImports($source, '@/routes/solo');
 
-    expect($room)->toHaveKeys(['create', 'show'])
+    expect($room)->toHaveKey('create')
         ->and($solo)->toHaveKey('create')
         ->and($source)->toContain("<Link href={{$room['create']}()}>")
         ->and($source)->toContain("<Link href={{$solo['create']}()}>");
 
-    // Rejoindre : un champ, pas un lien. Libellé visible lié au champ, saisie
-    // sans correction ni suggestion, capitales proposées au clavier virtuel.
-    expect(preg_match('/<Label\s+htmlFor=\{(\w+)\}/', $source, $label))->toBe(1)
-        ->and($source)->toMatch('/<Input\b[^>]*\bid=\{'.$label[1].'\}/s');
+    // Rejoindre : deux champs, le code puis le pseudo, chacun avec son
+    // libellé visible lié ; aucun sélecteur d'avatar (D55 du 02/10).
+    expect(preg_match_all('/<Label\s+htmlFor=\{(\w+)\}/', $source, $labels))->toBe(2);
 
-    preg_match('/<Input\b.*?\/>/s', $source, $input);
+    foreach ($labels[1] as $field) {
+        expect($source)->toMatch('/<Input\b[^>]*\bid=\{'.$field.'\}/s');
+    }
 
-    expect($input[0] ?? '')->toContain('autoComplete="off"')
-        ->and($input[0] ?? '')->toContain('autoCapitalize="characters"')
-        ->and($input[0] ?? '')->toContain('spellCheck={false}')
-        ->and($input[0] ?? '')->toContain('aria-describedby=')
-        ->and($input[0] ?? '')->toContain('aria-invalid=');
+    expect($source)->not->toContain('AvatarPicker')
+        ->and($source)->not->toMatch('/\bavatar\b/');
 
-    // Le message d'échec, sous le champ, porte l'identifiant que le champ
-    // désigne.
-    expect(preg_match('/aria-describedby=\{\s*failure === null \? undefined : (\w+)\s*\}/', $source, $described))->toBe(1)
-        ->and($source)->toMatch('/<p\b[^>]*\bid=\{'.$described[1].'\}/s');
+    preg_match_all('/<Input\b.*?\/>/s', $source, $inputs);
+
+    expect($inputs[0])->toHaveCount(2);
+
+    [$codeInput, $nicknameInput] = $inputs[0];
+
+    // Le code : saisie sans correction ni suggestion, capitales proposées au
+    // clavier virtuel.
+    expect($codeInput)->toContain('autoComplete="off"')
+        ->and($codeInput)->toContain('autoCapitalize="characters"')
+        ->and($codeInput)->toContain('spellCheck={false}')
+        ->and($codeInput)->toContain('aria-describedby=')
+        ->and($codeInput)->toContain('aria-invalid=');
+
+    // Le pseudo : le champ que `JoinRoomRequest` valide, sans correction, son
+    // erreur liée.
+    expect($nicknameInput)->toContain('name={NICKNAME_FIELD}')
+        ->and($source)->toContain("const NICKNAME_FIELD = 'nickname';")
+        ->and($nicknameInput)->toContain('autoComplete="nickname"')
+        ->and($nicknameInput)->toContain('spellCheck={false}')
+        ->and($nicknameInput)->toContain('aria-describedby=')
+        ->and($nicknameInput)->toContain('aria-invalid=');
+
+    // L'aide et le message d'échec du code sont tous deux reliés au champ.
+    expect($codeInput)->toContain('codeHelpId')
+        ->and($codeInput)->toContain('failureId')
+        ->and($source)->toMatch('/<p\b[^>]*\bid=\{codeHelpId\}/s')
+        ->and($source)->toMatch('/<p\b[^>]*\bid=\{failureId\}/s');
+
+    // Les refus du serveur : le pseudo sous son champ, le salon (complet,
+    // jeton expulsé) en alerte.
+    expect($source)->toContain('errors.nickname')
+        ->and($source)->toContain('errors.room')
+        ->and($source)->toContain('role="alert"');
+
+    // La mention des CGU : lien Wayfinder, nouvel onglet.
+    expect(homePageImports($source, '@/routes/legal'))->toHaveKey('terms')
+        ->and($source)->toMatch('/<a\s+href=\{terms\(\)\.url\}\s+target="_blank"\s+rel="noopener"/');
 
     // Le code passe par les miroirs client de `RoomCode`, et un code mal
-    // formé est refusé AVANT toute requête : le contrôle précède la visite, et
+    // formé est refusé AVANT toute requête : le contrôle précède l'envoi, et
     // sa branche d'échec se termine par un retour.
     $lib = homePageImports($source, '@/lib/game/room-code');
 
     expect($lib)->toHaveKeys(['normalizeRoomCode', 'isWellFormedRoomCode']);
 
     $check = strpos($source, "!{$lib['isWellFormedRoomCode']}(");
-    $visit = strpos($source, 'router.visit(');
+    $post = strpos($source, 'router.post(');
 
     expect($check)->toBeInt()
-        ->and($visit)->toBeInt()
-        ->and($check < $visit)->toBeTrue('le contrôle de forme doit précéder la visite')
-        ->and(substr($source, (int) $check, (int) $visit - (int) $check))->toContain('return;');
+        ->and($post)->toBeInt()
+        ->and($check < $post)->toBeTrue('le contrôle de forme doit précéder l’envoi')
+        ->and(substr($source, (int) $check, (int) $post - (int) $check))->toContain('return;');
 
-    // Un code bien formé part en visite GET vers `room.show`, par Wayfinder et
-    // avec le code normalisé : jamais `<Form>`, jamais une autre requête.
-    // La réponse de la visite n'est jamais retenue : Inertia 3 passe aussi
-    // par `onHttpException` les PAGES d'erreur du serveur (`error` 404 d'un
-    // code inconnu, 429, salon expiré en 410), et les y retenir empêcherait
-    // leur rendu. Seule la coupure réseau est rattrapée par la page.
-    // La visite reste un GET, méthode par défaut de `router.visit` : aucune
-    // option `method`, aucun autre verbe du routeur ni de l'action Wayfinder
-    // (`room.show` ne sert que GET et HEAD, tout autre verbe finirait en 405).
-    expect($source)->toMatch('/router\.visit\(\s*'.$room['show'].'\.url\(\{\s*room:\s*'.$lib['normalizeRoomCode'].'\(/')
+    // Un code bien formé part en un seul POST vers `room.join`, par l'action
+    // Wayfinder de `RoomEntryController` et avec le code normalisé, le pseudo
+    // seul dans le corps. Les PAGES d'erreur du serveur (`error` 404 d'un
+    // code inconnu, 429, salon expiré) ne sont jamais retenues : aucun
+    // `onHttpException`. Seule la coupure réseau est rattrapée par la page.
+    expect($source)->toContain("import RoomEntryController from '@/actions/App/Http/Controllers/Room/RoomEntryController';")
+        ->and($source)->toMatch('/router\.post\(\s*RoomEntryController\.store\.url\(\{\s*room:\s*'.$lib['normalizeRoomCode'].'\(/')
+        ->and($source)->toMatch('/\{\s*\[NICKNAME_FIELD\]:\s*nickname\s*\}/')
         ->and($source)->not->toContain('onHttpException')
-        ->and(substr_count($source, 'router.visit('))->toBe(1)
-        ->and($source)->not->toMatch('/\bmethod\s*:/', 'la visite du code doit rester un GET')
-        ->and($source)->not->toMatch('/\brouter\.(?:post|put|patch|delete)\(/', 'la visite du code doit rester un GET')
-        ->and($source)->not->toMatch('/\b'.$room['show'].'\.(?:post|put|patch|delete|form)\b/', 'la visite du code doit rester un GET')
+        ->and(substr_count($source, 'router.post('))->toBe(1)
+        ->and($source)->not->toMatch('/\brouter\.(?:visit|get|put|patch|delete)\(/')
         ->and($source)->not->toContain('<Form')
         ->and($source)->not->toContain('useForm')
         ->and($source)->not->toContain('useHttp')
-        ->and($source)->not->toContain('fetch(')
-        ->and($source)->not->toContain('router.get(');
+        ->and($source)->not->toContain('fetch(');
 
-    // Aucune URL écrite, aucune longueur ni aucun alphabet de code : ils
-    // restent à Wayfinder et à `RoomCode`.
+    // Aucune URL écrite, aucune longueur ni aucun alphabet de code, aucune
+    // borne de pseudo : ils restent à Wayfinder, à `RoomCode` et au serveur.
     expect($source)->not->toMatch('/[\'"`]\//', 'une URL écrite en dur')
         ->and($source)->not->toContain('ROOM_CODE')
         ->and($source)->not->toContain(RoomCode::ALPHABET)
         ->and($source)->not->toMatch('/\b(?:maxLength|minLength|pattern)=/');
 
-    // La cible de la visite : un code bien formé mais inconnu rend la page
+    // La cible de l'envoi : un code bien formé mais inconnu rend la page
     // `error` 404, en visite Inertia, jamais une page blanche.
     $unknown = 'ABCDEF';
 
@@ -288,7 +329,7 @@ it('propose créer un salon, un champ de code pour rejoindre et jouer en solo', 
         Header::INERTIA => 'true',
         'X-Requested-With' => 'XMLHttpRequest',
         'Accept' => 'text/html, application/xhtml+xml',
-    ])->get(route('room.show', ['room' => $unknown]))
+    ])->post(route('room.join', ['room' => $unknown]), ['nickname' => 'Alice'])
         ->assertNotFound()
         ->assertHeader(Header::INERTIA, 'true');
 
@@ -316,7 +357,7 @@ it('ne contient plus aucun lien ni texte du starter', function () {
         ->and($source)->not->toMatch('/\b(?:login|register|dashboard)\(/')
         ->and($source)->not->toContain('auth.user');
 
-    // Les dictionnaires : les sept clés de l'accueil et rien d'autre sous
+    // Les dictionnaires : les huit clés de l'accueil et rien d'autre sous
     // `common.home`, plus aucune clé ni aucun texte du starter.
     $expected = array_map(static fn (string $key): string => substr($key, strlen('common.home.')), homePageKeys());
     sort($expected);

@@ -90,6 +90,16 @@ class MoviePolicy
     }
 
     /**
+     * « Publier les films prêts » (spec 20 § 8.1 bis, ligne 47, D59 du 06/10) :
+     * même seuil que la publication à l'unité. L'action rejoue ensuite
+     * {@see self::publish()} sur chaque film du lot, sous verrou.
+     */
+    public function publishReady(User $user): bool
+    {
+        return $user->role->atLeast(UserRole::Curator);
+    }
+
+    /**
      * Publier un brouillon, ou republier un film dépublié.
      *
      * Seuls `draft` et `unpublished` en partent : publier un film suspendu

@@ -31,22 +31,33 @@ return [
 
     'new_tab' => '(s’ouvre dans un nouvel onglet)',
 
+    'back_to_top' => 'Revenir en haut',
+
     'notice' => [
+        'description' => 'Les informations essentielles sur l’éditeur, l’hébergement et les contenus du site.',
         'title' => 'Mentions légales',
     ],
 
     'privacy' => [
+        'description' => 'Ce que TripleFrames conserve, pourquoi et pendant combien de temps.',
         'title' => 'Politique de confidentialité',
     ],
 
     'provisional' => 'Texte provisoire, sans valeur contractuelle.',
 
     'report' => [
+        'description' => 'Comment signaler une image ou un film et demander son retrait.',
         'title' => 'Signaler un contenu',
     ],
 
     'terms' => [
+        'description' => 'Les règles essentielles pour jouer et utiliser TripleFrames.',
         'title' => 'Conditions générales d’utilisation',
+    ],
+
+    'toc' => [
+        'label' => 'Sommaire du document',
+        'title' => 'Sommaire',
     ],
 
     'terms_notice' => 'En continuant, vous acceptez les conditions générales d’utilisation.',

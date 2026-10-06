@@ -52,8 +52,8 @@ const ERROR_COPY: Record<ErrorStatus, ErrorCopy> = {
 };
 
 /**
- * La page d'erreur joueur (spec 90 § 4.8), dans `PublicLayout` et dans
- * l'apparence du visiteur, jamais forcée, même levée depuis une route de jeu.
+ * La page d'erreur joueur (spec 90 § 4.8), dans `PublicLayout`, même levée
+ * depuis une route de jeu.
  *
  * Rendue par le gestionnaire d'exceptions, hors mode debug, y compris pour
  * les erreurs nées avant le middleware Inertia (URL inconnue, code de salon

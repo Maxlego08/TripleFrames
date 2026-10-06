@@ -354,7 +354,7 @@ it("émet X-Robots-Tag noindex, nofollow sur toute réponse tant que l'indexatio
         indexingAssertNoindex($this->call('HEAD', route('home'))->assertOk(), "{$label} HEAD /");
 
         indexingAssertNoindex($this->get(route('login'))->assertOk(), "{$label} GET /login");
-        indexingAssertNoindex($this->get(route('dashboard'))->assertRedirect(), "{$label} GET /dashboard (invité)");
+        indexingAssertNoindex($this->get(route('profile.edit'))->assertRedirect(), "{$label} GET /settings/profile (invité)");
         indexingAssertNoindex(
             $this->from(route('home'))->post(route('locale.update'), ['locale' => 'fr'])->assertRedirect(),
             "{$label} POST /locale",

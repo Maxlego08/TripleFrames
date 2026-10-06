@@ -24,6 +24,13 @@ declare module '@inertiajs/core' {
              */
             accountsOpen: boolean;
             /**
+             * Fournisseurs de connexion ACTIFS, clés posées
+             * (`OAuthProviders::values()`, spec 40 § 12.1, D51 du 01/10) :
+             * boutons de connexion, et « Se connecter » de l'en-tête public
+             * même inscription fermée.
+             */
+            oauthProviders: Array<'google' | 'discord'>;
+            /**
              * Format fixe de la frame servable (`FrameGeometry::GAME_WIDTH` /
              * `GAME_HEIGHT`, contrat C9), identique pour tous et sans aucune
              * donnée de manche. Réservé aux attributs `width` / `height` de

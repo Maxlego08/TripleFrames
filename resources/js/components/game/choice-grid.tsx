@@ -143,3 +143,44 @@ export function ChoiceGrid({
         </div>
     );
 }
+
+/**
+ * Dernière manche dont l'absence de QCM a été annoncée, gardée au niveau du
+ * module pour la même raison que `announcedChoices` : ni le double montage
+ * de `strictMode`, ni un paquet qui répète l'information ne la relisent.
+ */
+let announcedUnavailable: string | null = null;
+
+export type ChoicesUnavailableProps = {
+    /** Clé de la manche (`roundKeyOf`) : une annonce par manche, pas plus. */
+    roundKey: string;
+};
+
+/**
+ * Le QCM de la manche n'existe pas (cas terminal de 70 § 10.7, D54 du
+ * 02/10) : `game.choices.unavailable` à la place de la grille, lu une fois
+ * par l'unique région vivante, sans déplacer le focus — le joueur qui tape
+ * garde sa frappe (90 § 7.5).
+ *
+ * Monté **seulement** sur l'information du serveur
+ * (`RoundState.choicesUnavailable`, porté par `tier.opened` ou le paquet) :
+ * aucun minuteur client n'en décide (règle 8). Tokens seulement.
+ */
+export function ChoicesUnavailable({ roundKey }: ChoicesUnavailableProps) {
+    const { t } = useTranslations();
+
+    const arrive = useEffectEvent((): void => {
+        if (announcedUnavailable !== roundKey) {
+            announcedUnavailable = roundKey;
+            announce(t('game.choices.unavailable'));
+        }
+    });
+
+    useEffect(() => arrive(), [roundKey]);
+
+    return (
+        <p className="text-sm text-muted-foreground">
+            {t('game.choices.unavailable')}
+        </p>
+    );
+}

@@ -1,6 +1,5 @@
 <?php
 
-use App\Avatars\AvatarPresetCatalog;
 use App\Enums\Locale;
 use App\Models\Player;
 use App\Models\Room;
@@ -9,7 +8,6 @@ use App\Settings\RoomSettingsBounds;
 use App\Support\I18n\TranslationDomains;
 use App\Support\Identity\NicknameNormalizer;
 use App\Support\Identity\PlayerToken;
-use Illuminate\Support\Facades\Route;
 use Illuminate\Testing\TestResponse;
 use Inertia\Testing\AssertableInertia as Assert;
 use Symfony\Component\HttpFoundation\Response;
@@ -156,24 +154,16 @@ it("n'expose aux visiteurs sans siège ni pseudo ni identifiant interne", functi
     $response = $this->get(route('room.entry', $room))->assertOk();
     $props = roomEntryOwnProps($response);
 
-    // Exactement les props du § 7.2, dans cet ordre.
-    expect(array_keys($props))->toBe(['room', 'entry', 'avatars', 'nickname'])
+    // Exactement les props du § 7.2, dans cet ordre : aucun avatar, la prise
+    // de siège l'attribue (D55 du 02/10).
+    expect(array_keys($props))->toBe(['room', 'entry', 'nickname'])
         ->and($props['room'])->toBe(['code' => $room->room_code])
         ->and($props['entry'])->toBe('open')
-        ->and($props['avatars'])->toBe([
-            'options' => AvatarPresetCatalog::options(),
-            // Les avatars des sièges TENUS, dans l'ordre du catalogue ; celui
-            // d'un siège parti est libre.
-            'taken' => [SeatEntry::avatar(5), SeatEntry::avatar(9)],
-            'suggested' => SeatEntry::avatar(1),
-            // « Mon avatar » : aucun pour un visiteur sans compte (spec 40 § 11.4).
-            'account' => null,
-        ])
         ->and($props['nickname'])->toBe(['min' => NicknameNormalizer::MIN_LENGTH, 'max' => NicknameNormalizer::MAX_LENGTH]);
 
-    // Aucune clé d'identifiant, à toute profondeur, dans toute la page.
+    // Aucune clé d'identifiant ni d'avatar, à toute profondeur, dans toute la page.
     $page = $response->inertiaPage();
-    $forbidden = ['id', 'room_id', 'host_player_id', 'publicId', 'public_id', 'player_token_hash', 'nickname_normalized', 'seatToken', 'state', 'seats'];
+    $forbidden = ['id', 'room_id', 'host_player_id', 'publicId', 'public_id', 'player_token_hash', 'nickname_normalized', 'seatToken', 'state', 'seats', 'avatars', 'taken'];
 
     expect(array_values(array_intersect(roomEntryKeys($page['props']), $forbidden)))->toBe([]);
 
@@ -185,14 +175,14 @@ it("n'expose aux visiteurs sans siège ni pseudo ni identifiant interne", functi
 
         expect($json)->not->toContain((string) $seat->public_id)
             ->and($json)->not->toContain((string) $seat->player_token_hash)
-            ->and($json)->not->toContain('"'.$seat->nickname.'"');
+            ->and($json)->not->toContain('"'.$seat->nickname.'"')
+            ->and($json)->not->toContain('"'.$seat->avatar_preset.'"');
     }
 
-    // La page de création non plus : aucun avatar pris, aucun salon.
+    // La page de création non plus : ni avatar, ni salon.
     $create = roomEntryOwnProps($this->get(route('room.create'))->assertOk());
 
-    expect(array_keys($create))->toBe(['avatars', 'nickname'])
-        ->and($create['avatars']['taken'])->toBe([]);
+    expect(array_keys($create))->toBe(['nickname']);
 });
 
 it("annonce le salon complet, la partie en cours et le refus d'un expulsé", function (): void {
@@ -308,32 +298,18 @@ it('redirige sans erreur vers la page de salon expiré quand on rejoint un salon
         ->assertInertia(fn (Assert $page) => $page->component('game/room-expired'));
 });
 
-it('ne force jamais le thème sombre sur les pages d\'entrée et de création', function (): void {
-    [$room, $host] = roomEntryRoom();
+it('rend les pages d\'entrée et de création en sombre, quel que soit le cookie d\'apparence', function (): void {
+    [$room] = roomEntryRoom();
 
-    // Les deux pages d'entrée suivent l'apparence du visiteur, dans les deux
-    // sens, sans jamais porter l'attribut de forçage.
+    // Tout le site est sombre (D56 du 02/10) : les deux pages d'entrée le
+    // sont aussi, sans attribut de forçage, et un cookie `appearance` hérité
+    // d'avant la décision n'y change rien.
     foreach (['room.create' => route('room.create'), 'room.entry' => route('room.entry', $room)] as $name => $url) {
-        foreach (['light', 'dark'] as $appearance) {
+        foreach (['light', 'system', 'dark'] as $appearance) {
             $tag = roomEntryHtmlTag($this->withUnencryptedCookie('appearance', $appearance)->get($url)->assertOk());
 
             expect($tag)->not->toContain('data-appearance-forced', "{$name} ({$appearance})")
-                ->and(preg_match('/\sclass="[^"]*\bdark\b/', $tag))->toBe($appearance === 'dark' ? 1 : 0, "{$name} ({$appearance})");
+                ->and(preg_match('/\sclass="[^"]*\bdark\b/', $tag))->toBe(1, "{$name} ({$appearance})");
         }
-
-        expect(Route::getRoutes()->getByName($name)?->gatherMiddleware())->not->toContain('game.appearance');
     }
-
-    // Contraste, joué en dernier — le partage de vue survit d'une requête à
-    // l'autre dans l'application du test : la page du salon force le sombre,
-    // malgré un visiteur en clair.
-    expect(Route::getRoutes()->getByName('room.show')?->gatherMiddleware())->toContain('game.appearance');
-
-    $holder = PlayerToken::mint(Locale::English);
-    Player::query()->whereKey($host->id)->update(['player_token_hash' => $holder->hash()]);
-    LobbyWrites::actAs($this, $holder);
-
-    $forced = roomEntryHtmlTag($this->withUnencryptedCookie('appearance', 'light')->get(route('room.show', $room))->assertOk());
-
-    expect($forced)->toContain('data-appearance-forced="dark"');
 });

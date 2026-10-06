@@ -1,4 +1,5 @@
-import { Form, Head } from '@inertiajs/react';
+import { Form, Head, usePage } from '@inertiajs/react';
+import { OAuthButtons } from '@/components/account/oauth-buttons';
 import InputError from '@/components/input-error';
 import PasskeyVerify from '@/components/passkey-verify';
 import PasswordInput from '@/components/password-input';
@@ -33,17 +34,22 @@ export default function Login({
     canUsePasskeys,
 }: Props) {
     const { t } = useTranslations();
+    const { oauthProviders, errors } = usePage<{
+        errors: Partial<Record<string, string>>;
+    }>().props;
 
     return (
         <>
             <Head title={t('account.login.title')} />
 
-            {canUsePasskeys && <PasskeyVerify />}
+            <InputError message={errors.oauth} />
+
+            {status && <div className="auth-status">{status}</div>}
 
             <Form
                 {...store.form()}
                 resetOnSuccess={['password']}
-                className="flex flex-col gap-6"
+                className="auth-form auth-form--login flex flex-col gap-6"
             >
                 {({ processing, errors }) => (
                     <>
@@ -132,9 +138,26 @@ export default function Login({
                 )}
             </Form>
 
-            {status && (
-                <div className="mb-4 text-center text-sm font-medium text-green-600">
-                    {status}
+            {(canUsePasskeys || oauthProviders.length > 0) && (
+                <div className="auth-methods">
+                    <div className="auth-divider">
+                        <span>{t('account.oauth.separator')}</span>
+                    </div>
+
+                    {canUsePasskeys && (
+                        <PasskeyVerify showSeparator={false} compact />
+                    )}
+
+                    {/* Connexion et création de compte par fournisseur (spec
+                        40 § 12, D51 du 01/10) : ouvertes dès qu'un fournisseur
+                        est actif, inscription par mot de passe fermée ou non. */}
+                    {oauthProviders.length > 0 && (
+                        <OAuthButtons
+                            providers={oauthProviders}
+                            intent="login"
+                            compact
+                        />
+                    )}
                 </div>
             )}
         </>

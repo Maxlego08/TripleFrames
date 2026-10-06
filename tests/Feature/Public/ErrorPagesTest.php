@@ -11,7 +11,6 @@ use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\Route;
-use Illuminate\Support\Facades\View;
 use Illuminate\Testing\TestResponse;
 use Illuminate\View\View as ViewInstance;
 use Inertia\Support\Header;
@@ -298,54 +297,32 @@ it("rend l'erreur du back-office en français quel que soit le cookie locale", f
     }
 });
 
-it("ne marque jamais la page error comme d'apparence forcée, même levée dans une route de jeu", function () {
-    // La moitié serveur du forçage sombre (spec 90 § 2.2) : partagée AVANT le
-    // contrôleur. `game.appearance` naît avec L90-7 ; jusque-là, une doublure
-    // fait exactement ce que la spec lui prescrit.
-    if (! array_key_exists('game.appearance', app('router')->getMiddleware())) {
-        app()->instance('tests.error-pages.force-game-appearance', new class
-        {
-            /** @param Closure(Request): Response $next */
-            public function handle(Request $request, Closure $next): Response
-            {
-                View::share('appearance', 'dark');
-                View::share('appearanceForced', true);
+it('rend la page error en sombre, même levée dans une route de jeu, quel que soit le cookie d\'apparence', function () {
+    // Tout le site est sombre (D56 du 02/10) : la page d'erreur l'est aussi,
+    // levée depuis une route de jeu comme ailleurs, et un cookie `appearance`
+    // hérité d'avant la décision n'y change rien.
+    $game = ['web', 'translations:game,room,legal'];
 
-                return $next($request);
-            }
-        });
-
-        app('router')->aliasMiddleware('game.appearance', 'tests.error-pages.force-game-appearance');
-    }
-
-    $game = ['web', 'game.appearance', 'translations:game,room,legal'];
-
-    Route::middleware($game)->get('/__errors/game/ok', fn () => 'ok');
     Route::middleware($game)->get('/__errors/game/missing', fn () => abort(404));
     Route::middleware($game)->get('/__errors/game/failure', fn () => abort(500));
 
-    // La route de jeu, elle, est bien forcée : sans quoi ce test ne prouverait
-    // rien.
-    $this->withUnencryptedCookie('appearance', 'light')->get('/__errors/game/ok')->assertOk();
-
-    expect(View::shared('appearanceForced'))->toBeTrue()
-        ->and(View::shared('appearance'))->toBe('dark');
-
     foreach (['/__errors/game/missing' => 404, '/__errors/game/failure' => 500] as $uri => $code) {
-        app()->forgetInstance(TranslationDomains::class);
+        foreach (['light', 'system', 'dark'] as $appearance) {
+            app()->forgetInstance(TranslationDomains::class);
 
-        $response = $this->withUnencryptedCookie('appearance', 'light')
-            ->get($uri)
-            ->assertStatus($code)
-            ->assertInertia(fn (Assert $page) => $page->component('error'));
+            $response = $this->withUnencryptedCookie('appearance', $appearance)
+                ->get($uri)
+                ->assertStatus($code)
+                ->assertInertia(fn (Assert $page) => $page->component('error'));
 
-        preg_match('/<html\b[^>]*>/i', (string) $response->getContent(), $match);
-        $tag = $match[0] ?? '';
+            preg_match('/<html\b[^>]*>/i', (string) $response->getContent(), $match);
+            $tag = $match[0] ?? '';
 
-        expect($tag)->not->toBe('')
-            ->not->toContain('data-appearance-forced')
-            ->and(preg_match('/\sclass="[^"]*\bdark\b/', $tag))->toBe(0, "{$uri} : page error rendue en sombre forcé")
-            ->and((string) $response->getContent())->toContain("const appearance = 'light';");
+            expect($tag)->not->toBe('')
+                ->not->toContain('data-appearance-forced')
+                ->and(preg_match('/\sclass="[^"]*\bdark\b/', $tag))->toBe(1, "{$uri} ({$appearance}) : page error hors du sombre")
+                ->and((string) $response->getContent())->not->toContain('const appearance');
+        }
     }
 });
 

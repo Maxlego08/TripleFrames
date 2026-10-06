@@ -3,11 +3,11 @@
 use App\Avatars\AvatarPresetCatalog;
 use App\Avatars\AvatarRef;
 use App\Enums\Locale;
+use App\Http\Requests\Room\ChangeSeatAvatarRequest;
 use App\Settings\PlatformLimits;
 use App\Support\I18n\TranslationDomains;
 use Illuminate\Support\Facades\Validator;
 use Tests\Support\I18n\FrontSource;
-use Tests\Support\Identity\NicknameFormRequest;
 
 /*
 |--------------------------------------------------------------------------
@@ -233,11 +233,11 @@ it("refuse une clé d'avatar hors du catalogue", function () {
             ->and(AvatarPresetCatalog::suggest($key, []))->toBe($keys[0]);
     }
 
-    // La règle de formulaire (`avatarPresetRules()`, L40-3) lit le même
+    // La règle de formulaire (`seatAvatarRules()`, changement au lobby, D55) lit le même
     // registre : chaque clé passe, rien d'autre — ni tableau, ni chemin.
     $avatarPasses = static fn (mixed $value): bool => Validator::make(
         ['avatar' => $value],
-        ['avatar' => (new NicknameFormRequest)->rules()['avatar']],
+        ['avatar' => (new ChangeSeatAvatarRequest)->rules()['avatar']],
     )->passes();
 
     foreach ($keys as $key) {

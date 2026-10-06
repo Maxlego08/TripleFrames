@@ -1,0 +1,174 @@
+@use '../auth/tokens' as *;
+@use '../auth/mixins' as mix;
+
+.legal-document {
+    display: grid;
+    min-height: 42rem;
+    grid-template-columns: 15rem minmax(0, 1fr);
+}
+
+.legal-toc {
+    border-right: $line solid $ink;
+    padding: 1.25rem;
+    background: oklch(0.92 0.04 296);
+
+    &__inner {
+        position: sticky;
+        top: 1rem;
+    }
+
+    h2 {
+        @include mix.display-type;
+        margin: 0 0 0.75rem;
+        font-size: 1rem;
+    }
+
+    ol {
+        display: grid;
+        margin: 0;
+        padding: 0;
+        gap: 0.2rem;
+        counter-reset: legal-toc;
+        list-style: none;
+    }
+
+    li {
+        counter-increment: legal-toc;
+    }
+
+    a {
+        display: grid;
+        grid-template-columns: 1.65rem 1fr;
+        gap: 0.35rem;
+        border: 0.125rem solid transparent;
+        border-radius: 0.45rem;
+        padding: 0.45rem 0.5rem;
+        color: $ink;
+        font-size: 0.82rem;
+        font-weight: 800;
+        line-height: 1.25;
+        text-decoration: none;
+
+        &::before {
+            color: $muted;
+            content: counter(legal-toc, decimal-leading-zero);
+        }
+
+        &:hover,
+        &:focus-visible {
+            border-color: $ink;
+            background: $cyan;
+        }
+    }
+}
+
+.legal-content {
+    min-width: 0;
+    padding: clamp(1.35rem, 4vw, 3rem);
+}
+
+.legal-meta {
+    display: flex;
+    margin-bottom: 0.75rem;
+    flex-wrap: wrap;
+    gap: 0.55rem;
+
+    span {
+        border: 0.125rem solid $ink;
+        border-radius: 999px;
+        padding: 0.25rem 0.55rem;
+        background: $cyan;
+        font-size: 0.78rem;
+        font-weight: 900;
+    }
+}
+
+.legal-body {
+    max-width: 70ch;
+
+    > h2 {
+        @include mix.display-type;
+        margin: 0;
+        padding-top: 1.65rem;
+        font-size: clamp(1.3rem, 3vw, 1.65rem);
+        line-height: 1.15;
+        scroll-margin-top: 1rem;
+
+        &:first-child {
+            padding-top: 0.5rem;
+        }
+    }
+
+    > h2:not(:first-child) {
+        margin-top: 1.65rem;
+        border-top: 0.125rem solid $lavender;
+    }
+
+    h3 {
+        margin: 1rem 0 0.4rem;
+        font-size: 1rem;
+    }
+
+    p,
+    ul {
+        margin: 0.75rem 0 0;
+    }
+
+    p,
+    li {
+        color: oklch(0.39 0.04 292);
+    }
+
+    ul {
+        display: grid;
+        padding-left: 1.2rem;
+        gap: 0.35rem;
+    }
+
+    a {
+        color: $ink;
+        font-weight: 800;
+        text-decoration-thickness: 0.1rem;
+        text-underline-offset: 0.2rem;
+    }
+
+    code {
+        border-radius: 0.3rem;
+        padding: 0.1rem 0.3rem;
+        background: $lavender;
+        color: $ink;
+        font-size: 0.82em;
+    }
+}
+
+.legal-contact {
+    max-width: 70ch;
+    margin-top: 1.65rem;
+    border-top: $line solid $ink;
+    padding-top: 1.65rem;
+
+    h2 {
+        @include mix.display-type;
+        margin: 0;
+        font-size: clamp(1.3rem, 3vw, 1.65rem);
+    }
+
+    p {
+        margin: 0.65rem 0 0;
+        color: oklch(0.39 0.04 292);
+    }
+
+    a {
+        color: $ink;
+        font-weight: 900;
+        text-underline-offset: 0.2rem;
+    }
+}
+
+.legal-back-to-top {
+    display: inline-flex;
+    margin-top: 1.5rem;
+    color: $ink;
+    font-weight: 900;
+    text-underline-offset: 0.2rem;
+}

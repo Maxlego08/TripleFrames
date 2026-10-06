@@ -139,7 +139,7 @@ function nicknameBlocklistSubmit(string $nickname, Locale $locale): TestResponse
         ->withUnencryptedCookie(LocaleCookie::NAME, $locale->value)
         ->post(
             nicknameBlocklistProbeUri(),
-            ['nickname' => $nickname, 'avatar' => 'preset-01'],
+            ['nickname' => $nickname],
             ['Accept' => 'application/json'],
         );
 }

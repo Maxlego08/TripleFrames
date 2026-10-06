@@ -1,0 +1,193 @@
+@use '../auth/tokens' as *;
+
+@media (min-width: 51.3125rem) {
+    .public-shell--home {
+        height: 100svh;
+        overflow: hidden;
+
+        > main {
+            min-height: 0;
+            overflow: hidden;
+        }
+    }
+
+    .home-stage {
+        display: flex;
+        min-height: 0;
+        flex-direction: column;
+        justify-content: center;
+    }
+}
+
+@media (min-width: 51.3125rem) and (max-height: 68.75rem) {
+    .home-stage {
+        display: flex;
+        min-height: 0;
+        flex-direction: column;
+        justify-content: center;
+        padding: 1.75rem 1rem 2rem;
+    }
+
+    .home-hero {
+        width: min(100%, 65rem);
+
+        &__content {
+            gap: 1.25rem;
+            padding: 2rem 3rem;
+        }
+
+        &__logo.auth-brand__logo {
+            width: 7.75rem;
+        }
+
+        &__text {
+            h1 {
+                margin-bottom: 0.75rem;
+                font-size: 3.35rem;
+            }
+
+            p {
+                margin-bottom: 0.9rem;
+                font-size: 1rem;
+            }
+        }
+    }
+
+    .home-join-card {
+        margin: 1rem;
+        padding: 1.65rem;
+
+        &__heading {
+            margin-bottom: 1rem;
+        }
+    }
+
+    .home-field {
+        margin-bottom: 0.7rem;
+
+        &__input[data-slot='input'] {
+            min-height: 3.1rem;
+        }
+    }
+
+    .home-button[data-slot='button'] {
+        min-height: 3.2rem;
+    }
+
+    .home-actions {
+        margin-top: 1.75rem;
+        padding-block: 0.7rem;
+    }
+}
+
+@media (max-width: $tablet) {
+    .home-hero {
+        max-width: 38rem;
+        grid-template-columns: 1fr;
+
+        &__content {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            align-items: center;
+            gap: 1.75rem;
+            padding-bottom: 1rem;
+        }
+
+        &__logo.auth-brand__logo {
+            width: 7.5rem;
+        }
+
+        &__text h1 {
+            font-size: clamp(2.35rem, 9vw, 3.6rem);
+        }
+    }
+
+    .home-join-card {
+        margin-top: 0.5rem;
+    }
+
+    .public-shell--home .site-footer__inner {
+        align-items: center;
+        flex-direction: column;
+        text-align: center;
+    }
+}
+
+@media (max-width: $mobile) {
+    .home-stage {
+        padding: 1.4rem 0.75rem 4rem;
+    }
+
+    .home-hero {
+        border-radius: 1.4rem 1.4rem 1.4rem 0.6rem;
+        box-shadow: 0.4375rem 0.4375rem 0 $ink;
+
+        &::before {
+            inset: -0.75rem 1.2rem auto -0.55rem;
+        }
+
+        &__content {
+            gap: 0.85rem;
+            padding: 1rem 1rem 0.4rem;
+        }
+
+        &__logo.auth-brand__logo {
+            width: 4.5rem;
+        }
+
+        &__text {
+            h1 {
+                margin-bottom: 0;
+                font-size: clamp(1.75rem, 9vw, 2.5rem);
+            }
+
+            p {
+                display: none;
+            }
+        }
+    }
+
+    .home-join-card {
+        margin: 0.65rem;
+        padding: 1.2rem;
+        box-shadow: 0.3125rem 0.3125rem 0 $coral;
+
+        &__heading {
+            margin-bottom: 0.45rem;
+        }
+
+        &__mobile-intro {
+            display: block;
+            max-width: 32rem;
+            margin: 0 0 1.1rem;
+            color: $muted;
+            font-size: 0.88rem;
+            line-height: 1.4;
+        }
+    }
+
+    .home-actions {
+        align-items: stretch;
+        flex-direction: column;
+        padding: 1.15rem;
+
+        &__buttons {
+            align-items: stretch;
+            flex-direction: column;
+        }
+
+        .home-button,
+        &__buttons {
+            width: 100%;
+        }
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .public-shell--home *,
+    .public-shell--home *::before,
+    .public-shell--home *::after {
+        scroll-behavior: auto !important;
+        transition-duration: 0.01ms !important;
+    }
+}

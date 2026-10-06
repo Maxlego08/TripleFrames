@@ -9,6 +9,7 @@ import { GameHelp } from '@/components/game/game-help';
 import { GameStage } from '@/components/game/game-stage';
 import { NextRoundButton } from '@/components/game/next-round-button';
 import { Podium } from '@/components/game/podium';
+import { LobbyAvatarPicker } from '@/components/room/lobby-avatar-picker';
 import { PoolStatus } from '@/components/room/pool-status';
 import { PresetPicker } from '@/components/room/preset-picker';
 import type { PresetOption } from '@/components/room/preset-picker';
@@ -31,6 +32,8 @@ import { useNextRound } from '@/hooks/game/use-next-round';
 import { useRoundStage } from '@/hooks/game/use-round-stage';
 import { useTranslations } from '@/hooks/use-translations';
 import { announce } from '@/lib/game/announcer';
+import { otherSeatsAvatarSignature } from '@/lib/game/lobby-avatars';
+import type { LobbyAvatars } from '@/lib/game/lobby-avatars';
 import { show } from '@/routes/room';
 import { update as updateSettings } from '@/routes/room/settings';
 import type { GameStatePacket, LocaleCode } from '@/types/game-wire';
@@ -65,6 +68,11 @@ type LobbyPageProps = {
     themes: { key: string; labels: Record<LocaleCode, string> }[] | null;
     /** [J2] Configurations du compte, `null` pour un invité. */
     configs: { key: string; name: string; isDefault: boolean }[] | null;
+    /**
+     * Le sélecteur d'avatar du siège (D55 du 02/10) : catalogue, clés des
+     * autres sièges, choix courant, image du compte. Rechargeable seule.
+     */
+    avatars: LobbyAvatars;
 };
 
 /**
@@ -98,17 +106,17 @@ function firstError(errors: Record<string, string>): string | null {
 
 /**
  * La page du salon — `room.show` (spec 50 § 7.2 et § 8.1 ; 90 § 2.1 et § 10)
- * : **une seule page du lobby au podium**, sous `GameLayout`, forcée en
- * sombre. Le changement d'écran vient du magasin de 60, jamais d'une
- * navigation : `game.launched` passe à l'état de partie, `room.replayed`
- * ramène au lobby, sans démonter la souscription, l'horloge ni l'annonceur.
+ * : **une seule page du lobby au podium**, sous `GameLayout`. Le changement
+ * d'écran vient du magasin de 60, jamais d'une navigation : `game.launched`
+ * passe à l'état de partie, `room.replayed` ramène au lobby, sans démonter la souscription, l'horloge ni l'annonceur.
  *
  * **État de lobby**, composé ici :
- * - pour tous : le code et le lien de partage, les réglages de l'onglet
+ * - pour tous : le code et le lien de partage, « Votre avatar » — le sélecteur
+ *   du siège, au lobby seulement (D55 du 02/10) —, les réglages de l'onglet
  *   Simple (L50-5) — éditables par l'hôte seul, en lecture seule pour les
  *   autres —, leurs avertissements, le nombre de joueurs et la liste des
- *   sièges, le compteur de vivier et le blocage, qui nomme le réglage
- *   fautif — non-répétition comprise (D28 du 23/09) —, l'aide ;
+ *   sièges, le compteur de vivier et le blocage, qui nomme le réglage fautif —
+ *   non-répétition comprise (D28 du 23/09) —, l'aide ;
  * - pour l'hôte : les presets du site, grisés quand le vivier du salon ne
  *   les tient pas (§ 5.3), le rapport des réglages que le serveur a ajustés
  *   de lui-même à sa dernière écriture (§ 2.6), les remèdes du vivier et
@@ -154,6 +162,7 @@ export default function Lobby({
     presets,
     launch,
     editor,
+    avatars,
 }: LobbyPageProps) {
     const { t, locale } = useTranslations();
     const { errors, maintenance } = usePage().props;
@@ -221,6 +230,10 @@ export default function Lobby({
             : typeof errors.publicId === 'string'
               ? errors.publicId
               : null;
+    // Refus du changement d'avatar (prise par un autre siège, partie
+    // lancée entre-temps), rendu sous le sélecteur.
+    const avatarError =
+        typeof errors.avatar === 'string' ? errors.avatar : null;
     const shareUrl = new URL(
         show.url({ room: room.code }),
         window.location.origin,
@@ -394,6 +407,17 @@ export default function Lobby({
                         {phase === 'lobby' ? (
                             <>
                                 <ShareCode code={room.code} url={shareUrl} />
+
+                                <LobbyAvatarPicker
+                                    {...gestures}
+                                    avatars={avatars}
+                                    seatAvatar={selfSeat?.avatar ?? null}
+                                    error={avatarError}
+                                    othersSignature={otherSeatsAvatarSignature(
+                                        state.seats,
+                                        state.self.publicId,
+                                    )}
+                                />
 
                                 {isHost && (
                                     <PresetPicker

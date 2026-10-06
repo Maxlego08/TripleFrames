@@ -16,11 +16,11 @@ const MAIN_ID = 'admin-main';
  * re-skin du site joueur ne doit pas toucher l'outil de catalogue, et
  * l'inverse non plus. Seules les primitives `ui/sidebar` sont partagées.
  *
- * **Aucun thème forcé** : le back-office suit l'apparence choisie par le
- * visiteur, clair, sombre ou système (D8 du 23/09, spec 90 § 2.2). La revue
- * d'une image exige de la voir telle qu'elle sera servie en jeu, ce que seul un
- * cadre sombre LOCAL donne — les cadres de revue et de prévisualisation passent
- * sous les tokens sombres du jeu (spec 20 § 6.7), jamais le document entier.
+ * **Aucun choix d'apparence** : le back-office garde le design du starter,
+ * en sombre comme tout le site (D56 du 02/10). La revue d'une image exige de
+ * la voir telle qu'elle sera servie en jeu : les cadres de revue et de
+ * prévisualisation passent sous la portée locale des tokens du jeu (spec 20
+ * § 6.7).
  * Tout passe par les tokens et par eux seuls : le back-office peint en
  * `bg-background`, `text-foreground`, `border-border`… Aucun composant
  * d'administration ne contient une couleur littérale ni une taille en `px`,

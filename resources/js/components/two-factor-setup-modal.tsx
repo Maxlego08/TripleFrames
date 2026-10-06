@@ -1,12 +1,13 @@
 import { Form } from '@inertiajs/react';
 import { REGEXP_ONLY_DIGITS } from 'input-otp';
-import { Check, Copy, ScanLine } from 'lucide-react';
+import { Check, Copy, ScanLine, XIcon } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import AlertError from '@/components/alert-error';
 import InputError from '@/components/input-error';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
+    DialogClose,
     DialogContent,
     DialogDescription,
     DialogHeader,
@@ -18,7 +19,6 @@ import {
     InputOTPSlot,
 } from '@/components/ui/input-otp';
 import { Spinner } from '@/components/ui/spinner';
-import { useAppearance } from '@/hooks/use-appearance';
 import { useClipboard } from '@/hooks/use-clipboard';
 import { useTranslations } from '@/hooks/use-translations';
 import { OTP_MAX_LENGTH } from '@/hooks/use-two-factor-auth';
@@ -63,7 +63,6 @@ function TwoFactorSetupStep({
     onNextStep: () => void;
     errors: string[];
 }) {
-    const { resolvedAppearance } = useAppearance();
     const [copiedText, copy] = useClipboard();
     const { t } = useTranslations();
     const IconComponent = copiedText === manualSetupKey ? Check : Copy;
@@ -84,10 +83,7 @@ function TwoFactorSetupStep({
                                             __html: qrCodeSvg,
                                         }}
                                         style={{
-                                            filter:
-                                                resolvedAppearance === 'dark'
-                                                    ? 'invert(1) brightness(1.5)'
-                                                    : undefined,
+                                            filter: 'invert(1) brightness(1.5)',
                                         }}
                                     />
                                 ) : (
@@ -329,7 +325,18 @@ export default function TwoFactorSetupModal({
 
     return (
         <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
-            <DialogContent className="sm:max-w-md">
+            <DialogContent className="settings-dialog settings-two-factor-dialog sm:max-w-md [&>button:last-child]:hidden">
+                <DialogClose asChild>
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        aria-label={t('common.action.close')}
+                        className="settings-dialog__close absolute top-3 right-3 min-h-11 min-w-11"
+                    >
+                        <XIcon aria-hidden="true" />
+                    </Button>
+                </DialogClose>
                 <DialogHeader className="flex items-center justify-center">
                     <GridScanIcon />
                     <DialogTitle>{modalConfig.title}</DialogTitle>
