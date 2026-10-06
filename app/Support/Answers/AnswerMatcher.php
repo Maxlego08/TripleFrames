@@ -21,6 +21,9 @@ use App\ValueObjects\Answers\MatchResult;
  *   clés et sa manche reste jugeable (10 § 3.5) ;
  * - (O) les films **publiés** qui portent exactement la forme soumise, sous
  *   toute nature, par `answer_key_norm_movie_uq` puis clé primaire ;
+ * - (L) les films **publiés** qui portent un **début** de la saisie en mots
+ *   entiers ({@see self::leadingForms()}, D61 du 06/10), lue pour toute
+ *   saisie ;
  * - la distance à **toutes** les clés de K, sans sortie anticipée, y compris
  *   celles que les chiffres ou l'ambiguïté écarteront ({@see self::decide()}).
  *
@@ -50,6 +53,17 @@ final class AnswerMatcher
     private const int RANK_PREFIX = 1;
 
     private const int RANK_SUBTITLE = 2;
+
+    /**
+     * Nombre de débuts de saisie lus par (L), toujours le même : la requête
+     * garde un texte et un nombre de paramètres constants (invariant L4),
+     * complétés par {@see self::LEADING_FILLER}. Seize mots couvrent tout
+     * titre du catalogue ; au-delà, un début plus long ne désigne aucun film.
+     */
+    public const int LEADING_SLOTS = 16;
+
+    /** Remplissage de (L) : une forme normalisée ne commence jamais par une espace. */
+    private const string LEADING_FILLER = ' ';
 
     /**
      * Juge une saisie **déjà normalisée** (étape S5) contre le film de la
@@ -84,7 +98,40 @@ final class AnswerMatcher
                 ->all(),
         );
 
-        return self::decide($submittedNormalized, $round->movie_id, $targetKeys, $carriers);
+        // (L) Les films PUBLIÉS qui portent l'un des débuts de la saisie, en
+        // mots entiers (D61 du 06/10) — lue pour toute saisie, même d'un seul
+        // mot (liste vide) : le travail ne dépend pas de la forme soumise.
+        $leadingCarriers = [];
+
+        foreach (AnswerKey::query()
+            ->join('movie', 'movie.id', '=', 'answer_key.movie_id')
+            ->whereIn('answer_key.normalized', array_pad(self::leadingForms($submittedNormalized), self::LEADING_SLOTS, self::LEADING_FILLER))
+            ->where('movie.availability', ContentAvailability::Published->value)
+            ->toBase()
+            ->get(['answer_key.normalized as normalized', 'answer_key.movie_id as movie_id']) as $row) {
+            $leadingCarriers[(string) $row->normalized][] = (int) $row->movie_id;
+        }
+
+        return self::decide($submittedNormalized, $round->movie_id, $targetKeys, $carriers, $leadingCarriers);
+    }
+
+    /**
+     * Les débuts de la saisie en mots entiers, du plus long au plus court, la
+     * saisie entière exclue, sur ses {@see self::LEADING_SLOTS} premiers mots
+     * au plus : « solo a star wars » → « solo a star », « solo a », « solo ».
+     *
+     * @return list<string>
+     */
+    public static function leadingForms(string $submittedNormalized): array
+    {
+        $words = $submittedNormalized === '' ? [] : explode(' ', $submittedNormalized);
+        $forms = [];
+
+        for ($count = min(count($words) - 1, self::LEADING_SLOTS); $count >= 1; $count--) {
+            $forms[] = implode(' ', array_slice($words, 0, $count));
+        }
+
+        return $forms;
     }
 
     /**
@@ -97,6 +144,7 @@ final class AnswerMatcher
      * | (b) | `s` égale une clé dérivée de la cible, aucun autre film publié ne porte `s` | acceptée, distance 0 |
      * | (c) | un autre film publié porte `s` | refusée, même sous le seuil de tolérance |
      * | (d) | tolérance : clés exactes et dérivées non ambiguës, chiffres identiques, `distance ≤ tolerance(clé)` | acceptée, plus petite distance, puis nature, puis identifiant |
+     * | (d′) | début en mots entiers (D61 du 06/10) : le **plus long** début de `s` porté par un film — cible ou publié — est un titre, un alias ou un préfixe de la cible ; préfixe porté par aucun autre film publié ; mêmes chiffres que `s` | acceptée, distance de `s` à la clé |
      * | (e) | sinon | refusée |
      *
      * Toutes les mesures — distance, chiffres, tolérance — sont prises pour
@@ -106,12 +154,14 @@ final class AnswerMatcher
      *
      * @param  list<AnswerKey>  $targetKeys  le résultat de K : les clés du film de la manche
      * @param  list<int>  $publishedMovieIdsCarryingSubmitted  le résultat de O : les films publiés qui portent `s`
+     * @param  array<string, list<int>>  $leadingCarriers  le résultat de L : début de `s` → films publiés qui le portent
      */
     public static function decide(
         string $submittedNormalized,
         int $targetMovieId,
         array $targetKeys,
         array $publishedMovieIdsCarryingSubmitted,
+        array $leadingCarriers = [],
     ): MatchResult {
         // O≠ : un AUTRE film publié porte exactement la forme soumise.
         $carriedByOtherPublished = array_filter(
@@ -180,8 +230,78 @@ final class AnswerMatcher
             return self::accepted($submittedNormalized, $tolerated['key'], $tolerated['distance'], false);
         }
 
+        // (d′) Le titre, l'alias ou le préfixe de la cible suivi d'autres mots
+        // (D61 du 06/10) : « solo a star wars movie » désigne « Solo ». Seul
+        // le PLUS LONG début porté par un film compte — « alien covenant le
+        // film » désigne « Alien: Covenant », jamais « Alien » ; un préfixe
+        // partagé par un autre film publié n'est pas candidat ; une suite de
+        // chiffres en plus (« rocky 2 … ») n'est jamais tolérée.
+        $leading = self::leading($submittedNormalized, $targetMovieId, $targetKeys, $leadingCarriers, $submittedDigits);
+
+        if ($leading !== null) {
+            return self::accepted(
+                $submittedNormalized,
+                $leading,
+                AnswerKeyNormalizer::distance($submittedNormalized, (string) $leading->normalized),
+                false,
+            );
+        }
+
         // (e)
         return MatchResult::rejected($submittedNormalized);
+    }
+
+    /**
+     * La clé de la cible désignée par le plus long début de la saisie, ou
+     * `null` — étape (d′), fonction pure.
+     *
+     * @param  list<AnswerKey>  $targetKeys
+     * @param  array<string, list<int>>  $leadingCarriers
+     * @param  list<int>  $submittedDigits
+     */
+    private static function leading(
+        string $submittedNormalized,
+        int $targetMovieId,
+        array $targetKeys,
+        array $leadingCarriers,
+        array $submittedDigits,
+    ): ?AnswerKey {
+        /** @var array<string, list<AnswerKey>> $byForm */
+        $byForm = [];
+
+        foreach ($targetKeys as $key) {
+            $byForm[(string) $key->normalized][] = $key;
+        }
+
+        foreach (self::leadingForms($submittedNormalized) as $form) {
+            $own = $byForm[$form] ?? [];
+            $others = array_values(array_filter(
+                $leadingCarriers[$form] ?? [],
+                static fn (int $movieId): bool => $movieId !== $targetMovieId,
+            ));
+
+            if ($own === [] && $others === []) {
+                continue;
+            }
+
+            // Le plus long début porté par un film décide, et lui seul.
+            $candidates = array_values(array_filter(
+                $own,
+                static fn (AnswerKey $key): bool => ($key->key_kind->isExact()
+                        || ($key->key_kind === AnswerKeyKind::Prefix && $others === []))
+                    && AnswerKeyNormalizer::digits($form) === $submittedDigits,
+            ));
+
+            if ($candidates === []) {
+                return null;
+            }
+
+            usort($candidates, static fn (AnswerKey $a, AnswerKey $b): int => [$a->key_kind->isExact() ? 0 : 1, $a->id] <=> [$b->key_kind->isExact() ? 0 : 1, $b->id]);
+
+            return $candidates[0];
+        }
+
+        return null;
     }
 
     /**

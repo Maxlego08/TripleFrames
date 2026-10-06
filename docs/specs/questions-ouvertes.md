@@ -730,6 +730,18 @@ Le porteur signale que « le QCM n'apparaît pas pour certains films », sans co
 |---|---|---|---|---|
 | D60 | Balayage de grande taille | **oui, J1** : 1 à 100 pages, liste 1/5/10/20/50/100 (défaut 10), job par passages de 600 s qui se relance sur les pages restantes | **oui** — `pages_max` 5 → 100 ; unicité du job jusqu'au traitement seulement ; aucune migration | `20` § 3, § 3.9 ; `config/catalog.php` |
 
+### D61. Un titre suivi d'autres mots est-il une bonne réponse ? — **oui : le titre, l'alias ou le préfixe non partagé de la cible, suivi d'autres mots, est accepté**
+
+**Demande du porteur.** « Pourquoi "Solo a star wars movie" est refusé mais pas "Solo A Star Wars Story" ? Alors que les deux doivent être acceptés. » Trois options présentées (préfixe seul, titre complet aussi, statu quo avec alias au cas par cas) ; retenue : **le titre complet aussi**, contre la recommandation du préfixe seul.
+
+**Ce que la décision arrête** (règle complète : `70` § 6.2, étape (d′)) : une saisie dont le **plus long début en mots entiers porté par un film** est un titre, un alias ou un préfixe non partagé de la cible est acceptée, à suite de chiffres identique. `AnswerRules::VERSION` passe à 2 ; une troisième lecture inconditionnelle (L) garde le travail constant.
+
+**Écart assumé.** Pour un titre court, une saisie qui désigne un autre film **non publié** passe : pour « Up », « up in the air » est accepté tant que ce film n'est pas au catalogue publié. La garde du plus long début et celle des chiffres limitent le reste. Aucune migration. Une décision : elle se cite « D61 du 06/10 ».
+
+| # | Décision | Réponse retenue | Écart | Inscrite dans |
+|---|---|---|---|---|
+| D61 | Titre suivi d'autres mots | **oui, J1** : étape (d′) — plus long début porté, clé exacte ou préfixe non partagé de la cible, mêmes chiffres ; `validation_version` 2 | **oui** — faux positif assumé sur un titre court face à un film non publié | `70` § 6.2 ; `CLAUDE.md` § 2 |
+
 ## Seule question encore ouverte — le nom de domaine (décision 5)
 
 La réponse est **« à acheter »**, mais **le nom n'a pas été fourni**. C'est le dernier point du questionnaire, et il bloque plus tôt qu'annoncé : le montage de développement retenu — `dev.<DOMAINE>` résolu en 127.0.0.1, certificat par défi DNS-01, RP ID de passkey fixé à `<DOMAINE>` — est le **seul** qui satisfasse simultanément Google, Discord, WebAuthn et les cookies `Secure`. `tripleframes.test` ne conviendra jamais : Google refuse tout redirect URI en `http` hors `localhost` et les TLD non enregistrés. **Le domaine conditionne donc le développement d'OAuth et des passkeys, pas seulement la mise en production.** C'est un achat à une dizaine d'euros par an, et c'est le seul achat réellement sur le chemin critique. Amendé le 23/09 (D1 du 23/09) : il conditionne aussi le jalon 1 lui-même, dont le back-office et la curation naissent en production sur `<DOMAINE>` ; l'achat est donc placé **avant la semaine 4**.

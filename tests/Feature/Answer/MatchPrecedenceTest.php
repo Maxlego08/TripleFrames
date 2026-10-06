@@ -245,7 +245,7 @@ it('évalue l\'ambiguïté à l\'instant de réception quand un film est publié
     expect(MatchFixtures::judge($round, 'The Lord of the Rings: The Two Towers', $matcher)->accepted)->toBeTrue();
 });
 
-it('exécute toujours exactement les deux lectures K et O, quel que soit le verdict', function (): void {
+it('exécute toujours exactement les trois lectures K, O et L, quel que soit le verdict', function (): void {
     $towers = MatchFixtures::movie('The Lord of the Rings: The Two Towers', [
         'en' => 'The Lord of the Rings: The Two Towers',
         'fr' => 'Le Seigneur des Anneaux : Les Deux Tours',
@@ -283,14 +283,16 @@ it('exécute toujours exactement les deux lectures K et O, quel que soit le verd
         $bySubmission[$typed] = $statements;
     }
 
-    // Deux lectures, les MÊMES instructions pour tout verdict : un refus pour
-    // préfixe ambigu ne lit rien de plus qu'un refus franc ni qu'une
-    // acceptation (invariant L4), et rien n'est écrit.
+    // Trois lectures (K, O, puis L depuis D61 du 06/10), les MÊMES
+    // instructions pour tout verdict : un refus pour préfixe ambigu ne lit
+    // rien de plus qu'un refus franc ni qu'une acceptation (invariant L4), et
+    // rien n'est écrit.
     $reference = $bySubmission['Le Seigneur des Anneaux : Les Deux Tours'];
 
-    expect($reference)->toHaveCount(2)
+    expect($reference)->toHaveCount(3)
         ->and($reference[0])->toContain('answer_key')->not->toContain('join')
-        ->and($reference[1])->toContain('join')->toContain('availability');
+        ->and($reference[1])->toContain('join')->toContain('availability')
+        ->and($reference[2])->toContain('join')->toContain('availability')->toContain(' in (');
 
     foreach ($bySubmission as $typed => $executed) {
         expect($executed)->toBe($reference, $typed);
@@ -431,4 +433,40 @@ it('ne recalcule jamais un guess existant', function (): void {
         ->and(Guess::query()->where('round_id', $round->id)->count())->toBe(1)
         ->and(Round::query()->whereKey($round->id)->value('found_count'))->toBe(1)
         ->and(SubmissionFixtures::participation($round, $earlySeat)->getAttributes())->toBe($closedAt);
+});
+
+it('ignore la ponctuation et accepte le titre ou le préfixe suivi d\'autres mots', function (string $typed, bool $accepted): void {
+    $solo = MatchFixtures::movie('Solo: A Star Wars Story', ['en' => 'Solo: A Star Wars Story', 'fr' => 'Solo: A Star Wars Story']);
+
+    expect(MatchFixtures::judge(MatchFixtures::roundOn($solo), $typed)->accepted)->toBe($accepted);
+})->with([
+    'sans les deux-points' => ['Solo A Star Wars Story', true],
+    'en minuscules, ponctuation libre' => ['solo - a star wars story !', true],
+    'le préfixe seul' => ['solo', true],
+    'le sous-titre seul' => ['A Star Wars Story', true],
+    // D61 du 06/10 : le préfixe ou le titre, suivi d'autres mots.
+    'le préfixe et un autre sous-titre' => ['Solo a star wars movie', true],
+    'le préfixe et un sous-titre tronqué' => ['solo a star wars', true],
+    'le préfixe et des mots en vrac' => ['solo star wars movie', true],
+    'le titre complet et un mot de plus' => ['Solo: A Star Wars Story le film', true],
+    'une faute de frappe sur un mot court' => ['soolo', false],
+    'un mot en plus, mais collé' => ['solofilm', false],
+    'un chiffre en plus' => ['solo 2', false],
+]);
+
+it('un début de saisie partagé ou plus long chez un autre film publié ne désigne pas la cible', function (): void {
+    // Le plus long début porté par un film décide : « alien covenant le
+    // film » désigne « Alien: Covenant », jamais « Alien ».
+    $alien = MatchFixtures::movie('Alien');
+    MatchFixtures::movie('Alien: Covenant');
+
+    expect(MatchFixtures::judge(MatchFixtures::roundOn($alien), 'alien covenant le film')->accepted)->toBeFalse()
+        ->and(MatchFixtures::judge(MatchFixtures::roundOn($alien), 'alien le huitieme passager')->accepted)->toBeTrue();
+
+    // Un préfixe partagé par un autre film publié n'est jamais candidat.
+    $first = MatchFixtures::movie('Mist Harbour: Arrival');
+    MatchFixtures::movie('Mist Harbour: Departure');
+
+    expect(MatchFixtures::judge(MatchFixtures::roundOn($first), 'mist harbour the beginning')->accepted)->toBeFalse()
+        ->and(MatchFixtures::judge(MatchFixtures::roundOn($first), 'mist harbour arrival extended cut')->accepted)->toBeTrue();
 });
