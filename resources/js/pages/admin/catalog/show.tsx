@@ -199,6 +199,9 @@ const TMDB_MOVIE_URL = 'https://www.themoviedb.org/movie/';
  * Le temps passé sur la fiche compte dans le temps actif du film (§ 10.1) :
  * un battement après chaque saisie, tant que le film se cure.
  */
+/** Le paramètre qui propose une réponse de joueur en alias (inspection d'une partie). */
+export const ALIAS_QUERY_PARAMETER = 'alias';
+
 export default function AdminCatalogShow({
     movie,
     projection,
@@ -223,6 +226,15 @@ export default function AdminCatalogShow({
     heartbeat_seconds,
 }: Props) {
     const { t, locale } = useTranslations();
+    // `?alias=` : une réponse de joueur proposée en alias depuis
+    // l'inspection d'une partie — l'onglet Titres s'ouvre, boîte remplie.
+    const [initialAlias] = useState<string | null>(() => {
+        const value = new URLSearchParams(
+            typeof window === 'undefined' ? '' : window.location.search,
+        ).get(ALIAS_QUERY_PARAMETER);
+
+        return value === null || value.trim() === '' ? null : value;
+    });
 
     // Le temps actif de curation du film (spec 20 § 10.1, lot L20-17) : la
     // fiche est une page du film. Jamais sur un film qui ne se cure plus.
@@ -434,7 +446,10 @@ export default function AdminCatalogShow({
                     </CardContent>
                 </Card>
 
-                <Tabs defaultValue="identity" className="w-full">
+                <Tabs
+                    defaultValue={initialAlias === null ? 'identity' : 'titles'}
+                    className="w-full"
+                >
                     <div className="w-full overflow-x-auto">
                         <TabsList>
                             <TabsTrigger value="identity">
@@ -501,6 +516,7 @@ export default function AdminCatalogShow({
                             )}
                             canCurate={abilities.curate}
                             preview={text_preview}
+                            initialAlias={initialAlias}
                         />
                         <MovieAnswerKeysCard answerKeys={answer_keys} />
                     </TabsContent>

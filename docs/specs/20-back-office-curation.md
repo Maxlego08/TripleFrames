@@ -394,7 +394,7 @@ La règle vit dans `10` § 9.2 (décisions 11 et 12) et n'est pas réécrite ici
 
 ### 3.2 Balayage `discover` [J1, existant ratifié]
 
-L'écran d'import existant est conservé : filtre pré-rempli depuis la configuration, visible et élargissable, `is_widened` figé à l'ouverture ; bornes de pages `catalog.import.pages_min`/`pages_max` ; exécution différée par `RunCatalogImport` ; reprise d'un balayage suspendu **par le bouton « Reprendre »** (`admin.import.resume`). Seuls ses messages changent (§ 13.1).
+L'écran d'import existant est conservé : filtre pré-rempli depuis la configuration, visible et élargissable, `is_widened` figé à l'ouverture ; bornes de pages `catalog.import.pages_min`/`pages_max` (1 et 100), choix proposés `pages_choices` (1, 5, 10, 20, 50, 100 ; défaut `pages_default` = 10) dans une liste déroulante, D60 du 06/10 — amendé le 06/10 ; exécution différée par `RunCatalogImport` ; reprise d'un balayage suspendu **par le bouton « Reprendre »** (`admin.import.resume`). Seuls ses messages changent (§ 13.1).
 
 ### 3.3 Collage : aperçu à blanc, refus durs, reprise [J1]
 
@@ -428,7 +428,7 @@ Le collage accepte la syntaxe de `TmdbIdentifierList` [existante] : identifiants
 
 - **Au J1, la somme des appels reste sous le plafond par construction** : un seul worker `default` (D1 du 23/09, `100`) exécute les imports l'un après l'autre, et les appels interactifs (recherche, visuels de l'éditeur, téléchargement d'un original) sont cadencés par un seul humain. Un 429 sur un appel interactif produit `admin.tmdb.error.rate_limited_interactive` et un bouton « Réessayer », jamais une page d'erreur.
 - **[J2]** dès que plusieurs curateurs ou plusieurs workers `default` existent : un limiteur **partagé en cache**, commun à tous les processus, plafonne la somme des balayages et des appels interactifs, ceux-ci passant en priorité.
-- Un import tient la file `default` le temps de ses pages (au plus `pages_max` pages de détails) ; les jobs d'image attendent derrière : quelques secondes à quelques dizaines de secondes, résidu assumé au J1.
+- Un import tient la file `default` **par passages** : `RunCatalogImport` enchaîne les pages une à une (`catalog:import-discover --pages=1`, curseur écrit après chaque page) au plus `RunCatalogImport::BUDGET_SECONDS` (600 s), puis met en file le passage suivant avec les pages restantes ; un passage dont la page n'avance pas (panne TMDB) s'arrête sans se relancer, et « Reprendre » rejoue la page (D60 du 06/10 — amendé le 06/10) ; les jobs d'image attendent derrière : quelques secondes à quelques dizaines de secondes, résidu assumé au J1.
 
 ### 3.7 Resynchronisation depuis l'écran [J2]
 

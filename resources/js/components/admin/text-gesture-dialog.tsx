@@ -44,7 +44,7 @@ const TEXT_MAX_LENGTH = 255;
 /** Le geste ouvert : corriger (ou saisir) un titre, ou ajouter un alias. */
 export type TextGesture =
     | { kind: 'title'; locale: string; current: string | null }
-    | { kind: 'alias' };
+    | { kind: 'alias'; initial?: string };
 
 type CheckStatus = 'idle' | 'loading' | 'ready' | 'failed';
 
@@ -203,7 +203,9 @@ function TextGestureForm({
     const field = gesture.kind === 'title' ? 'title' : 'alias';
 
     const [text, setText] = useState(
-        gesture.kind === 'title' ? (gesture.current ?? '') : '',
+        gesture.kind === 'title'
+            ? (gesture.current ?? '')
+            : (gesture.initial ?? ''),
     );
     const [aliasLocale, setAliasLocale] = useState('');
     const check = useTextCheck();

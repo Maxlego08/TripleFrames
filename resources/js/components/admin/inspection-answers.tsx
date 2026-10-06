@@ -10,6 +10,7 @@ import {
     localeLabel,
 } from '@/lib/admin-enum-keys';
 import { formatMoment } from '@/lib/admin-format';
+import { show as catalogShow } from '@/routes/admin/catalog';
 import { show as playersShow } from '@/routes/admin/players';
 import type {
     InspectionParticipant,
@@ -145,9 +146,16 @@ export function InspectionRoundHeader({
 export function InspectionParticipantAnswers({
     participant,
     showPlayer = true,
+    movieId = null,
 }: {
     participant: InspectionParticipant;
     showPlayer?: boolean;
+    /**
+     * Le film de la manche, quand elle est divulgable : chaque réponse fausse
+     * en texte libre offre alors « Ajouter en alias », qui ouvre la fiche du
+     * film, boîte d'ajout remplie et aperçu d'ambiguïté à vérifier.
+     */
+    movieId?: number | null;
 }) {
     const { t, locale } = useTranslations();
     const guess = participant.guess;
@@ -261,6 +269,31 @@ export function InspectionParticipantAnswers({
                                         </>
                                     )}
                                 </span>
+                                {movieId !== null &&
+                                    movieId !== undefined &&
+                                    answer.source === 'text' && (
+                                        <>
+                                            {' '}
+                                            <Link
+                                                href={catalogShow(movieId, {
+                                                    query: {
+                                                        alias: answer.submitted_text,
+                                                    },
+                                                })}
+                                                className="text-xs font-medium text-foreground underline underline-offset-4"
+                                                aria-label={t(
+                                                    'admin.inspection.answers.add_alias_label',
+                                                    {
+                                                        answer: answer.submitted_text,
+                                                    },
+                                                )}
+                                            >
+                                                {t(
+                                                    'admin.inspection.answers.add_alias',
+                                                )}
+                                            </Link>
+                                        </>
+                                    )}
                             </li>
                         ))}
                     </ol>

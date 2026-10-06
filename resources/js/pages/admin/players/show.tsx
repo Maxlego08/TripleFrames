@@ -231,6 +231,9 @@ export default function AdminPlayersShow({ player, games }: Props) {
                                                     round.participation
                                                 }
                                                 showPlayer={false}
+                                                movieId={
+                                                    round.movie?.id ?? null
+                                                }
                                             />
                                         )}
                                     </div>

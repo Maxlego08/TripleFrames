@@ -3,6 +3,7 @@
 use App\Enums\AnswerKeyKind;
 use App\Enums\ImportRunKind;
 use App\Enums\ImportRunStatus;
+use App\Jobs\Catalog\RunCatalogImport;
 use App\Models\AnswerKey;
 use App\Models\ImportRun;
 use App\Models\Movie;
@@ -12,6 +13,7 @@ use App\Support\Catalog\DiscoverCursor;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Sleep;
 use Tests\Fixtures\TmdbFixture;
 
@@ -579,4 +581,83 @@ it('nomme un auteur inconnu par une clé, jamais par une chaîne en dur', functi
         ->assertSuccessful();
 
     expect(ImportRun::query()->sole()->actor_id)->toBeNull();
+});
+
+/**
+ * Un balayage ouvert par le back-office, encore « en file », au filtre par
+ * défaut.
+ */
+function sweepRun(): ImportRun
+{
+    return ImportRun::factory()->discover()->running()->create([
+        'filter_min_vote_count' => 500,
+        'filter_languages' => 'fr,en,ja',
+        'filter_min_release_year' => 1970,
+        'started_at' => null,
+        'tmdb_page_cursor' => null,
+        'total_seen' => 0,
+        'total_imported' => 0,
+        'total_skipped' => 0,
+        'total_refused_content' => 0,
+    ]);
+}
+
+it('le job balaie page par page jusqu’au bout des pages demandées', function (): void {
+    Queue::fake();
+    tmdbFake();
+    $run = sweepRun();
+
+    RunCatalogImport::discover($run, 9)->handle();
+
+    $run->refresh();
+
+    // Les mêmes compteurs que la commande lancée d'un trait : le passage
+    // page à page ne change rien à ce qu'un balayage fait.
+    expect($run->status)->toBe(ImportRunStatus::Completed)
+        ->and($run->total_seen)->toBe(9)
+        ->and($run->total_imported)->toBe(2);
+
+    Queue::assertNotPushed(RunCatalogImport::class);
+});
+
+it('au-delà de son budget, un passage met la suite en file avec les pages restantes', function (): void {
+    Queue::fake();
+    tmdbFake(['*themoviedb.org/3/discover/movie*' => function () {
+        // Chaque page « coûte » plus que le budget d'un passage.
+        test()->travel(RunCatalogImport::BUDGET_SECONDS + 1)->seconds();
+
+        return tmdbJson('discover-page-1');
+    }]);
+    $run = sweepRun();
+
+    RunCatalogImport::discover($run, 3)->handle();
+
+    $run->refresh();
+
+    expect($run->status)->toBe(ImportRunStatus::Running)
+        ->and(DiscoverCursor::fromColumn($run->tmdb_page_cursor)->page)->toBe(2);
+
+    Queue::assertPushed(
+        RunCatalogImport::class,
+        fn (RunCatalogImport $job): bool => $job->runId === $run->id && $job->pages === 2,
+    );
+});
+
+it('un passage suspendu sur une panne TMDB ne se relance pas en boucle', function (): void {
+    Queue::fake();
+    tmdbFake(['*themoviedb.org/3/discover/movie*' => tmdbJson('discover-page-1', 503)]);
+    // Le coût d'une seule tentative de page, réessais du client compris.
+    RunCatalogImport::discover(sweepRun(), 1)->handle();
+    $single = count(Http::recorded());
+
+    $run = sweepRun();
+    RunCatalogImport::discover($run, 5)->handle();
+
+    // Suspendu, curseur inchangé : « Reprendre » rejouera la page — une seule
+    // tentative ici, jamais cinq.
+    expect($run->refresh()->status)->toBe(ImportRunStatus::Running)
+        ->and(DiscoverCursor::fromColumn($run->tmdb_page_cursor)->page)->toBe(1)
+        ->and(count(Http::recorded()))->toBe(2 * $single);
+
+    Queue::assertNotPushed(RunCatalogImport::class);
 });

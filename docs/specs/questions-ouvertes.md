@@ -714,6 +714,22 @@ Le porteur signale que « le QCM n'apparaît pas pour certains films », sans co
 |---|---|---|---|---|
 | D59 | Publier les films prêts d'un coup | **oui, J1** : écran `admin.catalog.ready` depuis le catalogue, lot = prêts à publier (brouillons), avertissement du lot, publication tout ou rien ; pas de commande artisan | **oui** — la publication devient aussi un geste de lot ; aucune migration | `20` § 2.2 (ligne 47), § 8.1 bis, L20-38 |
 
+### D60. Peut-on balayer des milliers de films d'un geste ? — **oui : 1 à 100 pages par balayage, choisies dans une liste, exécutées par passages**
+
+**Demande du porteur.** « Je veux que tu améliores l'importation de films […], que je puisse avoir une task qui va importer des films sur 10, 20, 50, 100 pages, dans un job, et ainsi avoir des milliers de films rapidement. » (La demande nommait IMDb : il s'agit du balayage `discover` de TMDB, seule source d'import du projet.)
+
+**Ce que la décision arrête** (`20` § 3, § 3.9) :
+
+1. **Taille** : `catalog.import.pages_max` passe de 5 à 100 ; l'écran propose `pages_choices` (1, 5, 10, 20, 50, 100), 10 présélectionné ; une page rend une vingtaine de fiches. La reprise d'un balayage suspendu repart au plafond, donc 100 pages.
+2. **Exécution** : `RunCatalogImport` travaille par passages de 600 s, une page à la fois, et met en file la suite avec les pages restantes ; le curseur écrit après chaque page rend tout passage reprenable sans rien rejouer. Les jobs d'image de la file `default` passent entre deux passages.
+3. **Rien d'autre ne change** : filtre de notoriété, filtres de contenu, débit TMDB (35 requêtes/s), compteurs et journal du balayage, un seul balayage ouvert à la fois.
+
+**Écart assumé.** Les films entrent `draft` et ne jouent qu'une fois curés et publiés : le volume importé ne change ni le vivier ni le temps de curation, seule la file de curation s'allonge. L'unicité du job tombe au début du traitement (`ShouldBeUniqueUntilProcessing`) pour qu'un passage puisse mettre le suivant en file ; deux traitements simultanés d'un même balayage restent exclus par la règle de reprise (cinq minutes d'inactivité). Aucune migration. Une décision : elle se cite « D60 du 06/10 ».
+
+| # | Décision | Réponse retenue | Écart | Inscrite dans |
+|---|---|---|---|---|
+| D60 | Balayage de grande taille | **oui, J1** : 1 à 100 pages, liste 1/5/10/20/50/100 (défaut 10), job par passages de 600 s qui se relance sur les pages restantes | **oui** — `pages_max` 5 → 100 ; unicité du job jusqu'au traitement seulement ; aucune migration | `20` § 3, § 3.9 ; `config/catalog.php` |
+
 ## Seule question encore ouverte — le nom de domaine (décision 5)
 
 La réponse est **« à acheter »**, mais **le nom n'a pas été fourni**. C'est le dernier point du questionnaire, et il bloque plus tôt qu'annoncé : le montage de développement retenu — `dev.<DOMAINE>` résolu en 127.0.0.1, certificat par défi DNS-01, RP ID de passkey fixé à `<DOMAINE>` — est le **seul** qui satisfasse simultanément Google, Discord, WebAuthn et les cookies `Secure`. `tripleframes.test` ne conviendra jamais : Google refuse tout redirect URI en `http` hors `localhost` et les TLD non enregistrés. **Le domaine conditionne donc le développement d'OAuth et des passkeys, pas seulement la mise en production.** C'est un achat à une dizaine d'euros par an, et c'est le seul achat réellement sur le chemin critique. Amendé le 23/09 (D1 du 23/09) : il conditionne aussi le jalon 1 lui-même, dont le back-office et la curation naissent en production sur `<DOMAINE>` ; l'achat est donc placé **avant la semaine 4**.

@@ -47,9 +47,10 @@ test('l’écran d’import rend ses deux voies, ses défauts et son historique'
             ->where('defaults.min_vote_count', config('catalog.import_filter.min_vote_count'))
             ->where('defaults.languages', config('catalog.import_filter.languages'))
             ->where('defaults.min_release_year', config('catalog.import_filter.min_release_year'))
-            ->where('defaults.pages_min', 1)
-            ->where('defaults.pages_max', 5)
-            ->where('defaults.pages_default', 1)
+            ->where('defaults.pages_min', config('catalog.import.pages_min'))
+            ->where('defaults.pages_max', config('catalog.import.pages_max'))
+            ->where('defaults.pages_default', config('catalog.import.pages_default'))
+            ->where('defaults.pages_choices', config('catalog.import.pages_choices'))
             ->where('defaults.paste_max_ids', config('catalog.import.paste_max_ids'))
             ->where('defaults.paste_max_themes', config('catalog.import.paste_max_themes'))
             ->has('defaults.language_choices')
@@ -268,7 +269,7 @@ test('les bornes du balayage sont celles de la configuration, jamais des littér
     $payload = ['min_votes' => 500, 'languages' => ['fr'], 'min_year' => 1970];
 
     $this->actingAs($this->curator)
-        ->post(route('admin.import.discover'), [...$payload, 'pages' => 99])
+        ->post(route('admin.import.discover'), [...$payload, 'pages' => config('catalog.import.pages_max') + 1])
         ->assertSessionHasErrors('pages');
 
     $this->actingAs($this->curator)

@@ -927,6 +927,8 @@ export type AdminImportDefaults = {
     pages_min: number;
     pages_max: number;
     pages_default: number;
+    /** Tailles de balayage proposées (`catalog.import.pages_choices`, D60 du 06/10). */
+    pages_choices: number[];
     paste_max_ids: number;
     /** Plafond de thèmes cochés par collage (`catalog.import.paste_max_themes`). */
     paste_max_themes: number;

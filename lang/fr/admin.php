@@ -2108,7 +2108,8 @@ return [
             ],
             'pages' => [
                 'label' => 'Pages TMDB',
-                'hint' => 'Entre :min et :max par envoi. Une page rend une vingtaine de fiches.',
+                'option' => ':pages page(s) — jusqu’à :movies fiches',
+                'hint' => 'Le balayage tourne en tâche de fond, par passages de dix minutes : vous pouvez quitter l’écran. Les fiches déjà au catalogue ou hors filtre ne comptent pas, et un balayage reprend où le précédent s’est arrêté.',
             ],
             'widened_warning' => 'Ce balayage ÉLARGIT le filtre par défaut : il sera marqué élargi, et tous les films qu’il fera entrer seront marqués « entrés par exception » avec leur motif.',
             'submit' => 'Lancer le balayage',
@@ -3282,6 +3283,8 @@ return [
             'wrong_line' => ':source · palier :tier · à :seconds s',
             'attempt' => 'tentative :number',
             'no_wrong' => 'Aucune réponse fausse.',
+            'add_alias' => 'Ajouter en alias',
+            'add_alias_label' => 'Ajouter « :answer » en alias du film',
         ],
         'players' => [
             'title' => 'Joueurs',
