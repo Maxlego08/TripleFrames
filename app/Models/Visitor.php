@@ -4,8 +4,10 @@ namespace App\Models;
 
 use App\Support\Visitor\VisitorTracker;
 use Carbon\CarbonImmutable;
+use Database\Factories\VisitorFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
@@ -30,6 +32,9 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 #[Hidden(['token_hash'])]
 class Visitor extends Model
 {
+    /** @use HasFactory<VisitorFactory> */
+    use HasFactory;
+
     protected $table = 'visitor';
 
     protected $dateFormat = 'Y-m-d H:i:s.v';

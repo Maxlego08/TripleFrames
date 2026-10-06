@@ -25,6 +25,10 @@ type SeatFormProps = {
     nickname: NicknameBounds;
     /** Libellé DÉJÀ traduit du bouton d'envoi. */
     submitLabel: string;
+    /** Icône décorative affichée tant que le formulaire n'est pas envoyé. */
+    submitIcon?: ReactNode;
+    /** Classe de présentation propre à la page qui accueille le formulaire. */
+    className?: string;
     /**
      * Aide du pseudo (`:min`, `:max`) : `room.identity.nickname_hint` par
      * défaut, qui dit l'unicité dans le salon ; `room.solo.nickname_hint` en
@@ -80,6 +84,8 @@ export function SeatForm({
     form,
     nickname,
     submitLabel,
+    submitIcon,
+    className,
     nicknameHintKey = 'room.identity.nickname_hint',
     children,
     onError,
@@ -105,7 +111,7 @@ export function SeatForm({
 
                 onError?.(errors);
             }}
-            className="flex flex-col gap-6"
+            className={`flex flex-col gap-6 ${className ?? ''}`.trim()}
         >
             {({ processing, errors }) => (
                 <>
@@ -166,6 +172,7 @@ export function SeatForm({
                                     className="motion-reduce:animate-none"
                                 />
                             )}
+                            {!processing && submitIcon}
                             {submitLabel}
                         </Button>
 

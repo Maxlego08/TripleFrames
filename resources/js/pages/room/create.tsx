@@ -1,4 +1,6 @@
 import { Head } from '@inertiajs/react';
+import { Sparkles } from 'lucide-react';
+import { useId } from 'react';
 import RoomController from '@/actions/App/Http/Controllers/Room/RoomController';
 import { SeatForm } from '@/components/room/seat-form';
 import type { NicknameBounds } from '@/components/room/seat-form';
@@ -25,26 +27,34 @@ type RoomCreateProps = {
  */
 export default function RoomCreate({ nickname }: RoomCreateProps) {
     const { t } = useTranslations();
+    const headingId = useId();
 
     return (
         <>
             <Head title={t('room.create.title')} />
 
-            <section className="mx-auto flex w-full max-w-2xl flex-col gap-6 px-4 py-8">
-                <header className="flex flex-col gap-2">
-                    <h1 className="text-2xl font-semibold tracking-tight">
-                        {t('room.create.title')}
-                    </h1>
-                    <p className="text-sm text-muted-foreground">
-                        {t('room.create.intro')}
-                    </p>
-                </header>
+            <section className="auth-stage room-create-stage">
+                <section
+                    className="auth-ticket room-create-ticket"
+                    aria-labelledby={headingId}
+                >
+                    <div className="auth-ticket__form-panel">
+                        <header className="auth-heading">
+                            <h1 id={headingId}>{t('room.create.title')}</h1>
+                            <p>{t('room.create.intro')}</p>
+                        </header>
 
-                <SeatForm
-                    form={RoomController.store.form()}
-                    nickname={nickname}
-                    submitLabel={t('room.create.submit')}
-                />
+                        <div className="auth-content">
+                            <SeatForm
+                                form={RoomController.store.form()}
+                                nickname={nickname}
+                                submitLabel={t('room.create.submit')}
+                                submitIcon={<Sparkles aria-hidden="true" />}
+                                className="room-create-form"
+                            />
+                        </div>
+                    </div>
+                </section>
             </section>
         </>
     );

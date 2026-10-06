@@ -25,7 +25,8 @@ import type { GameLayoutProps } from '@/types/ui';
  *    du pied de page replié — liens légaux et attribution TMDB dans une
  *    feuille, ouverts en nouvel onglet, jamais par une visite qui quitterait
  *    la partie ;
- * 4. `GameAnnouncer`, la SEULE région `aria-live` de la page (C16 § 4), montée
+ * 4. le bandeau de consentement, superposé en bas de la coquille ;
+ * 5. `GameAnnouncer`, la SEULE région `aria-live` de la page (C16 § 4), montée
  *    dès la coquille parce qu'une région vivante doit exister avant son
  *    premier message.
  *
@@ -53,10 +54,8 @@ export default function GameLayout({ children }: GameLayoutProps) {
     const notice = useFlashNotice();
 
     return (
-        <div className="flex h-[var(--game-viewport-height,100dvh)] flex-col overflow-hidden bg-background text-foreground">
+        <div className="relative flex h-[var(--game-viewport-height,100dvh)] flex-col overflow-hidden bg-background text-foreground">
             <MaintenanceBanner />
-
-            <ConsentBanner />
 
             {notice !== null && (
                 <div className="border-b border-border bg-muted">
@@ -80,6 +79,8 @@ export default function GameLayout({ children }: GameLayoutProps) {
                 <LanguageSwitcher iconOnly align="start" />
                 <SiteFooter variant="collapsed" />
             </div>
+
+            <ConsentBanner />
 
             <GameAnnouncer />
         </div>

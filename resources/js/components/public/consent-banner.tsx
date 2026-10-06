@@ -52,7 +52,7 @@ function ConsentButtons() {
  * que le visiteur n'a pas répondu à la version courante (prop partagée
  * `consent` nulle), dans les coquilles publique et de jeu. Elle ne bloque
  * rien — on joue exactement pareil sans répondre — et n'ouvre aucune région
- * `aria-live` : c'est une région nommée, dans le flux.
+ * `aria-live` : c'est une région nommée, superposée en bas de la coquille.
  *
  * Composant de présentation : props partagées seulement, tokens seulement.
  */
@@ -68,7 +68,7 @@ export function ConsentBanner() {
     return (
         <section
             aria-labelledby={headingId}
-            className="shrink-0 border-b border-border bg-card px-4 py-3 text-card-foreground"
+            className="absolute inset-x-0 bottom-0 z-50 bg-background/80 px-4 py-3 text-foreground"
         >
             <div className="mx-auto flex max-w-5xl flex-col gap-3 md:flex-row md:items-center md:justify-between">
                 <div className="space-y-1 text-sm">

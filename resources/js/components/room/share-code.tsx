@@ -1,138 +1,198 @@
-import { Check, Copy, Share2 } from 'lucide-react';
-import { useId, useRef, useState } from 'react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { Check, Copy, Eye, EyeOff, Link as LinkIcon } from 'lucide-react';
+import { useEffect, useId, useRef, useState } from 'react';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { useTranslations } from '@/hooks/use-translations';
 import { announce } from '@/lib/game/announcer';
 
 type ShareCodeProps = {
-    /** Code du salon, affiché tel quel : jamais dans un titre (§ 6.5). */
+    /** Code du salon, masqué au premier rendu comme sur la maquette. */
     code: string;
-    /**
-     * Lien de partage ABSOLU, construit par la page depuis Wayfinder
-     * (`show.url()` préfixé de `window.location.origin`), jamais par
-     * concaténation d'un code (§ 6.5).
-     */
+    /** Lien absolu du salon, copiable depuis le menu du bouton. */
     url: string;
 };
 
-/**
- * Code et lien de partage du salon (spec 50 § 6.5 et § 8.1) : tous les sièges
- * les voient, l'hôte comme les autres.
- *
- * - Le code s'affiche en grand (`room.lobby.code_label`) ; il se dicte, le
- *   lien se copie.
- * - « Copier le lien » (`room.lobby.copy_link`) écrit l'URL dans le
- *   presse-papiers ; le succès s'affiche (`room.lobby.link_copied`) et
- *   s'annonce par l'annonceur, jamais par un toast. Sans presse-papiers
- *   accessible (contexte non sécurisé, refus du navigateur), le champ du
- *   lien est sélectionné et reçoit le focus : la copie se fait à la main.
- * - « Partager » (`room.lobby.share`) n'est proposé que si
- *   `navigator.share` existe ; une feuille de partage fermée sans choix
- *   n'est pas une erreur.
- *
- * Le lien porte un code : la page reste `noindex`, et `Referrer-Policy` est
- * posée globalement (§ 6.5). Aucun préfixe de locale : le salon n'a pas de
- * langue, chaque joueur a la sienne.
- */
+type CopySuccessKey = 'room.lobby.code_copied' | 'room.lobby.link_copied';
+
+/** Barre compacte du code de la partie, fidèle à `waiting-room.html`. */
 export function ShareCode({ code, url }: ShareCodeProps) {
     const { t } = useTranslations();
-    const linkId = useId();
-    const codeLabelId = useId();
-    const linkInput = useRef<HTMLInputElement>(null);
-    const [copied, setCopied] = useState(false);
-    const canShare =
-        typeof navigator !== 'undefined' &&
-        typeof navigator.share === 'function';
+    const titleId = useId();
+    const closeTimer = useRef<number | null>(null);
+    const [visible, setVisible] = useState(false);
+    const [menuOpen, setMenuOpen] = useState(false);
+    const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-    const selectLink = (): void => {
-        linkInput.current?.focus();
-        linkInput.current?.select();
-    };
+    useEffect(() => {
+        if (toastMessage === null) {
+            return;
+        }
 
-    const copy = async (): Promise<void> => {
-        setCopied(false);
+        const timeout = window.setTimeout(() => setToastMessage(null), 3000);
 
-        try {
-            await navigator.clipboard.writeText(url);
-            setCopied(true);
-            announce(t('room.lobby.link_copied'));
-        } catch {
-            selectLink();
+        return () => window.clearTimeout(timeout);
+    }, [toastMessage]);
+
+    useEffect(
+        () => () => {
+            if (closeTimer.current !== null) {
+                window.clearTimeout(closeTimer.current);
+            }
+        },
+        [],
+    );
+
+    const cancelClose = (): void => {
+        if (closeTimer.current !== null) {
+            window.clearTimeout(closeTimer.current);
+            closeTimer.current = null;
         }
     };
 
-    const share = async (): Promise<void> => {
+    const scheduleClose = (): void => {
+        cancelClose();
+        closeTimer.current = window.setTimeout(() => setMenuOpen(false), 180);
+    };
+
+    const confirmCopy = (successKey: CopySuccessKey): void => {
+        const message = t(successKey);
+
+        setToastMessage(message);
+        setMenuOpen(false);
+        announce(message);
+    };
+
+    const legacyCopy = (value: string): boolean => {
+        const textarea = document.createElement('textarea');
+
+        textarea.value = value;
+        textarea.setAttribute('readonly', '');
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        textarea.setSelectionRange(0, value.length);
+
         try {
-            await navigator.share({ url });
+            return document.execCommand('copy');
         } catch {
-            // Feuille fermée sans partage, ou partage refusé : rien à dire.
+            return false;
+        } finally {
+            textarea.remove();
+        }
+    };
+
+    const copy = async (
+        value: string,
+        successKey: CopySuccessKey,
+    ): Promise<void> => {
+        setToastMessage(null);
+
+        try {
+            await navigator.clipboard.writeText(value);
+            confirmCopy(successKey);
+            return;
+        } catch {
+            // Les origines HTTP locales peuvent refuser l'API moderne.
+        }
+
+        if (legacyCopy(value)) {
+            confirmCopy(successKey);
         }
     };
 
     return (
-        <section
-            aria-labelledby={codeLabelId}
-            className="flex flex-col gap-3 rounded-md border border-border p-4"
-        >
-            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                <h2
-                    id={codeLabelId}
-                    className="text-sm font-medium text-muted-foreground"
+        <>
+            <section className="room-code" aria-labelledby={titleId}>
+                <div
+                    className="room-code__copy"
+                    onMouseEnter={() => {
+                        cancelClose();
+                        setMenuOpen(true);
+                    }}
+                    onMouseLeave={scheduleClose}
                 >
-                    {t('room.lobby.code_label')}
-                </h2>
-                <p className="font-mono text-3xl font-semibold tracking-widest select-all">
-                    {code}
-                </p>
-            </div>
-
-            <div className="grid gap-2">
-                <Label htmlFor={linkId} className="text-muted-foreground">
-                    {t('room.lobby.share_hint')}
-                </Label>
-                <Input
-                    ref={linkInput}
-                    id={linkId}
-                    readOnly
-                    value={url}
-                    spellCheck={false}
-                    onFocus={(event) => event.currentTarget.select()}
-                    className="min-h-11 font-mono text-sm"
-                />
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-                <Button
-                    type="button"
-                    variant="outline"
-                    className="min-h-11"
-                    onClick={() => void copy()}
-                >
-                    <Copy aria-hidden="true" />
-                    {t('room.lobby.copy_link')}
-                </Button>
-
-                {canShare && (
-                    <Button
-                        type="button"
-                        variant="outline"
-                        className="min-h-11"
-                        onClick={() => void share()}
+                    <DropdownMenu
+                        modal={false}
+                        open={menuOpen}
+                        onOpenChange={setMenuOpen}
                     >
-                        <Share2 aria-hidden="true" />
-                        {t('room.lobby.share')}
-                    </Button>
-                )}
+                        <DropdownMenuTrigger asChild>
+                            <button type="button" className="room-code__action">
+                                <span
+                                    className="room-code__action-icon"
+                                    aria-hidden="true"
+                                >
+                                    <Copy />
+                                </span>
+                                <span>{t('room.lobby.copy_code')}</span>
+                            </button>
+                        </DropdownMenuTrigger>
 
-                {copied && (
-                    <p className="inline-flex items-center gap-1 text-sm text-muted-foreground">
-                        <Check aria-hidden="true" className="size-4" />
-                        {t('room.lobby.link_copied')}
-                    </p>
-                )}
-            </div>
-        </section>
+                        <DropdownMenuContent
+                            align="start"
+                            sideOffset={6}
+                            className="room-copy-menu"
+                            onMouseEnter={cancelClose}
+                            onMouseLeave={scheduleClose}
+                            onCloseAutoFocus={(event) => event.preventDefault()}
+                        >
+                            <DropdownMenuItem
+                                className="room-copy-menu__item"
+                                onSelect={() =>
+                                    void copy(code, 'room.lobby.code_copied')
+                                }
+                            >
+                                <Copy aria-hidden="true" />
+                                {t('room.lobby.copy_room_code')}
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                                className="room-copy-menu__item"
+                                onSelect={() =>
+                                    void copy(url, 'room.lobby.link_copied')
+                                }
+                            >
+                                <LinkIcon aria-hidden="true" />
+                                {t('room.lobby.copy_link')}
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                </div>
+
+                <div className="room-code__display">
+                    <p id={titleId}>{t('room.lobby.code_label')}</p>
+                    <output aria-live="polite">
+                        {visible ? code : '****'}
+                    </output>
+                </div>
+
+                <button
+                    type="button"
+                    className="room-code__action"
+                    aria-pressed={visible}
+                    onClick={() => setVisible((current) => !current)}
+                >
+                    <span className="room-code__action-icon" aria-hidden="true">
+                        {visible ? <EyeOff /> : <Eye />}
+                    </span>
+                    <span>
+                        {visible
+                            ? t('room.lobby.hide_code')
+                            : t('room.lobby.show_code')}
+                    </span>
+                </button>
+            </section>
+
+            {toastMessage !== null && (
+                <div className="room-copy-toast" aria-hidden="true">
+                    <Check />
+                    <span>{toastMessage}</span>
+                </div>
+            )}
+        </>
     );
 }

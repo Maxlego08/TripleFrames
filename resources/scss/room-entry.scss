@@ -1,0 +1,71 @@
+@use 'auth/tokens' as *;
+@use 'auth/mixins' as mix;
+
+// La création de salon vit dans `PublicLayout`, mais reprend volontairement
+// le même gabarit que les pages d'authentification : fond, carte, titre et
+// formulaire viennent de leurs classes partagées `auth-*`.
+.public-shell--room-create {
+    min-width: 20rem;
+    background:
+        linear-gradient($night 0 0) top / 100% 0.2rem no-repeat,
+        repeating-linear-gradient(
+            90deg,
+            $violet 0 5.5rem,
+            $violet-light 5.5rem 9rem,
+            $violet-dark 9rem 13rem
+        );
+    color: $ink;
+    font-family: $body;
+    line-height: 1.5;
+
+    > .site-footer {
+        @include mix.public-site-footer;
+    }
+
+    a:focus-visible,
+    button:focus-visible,
+    input:focus-visible {
+        @include mix.focus-ring;
+    }
+}
+
+.room-create-stage.auth-stage {
+    min-height: 0;
+    flex: 1;
+}
+
+.room-create-ticket.auth-ticket {
+    width: min(100%, 42rem);
+}
+
+.room-create-form {
+    p {
+        color: $muted;
+        font-size: 0.8rem;
+        line-height: 1.45;
+    }
+
+    p.text-destructive {
+        color: $error;
+        font-weight: 800;
+    }
+
+    a {
+        min-height: 2.75rem;
+    }
+}
+
+@media (max-width: $mobile) {
+    .room-create-stage.auth-stage {
+        align-items: start;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .public-shell--room-create *,
+    .public-shell--room-create *::before,
+    .public-shell--room-create *::after {
+        scroll-behavior: auto !important;
+        transition-duration: 0.01ms !important;
+    }
+}

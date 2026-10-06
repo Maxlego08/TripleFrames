@@ -73,6 +73,41 @@ export function lobbyAvatarValue(
 }
 
 /**
+ * L'avatar voisin du choix courant, pour les flèches ‹ › du siège dans la
+ * salle d'attente : `direction` 1 (suivant) ou -1 (précédent), en boucle,
+ * dans l'ordre « Mon avatar » (s'il est offert) puis le catalogue, en
+ * sautant les clés tenues par un autre siège. `null` quand aucun autre
+ * choix n'est libre. Le serveur reste juge : une clé prise entre-temps est
+ * refusée (`room.lobby.avatar_taken`).
+ */
+export function cycleLobbyAvatar(
+    avatars: Pick<LobbyAvatars, 'options' | 'taken' | 'current' | 'account'>,
+    direction: 1 | -1,
+): SeatAvatarChoice | null {
+    const taken = new Set(avatars.taken);
+    const account: SeatAvatarChoice[] =
+        avatars.account === null ? [] : [ACCOUNT_AVATAR_CHOICE];
+    const presets: SeatAvatarChoice[] = avatars.options
+        .filter(
+            (option) => isAvatarPresetKey(option.key) && !taken.has(option.key),
+        )
+        .map((option) => option.key);
+    const choices = [...account, ...presets];
+    const current = lobbyAvatarValue(avatars);
+    const index = current === null ? -1 : choices.indexOf(current);
+
+    if (choices.length === 0 || (index !== -1 && choices.length === 1)) {
+        return null;
+    }
+
+    if (index === -1) {
+        return direction === 1 ? choices[0] : choices[choices.length - 1];
+    }
+
+    return choices[(index + direction + choices.length) % choices.length];
+}
+
+/**
  * Empreinte des avatars des AUTRES sièges, telle que le salon les diffuse
  * (`seat.joined`, `seat.updated`) : nature, image, présence et expulsion.
  * Elle change quand une clé peut être prise ou libérée ; le sélecteur ouvert

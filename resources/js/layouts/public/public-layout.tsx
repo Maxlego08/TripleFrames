@@ -18,9 +18,10 @@ const MAIN_ID = 'public-main';
  *
  * De haut en bas : le lien d'évitement (première cible de tabulation), l'en-
  * tête, le bandeau de maintenance (rendu seulement pendant un drainage,
- * § 3.3), le contenu, le pied de page complet, l'annonceur — pour la seule
- * annonce du changement de langue du sélecteur de l'en-tête (`common.language.
- * changed`, § 7.4) — et le `Toaster`.
+ * § 3.3), le contenu, le pied de page complet, le bandeau de consentement
+ * superposé en bas, l'annonceur — pour la seule annonce du changement de
+ * langue du sélecteur de l'en-tête (`common.language.changed`, § 7.4) — et
+ * le `Toaster`.
  *
  * `<Toaster />` est monté ICI et non plus dans `app.tsx` (spec 90 § 2.3) : la
  * section que rend sonner est une région `aria-live` toujours présente, même
@@ -34,15 +35,18 @@ export default function PublicLayout({ children }: { children: ReactNode }) {
     const component = usePage().component;
     const isHomePage = component === 'welcome';
     const isLegalPage = component.startsWith('legal/');
+    const isRoomCreatePage = component === 'room/create';
     const shellVariant = isHomePage
         ? 'public-shell--home'
         : isLegalPage
           ? 'public-shell--legal'
-          : '';
+          : isRoomCreatePage
+            ? 'public-shell--room-create'
+            : '';
 
     return (
         <div
-            className={`public-shell ${shellVariant} flex min-h-svh flex-col bg-background text-foreground`}
+            className={`public-shell ${shellVariant} relative flex min-h-svh flex-col bg-background text-foreground`}
         >
             <a
                 href={`#${MAIN_ID}`}
@@ -55,8 +59,6 @@ export default function PublicLayout({ children }: { children: ReactNode }) {
 
             <MaintenanceBanner />
 
-            <ConsentBanner />
-
             <main
                 id={MAIN_ID}
                 tabIndex={-1}
@@ -66,6 +68,8 @@ export default function PublicLayout({ children }: { children: ReactNode }) {
             </main>
 
             <SiteFooter variant="full" />
+
+            <ConsentBanner />
 
             <GameAnnouncer />
 

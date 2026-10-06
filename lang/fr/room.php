@@ -218,12 +218,18 @@ return [
 
     'lobby' => [
         'title' => 'Salon',
-        'code_label' => 'Code',
+        'code_label' => 'Code de la partie',
+        'copy_code' => 'Copier',
+        'copy_room_code' => 'Copier le code',
+        'code_copied' => 'Code copié',
+        'show_code' => 'Afficher',
+        'hide_code' => 'Masquer',
         'copy_link' => 'Copier le lien',
         'link_copied' => 'Lien copié',
         'share_hint' => 'Partagez ce lien ou ce code avec vos amis.',
         'share' => 'Partager',
         'players' => 'Joueurs (:count sur :capacity)',
+        'player_count' => ':count / :capacity joueurs',
         'host_badge' => 'Hôte',
         'you' => 'Vous',
         'seat' => [
@@ -249,6 +255,8 @@ return [
         'leave' => 'Quitter le salon',
         'leave_confirm' => 'Quitter le salon ? Vous pourrez revenir avec le lien.',
         'settings_title' => 'Réglages',
+        'configure' => 'Configurer',
+        'screen_waiting' => 'La séance va commencer',
         'presets_title' => 'Presets',
         'changes_title' => 'Réglages ajustés',
         'preset_grayed' => 'Pas assez de films pour ce preset : jouable avec :frames images par manche.',
@@ -261,6 +269,8 @@ return [
             'change' => 'Changer d’avatar',
             'done' => 'Terminé',
             'apply' => 'Choisir cet avatar',
+            'previous' => 'Avatar précédent',
+            'next' => 'Avatar suivant',
         ],
     ],
 

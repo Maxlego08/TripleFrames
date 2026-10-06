@@ -390,7 +390,8 @@ export function LeaveRoomAction({
     disabled,
     onHttpException,
     onRefused,
-}: RoomGestureContext) {
+    icon = LogOut,
+}: RoomGestureContext & { icon?: LucideIcon }) {
     const { t } = useTranslations();
 
     return (
@@ -399,7 +400,7 @@ export function LeaveRoomAction({
             label={t('room.lobby.leave')}
             title={t('room.lobby.leave')}
             description={t('room.lobby.leave_confirm')}
-            icon={LogOut}
+            icon={icon}
             destructive
             disabled={disabled}
             onHttpException={onHttpException}
