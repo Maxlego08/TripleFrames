@@ -22,7 +22,8 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 |--------------------------------------------------------------------------
 |
 | Deux routes, `admin.catalog.frames.game` et `admin.catalog.frames.master`,
-| seules lectrices du disque `frames` avec `/f/{serveToken}` (E10-61), et
+| lectrices du disque `frames` avec `/f/{serveToken}` (E10-61) et l’aperçu
+| de l’image signalée (`content-report.frame`, D63 du 07/10), et
 | jamais adressées par un `serve_token`. Leurs réponses viennent toutes de
 | `FrameImageResponse`, constructeur unique partagé avec la route de jeu : ce
 | sont donc SES en-têtes que ce fichier éprouve, sur le chemin de l'aperçu.

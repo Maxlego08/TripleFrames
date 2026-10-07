@@ -36,8 +36,12 @@ type ReportCreateProps = {
         year: number | null;
         tmdb: number;
     };
-    /** L'image désignée par le lien, par son seul `public_id` ; jamais l'image. */
-    frame: { publicId: string } | null;
+    /**
+     * L'image désignée par le lien, par son `public_id` ; `imageUrl`, produit
+     * par le serveur (route `content-report.frame`), n'est non nul que pour
+     * qui l'a déjà vue dans une manche révélée.
+     */
+    frame: { publicId: string; imageUrl: string | null } | null;
     /** Les portées offertes : `movie` seule sans image. */
     scopes: ReportScope[];
     /** Les motifs, dans l'ordre du serveur ; `frameOnly` : image seulement. */
@@ -190,8 +194,10 @@ function ChoiceGroup<T extends string>({
  * `PublicLayout`, au gabarit des pages d'entrée (`room-entry.scss`), style
  * propre dans `report.scss`.
  *
- * - Montre le **titre localisé et l'année** du film, **jamais l'image** :
- *   aucune route ne sert une image par son `public_id` (anti-triche).
+ * - Montre le **titre localisé et l'année** du film, et l'image désignée
+ *   **seulement à qui l'a déjà vue** dans une manche révélée (`imageUrl`
+ *   non nul, amendé le 07/10) : 16:9, chargement différé, masquée si ses
+ *   octets ne viennent pas.
  * - Portée « Cette image » / « Le film entier » quand une image est
  *   désignée ; sinon le film, d'office. Les motifs propres à l'image
  *   disparaissent pour le film entier — le serveur les refuse de toute façon.
@@ -226,6 +232,9 @@ export default function ReportCreate({
     const [scope, setScope] = useState<ReportScope>(scopes[0] ?? 'movie');
     const [reason, setReason] = useState<ReportReason | ''>('');
     const [comment, setComment] = useState('');
+    const [previewFailed, setPreviewFailed] = useState(false);
+    const { frameFormat } = usePage().props;
+    const previewUrl = previewFailed ? null : (frame?.imageUrl ?? null);
 
     const reportedFor = (each: ReportScope): boolean =>
         each === 'frame'
@@ -288,6 +297,22 @@ export default function ReportCreate({
                                     )}
                                 </span>
                             </p>
+
+                            {previewUrl !== null && (
+                                <figure className="report-frame">
+                                    <img
+                                        src={previewUrl}
+                                        alt={t('game.report.frame_alt')}
+                                        width={frameFormat.width}
+                                        height={frameFormat.height}
+                                        loading="lazy"
+                                        decoding="async"
+                                        draggable={false}
+                                        onError={() => setPreviewFailed(true)}
+                                        className="report-frame__image"
+                                    />
+                                </figure>
+                            )}
 
                             {outcome === 'sent' && (
                                 <Notice tone="success" role="status">

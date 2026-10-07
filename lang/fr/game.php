@@ -130,6 +130,27 @@ return [
         'title' => 'Partie en pause',
         'description' => 'Plus aucun joueur n’était connecté : la partie reprend dès que l’un d’eux revient.',
         'interrupts_at' => 'Sans retour d’un joueur, elle s’arrêtera à :time.',
+        // D64 du 07/10 : la pause manuelle. Gestes, bandeau de la pause
+        // demandée, écran de pause et refus (codes 409 des routes de pause).
+        'pause' => 'Pause',
+        'cancel' => 'Annuler la pause',
+        'resume' => 'Reprendre',
+        'requested' => 'Pause demandée : elle commencera à la fin de cette manche.',
+        'requested_announce' => 'Pause demandée pour la fin de cette manche.',
+        'request_cancelled_announce' => 'Pause annulée.',
+        'manual_description' => 'L’hôte a mis la partie en pause.',
+        'manual_description_solo' => 'Vous avez mis la partie en pause.',
+        'manual_interrupts_at' => 'Sans reprise, elle s’arrêtera à :time.',
+        'remaining' => 'Temps restant : :time',
+        'resumed_announce' => 'La partie reprend.',
+        'host_absent' => 'L’hôte n’est plus connecté : vous pouvez reprendre la partie.',
+        'errors' => [
+            'not_running' => 'Aucune partie n’est en cours.',
+            'no_round_left' => 'C’est la dernière manche : il n’y a plus rien à mettre en pause.',
+            'budget_exhausted' => 'Le temps de pause de cette partie est épuisé.',
+            'draining' => 'Une mise à jour du site se prépare : impossible de mettre la partie en pause.',
+            'failed' => 'Le geste n’a pas abouti. Réessayez.',
+        ],
     ],
 
     // Spec 60 § 5.4 (lot L60-14) : le seul pouvoir de l’hôte en partie,
@@ -244,6 +265,8 @@ return [
         'description' => 'Une image ou une fiche de film vous semble fausse ? Dites-le à l’équipe de curation.',
         'movie' => ':title (:year)',
         'movie_without_year' => ':title',
+        // L’aperçu de l’image signalée, montré seulement à qui l’a vue en jeu.
+        'frame_alt' => 'L’image signalée, telle que vue en jeu',
         'no_automatic_effect' => 'Un signalement ne retire rien automatiquement : un membre de l’équipe l’examine.',
         'fields' => [
             'scope' => 'Ce qui pose problème',

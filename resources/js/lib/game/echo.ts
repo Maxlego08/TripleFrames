@@ -49,7 +49,7 @@ import type { GameEventName, RealtimeConfig } from '@/types/game-wire';
  */
 
 /**
- * Les seize événements diffusés au salon (canal de présence
+ * Les dix-huit événements diffusés au salon (canal de présence
  * `room.{roomKey}`), dans l'ordre de la liste close (60 § 11.3).
  * `EventPayloadTest` compare cette liste à `app/Events/Game/`.
  */
@@ -69,6 +69,8 @@ export const ROOM_EVENTS = [
     'round.cancelled',
     'game.paused',
     'game.resumed',
+    'game.pause_requested',
+    'game.pause_request_cancelled',
     'game.ended',
 ] as const satisfies readonly GameEventName[];
 

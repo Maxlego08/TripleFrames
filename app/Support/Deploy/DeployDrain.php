@@ -123,16 +123,18 @@ final class DeployDrain
 
     /**
      * Borne d'attente par défaut, en minutes (§ 11.3, R-10) :
-     * `ceil(maxNaturalDurationMs / 60 000) + drain_margin_minutes`, soit
-     * environ 78 + 20 = 98 minutes aux bornes actuelles. Dérivée du prédicat
-     * de 60 (contrat C17 § 4.3), jamais d'un produit écrit à la main ; la
-     * marge couvre au moins une pause, attente puis décompte de reprise
+     * `ceil((maxNaturalDurationMs + manualPauseBudgetMs) / 60 000) +
+     * drain_margin_minutes`, soit environ 78 + 15 + 20 = 113 minutes aux
+     * bornes actuelles. Dérivée du prédicat de 60 (contrat C17 § 4.3), jamais
+     * d'un produit écrit à la main ; le budget des pauses manuelles (D64 du
+     * 07/10) couvre leur attente et leurs décomptes de reprise, la marge au
+     * moins une pause automatique, attente puis décompte de reprise
      * (`pauseTimeoutMs + launchCountdownMs`, § 11.8, précision (5)), ce que
      * `DeployDrainCommandTest` prouve.
      */
     public static function defaultTimeoutMinutes(): int
     {
-        return (int) ceil(GamesInProgress::maxNaturalDurationMs() / self::MILLISECONDS_PER_MINUTE)
+        return (int) ceil((GamesInProgress::maxNaturalDurationMs() + GamesInProgress::manualPauseBudgetMs()) / self::MILLISECONDS_PER_MINUTE)
             + Config::integer('deploy.drain_margin_minutes');
     }
 

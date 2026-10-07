@@ -5,6 +5,7 @@ import { ConnectionBanner } from '@/components/game/connection-banner';
 import { GameHelp } from '@/components/game/game-help';
 import { GameStage } from '@/components/game/game-stage';
 import { NextRoundButton } from '@/components/game/next-round-button';
+import { PauseButton } from '@/components/game/pause-button';
 import { Podium } from '@/components/game/podium';
 import { SoloRelaunch } from '@/components/game/solo-relaunch';
 import { SoloRoundActions } from '@/components/game/solo-round-actions';
@@ -14,6 +15,7 @@ import { ReadOnlyNotice } from '@/components/state/read-only-notice';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useMaintenanceRefresh } from '@/hooks/game/use-maintenance-refresh';
+import { usePauseGesture } from '@/hooks/game/use-pause-gesture';
 import { useRoundStage } from '@/hooks/game/use-round-stage';
 import { useSoloGestures } from '@/hooks/game/use-solo-gestures';
 import { useSoloState } from '@/hooks/game/use-solo-state';
@@ -23,6 +25,7 @@ import type {
 } from '@/hooks/game/use-solo-state';
 import { useTranslations } from '@/hooks/use-translations';
 import { announce } from '@/lib/game/announcer';
+import { pauseControlOf } from '@/lib/game/pause-gesture';
 import { parseIsoMs } from '@/lib/game/wire';
 import type { GameStatePacket } from '@/types/game-wire';
 import type { PlatformLimitsPayload } from '@/types/room-settings';
@@ -245,6 +248,17 @@ function SoloGame({
         gameRef: state.gameRef,
         sequenceIndex: clock.round?.sequenceIndex ?? null,
     });
+    // Pause manuelle (D64 du 07/10) : le joueur met en pause, retire sa
+    // demande ou reprend ; chaque geste rend le paquet à jour.
+    const pauseControl = pauseControlOf(state, clock.nowMs);
+    const pause = usePauseGesture({
+        store,
+        roomCode: null,
+        stateKey:
+            state.gameRef === null
+                ? null
+                : `${state.gameRef}|${state.status ?? '-'}|${String(state.pauseRequested)}`,
+    });
 
     const round = clock.round;
     // La scène d'une manche ouverte ne défile jamais (principe 5) : l'annonce
@@ -302,6 +316,17 @@ function SoloGame({
                     onReveal={() => gestures.run('reveal')}
                     onSkip={() => gestures.run('skip')}
                 />
+            }
+            pauseControl={
+                pauseControl === null ? null : (
+                    <PauseButton
+                        kind={pauseControl.kind}
+                        pending={pause.pending !== null}
+                        disabled={!canWrite}
+                        error={pause.error}
+                        onPress={pause.run}
+                    />
+                )
             }
         />
     );

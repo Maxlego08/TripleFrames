@@ -389,7 +389,10 @@ class FortifyServiceProvider extends ServiceProvider
      *   l'IP, comme les limiteurs de jeu.
      *
      * S'y ajoute `content-report` (`content-report.store`, D63 du 07/10) :
-     * par compte connecté, sinon comme `room-join`.
+     * par compte connecté, sinon comme `room-join`. Et `content-report-frame`
+     * (`content-report.frame`, amendé le 07/10), même clé, seau distinct de
+     * `frame-serve`, pour que l'aperçu ne consomme jamais le budget C8 des
+     * paliers.
      */
     private function configureRoomRateLimiting(): void
     {
@@ -412,6 +415,19 @@ class FortifyServiceProvider extends ServiceProvider
             $account = $request->user()?->getAuthIdentifier();
 
             return Limit::perHour(ContentReportRateLimits::reportsPerHour())
+                ->by($account !== null
+                    ? self::ACCOUNT_THROTTLE_PREFIX.$account
+                    : $this->seatThrottleKey($request));
+        });
+
+        // L'aperçu de l'image signalée (amendé le 07/10) : même clé que
+        // `content-report`, seau distinct de `frame-serve` — un onglet
+        // « Signaler » rechargé pendant la partie ne fait jamais tomber en 429
+        // le préchargement du palier suivant.
+        RateLimiter::for('content-report-frame', function (Request $request) {
+            $account = $request->user()?->getAuthIdentifier();
+
+            return Limit::perMinute(ContentReportRateLimits::framePreviewsPerMinute())
                 ->by($account !== null
                     ? self::ACCOUNT_THROTTLE_PREFIX.$account
                     : $this->seatThrottleKey($request));

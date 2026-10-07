@@ -1131,7 +1131,7 @@ test('journalise sur le canal game les transitions de la partie, sans aucune don
                 'outcome' => GameStatus::Completed->value,
                 'finalizedAt' => WireTime::iso($lastRevealEndsAt),
             ]])
-            ->and($of(GameJournal::GAME_PAUSED, $refB))->toBe([['gameRef' => $refB, 'mode' => $gameB->mode->value, 'pausedAt' => WireTime::iso($pausedAt)]])
+            ->and($of(GameJournal::GAME_PAUSED, $refB))->toBe([['gameRef' => $refB, 'mode' => $gameB->mode->value, 'pausedAt' => WireTime::iso($pausedAt), 'kind' => 'empty']])
             ->and(array_column($of(GameJournal::GAME_FINALIZED, $refB), 'outcome'))->toBe([GameStatus::Interrupted->value])
             ->and(array_column($of(GameJournal::GAME_FINALIZED, $refB), 'finalizedAt'))->toBe([WireTime::iso($interrupt->interruptsAt())])
             ->and($of(GameJournal::GAME_FINALIZED, GameRef::for($gameD)))->toBe([[
@@ -1159,6 +1159,9 @@ test('journalise sur le canal game les transitions de la partie, sans aucune don
             expect(array_keys($line['context'] ?? []))->each->toBeIn([
                 'gameRef', 'mode', 'inputDifficulty', 'sequenceIndex', 'roundNumber', 'tierIndex', 'reason', 'replaced', 'cause',
                 'startedAt', 'closedAt', 'pausedAt', 'resumedAt', 'outcome', 'finalizedAt', 'event', 'delayMs',
+                // D64 du 07/10 : nature de la pause, auteur de la reprise
+                // (jamais un siège), demande de pause et son retrait.
+                'kind', 'by', 'requestedAt', 'cancelledAt',
             ]);
         }
     } finally {

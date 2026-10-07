@@ -114,12 +114,17 @@ return [
     |
     | Section lue EXCLUSIVEMENT par
     | `App\Support\ContentReport\ContentReportRateLimits` : garde anti-abus
-    | du limiteur `content-report`, jamais une valeur de jeu.
+    | des limiteurs `content-report` et `content-report-frame`, jamais une
+    | valeur de jeu.
     |
     */
 
     'content_report' => [
         'reports_per_hour' => ContentReportRateLimits::DEFAULT_REPORTS_PER_HOUR,
+        // Aperçu de l'image signalée (`content-report-frame`, amendé le
+        // 07/10) : seau distinct de `frame-serve`, pour que l'aperçu ne
+        // consomme jamais le budget de chargement des paliers (C8).
+        'frame_previews_per_minute' => ContentReportRateLimits::DEFAULT_FRAME_PREVIEWS_PER_MINUTE,
     ],
 
 ];

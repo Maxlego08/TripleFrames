@@ -3,6 +3,7 @@
 namespace App\Actions\Game;
 
 use App\Enums\GameMode;
+use App\Enums\GamePauseKind;
 use App\Enums\GameStatus;
 use App\Events\Game\GameResumed;
 use App\Jobs\Game\InterruptPausedGame;
@@ -11,6 +12,8 @@ use App\Models\Room;
 use App\Models\Round;
 use App\Settings\EngineConstants;
 use App\Support\Game\GameJournal;
+use App\Support\Game\PauseDeadline;
+use App\Support\Game\ResumeAuthor;
 use App\Support\Realtime\WireTime;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
@@ -20,23 +23,33 @@ use LogicException;
  * La reprise d'une partie en pause — spec 60 § 14.2, contrat C7 § 4.11
  * (action interne, nom donné par le contrat).
  *
- * **Appelant** : le battement qui ramène un siège de la partie à `connected`
+ * **Appelants** : le battement qui ramène un siège de la partie à `connected`
  * (§ 13.1, {@see RecordHeartbeat}), dans sa transaction, après les verrous
- * `room` (s'il le tient) puis `player` : la reprise prend `game`, puis la
- * manche à reprogrammer (ordre global du § 4.5).
+ * `room` (s'il le tient) puis `player` ; et le geste « Reprendre » (D64 du
+ * 07/10, {@see ResumePausedGame}), après le verrou `room` en multijoueur :
+ * la reprise prend `game`, puis la manche à reprogrammer (ordre global du
+ * § 4.5).
  *
- * **Sous le verrou `game`, l'échéance est vérifiée d'abord** : si `now ≥
- * paused_at + pauseTimeoutMs`, la reprise ne reprend rien et gèle la partie
- * par `FinalizeGame::handle($game, GameStatus::Interrupted, paused_at +
- * pauseTimeoutMs)` (contrat C13 § 4.5) — l'instant PRÉVU, celui
+ * **Sous le verrou `game`, l'échéance est vérifiée d'abord** : si `now ≥`
+ * l'échéance de la pause ({@see PauseDeadline}), la reprise ne reprend rien
+ * et gèle la partie par `FinalizeGame::handle($game,
+ * GameStatus::Interrupted, échéance)` (contrat C13 § 4.5) — l'instant PRÉVU, celui
  * qu'écrit aussi {@see InterruptPausedGame} : l'issue d'une partie ne dépend
  * jamais du retard de ce job en tête de file (§ 4.2, règle 1), et le gel est
  * idempotent, le premier gagne.
  *
+ * **Une pause `manual` ne se reprend jamais au battement** (D64 du 07/10) :
+ * seul un geste ({@see ResumeAuthor} autre que `Heartbeat`) la reprend ; la
+ * garde est lue ICI, sous le verrou, le battement lisant la partie sans
+ * verrou.
+ *
  * **Dans le délai** :
  *
  * 1. `game.status = running`, `total_paused_ms += now − paused_at` (en
- *    millisecondes entières, sur les microsecondes), `paused_at = NULL` ;
+ *    millisecondes entières, sur les microsecondes), `paused_at = NULL`,
+ *    `pause_kind = NULL` ; pour une pause `manual`, `manual_paused_ms +=
+ *    now − paused_at + launchCountdownMs` — le décompte de reprise est
+ *    imputé au budget, qui borne ainsi le nombre de pauses manuelles ;
  *    en multijoueur, `game.resumed` `{ resumedAt }` ; la reprise au journal
  *    `game` (§ 4.7) ;
  * 2. `ScheduleRound(k+1, now + launchCountdownMs)` : la manche déprogrammée
@@ -65,7 +78,7 @@ final readonly class ResumeGame
      *
      * @var list<string>
      */
-    private const array RESUMED_COLUMNS = ['status', 'paused_at', 'total_paused_ms', 'updated_at'];
+    private const array RESUMED_COLUMNS = ['status', 'paused_at', 'pause_kind', 'total_paused_ms', 'manual_paused_ms', 'updated_at'];
 
     public function __construct(
         private ScheduleRound $schedule,
@@ -73,12 +86,13 @@ final readonly class ResumeGame
     ) {}
 
     /**
-     * @param  CarbonImmutable  $now  Instant du battement qui ramène le siège, à la milliseconde.
+     * @param  CarbonImmutable  $now  Instant du battement qui ramène le siège, ou du geste, à la milliseconde.
+     * @param  ResumeAuthor  $by  Qui reprend ; un battement ne reprend jamais une pause `manual`.
      * @return bool `true` si CET appel a repris la partie.
      */
-    public function handle(Game $game, CarbonImmutable $now): bool
+    public function handle(Game $game, CarbonImmutable $now, ResumeAuthor $by = ResumeAuthor::Heartbeat): bool
     {
-        return DB::transaction(function () use ($game, $now): bool {
+        return DB::transaction(function () use ($game, $now, $by): bool {
             $lockedGame = Game::query()->whereKey($game->id)->lockForUpdate()->first();
 
             if (! $lockedGame instanceof Game
@@ -89,7 +103,7 @@ final readonly class ResumeGame
             }
 
             $pausedAt = $lockedGame->paused_at;
-            $interruptsAt = $pausedAt->addMilliseconds(EngineConstants::pauseTimeoutMs());
+            $interruptsAt = PauseDeadline::of($lockedGame) ?? throw new LogicException('ResumeGame : échéance de pause introuvable.');
 
             // L'échéance d'abord : un battement tardif ne reprend jamais une
             // partie que sa pause a close, il la gèle à l'instant prévu.
@@ -101,13 +115,18 @@ final readonly class ResumeGame
                 return false;
             }
 
+            // Une pause manuelle n'attend qu'un geste, jamais un battement.
+            if ($lockedGame->pause_kind === GamePauseKind::Manual && $by === ResumeAuthor::Heartbeat) {
+                return false;
+            }
+
             $next = Round::query()->where('game_id', $lockedGame->id)->toPlay()->first();
 
             if (! $next instanceof Round) {
                 return false;
             }
 
-            self::markResumed($lockedGame, $pausedAt, $now);
+            self::markResumed($lockedGame, $pausedAt, $now, $by);
 
             $game->forceFill($lockedGame->only(self::RESUMED_COLUMNS))
                 ->syncOriginalAttributes(self::RESUMED_COLUMNS);
@@ -125,16 +144,24 @@ final readonly class ResumeGame
      * Étape 1 et son émission, dans une transaction IMBRIQUÉE validée avant
      * la programmation (E90-7) : `game.resumed` part avant `round.scheduled`.
      */
-    private static function markResumed(Game $lockedGame, CarbonImmutable $pausedAt, CarbonImmutable $now): void
+    private static function markResumed(Game $lockedGame, CarbonImmutable $pausedAt, CarbonImmutable $now, ResumeAuthor $by): void
     {
-        DB::transaction(static function () use ($lockedGame, $pausedAt, $now): void {
+        DB::transaction(static function () use ($lockedGame, $pausedAt, $now, $by): void {
+            $elapsedMs = self::elapsedMs($pausedAt, $now);
+            $manual = $lockedGame->pause_kind === GamePauseKind::Manual;
+
             $lockedGame->forceFill([
                 'status' => GameStatus::Running,
                 'paused_at' => null,
-                'total_paused_ms' => $lockedGame->total_paused_ms + self::elapsedMs($pausedAt, $now),
+                'pause_kind' => null,
+                'total_paused_ms' => $lockedGame->total_paused_ms + $elapsedMs,
+                // Le décompte de reprise est imputé au budget manuel (D64).
+                'manual_paused_ms' => $manual
+                    ? $lockedGame->manual_paused_ms + $elapsedMs + EngineConstants::launchCountdownMs()
+                    : $lockedGame->manual_paused_ms,
             ])->save();
 
-            GameJournal::gameResumed($lockedGame, $now);
+            GameJournal::gameResumed($lockedGame, $now, $by);
 
             // Garde de mode (§ 11.2) : aucune diffusion en solo.
             if ($lockedGame->mode === GameMode::Multiplayer) {

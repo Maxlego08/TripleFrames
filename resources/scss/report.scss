@@ -6,7 +6,7 @@
 // complété ici du film signalé, des tuiles de portée et de motif, de la zone
 // de précisions et du renvoi des ayants droit.
 
-// Le film signalé, en étiquette de billet : titre et année, jamais l'image.
+// Le film signalé, en étiquette de billet : titre et année.
 .report-movie {
     display: inline-flex;
     align-self: flex-start;
@@ -29,6 +29,27 @@
         width: 1rem;
         height: 1rem;
     }
+}
+
+// L'image signalée, montrée seulement à qui l'a vue en jeu (amendé le
+// 07/10) : cadre 16:9 du jeton `--aspect-frame`, largeur pleine du billet,
+// réservé avant l'arrivée des octets.
+.report-frame {
+    margin: 0;
+    border: $line solid $ink;
+    border-radius: $radius-medium;
+    overflow: hidden;
+    background: $ink;
+    box-shadow: 0.25rem 0.25rem 0 $ink;
+}
+
+.report-frame__image {
+    display: block;
+    width: 100%;
+    height: auto;
+    aspect-ratio: var(--aspect-frame);
+    object-fit: cover;
+    user-select: none;
 }
 
 .room-entry-notice.report-notice--success {

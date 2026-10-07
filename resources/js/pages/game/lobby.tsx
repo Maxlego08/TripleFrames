@@ -8,6 +8,7 @@ import { ConnectionBanner } from '@/components/game/connection-banner';
 import { GameHelp } from '@/components/game/game-help';
 import { GameStage } from '@/components/game/game-stage';
 import { NextRoundButton } from '@/components/game/next-round-button';
+import { PauseButton } from '@/components/game/pause-button';
 import { Podium } from '@/components/game/podium';
 import { AuthBrand } from '@/components/auth/auth-brand';
 import { GameToast } from '@/components/game/game-toast';
@@ -42,12 +43,14 @@ import { useLobbyState } from '@/hooks/game/use-lobby-state';
 import type { LobbyStateView } from '@/hooks/game/use-lobby-state';
 import { useMaintenanceRefresh } from '@/hooks/game/use-maintenance-refresh';
 import { useNextRound } from '@/hooks/game/use-next-round';
+import { usePauseGesture } from '@/hooks/game/use-pause-gesture';
 import { useRoundStage } from '@/hooks/game/use-round-stage';
 import { useSeatAvatar } from '@/hooks/game/use-seat-avatar';
 import { useTranslations } from '@/hooks/use-translations';
 import { announce } from '@/lib/game/announcer';
 import { lobbyAvatarData } from '@/lib/game/lobby-avatars';
 import type { LobbyAvatars } from '@/lib/game/lobby-avatars';
+import { pauseControlOf } from '@/lib/game/pause-gesture';
 import { show } from '@/routes/room';
 import { update as updateSettings } from '@/routes/room/settings';
 import type { GameStatePacket, LocaleCode } from '@/types/game-wire';
@@ -737,6 +740,17 @@ function LobbyGameStage({
         gameRef: state.gameRef,
         sequenceIndex: revealed?.sequenceIndex ?? null,
     });
+    // Pause manuelle (D64 du 07/10) : l'hôte met en pause ou retire sa
+    // demande ; l'hôte reprend, ou tout siège présent s'il ne l'est plus.
+    const pauseControl = pauseControlOf(state, clock.nowMs);
+    const pause = usePauseGesture({
+        store,
+        roomCode,
+        stateKey:
+            state.gameRef === null
+                ? null
+                : `${state.gameRef}|${state.status ?? '-'}|${String(state.pauseRequested)}`,
+    });
 
     return (
         <GameStage
@@ -762,6 +776,18 @@ function LobbyGameStage({
                     />
                 ) : null
             }
+            pauseControl={
+                pauseControl === null ? null : (
+                    <PauseButton
+                        kind={pauseControl.kind}
+                        pending={pause.pending !== null}
+                        disabled={!canWrite}
+                        error={pause.error}
+                        onPress={pause.run}
+                    />
+                )
+            }
+            pauseHostAbsent={pauseControl?.hostAbsent ?? false}
         />
     );
 }

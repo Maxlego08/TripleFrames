@@ -2,6 +2,7 @@
 
 namespace App\Support\Game;
 
+use App\Enums\GamePauseKind;
 use App\Enums\GameStatus;
 use App\Enums\RoundIncidentReason;
 use App\Models\Game;
@@ -64,6 +65,12 @@ final class GameJournal
     public const string GAME_PAUSED = 'game.paused';
 
     public const string GAME_RESUMED = 'game.resumed';
+
+    /** Demande de pause manuelle, en attente de la fin de révélation (D64 du 07/10). */
+    public const string PAUSE_REQUESTED = 'game.pause_requested';
+
+    /** Demande de pause manuelle annulée avant sa prise d'effet (D64 du 07/10). */
+    public const string PAUSE_REQUEST_CANCELLED = 'game.pause_request_cancelled';
 
     public const string GAME_FINALIZED = 'game.finalized';
 
@@ -181,26 +188,54 @@ final class GameJournal
         GameTraceWriter::record($game->id, GameTraceWriter::ROUND_CANCELLED, $round->sequence_index, details: ['reason' => $reason->value, 'replaced' => $replaced]);
     }
 
-    /** Mise en pause (§ 14.1), à l'instant théorique de la pause. */
-    public static function gamePaused(Game $game, CarbonImmutable $pausedAt): void
+    /** Mise en pause (§ 14.1), à l'instant théorique de la pause, avec sa nature (D64 du 07/10). */
+    public static function gamePaused(Game $game, CarbonImmutable $pausedAt, GamePauseKind $kind = GamePauseKind::Empty): void
     {
         self::write(LogLevel::INFO, self::GAME_PAUSED, [
             ...self::gameContext($game),
             'pausedAt' => WireTime::iso($pausedAt),
+            'kind' => $kind->value,
         ]);
 
-        GameTraceWriter::record($game->id, GameTraceWriter::GAME_PAUSED, theoreticalAt: $pausedAt);
+        GameTraceWriter::record($game->id, GameTraceWriter::GAME_PAUSED, theoreticalAt: $pausedAt, details: ['kind' => $kind->value]);
     }
 
-    /** Reprise d'une partie en pause (§ 14.2, `ResumeGame`, L60-13). */
-    public static function gameResumed(Game $game, CarbonImmutable $resumedAt): void
+    /**
+     * Reprise d'une partie en pause (§ 14.2, `ResumeGame`, L60-13), avec son
+     * auteur : `heartbeat`, `host`, `seat` ou `solo` — jamais un identifiant
+     * de siège (D64 du 07/10).
+     */
+    public static function gameResumed(Game $game, CarbonImmutable $resumedAt, ResumeAuthor $by = ResumeAuthor::Heartbeat): void
     {
         self::write(LogLevel::INFO, self::GAME_RESUMED, [
             ...self::gameContext($game),
             'resumedAt' => WireTime::iso($resumedAt),
+            'by' => $by->value,
         ]);
 
-        GameTraceWriter::record($game->id, GameTraceWriter::GAME_RESUMED, theoreticalAt: $resumedAt);
+        GameTraceWriter::record($game->id, GameTraceWriter::GAME_RESUMED, theoreticalAt: $resumedAt, details: ['by' => $by->value]);
+    }
+
+    /** Demande de pause manuelle (D64 du 07/10), à l'instant du geste. */
+    public static function pauseRequested(Game $game, CarbonImmutable $requestedAt): void
+    {
+        self::write(LogLevel::INFO, self::PAUSE_REQUESTED, [
+            ...self::gameContext($game),
+            'requestedAt' => WireTime::iso($requestedAt),
+        ]);
+
+        GameTraceWriter::record($game->id, GameTraceWriter::PAUSE_REQUESTED, recordedAt: $requestedAt);
+    }
+
+    /** Demande de pause manuelle annulée (D64 du 07/10), à l'instant du geste. */
+    public static function pauseRequestCancelled(Game $game, CarbonImmutable $cancelledAt): void
+    {
+        self::write(LogLevel::INFO, self::PAUSE_REQUEST_CANCELLED, [
+            ...self::gameContext($game),
+            'cancelledAt' => WireTime::iso($cancelledAt),
+        ]);
+
+        GameTraceWriter::record($game->id, GameTraceWriter::PAUSE_REQUEST_CANCELLED, recordedAt: $cancelledAt);
     }
 
     /**

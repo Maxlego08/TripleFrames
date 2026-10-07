@@ -28,7 +28,8 @@ use Tests\TestCase;
 | La page publique `/report?movie=<tmdb_id>&frame=<public_id>` : tout joueur,
 | invité compris, signale une fois une cible, sans effet automatique. Ni
 | compte ni siège : la page s'affiche, l'envoi est refusé. Aucun
-| identifiant interne dans l'URL ni dans la page, jamais l'image elle-même,
+| identifiant interne dans l'URL ni dans la page, l'image seulement à qui
+| l'a vue (`ContentReportFrameTest`),
 | et `noindex` permanent.
 |
 */

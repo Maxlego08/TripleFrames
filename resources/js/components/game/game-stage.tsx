@@ -1,5 +1,6 @@
-import { useEffect, useEffectEvent } from 'react';
+import { useEffect, useEffectEvent, useRef } from 'react';
 import type { ReactNode } from 'react';
+import { CirclePause } from 'lucide-react';
 import type { FrameFormat } from '@/components/game/game-frame';
 import { GamePaused } from '@/components/game/game-paused';
 import { RoundInput } from '@/components/game/round-input';
@@ -21,6 +22,7 @@ import { isMemberOfRound, roundKeyOf } from '@/lib/game/store';
 import type { GameStoreState } from '@/lib/game/store';
 import { parseIsoMs } from '@/lib/game/wire';
 import type { RoundState } from '@/types/game-wire';
+import type { TranslationKey } from '@/types/translations';
 
 export type GameStageProps = {
     /** L'état du magasin de la page (`useGameState().state`), en partie. */
@@ -65,6 +67,14 @@ export type GameStageProps = {
      * multijoueur (barrière 1 de 10 § 7.10, `lone_player` compris, § 9.3).
      */
     roundActions?: ReactNode;
+    /**
+     * Le geste de pause manuelle offert au siège (D64 du 07/10) : « Pause »
+     * ou « Annuler la pause » pendant la partie, « Reprendre » sur l'écran de
+     * pause ; nul sans autorité (`pauseControlOf()`).
+     */
+    pauseControl?: ReactNode;
+    /** « Reprendre » est offert parce que l'hôte n'est plus un siège présent. */
+    pauseHostAbsent?: boolean;
 };
 
 /**
@@ -169,12 +179,42 @@ export function GameStage({
     seatsPanel,
     revealAction,
     roundActions,
+    pauseControl = null,
+    pauseHostAbsent = false,
 }: GameStageProps) {
     const { t, tChoice, locale } = useTranslations();
     const number = new Intl.NumberFormat(locale);
     const gameRef = state.gameRef;
     const round = clock.round;
     const nowMs = clock.nowMs;
+
+    // La pause manuelle (D64 du 07/10) se dit dans l'unique région vivante
+    // (C16 § 4) à ses transitions seulement — demandée, retirée, reprise —,
+    // jamais au montage : l'écran de pause, lui, prend le focus.
+    const pauseRequested = state.pauseRequested;
+    const paused = state.status === 'paused';
+    const previousPause = useRef({ gameRef, pauseRequested, paused });
+    const announcePause = useEffectEvent((key: TranslationKey): void => {
+        announce(t(key));
+    });
+
+    useEffect(() => {
+        const previous = previousPause.current;
+
+        previousPause.current = { gameRef, pauseRequested, paused };
+
+        if (previous.gameRef !== gameRef) {
+            return;
+        }
+
+        if (pauseRequested && !previous.pauseRequested) {
+            announcePause('game.pause.requested_announce');
+        } else if (!pauseRequested && previous.pauseRequested && !paused) {
+            announcePause('game.pause.request_cancelled_announce');
+        } else if (!paused && previous.paused) {
+            announcePause('game.pause.resumed_announce');
+        }
+    }, [gameRef, pauseRequested, paused]);
 
     // Une annulation remplace l'image par un texte, qu'un lecteur d'écran
     // n'entendrait pas : elle passe par l'unique région vivante (C16 § 4),
@@ -226,7 +266,28 @@ export function GameStage({
             : null;
     };
 
-    const scrolling = (content: ReactNode, waiting: string | null) => (
+    // Bandeau de la pause demandée et geste de pause, hors écran de pause.
+    const pauseBar =
+        pauseRequested || pauseControl !== null ? (
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                {pauseRequested && (
+                    <p className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <CirclePause
+                            aria-hidden="true"
+                            className="size-4 shrink-0"
+                        />
+                        {t('game.pause.requested')}
+                    </p>
+                )}
+                {pauseControl}
+            </div>
+        ) : null;
+
+    const scrolling = (
+        content: ReactNode,
+        waiting: string | null,
+        withPauseBar = true,
+    ) => (
         <ScrollArea className="h-full">
             <div className="mx-auto flex w-full max-w-2xl flex-col gap-6 px-4 py-6">
                 <h1 className="text-2xl font-semibold tracking-tight">
@@ -234,6 +295,8 @@ export function GameStage({
                 </h1>
 
                 {banners}
+
+                {withPauseBar && pauseBar}
 
                 {waiting !== null && (
                     <p className="text-muted-foreground">{waiting}</p>
@@ -248,8 +311,20 @@ export function GameStage({
 
     if (state.status === 'paused' && state.pause !== null) {
         return scrolling(
-            <GamePaused interruptsAt={state.pause.interruptsAt} />,
+            <GamePaused
+                interruptsAt={state.pause.interruptsAt}
+                kind={state.pause.kind}
+                solo={state.mode === 'solo'}
+                remainingMs={
+                    state.pause.kind === 'manual'
+                        ? parseIsoMs(state.pause.interruptsAt) - nowMs
+                        : null
+                }
+                action={pauseControl}
+                hostAbsent={pauseHostAbsent}
+            />,
             waitingFor(null),
+            false,
         );
     }
 
@@ -445,6 +520,8 @@ export function GameStage({
             <h1 className="sr-only">{title}</h1>
 
             {banners}
+
+            {pauseBar}
 
             <RoundScene
                 className="min-h-0 flex-1"

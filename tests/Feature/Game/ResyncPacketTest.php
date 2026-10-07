@@ -331,7 +331,7 @@ it("le paquet d'un lobby porte les canaux du salon et aucune manche", function (
     // L'enveloppe, puis les champs de GameStatePacket dans l'ordre du type.
     expect(array_keys($packet))->toBe([
         'v', 'serverNow', 'gameRef', 'mode', 'channels', 'status', 'roundsCount', 'roundsCompleted',
-        'framesPerRound', 'inputDifficulty', 'maxAnswerLength', 'seats', 'pause', 'round', 'self',
+        'framesPerRound', 'inputDifficulty', 'maxAnswerLength', 'seats', 'pause', 'pauseRequested', 'round', 'self',
         'leaderboard', 'podium', 'nextTransitionAt',
     ])
         ->and($packet['v'])->toBe(1)
@@ -1150,7 +1150,8 @@ it('une partie en pause porte pausedAt et interruptsAt, et aucune manche', funct
     $paused = resyncPacketAt($this, $room, $seat, $token, $pausedAt);
 
     expect($paused['status'])->toBe(GameStatus::Paused->value)
-        ->and($paused['pause'])->toBe(['pausedAt' => WireTime::iso($pausedAt), 'interruptsAt' => WireTime::iso($interruptsAt)])
+        ->and($paused['pause'])->toBe(['pausedAt' => WireTime::iso($pausedAt), 'interruptsAt' => WireTime::iso($interruptsAt), 'kind' => 'empty'])
+        ->and($paused['pauseRequested'])->toBeFalse()
         ->and($paused['round'])->toBeNull()
         ->and($paused['nextTransitionAt'])->toBe(WireTime::iso($interruptsAt))
         // Sans manche portée, l'éligibilité se lit contre la manche suivante à

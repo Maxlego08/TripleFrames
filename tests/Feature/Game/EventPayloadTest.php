@@ -14,6 +14,8 @@ use App\Events\Game\GameEnded;
 use App\Events\Game\GameFinalized;
 use App\Events\Game\GameLaunched;
 use App\Events\Game\GamePaused;
+use App\Events\Game\GamePauseRequestCancelled;
+use App\Events\Game\GamePauseRequested;
 use App\Events\Game\GameResumed;
 use App\Events\Game\HostChanged;
 use App\Events\Game\PlayerLocked;
@@ -151,8 +153,10 @@ function eventPayloadClosedList(): array
         'round.closed' => [RoundClosed::class, 'room', ['sequenceIndex', 'roundNumber', 'endedAt', 'revealStartsAt', 'revealEndsAt']],
         'round.revealed' => [RoundRevealed::class, 'room', ['sequenceIndex', 'roundNumber', 'revealEndsAt', 'movie', 'images', 'frames', 'finders', 'leaderboard']],
         'round.cancelled' => [RoundCancelled::class, 'room', ['sequenceIndex', 'roundNumber']],
-        'game.paused' => [GamePaused::class, 'room', ['pausedAt', 'interruptsAt']],
+        'game.paused' => [GamePaused::class, 'room', ['pausedAt', 'interruptsAt', 'kind']],
         'game.resumed' => [GameResumed::class, 'room', ['resumedAt']],
+        'game.pause_requested' => [GamePauseRequested::class, 'room', ['requestedAt']],
+        'game.pause_request_cancelled' => [GamePauseRequestCancelled::class, 'room', []],
         'game.ended' => [GameEnded::class, 'room', ['podium']],
         'seat.choices' => [SeatChoicesOffered::class, 'seat', ['sequenceIndex', 'choices', 'useOriginalTitle', 'lang']],
         'seat.superseded' => [SeatSuperseded::class, 'seat', []],
@@ -745,17 +749,17 @@ it('la liste des événements diffusés est exactement la liste close du J1', fu
     ksort($found);
     ksort($expected);
 
-    // Dix-neuf, ni plus ni moins : tout nouvel événement amende 60 § 11.3 et
-    // entre ici.
+    // Vingt et un, ni plus ni moins : tout nouvel événement amende 60 § 11.3
+    // et entre ici (D64 du 07/10 : demande de pause et son retrait).
     expect($found)->toBe($expected)
-        ->and($found)->toHaveCount(19);
+        ->and($found)->toHaveCount(21);
 
     // Seuls trois événements sont ciblés.
     expect(array_keys(array_filter($found, static fn (array $row): bool => $row[1] === 'seat')))
         ->toEqualCanonicalizing(['seat.choices', 'seat.superseded', 'seat.kicked']);
 
     // Miroir client (L60-9, écart (i) du § 22 bis) : l'union `GameEventName`
-    // et les charges typées nomment exactement les dix-neuf, dans l'ordre de
+    // et les charges typées nomment exactement les vingt et un, dans l'ordre de
     // la liste close ; les écoutes d'Echo suivent le canal de chaque classe.
     $closedList = eventPayloadClosedList();
     $onChannel = static fn (string $channel): array => array_keys(array_filter(

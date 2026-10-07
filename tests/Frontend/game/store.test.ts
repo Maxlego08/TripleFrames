@@ -150,6 +150,7 @@ function packet(
             seat(RIVAL, { firstRoundNumber: 1 }),
         ],
         pause: null,
+        pauseRequested: false,
         round: null,
         self: {
             publicId: SELF,
@@ -848,6 +849,7 @@ describe('store', () => {
             event<'game.paused'>(30_310, {
                 pausedAt: iso(30_300),
                 interruptsAt: iso(930_300),
+                kind: 'empty',
             }),
         );
 
@@ -1880,5 +1882,124 @@ describe('store', () => {
         await advanceTo(21_000 + HEARTBEAT_MS - 1);
         expect(game.resyncs).toEqual([]);
         game.stop();
+    });
+});
+
+describe('store — pause manuelle (D64 du 07/10)', () => {
+    beforeEach(() => {
+        vi.useFakeTimers();
+        vi.setSystemTime(ORIGIN_MS + 1000);
+    });
+
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    it('pose puis retire la demande de pause, une seule fois par événement', () => {
+        const game = harness(packet(1000));
+
+        expect(game.store.getState().pauseRequested).toBe(false);
+
+        const requested = event<'game.pause_requested'>(1100, {
+            requestedAt: iso(1100),
+        });
+
+        game.store.receive('game.pause_requested', requested);
+        const afterFirst = game.notifications();
+        game.store.receive('game.pause_requested', requested);
+
+        expect(game.store.getState().pauseRequested).toBe(true);
+        expect(game.notifications()).toBe(afterFirst);
+
+        game.store.receive(
+            'game.pause_request_cancelled',
+            event<'game.pause_request_cancelled'>(1200, {}),
+        );
+
+        expect(game.store.getState().pauseRequested).toBe(false);
+        game.stop();
+    });
+
+    it('efface la demande à game.paused, porte la nature de la pause, et la remet à zéro à game.resumed', () => {
+        const game = harness(packet(1000, { pauseRequested: true }));
+
+        game.store.receive(
+            'game.paused',
+            event<'game.paused'>(1100, {
+                pausedAt: iso(1100),
+                interruptsAt: iso(896_100),
+                kind: 'manual',
+            }),
+        );
+
+        let state = game.store.getState();
+
+        expect(state.status).toBe('paused');
+        expect(state.pauseRequested).toBe(false);
+        expect(state.pause).toEqual({
+            pausedAt: iso(1100),
+            interruptsAt: iso(896_100),
+            kind: 'manual',
+        });
+
+        // Une demande reçue en pause n'a pas de sens : ignorée.
+        game.store.receive(
+            'game.pause_requested',
+            event<'game.pause_requested'>(1150, { requestedAt: iso(1150) }),
+        );
+        expect(game.store.getState().pauseRequested).toBe(false);
+
+        game.store.receive(
+            'game.resumed',
+            event<'game.resumed'>(1200, { resumedAt: iso(1200) }),
+        );
+
+        state = game.store.getState();
+
+        expect(state.status).toBe('running');
+        expect(state.pause).toBeNull();
+        expect(state.pauseRequested).toBe(false);
+        game.stop();
+    });
+
+    it('lit pause.kind et pauseRequested dans le paquet, et efface la demande à game.ended', () => {
+        const paused = harness(
+            packet(1000, {
+                status: 'paused',
+                pause: {
+                    pausedAt: iso(900),
+                    interruptsAt: iso(895_900),
+                    kind: 'manual',
+                },
+            }),
+        );
+
+        expect(paused.store.getState().pause?.kind).toBe('manual');
+        paused.stop();
+
+        const running = harness(packet(1000, { pauseRequested: true }));
+
+        expect(running.store.getState().pauseRequested).toBe(true);
+
+        running.store.receive(
+            'game.ended',
+            event<'game.ended'>(1100, {
+                podium: {
+                    gameStatus: 'completed',
+                    mode: 'multiplayer',
+                    roundsCompleted: 10,
+                    roundsCount: 10,
+                    framesPerRound: 3,
+                    scoreless: true,
+                    endedAt: iso(1100),
+                    standings: [],
+                    recap: [],
+                    highlights: {},
+                } as unknown as GameEventPayloads['game.ended']['podium'],
+            }),
+        );
+
+        expect(running.store.getState().pauseRequested).toBe(false);
+        running.stop();
     });
 });

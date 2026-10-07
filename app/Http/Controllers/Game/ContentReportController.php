@@ -11,6 +11,7 @@ use App\Http\Requests\Game\ContentReportStoreRequest;
 use App\Models\ContentReport;
 use App\Support\ContentReport\ContentReporter;
 use App\Support\ContentReport\ContentReportTarget;
+use App\Support\ContentReport\FrameViewEligibility;
 use App\Support\Game\RevealMovieBuilder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -25,8 +26,10 @@ use Throwable;
  * et son envoi. `noindex` permanent (aucun drapeau d'indexation), coquille
  * `PublicLayout`, domaine `game`.
  *
- * La page montre le titre localisé et l'année du film — **jamais l'image** :
- * aucune route ne sert une image par son `public_id` (anti-triche). Les
+ * La page montre le titre localisé et l'année du film ; l'image désignée
+ * n'y est montrée (`frame.imageUrl`, route `content-report.frame`) qu'à qui
+ * l'a déjà vue dans une manche révélée ({@see FrameViewEligibility}, amendé
+ * le 07/10) — sinon `imageUrl` est nul, sans rien dire de plus. Les
  * ayants droit sont renvoyés vers la page de retrait (`takedown.create`),
  * lien composé côté client.
  */
@@ -35,7 +38,7 @@ final class ContentReportController extends Controller
     /** Clé du flash qui porte l'issue d'un envoi : `sent` ou `already_reported`. */
     public const string FLASH_KEY = 'contentReport';
 
-    public function create(Request $request): Response
+    public function create(Request $request, FrameViewEligibility $eligibility): Response
     {
         $target = ContentReportTarget::resolve($request->query('movie'), $request->query('frame'));
         $reporter = ContentReporter::fromRequest($request);
@@ -50,7 +53,12 @@ final class ContentReportController extends Controller
                 'year' => $target->movie->release_year,
                 'tmdb' => $target->movie->tmdb_id,
             ],
-            'frame' => $target->frame === null ? null : ['publicId' => $target->frame->public_id],
+            'frame' => $target->frame === null ? null : [
+                'publicId' => $target->frame->public_id,
+                'imageUrl' => $eligibility->allows($target->frame, $request)
+                    ? route('content-report.frame', ['publicId' => $target->frame->public_id], false)
+                    : null,
+            ],
             'scopes' => array_map(
                 static fn (ContentReportScope $scope): string => $scope->value,
                 $target->frame === null ? [ContentReportScope::Movie] : ContentReportScope::cases(),

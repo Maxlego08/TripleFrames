@@ -406,9 +406,13 @@ it("appelle game:reschedule avant d'attendre", function (): void {
         ->and($sleeps)->toHaveCount(1);
 });
 
-it("dérive sa borne par défaut de maxNaturalDurationMs et d'une marge qui couvre une pause", function (): void {
+it("dérive sa borne par défaut de maxNaturalDurationMs, du budget des pauses manuelles et d'une marge qui couvre une pause", function (): void {
     $margin = config()->integer('deploy.drain_margin_minutes');
-    $expected = static fn (): int => (int) ceil(GamesInProgress::maxNaturalDurationMs() / 60_000) + $margin;
+    $expected = static fn (): int => (int) ceil((GamesInProgress::maxNaturalDurationMs() + GamesInProgress::manualPauseBudgetMs()) / 60_000) + $margin;
+
+    // Le budget des pauses manuelles (D64 du 07/10) couvre attente et
+    // décomptes de reprise de toutes les pauses manuelles d'une partie.
+    expect(GamesInProgress::manualPauseBudgetMs())->toBe(EngineConstants::pauseTimeoutMs());
 
     // La marge couvre une pause : l'attente, PUIS le décompte de reprise, que
     // `total_paused_ms` ne compte pas (§ 11.3, § 11.8 précision (5)).
@@ -418,7 +422,7 @@ it("dérive sa borne par défaut de maxNaturalDurationMs et d'une marge qui couv
     $default = DeployDrain::defaultTimeoutMinutes();
 
     expect($default)->toBe($expected())
-        ->and($default * 60_000)->toBeGreaterThanOrEqual(GamesInProgress::maxNaturalDurationMs() + EngineConstants::pauseTimeoutMs() + EngineConstants::launchCountdownMs());
+        ->and($default * 60_000)->toBeGreaterThanOrEqual(GamesInProgress::maxNaturalDurationMs() + GamesInProgress::manualPauseBudgetMs() + EngineConstants::pauseTimeoutMs() + EngineConstants::launchCountdownMs());
 
     // Elle suit la durée naturelle : une réserve de tirage plus large, puis un
     // décompte de lancement plus long, allongent la borne.
@@ -432,7 +436,7 @@ it("dérive sa borne par défaut de maxNaturalDurationMs et d'une marge qui couv
     engineConstantsConfigure(['launch_countdown_ms' => EngineConstants::DEFAULT_LAUNCH_COUNTDOWN_MS + 1500]);
 
     expect(DeployDrain::defaultTimeoutMinutes())->toBe($expected())
-        ->and(GamesInProgress::maxNaturalDurationMs())->toBeGreaterThan(($wider - $margin - 1) * 60_000);
+        ->and(GamesInProgress::maxNaturalDurationMs() + GamesInProgress::manualPauseBudgetMs())->toBeGreaterThan(($wider - $margin - 1) * 60_000);
 
     platformLimitsConfigure(['draw_substitute_margin' => PlatformLimits::DEFAULT_DRAW_SUBSTITUTE_MARGIN]);
     engineConstantsConfigure(['launch_countdown_ms' => EngineConstants::DEFAULT_LAUNCH_COUNTDOWN_MS]);

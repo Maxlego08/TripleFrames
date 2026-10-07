@@ -4,12 +4,15 @@ use App\Http\Controllers\Game\AnswerController;
 use App\Http\Controllers\Game\ChoiceController;
 use App\Http\Controllers\Game\ClockController;
 use App\Http\Controllers\Game\ContentReportController;
+use App\Http\Controllers\Game\ContentReportFrameController;
 use App\Http\Controllers\Game\FrameServeController;
+use App\Http\Controllers\Game\GamePauseController;
 use App\Http\Controllers\Game\NextRoundController;
 use App\Http\Controllers\Game\RoomHeartbeatController;
 use App\Http\Controllers\Game\RoomStateController;
 use App\Http\Controllers\Game\SoloGameController;
 use App\Http\Controllers\Game\SoloHeartbeatController;
+use App\Http\Controllers\Game\SoloPauseController;
 use App\Http\Controllers\Game\SoloRoundController;
 use App\Http\Controllers\Game\SoloStateController;
 use App\Http\Controllers\Room\AvatarReportController;
@@ -145,6 +148,19 @@ Route::middleware(['seat.active', 'throttle:game-write'])->group(function (): vo
 
     Route::post('solo/round/next', [SoloRoundController::class, 'next'])
         ->name('solo.next');
+
+    // Pause manuelle (D64 du 07/10, spec 60 § 14) : « Pause » (immédiate
+    // entre deux manches, sinon demandée pour la fin de la révélation),
+    // « Annuler la pause » et « Reprendre ». Répondent par le paquet à jour ;
+    // 409 `not_running`, `no_round_left`, `budget_exhausted` ou `draining`.
+    Route::post('solo/game/pause', [SoloPauseController::class, 'pause'])
+        ->name('solo.pause');
+
+    Route::post('solo/game/pause/cancel', [SoloPauseController::class, 'cancel'])
+        ->name('solo.pause.cancel');
+
+    Route::post('solo/game/resume', [SoloPauseController::class, 'resume'])
+        ->name('solo.resume');
 });
 
 Route::get('clock', [ClockController::class, 'show'])
@@ -251,6 +267,21 @@ Route::middleware(['seat.active', 'throttle:game-write'])->group(function (): vo
     // pour un siège qui n'est pas l'hôte, relu sous le verrou du salon.
     Route::post('r/{room}/round/next', [NextRoundController::class, 'store'])
         ->name('room.round.next');
+
+    // Pause manuelle (D64 du 07/10, spec 60 § 14) : l'hôte met en pause
+    // (immédiate entre deux manches, sinon demandée pour la fin de la
+    // révélation) ou retire sa demande ; l'hôte reprend — tout siège présent
+    // si l'hôte n'en est pas un. 204 ; 409 `not_running`, `no_round_left`,
+    // `budget_exhausted` ou `draining` ; 403 sans autorité, relue sous le
+    // verrou du salon.
+    Route::post('r/{room}/game/pause', [GamePauseController::class, 'pause'])
+        ->name('room.game.pause');
+
+    Route::post('r/{room}/game/pause/cancel', [GamePauseController::class, 'cancel'])
+        ->name('room.game.pause.cancel');
+
+    Route::post('r/{room}/game/resume', [GamePauseController::class, 'resume'])
+        ->name('room.game.resume');
 });
 
 // Soumission d'une réponse en texte libre (spec 70 § 7.1, contrat C10 § 2) :
@@ -297,3 +328,16 @@ Route::middleware('translations:game,legal')->group(function (): void {
         ->name('content-report.store')
         ->middleware('throttle:content-report');
 });
+
+// Aperçu de l'image signalée (D63 du 07/10, amendé le 07/10) : les octets du
+// dérivé `game/`, adressés par le `public_id` de la frame, servis au SEUL
+// demandeur — compte ou `player_token` — qui a participé à une manche révélée
+// où elle a été servie (`FrameViewEligibility`, relu à chaque requête). 404
+// uniforme sinon, mêmes en-têtes que `/f/` (`no-store`, `noindex`), débit
+// `content-report-frame`, seau distinct de `frame-serve` (l'aperçu ne mord
+// jamais sur le budget des paliers). Hors domaine de traduction, sans drapeau
+// d'indexation.
+Route::get('report/frame/{publicId}', [ContentReportFrameController::class, 'show'])
+    ->name('content-report.frame')
+    ->where('publicId', '[0-9A-Z]{12}')
+    ->middleware('throttle:content-report-frame');

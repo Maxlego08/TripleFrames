@@ -2,9 +2,11 @@
 
 namespace App\Policies;
 
+use App\Models\Game;
 use App\Models\Player;
 use App\Models\Room;
 use App\Models\User;
+use App\Support\Game\SeatPresence;
 
 /**
  * Gestes de salon (spec 50 § 17.1, contrat C6), découverte automatiquement
@@ -70,6 +72,39 @@ class RoomPolicy
     public function advanceRound(?User $user, Room $room, ?Player $seat): bool
     {
         return self::holdsHostSeat($room, $seat);
+    }
+
+    /**
+     * Mettre la partie en pause, ou retirer une pause demandée
+     * (`room.game.pause`, `room.game.pause.cancel`, D64 du 07/10, spec 60
+     * § 14.1 bis) : même clause que {@see self::updateSettings()}. Les actions
+     * la relisent sous le verrou du salon.
+     */
+    public function pauseGame(?User $user, Room $room, ?Player $seat): bool
+    {
+        return self::holdsHostSeat($room, $seat);
+    }
+
+    /**
+     * Reprendre une partie en pause (`room.game.resume`, D64 du 07/10, spec
+     * 60 § 14.2) : l'hôte ; si l'hôte n'est pas un **siège présent** de la
+     * partie (§ 1.2), tout siège présent de la partie. Relue sous le verrou
+     * du salon par l'action. Sans partie, la clause d'hôte seule — le
+     * contrôleur ne la consulte pas : il répond `not_running` à tout siège
+     * du salon.
+     */
+    public function resumeGame(?User $user, Room $room, ?Player $seat, ?Game $game = null): bool
+    {
+        if (self::holdsHostSeat($room, $seat)) {
+            return true;
+        }
+
+        return $seat !== null
+            && $game !== null
+            && $seat->room_id === $room->id
+            && $game->room_id === $room->id
+            && SeatPresence::isPresent($game, $seat->id)
+            && ! SeatPresence::isPresent($game, $room->host_player_id);
     }
 
     /**

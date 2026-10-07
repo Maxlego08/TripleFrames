@@ -14,8 +14,10 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  * aperçu admin C9-bis (spec 20 § 5.8), partagé avec `GET /f/{serveToken}` de
  * la spec 60 (R-31).
  *
- * Le disque `frames` a exactement deux lecteurs HTTP, la route de jeu et
- * l'aperçu du back-office (E10-61), et tous deux passent par ici : les
+ * Le disque `frames` a exactement trois lecteurs HTTP, la route de jeu,
+ * l'aperçu du back-office (E10-61) et l'aperçu de l'image signalée
+ * (`content-report.frame`, D63 du 07/10 amendée, préfixe `game/` seul), et
+ * tous passent par ici : les
  * en-têtes ne se disent donc qu'à un seul endroit, et ceux de `/f/` et de
  * l'aperçu sont identiques par construction.
  *

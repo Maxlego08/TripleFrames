@@ -121,6 +121,8 @@ export type ResyncReason =
     | 'frame_expired'
     | 'solo_poll'
     | 'heartbeat_refused'
+    /** Un geste de pause refusé : l'écran était en retard (D64 du 07/10). */
+    | 'pause_refused'
     | 'retry';
 
 /** Réponse d'une resynchronisation, telle que la fonction de la page la rend. */
@@ -153,6 +155,8 @@ export interface GameStoreState {
     maxAnswerLength: number | null;
     seats: readonly SeatView[];
     pause: GameStatePacket['pause'];
+    /** Pause manuelle demandée, en attente de la fin de révélation (D64 du 07/10). */
+    pauseRequested: boolean;
     /**
      * Manches connues de la partie, dans l'ordre de jeu (`startsAt`) : la
      * manche en cours ou révélée, et la suivante déjà programmée. Leurs
@@ -396,6 +400,8 @@ const GAME_BOUND = new Set<GameEventName>([
     'round.cancelled',
     'game.paused',
     'game.resumed',
+    'game.pause_requested',
+    'game.pause_request_cancelled',
     'game.ended',
     'seat.choices',
 ]);
@@ -557,6 +563,7 @@ function stateFromPacket(
         maxAnswerLength: packet.maxAnswerLength,
         seats: packet.seats,
         pause: packet.pause,
+        pauseRequested: packet.pauseRequested,
         rounds: round === null ? [] : [round],
         self: packet.self,
         offeredChoices:
@@ -879,6 +886,9 @@ export function createGameStore(options: GameStoreOptions): GameStore {
             case 'game.resumed':
                 parts.push(String(payload.resumedAt));
                 break;
+            case 'game.pause_requested':
+                parts.push(String(payload.requestedAt));
+                break;
             case 'game.launched':
             case 'game.ended':
                 break;
@@ -1054,6 +1064,7 @@ export function createGameStore(options: GameStoreOptions): GameStore {
                     firstRoundNumber: null,
                 })),
                 pause: null,
+                pauseRequested: false,
                 rounds: [],
                 self: {
                     ...state.self,
@@ -1328,13 +1339,36 @@ export function createGameStore(options: GameStoreOptions): GameStore {
                 pause: {
                     pausedAt: event.pausedAt,
                     interruptsAt: event.interruptsAt,
+                    kind: event.kind,
                 },
+                pauseRequested: false,
                 rounds: [],
             });
         },
 
         'game.resumed': () => {
-            commit({ ...state, status: 'running', pause: null });
+            commit({
+                ...state,
+                status: 'running',
+                pause: null,
+                pauseRequested: false,
+            });
+        },
+
+        'game.pause_requested': () => {
+            if (state.status !== 'running' || state.pauseRequested) {
+                return;
+            }
+
+            commit({ ...state, pauseRequested: true });
+        },
+
+        'game.pause_request_cancelled': () => {
+            if (!state.pauseRequested) {
+                return;
+            }
+
+            commit({ ...state, pauseRequested: false });
         },
 
         'game.ended': (event) => {
@@ -1344,6 +1378,7 @@ export function createGameStore(options: GameStoreOptions): GameStore {
                 status: event.podium.gameStatus,
                 roundsCompleted: event.podium.roundsCompleted,
                 pause: null,
+                pauseRequested: false,
                 rounds: [],
                 podium: event.podium,
                 nextTransitionAt: null,
@@ -1447,6 +1482,7 @@ export function createGameStore(options: GameStoreOptions): GameStore {
             maxAnswerLength: state.settings?.settings.maxAnswerLength ?? null,
             seats: event.seats,
             pause: null,
+            pauseRequested: false,
             rounds: [],
             self: {
                 ...state.self,

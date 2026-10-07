@@ -10,8 +10,8 @@
 | partie possible (`GamesInProgress::maxNaturalDurationMs()`, spec 60).
 |
 | `drain_timeout_minutes` : `DEPLOY_DRAIN_TIMEOUT_MINUTES`, vide = null =
-| `DeployDrain::defaultTimeoutMinutes()`, soit environ 98 minutes aux bornes
-| actuelles. L'option `--timeout` de `deploy:drain` l'emporte. Seul le vide
+| `DeployDrain::defaultTimeoutMinutes()`, soit environ 113 minutes aux bornes
+| actuelles (durée naturelle, plus le budget des pauses manuelles de D64). L'option `--timeout` de `deploy:drain` l'emporte. Seul le vide
 | vaut « par défaut » : `0`, comme toute valeur qui n'est pas un entier ≥ 1,
 | est REFUSÉ par la commande (code 2), jamais remplacé en silence.
 |

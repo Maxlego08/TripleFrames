@@ -5,6 +5,7 @@ namespace App\Support\Game;
 use App\Actions\Game\CatchUpGame;
 use App\Actions\Game\ClaimSeatTab;
 use App\Enums\GameMode;
+use App\Enums\GamePauseKind;
 use App\Enums\GamePlayerStatus;
 use App\Enums\GameStatus;
 use App\Enums\RoundStatus;
@@ -18,7 +19,6 @@ use App\Models\Room;
 use App\Models\Round;
 use App\Models\RoundPlayer;
 use App\Models\RoundTier;
-use App\Settings\EngineConstants;
 use App\Support\Realtime\ChannelNames;
 use App\Support\Realtime\GameWire;
 use App\Support\Realtime\WireTime;
@@ -97,7 +97,7 @@ use LogicException;
  * @phpstan-type RoundPhase 'scheduled'|'running'|'closed'|'revealing'|'cancelled'
  * @phpstan-type RoundStatePayload array{sequenceIndex: int, roundNumber: int, roundsCount: int, startsAt: string, durationMs: int, tiers: list<array{tierIndex: int, startsAtOffsetMs: int, durationMs: int, points: int}>, choicesAtTierIndex: int|null, phase: RoundPhase, currentTierIndex: int|null, images: list<TierImageRefPayload>, locked: list<array{publicId: string, lockRank: int}>, endedAt: string|null, revealStartsAt: string|null, revealEndsAt: string|null, reveal: array{movie: RevealMoviePayload, frames: list<RevealFramePayload>, finders: list<RoundFinderPayload>}|null, choicesUnavailable: bool}
  * @phpstan-type SelfStatePayload array{publicId: string, seatActive: bool, isHost: bool, member: bool, participates: bool, input: array<string, mixed>|null, ownScore: int}
- * @phpstan-type GameStatePacketPayload array{v: int, serverNow: string, gameRef: string|null, mode: 'multiplayer'|'solo', channels: array{room: string, seat: string}|null, status: string|null, roundsCount: int|null, roundsCompleted: int|null, framesPerRound: int|null, inputDifficulty: string|null, maxAnswerLength: int|null, seats: list<SeatViewPayload>, pause: array{pausedAt: string, interruptsAt: string}|null, round: RoundStatePayload|null, self: SelfStatePayload, leaderboard: LeaderboardPayload, podium: PodiumPayload|null, nextTransitionAt: string|null}
+ * @phpstan-type GameStatePacketPayload array{v: int, serverNow: string, gameRef: string|null, mode: 'multiplayer'|'solo', channels: array{room: string, seat: string}|null, status: string|null, roundsCount: int|null, roundsCompleted: int|null, framesPerRound: int|null, inputDifficulty: string|null, maxAnswerLength: int|null, seats: list<SeatViewPayload>, pause: array{pausedAt: string, interruptsAt: string, kind: string}|null, pauseRequested: bool, round: RoundStatePayload|null, self: SelfStatePayload, leaderboard: LeaderboardPayload, podium: PodiumPayload|null, nextTransitionAt: string|null}
  */
 final class GameStateBuilder
 {
@@ -154,6 +154,7 @@ final class GameStateBuilder
                 ? [SeatViewPresenter::lobby($seat, null)]
                 : SeatViewPresenter::lobbySeats($room),
             'pause' => null,
+            'pauseRequested' => false,
             'round' => null,
             'self' => [
                 'publicId' => $seat->public_id,
@@ -212,6 +213,7 @@ final class GameStateBuilder
             'maxAnswerLength' => $game->settings_snapshot->maxAnswerLength,
             'seats' => SeatViewPresenter::gameSeats($game, $hostPlayerId),
             'pause' => self::pause($game),
+            'pauseRequested' => $game->ended_at === null && $game->status === GameStatus::Running && $game->pause_requested_at !== null,
             'round' => $carried === null ? null : self::roundState($game, $carried, $seat, $now),
             'self' => [
                 'publicId' => $seat->public_id,
@@ -587,20 +589,23 @@ final class GameStateBuilder
     }
 
     /**
-     * `pause` : `paused_at` et `paused_at + pauseTimeoutMs` pour une partie
-     * en pause, NULL sinon.
+     * `pause` : `paused_at`, l'échéance ({@see PauseDeadline}) et la nature
+     * (`empty` / `manual`, D64 du 07/10) pour une partie en pause, NULL sinon.
      *
-     * @return array{pausedAt: string, interruptsAt: string}|null
+     * @return array{pausedAt: string, interruptsAt: string, kind: string}|null
      */
     private static function pause(Game $game): ?array
     {
-        if ($game->status !== GameStatus::Paused || $game->paused_at === null) {
+        $interruptsAt = PauseDeadline::of($game);
+
+        if ($interruptsAt === null || $game->paused_at === null) {
             return null;
         }
 
         return [
             'pausedAt' => WireTime::iso($game->paused_at),
-            'interruptsAt' => WireTime::iso($game->paused_at->addMilliseconds(EngineConstants::pauseTimeoutMs())),
+            'interruptsAt' => WireTime::iso($interruptsAt),
+            'kind' => ($game->pause_kind ?? GamePauseKind::Empty)->value,
         ];
     }
 
@@ -625,8 +630,10 @@ final class GameStateBuilder
 
         $instants = [];
 
-        if ($game->status === GameStatus::Paused && $game->paused_at !== null) {
-            $instants[] = $game->paused_at->addMilliseconds(EngineConstants::pauseTimeoutMs());
+        $interruptsAt = PauseDeadline::of($game);
+
+        if ($interruptsAt !== null) {
+            $instants[] = $interruptsAt;
         }
 
         if ($game->status === GameStatus::Running) {

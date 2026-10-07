@@ -19,7 +19,8 @@ use LogicException;
 use Symfony\Component\HttpFoundation\Response as HttpStatus;
 
 /**
- * « Manche suivante », le seul pouvoir de l'hôte en partie — route
+ * « Manche suivante », un pouvoir de l'hôte en partie (avec la pause
+ * manuelle, D64 du 07/10, `GamePauseController`) — route
  * `room.round.next`, `POST /r/{room}/round/next` (spec 60 § 5.4, § 10.1 et
  * § 13.5 ; contrat C7 § 2.4 ; 00 § Déroulé d'une partie, « Pouvoirs de
  * l'hôte en partie »). Il **raccourcit `R`, jamais `D`**, et ne touche
