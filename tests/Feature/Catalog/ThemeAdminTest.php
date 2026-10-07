@@ -440,19 +440,9 @@ test('modifier un libellé ou l’ordre seuls ne relance aucune synchronisation'
         ->and($theme->labels->firstWhere('locale', Locale::English)?->label)->toBe('Science fiction');
 });
 
-test('la publication est refusée sous le seuil d’œuvres et accordée au seuil', function (): void {
+test('la publication est accordée sous le seuil d’œuvres, sans aucun refus', function (): void {
     $theme = Theme::factory()->unpublished()->create();
-    themeAdminMembers($theme, RoomSettingsBounds::DEFAULT_ROUNDS_COUNT - 1);
-
-    themeAdminSend('post', 'admin.themes.publish', ['is_published' => true], ['theme' => $theme->id])
-        ->assertSessionHasErrors(['is_published' => themeAdminText('admin.themes.too_small', [
-            'count' => RoomSettingsBounds::DEFAULT_ROUNDS_COUNT - 1,
-            'min' => RoomSettingsBounds::DEFAULT_ROUNDS_COUNT,
-        ])]);
-
-    expect($theme->refresh()->is_published)->toBeFalse();
-
-    themeAdminMembers($theme, 1);
+    themeAdminMembers($theme, RoomSettingsBounds::DEFAULT_ROUNDS_COUNT - 8);
 
     themeAdminSend('post', 'admin.themes.publish', ['is_published' => true], ['theme' => $theme->id])
         ->assertSessionHasNoErrors()

@@ -2288,7 +2288,6 @@ export type TranslationKey =
     | 'admin.themes.status.unpublished'
     | 'admin.themes.threshold'
     | 'admin.themes.title'
-    | 'admin.themes.too_small'
     | 'admin.themes.works_hint'
     | 'admin.throughput.description'
     | 'admin.throughput.empty'

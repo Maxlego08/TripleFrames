@@ -827,6 +827,14 @@ Le porteur signale que « le QCM n'apparaît pas pour certains films », sans co
 |---|---|---|---|---|
 | D64 | Pause manuelle d'une partie | **oui, J1** : hôte (joueur solo) ; immédiate entre deux manches, sinon demandée pour la fin de la révélation ; reprise par l'hôte, ou tout siège présent si l'hôte ne l'est plus ; jamais au battement ; budget `pauseTimeoutMs` cumulé par partie, décomptes compris ; refusée pendant un drainage | **non** sur les règles verrouillées ; borne de drainage + 15 min ; une migration `game` | `10` § 7.2 ; `60` § 4.4, § 10.1, § 11.3, § 12.1, § 13.1, § 14.1, § 14.1 bis, § 14.2, § 14.3, § 14.4, § 15.2, § 16.5 ; `80` § 10.5 ; `90` § 10 ; `100` § 11.3 ; `05` (domaine `game`) |
 
+### D65. Faut-il un nombre minimal d'œuvres pour publier un thème ? — **non : le seuil n'est plus qu'un avertissement**
+
+Demande du porteur (07/10) : « Ce thème ne compte que 2 œuvre(s) : il en faut au moins 10 pour le publier. — il faut désactiver cette règle ». Le refus `admin.themes.too_small` de `PublishTheme` est supprimé ; la boîte de publication avertit seulement sous `RoomSettingsBounds::DEFAULT_ROUNDS_COUNT` œuvres au `N` par défaut. La mesure (`PoolReporter::themeWorks()`) et son affichage restent. **Conséquence assumée** : au J2, quand le sélecteur sera visible, un salon qui choisirait seul un thème maigre sera bloqué au lancement par la garde de vivier (`30` § 4.2), avec sa cause et son remède — jamais lancé à vide. Le libellé manquant reste un refus. Une décision : elle se cite « D65 du 07/10 ».
+
+| # | Décision | Réponse retenue | Écart | Inscrite dans |
+|---|---|---|---|---|
+| D65 | Seuil d'œuvres à la publication d'un thème | **supprimé comme refus** : un thème se publie quel que soit son nombre d'œuvres ; l'écran avertit sous `DEFAULT_ROUNDS_COUNT` | **oui**, révise la forme « refus » de D43 du 01/10 (`20` § 9.6) | `20` § 9.6 ; `30` § 12.3 |
+
 ## Seule question encore ouverte — le nom de domaine (décision 5)
 
 La réponse est **« à acheter »**, mais **le nom n'a pas été fourni**. C'est le dernier point du questionnaire, et il bloque plus tôt qu'annoncé : le montage de développement retenu — `dev.<DOMAINE>` résolu en 127.0.0.1, certificat par défi DNS-01, RP ID de passkey fixé à `<DOMAINE>` — est le **seul** qui satisfasse simultanément Google, Discord, WebAuthn et les cookies `Secure`. `tripleframes.test` ne conviendra jamais : Google refuse tout redirect URI en `http` hors `localhost` et les TLD non enregistrés. **Le domaine conditionne donc le développement d'OAuth et des passkeys, pas seulement la mise en production.** C'est un achat à une dizaine d'euros par an, et c'est le seul achat réellement sur le chemin critique. Amendé le 23/09 (D1 du 23/09) : il conditionne aussi le jalon 1 lui-même, dont le back-office et la curation naissent en production sur `<DOMAINE>` ; l'achat est donc placé **avant la semaine 4**.

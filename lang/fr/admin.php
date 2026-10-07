@@ -2508,7 +2508,7 @@ return [
         'title' => 'Thèmes',
         'heading' => 'Thèmes',
         'description' => 'Chaque thème, publié ou non, avec sa règle, ses œuvres et ses films. Un thème rassemble les films qui satisfont sa règle, plus les ajouts manuels de la fiche film, moins ses retraits manuels.',
-        'threshold' => 'Un thème se publie à partir de :min œuvres au réglage par défaut (:frames images par manche). En deçà, un salon qui le choisirait seul serait bloqué au lancement. Dépublier est toujours permis.',
+        'threshold' => 'Un thème se publie quel que soit son nombre d’œuvres. Sous :min œuvres au réglage par défaut (:frames images par manche), un salon qui le choisirait seul serait bloqué au lancement. Dépublier est toujours permis.',
         'selector_hidden' => 'Le sélecteur de thèmes reste masqué aux joueurs au jalon 1 : publier un thème le prépare, sans le montrer encore.',
         'create' => 'Créer un thème',
         'empty' => 'Aucun thème de cette nature.',
@@ -2591,9 +2591,9 @@ return [
         'publish' => [
             'title_publish' => 'Publier le thème :key',
             'title_unpublish' => 'Dépublier le thème :key',
-            'description_publish' => 'Le thème compte :works œuvre(s) ; le seuil de publication est de :min. Publier ne recalcule rien : seuls ses films actifs y entrent.',
+            'description_publish' => 'Le thème compte :works œuvre(s) ; une partie au réglage par défaut en demande :min. Publier ne recalcule rien : seuls ses films actifs y entrent.',
             'description_unpublish' => 'Le thème sort des réglages proposés aux salons ; ses films et ses exceptions manuelles sont conservés.',
-            'below_threshold' => 'Sous le seuil : la publication sera refusée tant que le thème compte moins de :min œuvres.',
+            'below_threshold' => 'Moins de :min œuvres : la publication est permise, mais un salon qui choisirait ce thème seul au réglage par défaut serait bloqué au lancement.',
             'notice' => [
                 'live_action_japanese' => 'Ce thème rassemble tous les films en japonais, prise de vue réelle comprise. Avant de le publier, retirez-en à la main les films japonais qui ne sont pas des animés : le seuil d’œuvres ne le vérifie pas.',
             ],
@@ -2622,7 +2622,6 @@ return [
         'rule_too_long' => 'La liste des sociétés dépasse :max caractères : retirez-en une.',
         'negation_forbidden' => 'Une saga et un thème sans règle ne se nient pas.',
         'labels_missing' => 'Ce thème n’a pas de libellé dans chaque langue : complétez-les avant de le publier.',
-        'too_small' => 'Ce thème ne compte que :count œuvre(s) : il en faut au moins :min pour le publier.',
     ],
 
     'users' => [
