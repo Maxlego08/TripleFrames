@@ -3,6 +3,7 @@ import '../scss/auth.scss';
 import '../scss/home.scss';
 import '../scss/legal.scss';
 import '../scss/lobby.scss';
+import '../scss/report.scss';
 import '../scss/room-entry.scss';
 import '../scss/settings.scss';
 import { TooltipProvider } from '@/components/ui/tooltip';

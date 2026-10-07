@@ -78,8 +78,8 @@ function adminJournalRawLine(AdminActionType $action, array $overrides = []): Ad
     return $line;
 }
 
-test('la liste fermée compte exactement cinquante-deux cas', function (): void {
-    expect(AdminActionType::cases())->toHaveCount(52)
+test('la liste fermée compte exactement cinquante-trois cas', function (): void {
+    expect(AdminActionType::cases())->toHaveCount(53)
         ->and(array_map(static fn (AdminActionType $case): string => $case->value, AdminActionType::cases()))
         ->toEqualCanonicalizing([
             'role.changed',
@@ -140,6 +140,8 @@ test('la liste fermée compte exactement cinquante-deux cas', function (): void 
             'theme.published',
             'theme.unpublished',
             'movie.theme_set',
+            // D63 du 07/10 : les signalements de contenu ignorés.
+            'content_report.dismissed',
         ]);
 
     // `action` reste un `string(40)` : aucun cas ne dépasse la colonne, et
@@ -148,7 +150,10 @@ test('la liste fermée compte exactement cinquante-deux cas', function (): void 
         expect(strlen($case->value))->toBeLessThanOrEqual(40);
     }
 
-    expect(AdminActionSubject::cases())->toHaveCount(12)
+    expect(AdminActionSubject::cases())->toHaveCount(13)
+        // D63 du 07/10 : un groupe de signalements de contenu, désigné par le plus ancien.
+        ->and(AdminActionSubject::ContentReport->value)->toBe('content_report')
+        ->and(AdminActionSubject::ContentReport->hasIdentifier())->toBeTrue()
         ->and(AdminActionSubject::ImportRun->value)->toBe('import_run')
         ->and(AdminActionSubject::Accounts->value)->toBe('accounts')
         ->and(AdminActionSubject::Theme->value)->toBe('theme')

@@ -26,6 +26,7 @@ use App\Support\Scoring\Scoreboard;
  * | `originalLanguage`   | `movie.original_language`                                             |
  * | `year`               | `movie.release_year` — discriminant des homonymes et des remakes      |
  * | `letterboxdUrl`      | fiche Letterboxd par `movie.tmdb_id` ; nulle sans `tmdb_id` (D58)     |
+ * | `tmdb`               | `movie.tmdb_id`, adresse du lien « Signaler » (`/report?movie=`, D63) |
  *
  * **`lang` de chaque titre** (05 § Attribut `lang`, R-24) : `Locale::bcp47()`
  * de la locale **atteinte** par la chaîne de repli (rangs 1 et 2) ; au rang 3,
@@ -39,16 +40,18 @@ use App\Support\Scoring\Scoreboard;
  * chaque client choisit le sien (`reveal-titles.ts`, L60-9). **Jamais** un
  * alias (un alias est une clé de validation, jamais un rendu, 10 § A4), ni le
  * genre, le studio ou la durée du film (principe 2), ni aucun identifiant
- * interne (§ 11.7). Le `tmdb_id`, identifiant **externe**, ne sort que dans
- * l'URL Letterboxd (D58 du 06/10) : le titre et l'année, révélés en même
- * temps, désignent déjà le film.
+ * interne (§ 11.7). Le `tmdb_id`, identifiant **externe**, sort dans l'URL
+ * Letterboxd (D58 du 06/10) et, nu, sous la clé `tmdb` qui adresse le lien
+ * « Signaler » (D63 du 07/10) — clé sans suffixe `Id`, que `WirePayload`
+ * refuserait : le titre et l'année, révélés en même temps, désignent déjà
+ * le film. Nulle pour un film sans `tmdb_id` : aucun bouton.
  *
  * **Ne décide pas QUAND il part** : le paquet ne quitte le serveur qu'à
  * `ended_at + tier_grace_ms` (`RevealRound`), jamais avant (règle 3) —
  * chaque appelant tient sa garde, cette classe compose.
  *
  * @phpstan-type RevealTitlePayload array{text: string, lang: string}
- * @phpstan-type RevealMoviePayload array{titles: array<string, RevealTitlePayload>, originalTitle: string, originalTitleLatin: string|null, originalLanguage: string, year: int|null, letterboxdUrl: string|null}
+ * @phpstan-type RevealMoviePayload array{titles: array<string, RevealTitlePayload>, originalTitle: string, originalTitleLatin: string|null, originalLanguage: string, year: int|null, letterboxdUrl: string|null, tmdb: int|null}
  */
 final class RevealMovieBuilder
 {
@@ -91,6 +94,7 @@ final class RevealMovieBuilder
             'originalLanguage' => $movie->original_language,
             'year' => $movie->release_year,
             'letterboxdUrl' => $movie->tmdb_id === null ? null : sprintf(self::LETTERBOXD_TMDB_URL, $movie->tmdb_id),
+            'tmdb' => $movie->tmdb_id,
         ];
     }
 

@@ -490,7 +490,8 @@ La révélation montre, et rien d'autre :
 - **les images de la manche déjà servies** — les paliers ouverts (`served_at` non nul), dans l'ordre des paliers ; une manche close par fin anticipée n'en montre que les paliers ouverts, jamais un palier non ouvert ;
 - le **titre dans la langue du joueur** (chaîne de repli de 05, attribut `lang` de la locale atteinte), le **titre original s'il diffère** (translittération latine s'il en existe une) et l'**année** — discriminant des homonymes et des remakes ;
 - **qui a trouvé**, à quel palier, en combien de temps et pour combien de points (`finders`, contrat C13), le **classement intermédiaire** avec avatars (avatars lus dans `seats`) ;
-- l'**attribution TMDB** (`TmdbAttribution`, contrat C16 ; principe 12).
+- l'**attribution TMDB** (`TmdbAttribution`, contrat C16 ; principe 12) ;
+- les liens **« Signaler »** (D63 du 07/10 — amendé le 07/10) : un pour le film, un par image ouverte, vers la page `/report` de `90` § 4.5 bis ; ils lisent `RevealMovie.tmdb` et `frames[].framePublicId` (§ 11.5), qui ne voyagent qu'avec la révélation.
 
 « Affiche » est retirée : aucune affiche n'est stockée ni licite (A-03). Une révélation déjà affichée ne se recompose pas au changement de langue (05) ; le paquet porte les titres de **toutes** les locales activées, chaque client choisit le sien.
 
@@ -621,7 +622,7 @@ Deux bases abstraites [nouvelles, `app/Events/Game/`] : `RoomBroadcast(Room $roo
 | `tier.opened` | `TierOpened` | salon | `OpenTier` à `Tᵢ`, `i` = 1..N | `{ sequenceIndex, roundNumber, tierIndex, opensAt: IsoMs, next: TierImageRef \| null, choicesUnavailable: boolean }` (`choicesUnavailable` : D54 du 02/10 — amendé le 02/10) |
 | `player.locked` | `PlayerLocked` | salon | `SeatInputClosed`, sur `AnswerAccepted` (70) | `{ sequenceIndex, publicId, lockRank }` |
 | `round.closed` | `RoundClosed` | salon | `CloseRound`, à `D` ou à la fin anticipée | `{ sequenceIndex, roundNumber, endedAt, revealStartsAt, revealEndsAt }` |
-| `round.revealed` | `RoundRevealed` | salon | `RevealRound`, à `ended_at + tier_grace_ms` | `{ sequenceIndex, roundNumber, revealEndsAt, movie: RevealMovie, images: TierImageRef[], finders: RoundFinder[], leaderboard: Leaderboard }` |
+| `round.revealed` | `RoundRevealed` | salon | `RevealRound`, à `ended_at + tier_grace_ms` | `{ sequenceIndex, roundNumber, revealEndsAt, movie: RevealMovie, images: TierImageRef[], frames: RevealFrame[], finders: RoundFinder[], leaderboard: Leaderboard }` (`frames` : D63 du 07/10 — amendé le 07/10) |
 | `round.cancelled` | `RoundCancelled` | salon | `CancelRound` | `{ sequenceIndex, roundNumber }` — aucun motif, aucun titre |
 | `game.paused` | `GamePaused` | salon | `EndReveal` sans siège présent (écart (b) du § 22 bis) | `{ pausedAt, interruptsAt }` |
 | `game.resumed` | `GameResumed` | salon | retour d'un siège pendant la pause | `{ resumedAt }`, suivi de `round.scheduled` |
@@ -645,8 +646,9 @@ Tout nouvel événement amende cette spec et entre dans `EventPayloadTest`. Le J
 type LocaleCode = 'fr' | 'en';                                   // Locale::cases()
 interface TierImageRef { tierIndex: number; url: string; fetchNotBefore: IsoMs }
 interface RevealTitle { text: string; lang: string }
-interface RevealMovie { titles: Record<LocaleCode, RevealTitle>; originalTitle: string; originalTitleLatin: string | null; /* + letterboxdUrl: string | null, D58 du 06/10 */
+interface RevealMovie { titles: Record<LocaleCode, RevealTitle>; originalTitle: string; originalTitleLatin: string | null; /* + letterboxdUrl: string | null, D58 du 06/10 ; + tmdb: number | null, D63 du 07/10 */
   originalLanguage: string; year: number | null }                 // aussi TitlePacket du récapitulatif (C13)
+interface RevealFrame { tierIndex: number; framePublicId: string } // D63 du 07/10 : variante servie, après la révélation seulement
 
 // L60-4
 import type { PlayerIdentity } from '@/types/player';                                  // C5
@@ -677,8 +679,8 @@ import type { ChoicesPayload } from '@/types/answers';                          
 | `TierImageRef` | `url` = `ServeUrl::for($tier)` ; `fetchNotBefore` = `Tᵢ − preload_lead_ms` |
 | `tier.opened` | `opensAt` = `Tᵢ` théorique (= `served_at`) ; `next` = référence du palier `i+1`, frappé dans la même transition, NULL au dernier palier ; `choicesUnavailable` = vrai au seul palier du QCM d'une manche Normal dont la composition a abouti au cas terminal (70 § 10.7), faux partout ailleurs — Facile (la manche est alors annulée, aucun `tier.opened`) et Expert compris. Booléen identique pour tout le salon, qui ne dit rien de la réponse : l'absence de `seat.choices` le disait déjà à chaque siège (D54 du 02/10 — amendé le 02/10) |
 | `round.closed` | `endedAt` = `ended_at` ; `revealStartsAt` = `ended_at + tier_grace_ms` ; `revealEndsAt` = `reveal_ends_at` |
-| `RevealMovie` | composé par le **seul** constructeur `App\Support\Game\RevealMovieBuilder::build(Movie $movie): array` [nouveau, L60-6], appelé par `RevealRound`, par `GameStateBuilder` (`round.reveal`) et par `Scoreboard::podium()` de 80 (paquet de titres du récapitulatif, contrat C7 § 3) — une seule composition, pour que la révélation et le récapitulatif ne divergent jamais : `titles` : pour **chaque** `Locale::cases()`, `DisplayTitleResolver::resolve($movie, $locale)` (contrat C11) → `text` et `lang` = `Locale::bcp47()` de la locale atteinte, ou, au rang 3, `movie.original_language` suffixé `-Latn` si la translittération est servie ; `originalTitle` = `title_original` ; `originalTitleLatin` = `title_original_latin` ; `originalLanguage` = `original_language` ; `year` = `release_year` ; `letterboxdUrl` = `https://letterboxd.com/tmdb/{tmdb_id}/`, **nul sans `tmdb_id`** (D58 du 06/10 — amendé le 06/10) |
-| `round.revealed` | `images` = une `TierImageRef` par palier **ouvert**, par `tier_index` ; `finders` = `Scoreboard::roundFinders($round)` ; `leaderboard` = `Scoreboard::leaderboard($game, $round)` (contrat C13) |
+| `RevealMovie` | composé par le **seul** constructeur `App\Support\Game\RevealMovieBuilder::build(Movie $movie): array` [nouveau, L60-6], appelé par `RevealRound`, par `GameStateBuilder` (`round.reveal`) et par `Scoreboard::podium()` de 80 (paquet de titres du récapitulatif, contrat C7 § 3) — une seule composition, pour que la révélation et le récapitulatif ne divergent jamais : `titles` : pour **chaque** `Locale::cases()`, `DisplayTitleResolver::resolve($movie, $locale)` (contrat C11) → `text` et `lang` = `Locale::bcp47()` de la locale atteinte, ou, au rang 3, `movie.original_language` suffixé `-Latn` si la translittération est servie ; `originalTitle` = `title_original` ; `originalTitleLatin` = `title_original_latin` ; `originalLanguage` = `original_language` ; `year` = `release_year` ; `letterboxdUrl` = `https://letterboxd.com/tmdb/{tmdb_id}/`, **nul sans `tmdb_id`** (D58 du 06/10 — amendé le 06/10) ; `tmdb` = `tmdb_id`, nul sans lui — clé **sans** suffixe `Id`, que `WirePayload::isInternalKey()` refuserait ; sert au lien « Signaler » (D63 du 07/10 — amendé le 07/10) |
+| `round.revealed` | `images` = une `TierImageRef` par palier **ouvert**, par `tier_index` ; `frames` = un `RevealFrame` par palier ouvert (`served_at` non nul), par `tier_index`, `framePublicId` = `servedFrame->public_id` — la variante **réellement servie**, jamais `frame_id` —, composé par le seul `RevealFramesPresenter`, appelé par `RevealRound::payload()` et par `GameStateBuilder` sous `reveal`, **jamais** par `TierImageRefPresenter`, partagé avec les charges d'avant la révélation (D63 du 07/10 — amendé le 07/10) ; `finders` = `Scoreboard::roundFinders($round)` ; `leaderboard` = `Scoreboard::leaderboard($game, $round)` (contrat C13) |
 | `game.paused` | `pausedAt` = `paused_at` ; `interruptsAt` = `paused_at + pauseTimeoutMs` |
 | `game.ended` | `podium` = `Scoreboard::podium($game)` ; issue, manches jouées et prévues sont dans `Podium` |
 | `seat.choices` | `ChoicesPresenter::forSeat($roundPlayer)->toArray()` (contrat C11) |
@@ -704,7 +706,8 @@ Tout ce qui est au tableau du § 11.3 avec le canal « salon » est **diffusé**
 - **À aucun moment** : `round.id`, `game.id`, `room.id`, `player.id`, `frame.id`, `frame_level`, `served_frame_id`, `game_path`, `draw_seed`, `draw_pool_size`, `choice_1` en position identifiable, `input_state` d'autrui, `active_seat_token` (sauf la prop `seatToken` de l'onglet qui vient de le frapper).
 - **Avant la révélation** : les points et le `tier_index` d'autrui.
 - **Le genre, le studio et la durée du film** (principe 2).
-- **Le `tmdb_id`**, identifiant externe, ne sort qu'**après** `revealStartsAt`, dans la seule `RevealMovie.letterboxdUrl` (D58 du 06/10 — amendé le 06/10).
+- **Le `tmdb_id`**, identifiant externe, ne sort qu'**après** `revealStartsAt`, dans `RevealMovie.letterboxdUrl` (D58 du 06/10 — amendé le 06/10) et `RevealMovie.tmdb` (D63 du 07/10 — amendé le 07/10).
+- **`frame.public_id`** (`10` § 1.1) ne sort qu'**après** `revealStartsAt`, dans `frames[].framePublicId` de `round.revealed` et de `round.reveal` ; jamais dans `round.scheduled`, `tier.opened`, une `TierImageRef` ni `RoundState.images` (D63 du 07/10 — amendé le 07/10).
 - **Aucune phrase formatée côté serveur**, à la seule exception des quatre chaînes du QCM et des titres de la révélation, qui sont des données (05).
 
 ### 11.8 Réception côté client

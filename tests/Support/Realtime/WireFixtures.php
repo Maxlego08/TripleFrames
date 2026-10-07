@@ -38,6 +38,7 @@ use App\Models\RoundPlayer;
 use App\Models\RoundTier;
 use App\Settings\EngineConstants;
 use App\Support\Answers\ChoicesPresenter;
+use App\Support\Game\RevealFramesPresenter;
 use App\Support\Game\RevealMovieBuilder;
 use App\Support\Game\RoundTimelinePresenter;
 use App\Support\Game\SeatViewPresenter;
@@ -173,6 +174,10 @@ final class WireFixtures
                 'images' => array_map(
                     static fn (int $tierIndex): array => self::image($game, $revealed, $tierIndex),
                     range(1, $game->frames_per_round),
+                ),
+                // D63 du 07/10 : l'identité publique des images servies.
+                'frames' => RevealFramesPresenter::frames(
+                    RoundTier::query()->where('round_id', $revealed->id)->whereNotNull('served_at')->with('servedFrame')->get(),
                 ),
                 'finders' => Scoreboard::roundFinders($revealed),
                 'leaderboard' => Scoreboard::leaderboard($game, $revealed),

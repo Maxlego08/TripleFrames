@@ -484,7 +484,8 @@ it('garde noindex le lien d\'un salon, les pages de jeu, signaler un contenu et 
 
     // Aucune route de ces familles ne porte le drapeau, quel que soit le lot
     // qui l'a déclarée : salon, jeu, solo, retrait, back-office, images.
-    $families = ['room.', 'solo.', 'game.', 'takedown.', 'admin.', 'frame.', 'clock.', 'ops.'];
+    // `content-report.` : signaler un film vu en jeu (D63 du 07/10).
+    $families = ['room.', 'solo.', 'game.', 'takedown.', 'content-report.', 'admin.', 'frame.', 'clock.', 'ops.'];
 
     foreach (Route::getRoutes()->getRoutes() as $route) {
         $name = $route->getName() ?? '';
@@ -493,7 +494,7 @@ it('garde noindex le lien d\'un salon, les pages de jeu, signaler un contenu et 
 
         if (Str::startsWith($name, $families)
             || str_contains($uri, '{room}')
-            || in_array($first, ['r', 'solo', 'admin', 'report-content', 'f', 'ops'], true)) {
+            || in_array($first, ['r', 'solo', 'admin', 'report-content', 'report', 'f', 'ops'], true)) {
             expect(array_key_exists(RobotsDirectives::ROUTE_FLAG, $route->defaults))
                 ->toBeFalse("/{$uri} ({$name}) ne doit jamais porter RobotsDirectives::ROUTE_FLAG");
         }

@@ -6,6 +6,7 @@ use App\Enums\Locale;
 use App\Models\AdminAction;
 use App\Models\Alias;
 use App\Models\AudienceDaily;
+use App\Models\ContentReport;
 use App\Models\Frame;
 use App\Models\FrameReview;
 use App\Models\Game;
@@ -426,6 +427,54 @@ function adminRoutesMatrix(): array
                 return ['movie_ids' => array_column($batch['movies'], 'id'), 'ambiguity_digest' => $batch['digest']];
             },
             redirect: fn (array $parameters): string => route('admin.catalog.index'),
+        ),
+
+        // Ligne 48 — la file des signalements de contenu par les joueurs
+        // (§ 11.6, D63 du 07/10) : curateur au moins ; chaque geste clôt les
+        // signalements ouverts de sa cible et revient à la file.
+        'admin.content-reports.index' => adminRoutesRow(
+            row: 48,
+            method: 'GET',
+            guards: ['can:viewAny,'.ContentReport::class],
+            curator: 200,
+            admin: 200,
+        ),
+
+        'admin.content-reports.unpublish-movie' => adminRoutesRow(
+            row: 48,
+            method: 'POST',
+            guards: ['can:resolve,contentReport'],
+            curator: 302,
+            admin: 302,
+            parameters: fn (): array => [
+                'contentReport' => ContentReport::factory()->forMovie(Movie::factory()->published()->create())->create()->id,
+            ],
+            payload: fn (): array => ['reason' => 'Motif de la matrice.'],
+            redirect: fn (array $parameters): string => route('admin.content-reports.index'),
+        ),
+
+        'admin.content-reports.unpublish-frame' => adminRoutesRow(
+            row: 48,
+            method: 'POST',
+            guards: ['can:resolve,contentReport'],
+            curator: 302,
+            admin: 302,
+            parameters: function (): array {
+                $frame = Frame::query()->findOrFail(adminRoutesFrameGestureParameters(published: true)['frame']);
+
+                return ['contentReport' => ContentReport::factory()->forFrame($frame)->create()->id];
+            },
+            redirect: fn (array $parameters): string => route('admin.content-reports.index'),
+        ),
+
+        'admin.content-reports.dismiss' => adminRoutesRow(
+            row: 48,
+            method: 'POST',
+            guards: ['can:resolve,contentReport'],
+            curator: 302,
+            admin: 302,
+            parameters: fn (): array => ['contentReport' => ContentReport::factory()->create()->id],
+            redirect: fn (array $parameters): string => route('admin.content-reports.index'),
         ),
 
         // Ligne 27 — file agrégée de suggestions, reconstruction idempotente,

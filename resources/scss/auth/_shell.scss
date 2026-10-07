@@ -132,6 +132,18 @@
     }
 }
 
+.public-header__nav-admin {
+    @include mix.hard-shadow(0.1875rem);
+    border: 0.125rem solid $ink;
+    background: $cyan;
+    text-decoration: none;
+
+    &:hover {
+        background: $cyan;
+        text-decoration: none;
+    }
+}
+
 .auth-brand {
     display: inline-flex;
     min-width: 0;

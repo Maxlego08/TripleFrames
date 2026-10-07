@@ -101,6 +101,9 @@ const WATCHED = [
     'resources/js/pages/game',
     'resources/js/pages/room',
     'resources/js/pages/legal',
+    // D63 du 07/10 (spec 90 § 4.5 bis) : la page publique « Signaler un
+    // problème », inscrite à la création de son répertoire.
+    'resources/js/pages/report',
     'resources/js/pages/error.tsx',
     'resources/js/layouts/game',
     'resources/js/layouts/public',

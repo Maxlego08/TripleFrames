@@ -81,7 +81,9 @@ export interface RevealTitle {
  * langue et l'année. Aussi le « paquet de titres » du récapitulatif de fin
  * de partie (`TitlePacket` de `types/scoring.ts`, contrat C13).
  * `letterboxdUrl` : la fiche Letterboxd du film, nulle sans `tmdb_id`
- * (catalogue de démonstration ; D58 du 06/10).
+ * (catalogue de démonstration ; D58 du 06/10). `tmdb` : l'identifiant TMDB
+ * du film, adresse du lien « Signaler » (`/report?movie=`, D63 du 07/10) ;
+ * nul sans `tmdb_id`, et alors aucun lien.
  */
 export interface RevealMovie {
     titles: Record<LocaleCode, RevealTitle>;
@@ -90,6 +92,18 @@ export interface RevealMovie {
     originalLanguage: string;
     year: number | null;
     letterboxdUrl: string | null;
+    tmdb: number | null;
+}
+
+/**
+ * L'identité publique de l'image réellement servie à un palier ouvert, pour
+ * le lien « Signaler cette image » (D63 du 07/10). **Seulement à la
+ * révélation** (règle 3) : jamais dans `TierImageRef`, `round.scheduled`
+ * ni `tier.opened`.
+ */
+export interface RevealFrame {
+    tierIndex: number;
+    framePublicId: string;
 }
 
 // --- L60-4 : sièges, chronologie, paquet de resynchronisation ---------------
@@ -144,7 +158,11 @@ export interface RoundState extends RoundTimeline {
     endedAt: IsoMs | null;
     revealStartsAt: IsoMs | null;
     revealEndsAt: IsoMs | null;
-    reveal: { movie: RevealMovie; finders: RoundFinder[] } | null;
+    reveal: {
+        movie: RevealMovie;
+        frames: RevealFrame[];
+        finders: RoundFinder[];
+    } | null;
     choicesUnavailable: boolean;
 }
 
@@ -301,6 +319,7 @@ export interface GameEventPayloads {
         revealEndsAt: IsoMs;
         movie: RevealMovie;
         images: TierImageRef[];
+        frames: RevealFrame[];
         finders: RoundFinder[];
         leaderboard: Leaderboard;
     };

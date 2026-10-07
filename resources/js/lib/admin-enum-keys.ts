@@ -356,6 +356,8 @@ export const ADMIN_ACTION_KEYS: Record<AdminActionTypeValue, TranslationKey> = {
     'theme.updated': 'admin.enum.admin_action.theme_updated',
     'theme.published': 'admin.enum.admin_action.theme_published',
     'theme.unpublished': 'admin.enum.admin_action.theme_unpublished',
+    'content_report.dismissed':
+        'admin.enum.admin_action.content_report_dismissed',
 };
 
 /** Les sujets du journal — `AdminActionSubject::labelKey()`. */
@@ -375,6 +377,7 @@ export const ADMIN_ACTION_SUBJECT_KEYS: Record<
     game: 'admin.enum.admin_action_subject.game',
     games: 'admin.enum.admin_action_subject.games',
     players: 'admin.enum.admin_action_subject.players',
+    content_report: 'admin.enum.admin_action_subject.content_report',
 };
 
 /** Les deux classes de conservation d'une ligne du journal. */

@@ -30,8 +30,8 @@ export default function PasskeyItem({ passkey, onDelete }: Props) {
     return (
         <div className="settings-credential-item flex items-center justify-between border-b p-4 last:border-b-0">
             <div className="flex items-center gap-4">
-                <div className="settings-credential-icon flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-muted">
-                    <KeyRound className="h-5 w-5 text-muted-foreground" />
+                <div className="settings-credential-icon flex h-10 w-10 shrink-0 items-center justify-center rounded-xl">
+                    <KeyRound className="h-5 w-5" aria-hidden="true" />
                 </div>
                 <div className="space-y-1">
                     <div className="flex items-center gap-2.5">
@@ -39,7 +39,7 @@ export default function PasskeyItem({ passkey, onDelete }: Props) {
                             {passkey.name}
                         </p>
                         {passkey.authenticator && (
-                            <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-[11px] font-medium tracking-wide text-muted-foreground uppercase ring-1 ring-border ring-inset">
+                            <span className="settings-credential-tag inline-flex items-center rounded-md px-2 py-0.5 text-xs">
                                 {passkey.authenticator}
                             </span>
                         )}
@@ -67,7 +67,7 @@ export default function PasskeyItem({ passkey, onDelete }: Props) {
                     <Button
                         variant="ghost"
                         size="sm"
-                        className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                        className="settings-destructive-icon"
                     >
                         <Trash2 className="h-4 w-4" />
                         <span className="sr-only">

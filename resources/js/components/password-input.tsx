@@ -30,7 +30,7 @@ export default function PasswordInput({
                         ? t('account.fields.password_hide')
                         : t('account.fields.password_show')
                 }
-                tabIndex={-1}
+                aria-pressed={showPassword}
             >
                 {showPassword ? (
                     <EyeOff className="size-4" />

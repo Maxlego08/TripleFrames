@@ -38,6 +38,10 @@ enum PurgeScope: string
 
     case Report = 'report';
 
+    // D63 du 07/10 : les signalements de contenu par les joueurs, 12 mois
+    // après leur création.
+    case ContentReport = 'content_report';
+
     case AdminAction = 'admin_action';
 
     case DataExport = 'data_export';
@@ -90,6 +94,7 @@ enum PurgeScope: string
             self::Perf,
             self::GameTrace,
             self::Audience,
+            self::ContentReport,
             self::FrameworkSessions,
             self::FrameworkFailedJobs,
             self::FrameworkResetTokens,

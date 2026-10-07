@@ -48,6 +48,13 @@ enum AdminActionSubject: string
     /** L'ensemble des sièges que montre l'annuaire des joueurs (D46 du 01/10). */
     case Players = 'players';
 
+    /**
+     * Un groupe de signalements de contenu clos ensemble (D63 du 07/10) :
+     * `subject_id` désigne le plus ancien signalement du groupe, `details`
+     * la cible et le nombre de signalements clos.
+     */
+    case ContentReport = 'content_report';
+
     /** Préfixe des libellés du back-office, un par cas. */
     public const string LABEL_PREFIX = 'admin.enum.admin_action_subject.';
 

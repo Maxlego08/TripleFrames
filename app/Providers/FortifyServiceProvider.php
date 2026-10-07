@@ -10,6 +10,7 @@ use App\Models\LinkedAccount;
 use App\Models\User;
 use App\Settings\EngineConstants;
 use App\Settings\RoomSettingsBounds;
+use App\Support\ContentReport\ContentReportRateLimits;
 use App\Support\Identity\AccountSwitches;
 use App\Support\Identity\OAuthProviders;
 use App\Support\Identity\PlayerTokenManager;
@@ -35,6 +36,9 @@ class FortifyServiceProvider extends ServiceProvider
 
     /** Espace des clés de limiteur de jeu comptées par adresse, faute de jeton. */
     private const string SEAT_THROTTLE_IP_PREFIX = 'ip:';
+
+    /** Espace des clés du limiteur `content-report` comptées par compte connecté. */
+    private const string ACCOUNT_THROTTLE_PREFIX = 'user:';
 
     /**
      * Les deux budgets du limiteur `answer` par siège (spec 70 § 8) : la
@@ -383,6 +387,9 @@ class FortifyServiceProvider extends ServiceProvider
      *   le cache du limiteur, jamais dans une table de domaine ;
      * - `room-join` (`room.join`) : par hash du `player_token`, repli sur
      *   l'IP, comme les limiteurs de jeu.
+     *
+     * S'y ajoute `content-report` (`content-report.store`, D63 du 07/10) :
+     * par compte connecté, sinon comme `room-join`.
      */
     private function configureRoomRateLimiting(): void
     {
@@ -394,6 +401,20 @@ class FortifyServiceProvider extends ServiceProvider
         RateLimiter::for('room-join', function (Request $request) {
             return Limit::perMinute(RoomRateLimits::joinsPerMinute())
                 ->by($this->seatThrottleKey($request));
+        });
+
+        // Le signalement de contenu par un joueur (D63 du 07/10) : par compte
+        // connecté — qui peut signaler sans siège, donc sans jeton —, sinon
+        // par hash du `player_token`, repli sur l'IP, comme l'entrée dans un
+        // salon. Plusieurs comptes derrière une même adresse ne partagent
+        // jamais un seau.
+        RateLimiter::for('content-report', function (Request $request) {
+            $account = $request->user()?->getAuthIdentifier();
+
+            return Limit::perHour(ContentReportRateLimits::reportsPerHour())
+                ->by($account !== null
+                    ? self::ACCOUNT_THROTTLE_PREFIX.$account
+                    : $this->seatThrottleKey($request));
         });
     }
 

@@ -1,6 +1,82 @@
 @use 'auth/tokens' as *;
 @use 'auth/mixins' as mix;
 
+@mixin settings-button {
+    min-height: 2.75rem;
+    border: 0.125rem solid $ink;
+    border-radius: 0.72rem;
+    padding: 0.55rem 0.95rem;
+    color: $ink;
+    box-shadow: 0.2rem 0.2rem 0 $ink;
+    font-family: $body;
+    font-size: 0.86rem;
+    font-weight: 900;
+    transition:
+        translate 120ms ease,
+        box-shadow 120ms ease,
+        background-color 120ms ease;
+
+    &[data-variant='default'] {
+        background: $coral;
+
+        &:hover {
+            background: $yellow;
+        }
+    }
+
+    &[data-variant='outline'] {
+        background: $white;
+
+        &:hover {
+            background: $yellow;
+        }
+    }
+
+    &[data-variant='secondary'] {
+        background: $yellow;
+
+        &:hover {
+            background: $lavender;
+        }
+    }
+
+    &[data-variant='destructive'] {
+        background: $error;
+        color: $white;
+
+        &:hover {
+            background: $error;
+            color: $white;
+        }
+    }
+
+    &[data-variant='ghost'] {
+        border-color: transparent;
+        background: transparent;
+        box-shadow: none;
+
+        &:hover {
+            background: $yellow;
+            box-shadow: none;
+            translate: 0;
+        }
+    }
+
+    &:hover {
+        box-shadow: 0.28rem 0.28rem 0 $ink;
+        translate: -0.06rem -0.06rem;
+    }
+
+    &:focus-visible {
+        @include mix.focus-ring;
+    }
+
+    &:disabled {
+        cursor: wait;
+        opacity: 0.6;
+    }
+}
+
 .settings-shell {
     display: grid;
     min-width: 20rem;
@@ -37,12 +113,22 @@
         &__inner {
             width: min(100% - 2rem, 76rem);
             max-width: none;
+            min-height: 2.75rem;
             flex-direction: row;
             align-items: center;
-            justify-content: space-between;
-            gap: 0.75rem 1.5rem;
-            padding-block: 1rem;
+            justify-content: center;
+            gap: 0;
+            padding-block: 0;
             color: $ink;
+        }
+
+        nav {
+            width: 100%;
+        }
+
+        ul {
+            justify-content: center;
+            gap: 0 0.75rem;
         }
 
         a,
@@ -51,6 +137,7 @@
         }
 
         a {
+            min-height: 2.5rem;
             font-weight: 800;
         }
     }
@@ -79,96 +166,11 @@
     margin: clamp(1.5rem, 4vw, 3.5rem) auto clamp(3rem, 6vw, 5rem);
 }
 
-.settings-page__hero {
-    position: relative;
-    display: flex;
-    min-height: 10rem;
-    align-items: center;
-    justify-content: space-between;
-    gap: 2rem;
-    overflow: hidden;
-    border: $line solid $ink;
-    border-radius: 1.65rem 1.65rem 0.75rem 1.65rem;
-    padding: clamp(1.5rem, 4vw, 2.8rem);
-    background: $paper;
-    box-shadow: 0.65rem 0.65rem 0 $ink;
-
-    &::after {
-        position: absolute;
-        right: 0;
-        bottom: 0;
-        width: 42%;
-        height: 0.7rem;
-        background: $coral;
-        content: '';
-    }
-}
-
-.settings-page__hero-copy {
-    position: relative;
-    z-index: 1;
-
-    h1,
-    p {
-        margin: 0;
-    }
-
-    h1 {
-        @include mix.display-type;
-        font-size: clamp(2.15rem, 5vw, 4rem);
-        line-height: 0.95;
-    }
-
-    p {
-        max-width: 34rem;
-        margin-top: 0.8rem;
-        color: $muted;
-        font-size: 1rem;
-    }
-}
-
-.settings-page__frames {
-    position: relative;
-    width: 10rem;
-    height: 6.5rem;
-    flex: 0 0 auto;
-
-    span {
-        position: absolute;
-        width: 6.3rem;
-        height: 4.6rem;
-        border: $line solid $ink;
-        border-radius: 1rem;
-        box-shadow: 0.25rem 0.25rem 0 $ink;
-
-        &:nth-child(1) {
-            top: 0;
-            left: 0;
-            background: $cyan;
-            rotate: -8deg;
-        }
-
-        &:nth-child(2) {
-            top: 0.9rem;
-            right: 0;
-            background: $coral;
-            rotate: 8deg;
-        }
-
-        &:nth-child(3) {
-            right: 1.8rem;
-            bottom: 0;
-            background: $yellow;
-        }
-    }
-}
-
 .settings-page__workspace {
     display: grid;
     grid-template-columns: 15.5rem minmax(0, 1fr);
     align-items: start;
     gap: 1.5rem;
-    margin-top: 2rem;
 }
 
 .settings-nav {
@@ -258,15 +260,15 @@
     padding: clamp(1.4rem, 4vw, 2.6rem);
 
     > :not(.sr-only) + :not(.sr-only) {
-        margin-top: 2.5rem;
+        margin-top: 1.25rem;
         border-top: $line solid $ink;
-        padding-top: 2.5rem;
+        padding-top: 1.25rem;
     }
 }
 
 .settings-panel {
     header {
-        margin-bottom: 1.5rem;
+        margin-bottom: 0;
 
         h2 {
             @include mix.display-type;
@@ -321,36 +323,7 @@
     }
 
     [data-slot='button'] {
-        min-height: 2.75rem;
-        border: 0.125rem solid $ink;
-        border-radius: 0.72rem;
-        padding: 0.55rem 0.95rem;
-        background: $coral;
-        color: $ink;
-        box-shadow: 0.2rem 0.2rem 0 $ink;
-        font-family: $body;
-        font-size: 0.86rem;
-        font-weight: 900;
-        transition:
-            translate 120ms ease,
-            box-shadow 120ms ease,
-            background-color 120ms ease;
-
-        &:hover {
-            background: $yellow;
-            color: $ink;
-            box-shadow: 0.28rem 0.28rem 0 $ink;
-            translate: -0.06rem -0.06rem;
-        }
-
-        &:focus-visible {
-            @include mix.focus-ring;
-        }
-
-        &:disabled {
-            cursor: wait;
-            opacity: 0.6;
-        }
+        @include settings-button;
     }
 
     [role='radiogroup'] > label {
@@ -390,6 +363,36 @@
     box-shadow: 0.18rem 0.18rem 0 $lavender;
 }
 
+.settings-profile__session {
+    border-top: $line solid $ink;
+    padding-top: 1.25rem;
+}
+
+.settings-profile__verification-link {
+    color: $ink;
+    text-decoration-color: $muted;
+
+    &:hover {
+        text-decoration-color: $ink;
+    }
+
+    &:focus-visible {
+        @include mix.focus-ring;
+    }
+}
+
+.settings-profile__verification-sent {
+    margin-top: 0.75rem;
+    border: 0.125rem solid $ink;
+    border-radius: 0.7rem;
+    padding: 0.65rem 0.75rem;
+    background: $cyan;
+    color: $ink;
+    box-shadow: 0.16rem 0.16rem 0 $ink;
+    font-size: 0.86rem;
+    font-weight: 800;
+}
+
 .settings-avatar-current {
     border: 0.125rem solid $ink;
     border-radius: 0.9rem;
@@ -420,8 +423,17 @@
     }
 }
 
+.settings-provider-status[data-slot='badge'] {
+    border-color: $ink;
+    background: $lavender;
+    color: $ink;
+    font-weight: 800;
+}
+
 .settings-credential-list {
+    overflow: hidden;
     border: 0.125rem solid $ink;
+    border-radius: 0.9rem;
     background: $white;
     box-shadow: 0.18rem 0.18rem 0 $lavender;
 }
@@ -429,6 +441,22 @@
 .settings-credential-item {
     border-color: $ink;
     color: $ink;
+}
+
+.settings-credential-tag {
+    border: 0.125rem solid $ink;
+    background: $lavender;
+    color: $ink;
+    font-weight: 800;
+}
+
+.settings-panel .settings-destructive-icon[data-slot='button'] {
+    color: $error;
+
+    &:hover {
+        background: $lavender;
+        color: $error;
+    }
 }
 
 .settings-credential-icon,
@@ -612,29 +640,7 @@
     }
 
     [data-slot='button'] {
-        min-height: 2.75rem;
-        border: 0.125rem solid $ink;
-        border-radius: 0.7rem;
-        background: $coral;
-        color: $ink;
-        box-shadow: 0.18rem 0.18rem 0 $ink;
-        font-family: $body;
-        font-weight: 900;
-        transition:
-            translate 120ms ease,
-            box-shadow 120ms ease,
-            background-color 120ms ease;
-
-        &:hover {
-            background: $yellow;
-            color: $ink;
-            box-shadow: 0.25rem 0.25rem 0 $ink;
-            translate: -0.05rem -0.05rem;
-        }
-
-        &:focus-visible {
-            @include mix.focus-ring;
-        }
+        @include settings-button;
     }
 
     [data-slot='dialog-footer'] {
@@ -644,6 +650,7 @@
 
 .settings-dialog .settings-dialog__close[data-slot='button'] {
     z-index: 2;
+    border-color: $ink;
     border-radius: 50%;
     padding: 0;
     background: $white;
@@ -655,6 +662,71 @@
 }
 
 .settings-two-factor-dialog {
+    .settings-two-factor-scan {
+        border: 0.125rem solid $ink;
+        background: $yellow;
+        box-shadow: 0.16rem 0.16rem 0 $ink;
+    }
+
+    .settings-two-factor-scan__inner {
+        border: 0.125rem solid $ink;
+        background: $cyan;
+
+        [class*='border-'] {
+            border-color: $ink;
+        }
+    }
+
+    .settings-two-factor-qr {
+        border: $line solid $ink;
+        background: $white;
+        box-shadow: 0.3rem 0.3rem 0 $ink;
+    }
+
+    .settings-two-factor-divider {
+        background: $ink;
+    }
+
+    .settings-two-factor-divider__label {
+        background: $paper;
+        color: $muted;
+        font-size: 0.8rem;
+        font-weight: 800;
+    }
+
+    .settings-two-factor-key {
+        border: 0.125rem solid $ink;
+        background: $white;
+        box-shadow: 0.16rem 0.16rem 0 $ink;
+
+        &:focus-within {
+            box-shadow: 0.2rem 0.2rem 0 $cyan;
+        }
+    }
+
+    .settings-two-factor-key__value {
+        background: $white;
+        color: $ink;
+    }
+
+    .settings-two-factor-key__copy {
+        min-width: 2.75rem;
+        border: 0;
+        border-left: 0.125rem solid $ink;
+        background: $yellow;
+        color: $ink;
+
+        &:hover {
+            background: $cyan;
+        }
+
+        &:focus-visible {
+            @include mix.focus-ring;
+            position: relative;
+            z-index: 1;
+        }
+    }
+
     [data-slot='dialog-header'] > div:first-child {
         border: 0.125rem solid $ink;
         background: $yellow;
@@ -692,7 +764,6 @@
 
     .settings-shell .site-footer__inner {
         align-items: center;
-        flex-direction: column;
         text-align: center;
     }
 }
@@ -703,30 +774,8 @@
         margin-top: 0.8rem;
     }
 
-    .settings-page__hero {
-        min-height: 8.5rem;
-        padding: 1.25rem;
-    }
-
-    .settings-page__hero-copy {
-        h1 {
-            font-size: 2.15rem;
-        }
-
-        p {
-            font-size: 0.86rem;
-        }
-    }
-
-    .settings-page__frames {
-        position: absolute;
-        right: -3.7rem;
-        opacity: 0.45;
-    }
-
     .settings-page__workspace {
         gap: 1rem;
-        margin-top: 1rem;
     }
 
     .settings-nav {
@@ -749,8 +798,8 @@
         padding: 1.2rem;
 
         > :not(.sr-only) + :not(.sr-only) {
-            margin-top: 2rem;
-            padding-top: 2rem;
+            margin-top: 1rem;
+            padding-top: 1rem;
         }
     }
 }

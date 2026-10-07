@@ -35,9 +35,7 @@
     .public-shell--legal {
         > footer > div {
             width: min(100% - 1rem, 76rem);
-            align-items: flex-start;
-            flex-direction: column;
-            padding-block: 1rem;
+            align-items: center;
         }
     }
 

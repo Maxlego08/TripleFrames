@@ -91,7 +91,7 @@ export function CinemaSeatMap({
                     <span className="cinema-room__tier cinema-room__tier--front" />
                 </div>
 
-                <ul className="cinema-room__seats" aria-live="polite">
+                <ul className="cinema-room__seats">
                     {Array.from({ length: ROOM_SEATS }, (_, index) => {
                         const position = index + 1;
                         const seat = slots.get(position);

@@ -12,6 +12,7 @@ use App\Models\Movie;
 use App\Models\Room;
 use App\Models\Round;
 use App\Models\RoundTier;
+use App\Support\Game\RevealFramesPresenter;
 use App\Support\Game\RevealMovieBuilder;
 use App\Support\Game\RoundStep;
 use App\Support\Game\TierImageRefPresenter;
@@ -163,7 +164,9 @@ final readonly class RevealRound
      * La charge de `round.revealed` (§ 11.5) : titres par le seul
      * constructeur de `RevealMovie`, une `TierImageRef` par palier **ouvert**
      * (`served_at` non nul), par `tier_index` — jamais un palier non ouvert
-     * (D14 du 23/09) —, trouvailles et classement en portée publiable.
+     * (D14 du 23/09) —, l'identité publique des images servies pour le lien
+     * « Signaler » ({@see RevealFramesPresenter}, D63 du 07/10), trouvailles
+     * et classement en portée publiable.
      *
      * @return array<string, mixed>
      */
@@ -174,11 +177,14 @@ final readonly class RevealRound
 
         $lockedRound->setRelation('game', $lockedGame);
 
-        $images = RoundTier::query()
+        $openedTiers = RoundTier::query()
             ->where('round_id', $lockedRound->id)
             ->whereNotNull('served_at')
+            ->with('servedFrame')
             ->orderBy('tier_index')
-            ->get()
+            ->get();
+
+        $images = $openedTiers
             ->map(static fn (RoundTier $tier): array => TierImageRefPresenter::image(
                 $lockedGame,
                 $tier->setRelation('round', $lockedRound),
@@ -192,6 +198,7 @@ final readonly class RevealRound
             'revealEndsAt' => WireTime::iso($revealEndsAt),
             'movie' => RevealMovieBuilder::build(Movie::query()->findOrFail($lockedRound->movie_id)),
             'images' => $images,
+            'frames' => RevealFramesPresenter::frames($openedTiers),
             'finders' => Scoreboard::roundFinders($lockedRound),
             'leaderboard' => Scoreboard::leaderboard($lockedGame, $lockedRound),
         ];

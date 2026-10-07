@@ -4,6 +4,7 @@ use App\Http\Controllers\Admin\AccessController;
 use App\Http\Controllers\Admin\AudienceController;
 use App\Http\Controllers\Admin\AvatarModerationController;
 use App\Http\Controllers\Admin\CatalogController;
+use App\Http\Controllers\Admin\ContentReportController;
 use App\Http\Controllers\Admin\CurationHeartbeatController;
 use App\Http\Controllers\Admin\CurationQueueController;
 use App\Http\Controllers\Admin\DashboardController;
@@ -47,6 +48,7 @@ use App\Http\Controllers\Admin\TwoFactorRequiredController;
 use App\Http\Controllers\Admin\UserDirectoryController;
 use App\Models\AdminAction;
 use App\Models\AudienceDaily;
+use App\Models\ContentReport;
 use App\Models\Frame;
 use App\Models\FrameReview;
 use App\Models\Game;
@@ -452,6 +454,26 @@ Route::middleware(['auth', 'verified', 'role:curator', 'admin.2fa', 'admin.local
         Route::post('near-misses/{nearMiss}/dismiss', [NearMissController::class, 'dismiss'])
             ->middleware(['can:dismiss,nearMiss', 'throttle:admin-curation'])
             ->name('near_misses.dismiss');
+
+        // Les signalements de contenu par les joueurs (D63 du 07/10, § 11.6,
+        // ligne 48) : curateur et au-delà, file groupée par cible. Chaque
+        // geste repasse en plus, sous verrou, par la policy de ce qu'il
+        // change (`MoviePolicy::unpublish`, `FramePolicy::unpublish`).
+        Route::get('content-reports', [ContentReportController::class, 'index'])
+            ->middleware('can:viewAny,'.ContentReport::class)
+            ->name('content-reports.index');
+
+        Route::post('content-reports/{contentReport}/unpublish-movie', [ContentReportController::class, 'unpublishMovie'])
+            ->middleware(['can:resolve,contentReport', 'throttle:admin-curation'])
+            ->name('content-reports.unpublish-movie');
+
+        Route::post('content-reports/{contentReport}/unpublish-frame', [ContentReportController::class, 'unpublishFrame'])
+            ->middleware(['can:resolve,contentReport', 'throttle:admin-curation'])
+            ->name('content-reports.unpublish-frame');
+
+        Route::post('content-reports/{contentReport}/dismiss', [ContentReportController::class, 'dismiss'])
+            ->middleware(['can:resolve,contentReport', 'throttle:admin-curation'])
+            ->name('content-reports.dismiss');
 
         // Les écrans de l'administrateur seul (§ 2.8, lignes 34 et 40) :
         // une seconde porte, `role:admin`, en plus de la garde `can:` de

@@ -165,9 +165,9 @@ export function ShareCode({ code, url }: ShareCodeProps) {
 
                 <div className="room-code__display">
                     <p id={titleId}>{t('room.lobby.code_label')}</p>
-                    <output aria-live="polite">
+                    <span className="room-code__value">
                         {visible ? code : '****'}
-                    </output>
+                    </span>
                 </div>
 
                 <button

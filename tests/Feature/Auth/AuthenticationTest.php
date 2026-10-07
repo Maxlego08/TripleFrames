@@ -63,6 +63,16 @@ test('users can logout', function () {
     $this->assertGuest();
 });
 
+test('profile exposes the logout action', function () {
+    $profile = (string) file_get_contents(resource_path('js/pages/settings/profile.tsx'));
+
+    expect($profile)
+        ->toContain('href={logout()}')
+        ->toContain("t('common.nav.log_out')")
+        ->toContain('router.flushAll()')
+        ->toContain('data-test="logout-button"');
+});
+
 test('users are rate limited', function () {
     $user = User::factory()->create();
 

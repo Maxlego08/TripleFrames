@@ -36,6 +36,11 @@ use App\Support\Admin\AdminJournal;
  * - un cas entré par **D49 du 01/10** (spec 40 § 11.7) : `avatar.removed`,
  *   le retrait d'une image téléversée par l'administrateur, motif obligatoire.
  *
+ * - un cas entré par **D63 du 07/10** (spec 10 § 8.3, spec 20 § 11.6) :
+ *   `content_report.dismissed`, sujet {@see AdminActionSubject::ContentReport},
+ *   la clôture sans suite des signalements ouverts d'une cible, motif
+ *   facultatif, le nombre de signalements clos en `details`.
+ *
  * Tous sans migration de colonne : `action` reste un `string(40)`. `10`
  * possède la liste ; un cas nouveau s'y demande en exigence, jamais par un
  * ajout direct ici.
@@ -205,6 +210,11 @@ enum AdminActionType: string
     /** La fiche d'un siège : ses parties et ses réponses. */
     case PlayerViewed = 'player.viewed';
 
+    // --- D63 du 07/10 : signalements de contenu par les joueurs ------------
+
+    /** Les signalements ouverts d'une cible clos sans dépublication. */
+    case ContentReportDismissed = 'content_report.dismissed';
+
     /** Préfixe des libellés du back-office, un par cas. */
     public const string LABEL_PREFIX = 'admin.enum.admin_action.';
 
@@ -245,6 +255,7 @@ enum AdminActionType: string
             AdminActionSubject::Site,
             AdminActionSubject::ImportRun,
             AdminActionSubject::Theme,
+            AdminActionSubject::ContentReport,
             AdminActionSubject::Accounts,
             AdminActionSubject::Game,
             AdminActionSubject::Games,
@@ -314,6 +325,7 @@ enum AdminActionType: string
             self::ThemeUpdated,
             self::ThemePublished,
             self::ThemeUnpublished => AdminActionSubject::Theme,
+            self::ContentReportDismissed => AdminActionSubject::ContentReport,
         };
     }
 
@@ -369,6 +381,7 @@ enum AdminActionType: string
             self::ThemeUpdated,
             self::ThemePublished,
             self::ThemeUnpublished,
+            self::ContentReportDismissed,
         ], true);
     }
 

@@ -4,6 +4,7 @@ namespace App\ValueObjects\Admin;
 
 use App\Casts\AdminActionDetailsCast;
 use App\Enums\ContentOrigin;
+use App\Enums\ContentReportResolution;
 use App\Enums\FrameLevel;
 use App\Enums\FrameProcessingFailure;
 use App\Enums\FrameSourceKind;
@@ -252,6 +253,21 @@ final readonly class AdminActionDetails implements JsonSerializable
     {
         return new self([
             'works' => $works,
+        ]);
+    }
+
+    /**
+     * `content_report.dismissed` (D63 du 07/10) : la cible — film, et image
+     * si le groupe vise une image —, l'issue et le nombre de signalements
+     * clos. Jamais le texte libre d'un joueur : la ligne est permanente.
+     */
+    public static function contentReportsDismissed(int $movieId, ?int $frameId, ContentReportResolution $resolution, int $closed): self
+    {
+        return new self([
+            'movie_id' => $movieId,
+            'frame_id' => $frameId,
+            'resolution' => $resolution->value,
+            'closed' => $closed,
         ]);
     }
 

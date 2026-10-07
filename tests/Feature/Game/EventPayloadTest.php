@@ -65,6 +65,7 @@ use App\Support\Game\RoundStep;
 use App\Support\Game\TransitionBroadcasts;
 use App\Support\Identity\PlayerToken;
 use App\Support\Identity\PlayerTokenCookie;
+use App\Support\Identity\PublicId;
 use App\Support\Realtime\ChannelNames;
 use App\Support\Realtime\GameRef;
 use App\Support\Realtime\GameWire;
@@ -148,7 +149,7 @@ function eventPayloadClosedList(): array
         'tier.opened' => [TierOpened::class, 'room', ['sequenceIndex', 'roundNumber', 'tierIndex', 'opensAt', 'next', 'choicesUnavailable']],
         'player.locked' => [PlayerLocked::class, 'room', ['sequenceIndex', 'publicId', 'lockRank']],
         'round.closed' => [RoundClosed::class, 'room', ['sequenceIndex', 'roundNumber', 'endedAt', 'revealStartsAt', 'revealEndsAt']],
-        'round.revealed' => [RoundRevealed::class, 'room', ['sequenceIndex', 'roundNumber', 'revealEndsAt', 'movie', 'images', 'finders', 'leaderboard']],
+        'round.revealed' => [RoundRevealed::class, 'room', ['sequenceIndex', 'roundNumber', 'revealEndsAt', 'movie', 'images', 'frames', 'finders', 'leaderboard']],
         'round.cancelled' => [RoundCancelled::class, 'room', ['sequenceIndex', 'roundNumber']],
         'game.paused' => [GamePaused::class, 'room', ['pausedAt', 'interruptsAt']],
         'game.resumed' => [GameResumed::class, 'room', ['resumedAt']],
@@ -1144,6 +1145,7 @@ it("chaque titre de la révélation porte l'attribut lang de la locale atteinte"
             'originalLanguage' => $movie->original_language,
             'year' => $movie->release_year,
             'letterboxdUrl' => "https://letterboxd.com/tmdb/{$movie->tmdb_id}/",
+            'tmdb' => $movie->tmdb_id,
         ], $label)
             // Une entrée par locale activée, dans l'ordre du registre.
             ->and(array_keys($packet['titles'] ?? []))->toBe(array_map(static fn (Locale $locale): string => $locale->value, Locale::cases()), $label);
@@ -1986,6 +1988,8 @@ it('chaque charge aux bornes tient sous la borne de requête de Reverb, pire cas
             'revealEndsAt' => WireTime::iso(Date::now()->toImmutable()),
             'movie' => RevealMovieBuilder::build(Movie::query()->findOrFail($last->movie_id)),
             'images' => array_map(static fn (int $tierIndex): array => WireFixtures::image($game, $last, $tierIndex), range(1, $game->frames_per_round)),
+            // Pire cas : une identité publique par palier (D63 du 07/10).
+            'frames' => array_map(static fn (int $tierIndex): array => ['tierIndex' => $tierIndex, 'framePublicId' => str_repeat('Z', PublicId::LENGTH)], range(1, $game->frames_per_round)),
             'finders' => Scoreboard::roundFinders($last),
             'leaderboard' => Scoreboard::leaderboard($game, $last),
         ]),

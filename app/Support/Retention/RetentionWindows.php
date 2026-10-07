@@ -56,6 +56,13 @@ final class RetentionWindows
     public const int VISITOR_MONTHS = 13;
 
     /**
+     * `content_report` : un signalement de contenu par un joueur, supprimé
+     * 12 mois après `created_at`, ouvert ou clos — son texte libre est une
+     * donnée de joueur (D63 du 07/10).
+     */
+    public const int CONTENT_REPORT_MONTHS = 12;
+
+    /**
      * Filet `stale_room` : un salon non archivé 48 h après sa dernière
      * activité, archivé de force par l'action d'archivage de 50
      * (`StaleRoomHandler`). La sonde n° 2 de 10 § 11.3 lit la même durée.

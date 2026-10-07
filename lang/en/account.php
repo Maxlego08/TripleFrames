@@ -134,11 +134,13 @@ return [
         'setup' => [
             'code_placeholder' => 'Enter the 6-digit code',
             'confirm' => 'Confirm',
+            'copy_key' => 'Copy setup key',
             'done' => [
                 'description' => 'Two-factor authentication is now enabled. Scan the QR code or enter the setup key in your authenticator app.',
                 'heading' => 'Two-factor authentication enabled',
                 'submit' => 'Close',
             ],
+            'key_copied' => 'Setup key copied',
             'manual_entry' => 'or enter the setup key manually',
             'scan' => [
                 'description' => 'To finish enabling two-factor authentication, scan the QR code or enter the setup key in your authenticator app',

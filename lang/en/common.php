@@ -33,6 +33,7 @@ return [
     ],
 
     'nav' => [
+        'admin' => 'Admin',
         'dashboard' => 'Dashboard',
         'home' => 'Home',
         'log_in' => 'Log in',

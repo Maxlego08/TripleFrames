@@ -30,6 +30,7 @@ return [
     ],
 
     'nav' => [
+        'admin' => 'Administration',
         'dashboard' => 'Tableau de bord',
         'home' => 'Accueil',
         'log_in' => 'Se connecter',

@@ -4,6 +4,7 @@ use App\Avatars\AvatarPresetCatalog;
 use App\Avatars\AvatarRef;
 use App\Enums\AdminActionSubject;
 use App\Enums\AdminActionType;
+use App\Enums\ContentReportReason;
 use App\Enums\ErrorPageStatus;
 use App\Enums\FrameProcessingFailure;
 use App\Enums\InputDifficulty;
@@ -449,6 +450,12 @@ it('carries every key built by an enumerable key constructor', function () {
             static fn (AdminActionSubject $subject): string => $subject->labelKey(),
             AdminActionSubject::cases(),
         ),
+        // Motifs d'un signalement de contenu, côté joueur et côté
+        // back-office (D63 du 07/10).
+        ...array_merge(...array_map(
+            static fn (ContentReportReason $reason): array => [$reason->labelKey(), $reason->adminLabelKey()],
+            ContentReportReason::cases(),
+        )),
         // Refus d'un cadre de recadrage (20 § 5.2, L20-4).
         ...array_map(
             static fn (CropViolation $violation): string => $violation->translationKey(),

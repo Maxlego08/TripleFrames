@@ -43,6 +43,8 @@ return [
         'curation' => 'File de curation',
         'catalog' => 'Catalogue',
         'near_misses' => 'Suggestions d’alias',
+        // Les signalements de contenu par les joueurs (ligne 48, D63 du 07/10).
+        'content_reports' => 'Signalements',
         // L'écran des thèmes (spec 20 § 9.6, D43 du 01/10).
         'themes' => 'Thèmes',
         'import' => 'Import',
@@ -440,6 +442,7 @@ return [
             'theme_updated' => 'Thème corrigé',
             'theme_published' => 'Thème publié',
             'theme_unpublished' => 'Thème dépublié',
+            'content_report_dismissed' => 'Signalements ignorés',
         ],
         'admin_action_subject' => [
             'movie' => 'Film',
@@ -454,6 +457,7 @@ return [
             'game' => 'Partie',
             'games' => 'Parties',
             'players' => 'Joueurs',
+            'content_report' => 'Signalement de contenu',
         ],
     ],
 
@@ -736,6 +740,85 @@ return [
     | n'apparaît qu'après trois manches distinctes ; elle reste une suggestion
     | jusqu'au geste explicite d'un curateur.
     */
+    /*
+    | La file des signalements de contenu par les joueurs (spec 20 § 11.6,
+    | D63 du 07/10) : groupée par cible, curateur et au-delà. Aucun effet
+    | automatique ; dépublier reprend les gestes du catalogue et de la banque.
+    */
+    'content_report' => [
+        'title' => 'Signalements de contenu',
+        'heading' => 'Signalements de contenu',
+        'description' => 'Films et images signalés par les joueurs depuis la révélation ou le podium. Un signalement ne change rien tout seul : à vous de décider.',
+        'empty' => 'Aucun signalement à examiner.',
+        'empty_closed' => 'Aucun signalement traité.',
+        'list' => 'Cibles signalées',
+        'filters' => [
+            'label' => 'Afficher',
+            'open' => 'À traiter',
+            'closed' => 'Traités',
+        ],
+        'counts' => [
+            'open_targets' => 'Cibles à traiter : :count',
+            'open_reports' => 'Signalements ouverts : :count',
+        ],
+        'scope' => [
+            'frame' => 'Image',
+            'movie' => 'Film entier',
+        ],
+        'reasons' => [
+            'wrong_movie' => 'Pas ce film, ou fiche fausse',
+            'title_visible' => 'Titre ou texte révélateur lisible',
+            'wrong_level' => 'Niveau inadapté',
+            'poor_quality' => 'Mauvaise qualité',
+            'offensive' => 'Contenu choquant',
+            'other' => 'Autre',
+        ],
+        'resolution' => [
+            'movie_unpublished' => 'Film dépublié',
+            'frame_unpublished' => 'Image dépubliée',
+            'dismissed' => 'Ignoré',
+            'already_handled' => 'Déjà hors jeu',
+        ],
+        'column' => [
+            'target' => 'Cible',
+            'reasons' => 'Motifs',
+            'comments' => 'Derniers commentaires',
+            'reported' => 'Signalé',
+            'actions' => 'Actions',
+        ],
+        'reports_count' => ':count signalement(s)',
+        'reported_between' => 'Du :first au :last',
+        'frame_level' => 'Niveau :level',
+        'thumbnail_alt' => 'Image signalée de « :title »',
+        'movie_link' => 'Fiche du film',
+        'bank_link' => 'Banque d’images',
+        'coverage_warning' => 'Dépublier cette image casse la couverture 1-3-5 : le film restera jouable jusqu’à :max images par manche.',
+        'coverage_warning_unplayable' => 'Dépublier cette image rend le film injouable.',
+        'actions' => [
+            'unpublish_movie' => 'Dépublier le film',
+            'unpublish_frame' => 'Dépublier l’image',
+            'dismiss' => 'Ignorer',
+        ],
+        'resolved_on' => 'Traité le :date',
+        'availability' => 'État actuel : :state',
+        'reason_required_label' => 'Motif (obligatoire)',
+        'reason_optional_label' => 'Motif (facultatif), inscrit au journal',
+        'gesture_label' => ':action — :title',
+        'dialogs' => [
+            'unpublish_movie_title' => 'Dépublier « :title » ?',
+            'unpublish_movie_description' => 'Le film sort du jeu et tous ses signalements ouverts sont clos. Le motif est obligatoire.',
+            'unpublish_frame_title' => 'Dépublier cette image ?',
+            'unpublish_frame_description' => 'L’image sort du jeu et ses signalements ouverts sont clos.',
+            'dismiss_title' => 'Ignorer ces signalements ?',
+            'dismiss_description' => 'La cible reste en jeu ; ses signalements ouverts sont clos et le geste est journalisé.',
+        ],
+        'flash' => [
+            'movie_unpublished' => 'Film dépublié. Signalements clos : :count.',
+            'frame_unpublished' => 'Image dépubliée. Signalements clos : :count.',
+            'dismissed' => 'Signalements ignorés : :count.',
+        ],
+    ],
+
     'near_misses' => [
         'title' => 'Suggestions d’alias',
         'heading' => 'Suggestions d’alias',

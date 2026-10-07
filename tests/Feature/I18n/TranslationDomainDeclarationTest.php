@@ -92,6 +92,8 @@ function domainDeclarationTable(): array
         'pages/settings/' => $account,
         'pages/game/' => $game,
         'pages/room/' => ['common', 'legal', 'room'],
+        // Le signalement de contenu par un joueur (D63 du 07/10).
+        'pages/report/' => ['common', 'game', 'legal'],
         'pages/admin/' => $admin,
 
         // Répertoires rattachés (§ 6.3, L90-3).

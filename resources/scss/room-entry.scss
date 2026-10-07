@@ -119,7 +119,10 @@
 }
 
 .room-entry-form {
-    p {
+    // Jamais un avis (`.room-entry-notice`) : posé dans le formulaire, il
+    // prendrait sinon le gris atténué sur son fond de couleur, sous le
+    // contraste AA (page `report/create`).
+    p:not(.room-entry-notice) {
         color: $muted;
         font-size: 0.8rem;
         line-height: 1.45;

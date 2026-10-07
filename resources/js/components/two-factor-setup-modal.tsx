@@ -26,8 +26,8 @@ import { confirm } from '@/routes/two-factor';
 
 function GridScanIcon() {
     return (
-        <div className="mb-3 rounded-full border border-border bg-card p-0.5 shadow-sm">
-            <div className="relative overflow-hidden rounded-full border border-border bg-muted p-2.5">
+        <div className="settings-two-factor-scan mb-3 rounded-full p-0.5">
+            <div className="settings-two-factor-scan__inner relative overflow-hidden rounded-full p-2.5">
                 <div className="absolute inset-0 grid grid-cols-5 opacity-50">
                     {Array.from({ length: 5 }, (_, i) => (
                         <div
@@ -65,7 +65,8 @@ function TwoFactorSetupStep({
 }) {
     const [copiedText, copy] = useClipboard();
     const { t } = useTranslations();
-    const IconComponent = copiedText === manualSetupKey ? Check : Copy;
+    const copied = copiedText === manualSetupKey;
+    const IconComponent = copied ? Check : Copy;
 
     return (
         <>
@@ -74,7 +75,7 @@ function TwoFactorSetupStep({
             ) : (
                 <>
                     <div className="mx-auto flex max-w-md overflow-hidden">
-                        <div className="mx-auto aspect-square w-64 rounded-lg border border-border">
+                        <div className="settings-two-factor-qr mx-auto aspect-square w-64 rounded-lg">
                             <div className="z-10 flex h-full w-full items-center justify-center p-5">
                                 {qrCodeSvg ? (
                                     <div
@@ -102,14 +103,14 @@ function TwoFactorSetupStep({
                     </div>
 
                     <div className="relative flex w-full items-center justify-center">
-                        <div className="absolute inset-0 top-1/2 h-px w-full bg-border" />
-                        <span className="relative bg-card px-2 py-1">
+                        <div className="settings-two-factor-divider absolute inset-0 top-1/2 h-px w-full" />
+                        <span className="settings-two-factor-divider__label relative px-2 py-1">
                             {t('account.two_factor.setup.manual_entry')}
                         </span>
                     </div>
 
                     <div className="flex w-full space-x-2">
-                        <div className="flex w-full items-stretch overflow-hidden rounded-xl border border-border">
+                        <div className="settings-two-factor-key flex w-full items-stretch overflow-hidden rounded-xl">
                             {!manualSetupKey ? (
                                 <div className="flex h-full w-full items-center justify-center bg-muted p-3">
                                     <Spinner
@@ -122,13 +123,22 @@ function TwoFactorSetupStep({
                                         type="text"
                                         readOnly
                                         value={manualSetupKey}
-                                        className="h-full w-full bg-background p-3 text-foreground outline-none"
+                                        className="settings-two-factor-key__value h-full w-full p-3 outline-none"
                                     />
                                     <button
+                                        type="button"
                                         onClick={() => copy(manualSetupKey)}
-                                        className="border-l border-border px-3 hover:bg-muted"
+                                        className="settings-two-factor-key__copy px-3"
+                                        aria-label={t(
+                                            copied
+                                                ? 'account.two_factor.setup.key_copied'
+                                                : 'account.two_factor.setup.copy_key',
+                                        )}
                                     >
-                                        <IconComponent className="w-4" />
+                                        <IconComponent
+                                            className="w-4"
+                                            aria-hidden="true"
+                                        />
                                     </button>
                                 </>
                             )}

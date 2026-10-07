@@ -22,12 +22,14 @@ use App\Models\Room;
 use App\Models\Round;
 use App\Models\RoundChoiceSet;
 use App\Models\RoundPlayer;
+use App\Models\RoundTier;
 use App\Settings\EngineConstants;
 use App\Settings\RoomSettings;
 use App\Settings\RoomSettingsBounds;
 use App\Support\Answers\ChoicesPresenter;
 use App\Support\Game\GameJournal;
 use App\Support\Game\GameStateBuilder;
+use App\Support\Game\RevealFramesPresenter;
 use App\Support\Game\RevealMovieBuilder;
 use App\Support\Game\SeatViewPresenter;
 use App\Support\Game\ServeGuard;
@@ -623,6 +625,10 @@ it('pendant la révélation, le paquet porte les URL des seuls paliers ouverts, 
             ])
             ->and($packet['round']['reveal'])->toBe([
                 'movie' => RevealMovieBuilder::build(Movie::query()->findOrFail($last->movie_id)),
+                // D63 du 07/10 : l'identité publique des images servies, paliers ouverts seuls.
+                'frames' => RevealFramesPresenter::frames(
+                    RoundTier::query()->where('round_id', $last->id)->whereNotNull('served_at')->with('servedFrame')->get(),
+                ),
                 'finders' => Scoreboard::roundFinders($last->refresh()),
             ]);
 
@@ -1286,6 +1292,6 @@ it('la forme du paquet de partie suit GameStatePacket, RoundState et SelfState d
             ->and(array_keys($packet['round']['images'][0]))->toBe($fields('TierImageRef'));
     }
 
-    expect(array_keys($packets[1]['round']['reveal'] ?? []))->toBe(['movie', 'finders'])
+    expect(array_keys($packets[1]['round']['reveal'] ?? []))->toBe(['movie', 'frames', 'finders'])
         ->and(array_keys($packets[1]['round']['reveal']['movie']))->toBe($fields('RevealMovie'));
 });

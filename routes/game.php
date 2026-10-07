@@ -3,6 +3,7 @@
 use App\Http\Controllers\Game\AnswerController;
 use App\Http\Controllers\Game\ChoiceController;
 use App\Http\Controllers\Game\ClockController;
+use App\Http\Controllers\Game\ContentReportController;
 use App\Http\Controllers\Game\FrameServeController;
 use App\Http\Controllers\Game\NextRoundController;
 use App\Http\Controllers\Game\RoomHeartbeatController;
@@ -22,6 +23,7 @@ use App\Http\Controllers\Room\RoomEntryController;
 use App\Http\Controllers\Room\RoomPresetController;
 use App\Http\Controllers\Room\RoomSettingsController;
 use App\Http\Controllers\Room\SeatAvatarController;
+use App\Http\Middleware\VaryOnLanguage;
 use App\Support\Room\RoomCode;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
@@ -277,3 +279,21 @@ Route::post('seat/{player:public_id}/answer', [AnswerController::class, 'store']
 Route::post('seat/{player:public_id}/choice', [ChoiceController::class, 'store'])
     ->name('round.choice.store')
     ->middleware(['seat.active', 'throttle:answer']);
+
+// Signaler un film ou une image vue en jeu (D63 du 07/10, spec 90 § 4.5 bis),
+// depuis la révélation ou le podium : `/report?movie=<tmdb_id>&frame=<public_id>`,
+// aucun identifiant interne. Page publique, coquille `PublicLayout`, domaine
+// `game` (`legal` comme toute route joueur), `noindex` permanent : la route ne
+// porte JAMAIS `RobotsDirectives::ROUTE_FLAG`. L'envoi exige un compte ou un
+// siège (403 sinon) et passe par le limiteur `content-report`. Distincte de
+// « signaler un contenu » (`takedown.create`, `/report-content`), la voie des
+// ayants droit, vers laquelle la page renvoie.
+Route::middleware('translations:game,legal')->group(function (): void {
+    Route::get('report', [ContentReportController::class, 'create'])
+        ->name('content-report.create')
+        ->defaults(VaryOnLanguage::ROUTE_FLAG, true);
+
+    Route::post('report', [ContentReportController::class, 'store'])
+        ->name('content-report.store')
+        ->middleware('throttle:content-report');
+});

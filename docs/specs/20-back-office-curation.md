@@ -60,7 +60,7 @@ Raison du découpage par jalon (aucune coupe du J1, D35 du 23/09) : au J1 le sit
 
 ### 2.1 Trois rôles, un seuil par policy [J1]
 
-`App\Enums\UserRole` [existant] : `player` ⊂ `curator` ⊂ `admin`, colonne `users.role` hors `#[Fillable]`, hiérarchie par `UserRole::atLeast()` (décision 9, `10` § 5.1). La ligne de partage n'est pas « qui touche au catalogue » mais **« qui engage le projet »** : le curateur importe, ajoute, recadre, classe, revoit, corrige, regroupe, publie et dépublie ; l'administrateur fait tout cela et **lui seul** modère, gère les accès, suspend, prononce un retrait juridique, décide d'une demande de retrait et inspecte une partie.
+`App\Enums\UserRole` [existant] : `player` ⊂ `curator` ⊂ `admin`, colonne `users.role` hors `#[Fillable]`, hiérarchie par `UserRole::atLeast()` (décision 9, `10` § 5.1). La ligne de partage n'est pas « qui touche au catalogue » mais **« qui engage le projet »** : le curateur importe, ajoute, recadre, classe, revoit, corrige, regroupe, publie et dépublie ; l'administrateur fait tout cela et **lui seul** modère, gère les accès, suspend, prononce un retrait juridique, décide d'une demande de retrait et inspecte une partie. **Exception écrite** (D63 du 07/10 — amendé le 07/10) : les **signalements de contenu** des joueurs ne sont pas de la modération mais un signal de curation — la file « Signalements de contenu » (§ 11.6) est ouverte au curateur, dont les seuls gestes y sont ceux qu'il possède déjà (dépublier, ignorer).
 
 **Jamais de `Gate::before`** : il donnerait à l'admin la `saved_config` d'un tiers, strictement privée (`CLAUDE.md` §5, test existant « un administrateur est REFUSÉ sur la saved_config d'un tiers »). Chaque policy pose son seuil par `atLeast()` et elle est **vérifiée à chaque écriture**, par le middleware `can:` de la route, jamais seulement à l'affichage d'un bouton. Les booléens `abilities` envoyés aux écrans (§ 4.3) ne servent qu'à masquer un bouton : ils n'autorisent rien.
 
@@ -118,6 +118,7 @@ Cette matrice est la table de vérité des écrans et de la famille de tests d'a
 | 45 | Avatars téléversés : liste, filtres « masqués » et « signalés », lever, retirer (§ 12.5) | `admin.avatars.index`, `admin.avatars.image`, `admin.avatars.unhide`, `admin.avatars.remove` (sous-groupe `role:admin`) | `UserPolicy::moderateAvatar` | **403** | 200 / 303 | `avatar.unhidden` ; `avatar.removed` (motif obligatoire) | J1 (D49 du 01/10 — amendé le 01/10) |
 | 46 | Lots d'images : aperçu à blanc, import par la file (§ 5.10) | `admin.frame_batch.index`, `admin.frame_batch.store`, `admin.frame_batch.import` (`throttle:admin-import` sur les deux écritures) | `FramePolicy::importBatch` ; `FramePolicy::create` rejouée par image | 200 / 302 | 200 / 302 | par image ajoutée : `frame.uploaded_by_id` ; `frame.added` | J1 (D57 du 05/10 — amendé le 05/10) |
 | 47 | Publier les films prêts : écran du lot, avertissement d'ambiguïté de chaque film, publication tout ou rien (§ 8.1 bis) | `admin.catalog.ready`, `admin.catalog.ready.publish` (`throttle:admin-curation` sur l'écriture) | `MoviePolicy::publishReady` ; `MoviePolicy::publish` rejouée par film | 200 / 302 | 200 / 302 | par film : `movie.published` | J1 (D59 du 06/10 — amendé le 06/10) |
+| 48 | Signalements de contenu : file groupée par cible, dépublier le film, dépublier l'image, ignorer (§ 11.6) | `admin.content-reports.index`, `admin.content-reports.unpublish-movie`, `admin.content-reports.unpublish-frame`, `admin.content-reports.dismiss` (`throttle:admin-curation` sur les trois écritures) | `ContentReportPolicy::viewAny` / `resolve` ; `MoviePolicy::unpublish` / `FramePolicy::unpublish` rejouées | 200 / 302 | 200 / 302 | `movie.unpublished` (motif obligatoire), `frame.unpublished`, `content_report.dismissed` ; `content_report.status`, `resolution`, `resolved_by_id` | J1 (D63 du 07/10 — amendé le 07/10) |
 
 ### 2.3 La porte `/admin` [J1]
 
@@ -165,7 +166,7 @@ D12 du 23/09 : l'attribution de `curator` ou `admin` exige un **nom réel**, dis
 
 ### 2.7 Journal `admin_action` : liste fermée, acteurs réservés, écrivain unique [J1 ; gestes selon le jalon]
 
-`10` possède le schéma et la liste (§ 8.3) ; cette spec en formule les exigences (E10-05) et en écrit l'unique écrivain. **22 cas** — les 21 du J1, dont 6 nouveaux le 23/09, plus `user.real_name_changed` inscrit le 28/09 (EN20-3) —, sans migration (`action string(40)`, `subject_type string(20)`, `subject_id` nullable existants) — amendé le 28/09. **41 cas depuis le 30/09** : les dix-neuf cas de D41 du 30/09 suivent ce premier tableau, dans le tableau « Règle D41 » plus bas — amendé le 30/09. **47 cas et 9 sujets depuis le 01/10** : `movie.frames_reviewed` (D42 du 30/09) et les cinq cas des thèmes (D43 du 01/10, « Cas des thèmes » plus bas) — amendé le 01/10 :
+`10` possède le schéma et la liste (§ 8.3) ; cette spec en formule les exigences (E10-05) et en écrit l'unique écrivain. **22 cas** — les 21 du J1, dont 6 nouveaux le 23/09, plus `user.real_name_changed` inscrit le 28/09 (EN20-3) —, sans migration (`action string(40)`, `subject_type string(20)`, `subject_id` nullable existants) — amendé le 28/09. **41 cas depuis le 30/09** : les dix-neuf cas de D41 du 30/09 suivent ce premier tableau, dans le tableau « Règle D41 » plus bas — amendé le 30/09. **47 cas et 9 sujets depuis le 01/10** : `movie.frames_reviewed` (D42 du 30/09) et les cinq cas des thèmes (D43 du 01/10, « Cas des thèmes » plus bas) — amendé le 01/10. **Un cas et un sujet de plus le 07/10** : `content_report.dismissed`, sujet `content_report` (D63 du 07/10, « Cas des signalements de contenu » plus bas) — amendé le 07/10 :
 
 | Valeur | Sujet | Motif | Acteur admis | Écrit par | Jalon du geste |
 |---|---|---|---|---|---|
@@ -301,6 +302,16 @@ Hors de `routes/admin.php`, le back-office n'atteint aucune écriture : `game.ph
 | `movie.theme_set` | movie | `admin.catalog.themes.update` (28) | `SetMovieThemeMembership` | `manual_state` du film pour ce thème change ; rien sinon |
 
 **Exception assumée à D41, le collage avec thèmes.** Les exceptions `added` posées par un collage (§ 3.3) n'écrivent **pas** de ligne `movie.theme_set` par film : le geste du curateur est le collage, journalisé une fois par `import.paste_started`, dont `details.theme_ids` porte les thèmes choisis ; la trace par film reste en base, `movie_theme.assigned_by_id` (l'auteur du collage) et `assigned_at`, et le rapport du balayage (`admin/import/show`) compte les thèmes appliqués et les films laissés hors du thème parce qu'un curateur les en avait retirés (`import_run.total_themes_applied` et `total_themes_kept_removed`, `10` § 9.1 — amendé le 01/10). Une ligne par film écrirait jusqu'à `paste_max_ids` × `paste_max_themes` lignes pour un seul clic, sans rien dire de plus que l'en-tête du collage. L'évaluation automatique n'écrit rien au journal (`30` § 13.2). `admin.themes.index` est une lecture ordinaire du catalogue, exclue au même motif que les lignes 1 à 4 (tableau des exclusions ci-dessus).
+
+#### Cas des signalements de contenu [J1, D63 du 07/10]
+
+**Un cas nouveau le 07/10** (D63 du 07/10 — amendé le 07/10), sujet nouveau **`content_report`** (`hasIdentifier()` vrai), classe `permanent`, motif facultatif, ni console ni système ; `subject_id` = le plus ancien signalement du groupe ; `details` : film, image, issue et nombre de signalements clos, jamais le texte libre (`10` § 8.3). Écrit par `AdminJournal::record()` dans la transaction qui clôt les signalements :
+
+| Valeur | Sujet | Route (matrice § 2.2) | Écrit par | Condition d'écriture |
+|---|---|---|---|---|
+| `content_report.dismissed` | content_report | `admin.content-reports.dismiss` (48) | geste « Ignorer » de la file | au moins un signalement ouvert de la cible passe `dismissed` ; rien sinon (geste idempotent) |
+
+Les deux dépublications depuis la file **n'ajoutent aucun cas** : elles passent par `UnpublishMovie` et `UnpublishFrame`, qui écrivent `movie.unpublished` et `frame.unpublished` comme depuis la fiche ; la clôture des signalements en `movie_unpublished` ou `frame_unpublished` se fait dans la même transaction, sans ligne par signalement. `admin.content-reports.index` est une lecture ordinaire du catalogue, exclue au même motif que les lignes 1 à 4 (aucun compte n'y est lu : le signaleur n'est jamais affiché). `AdminActionTypeTest` compte un cas et un sujet de plus.
 
 ### 2.8 Écran de gestion des accès et annuaire des comptes [J2, livrés en avance le 28/09]
 
@@ -1126,7 +1137,7 @@ Question 23. Page `admin/takedowns/index` et `admin/takedowns/show` (`TakedownCo
 
 ### 11.5 Modération des pseudos et des copies provider [J2]
 
-La **règle** — seuil de deux signaleurs distincts, masquage, chaîne de repli, notification, effet de `nickname.banned` — appartient à `40` ; cette spec fournit l'**écran** (n° 11 ; `questions-ouvertes.md` : « les écrans admin appartiennent à `20` ») et la ligne de matrice (§ 2.2, ligne 35). Page `admin/moderation/index`, admin seul : pseudos masqués (`player.nickname_masked_at`) et copies provider masquées (`users.avatar_provider_hidden_at`) avec leur `reports_count` et leur date ; « Lever le masquage » (`nickname.unmasked`, `avatar.unhidden`, motif facultatif) ; repérage d'un signaleur abusif par le décompte de ses signalements dans la fenêtre de rétention de `report`. Les avatars prédéfinis et les images de jeu ne sont **jamais** signalables (`10` § 8.1).
+La **règle** — seuil de deux signaleurs distincts, masquage, chaîne de repli, notification, effet de `nickname.banned` — appartient à `40` ; cette spec fournit l'**écran** (n° 11 ; `questions-ouvertes.md` : « les écrans admin appartiennent à `20` ») et la ligne de matrice (§ 2.2, ligne 35). Page `admin/moderation/index`, admin seul : pseudos masqués (`player.nickname_masked_at`) et copies provider masquées (`users.avatar_provider_hidden_at`) avec leur `reports_count` et leur date ; « Lever le masquage » (`nickname.unmasked`, `avatar.unhidden`, motif facultatif) ; repérage d'un signaleur abusif par le décompte de ses signalements dans la fenêtre de rétention de `report`. Les avatars prédéfinis ne sont **jamais** signalables (`10` § 8.1) ; les images de jeu ne le sont pas **ici** : leur signalement de contenu, sans effet automatique, a sa propre file (§ 11.6 — amendé le 07/10 (D63 du 07/10)).
 
 | Méthode | URI | Nom | Action | Garde | Requête |
 |---|---|---|---|---|---|
@@ -1135,6 +1146,31 @@ La **règle** — seuil de deux signaleurs distincts, masquage, chaîne de repli
 | POST | `admin/moderation/users/{user}/avatar/unhide` | `admin.moderation.avatar.unhide` | `ModerationAvatarController@store` | idem | idem |
 
 `{player}` et `{user}` sont liés par `id`, identifiant qui ne sort que vers le back-office (E10-11 (b)). Le nom exact des méthodes de policy est fixé par la section J2 de `40`, que le jeu `AdminRoutes` reprend à la lettre ; chaque levée écrit sa ligne (`nickname.unmasked`, `avatar.unhidden`) par `AdminJournal::record`, dans la transaction de l'état.
+
+### 11.6 Signalements de contenu des joueurs [J1, D63 du 07/10]
+
+Amendé le 07/10 (D63 du 07/10). La **règle** et la table appartiennent à `10` § 8.1 bis ; la page publique d'envoi à `90` § 4.5 bis ; cette spec fournit la **file** et ses gestes (matrice § 2.2, ligne 48). Un signalement de contenu est un **signal de curation**, jamais une modération communautaire : il ne change jamais l'état d'un film ni d'une image ; seul un geste humain d'un curateur le fait, et ce geste est le geste existant, journalisé comme tel.
+
+**Écran** `admin/content-reports/index` (`GET admin/content-reports` → `admin.content-reports.index`, `ContentReportPolicy::viewAny`, curateur et au-dessus) :
+
+- signalements **groupés par cible** — l'image si le signalement en vise une, sinon le film —, les cibles à signalements `open` d'abord ; filtre `status` (`open` par défaut, ou `closed`), paginé (`ContentReportIndexRequest`) ;
+- par cible : titre et année du film, niveau et état de l'image, **compte par raison** (`ContentReportReason`), derniers commentaires (texte libre affiché comme donnée), lien vers la fiche du film et sa banque d'images, vignette admin de l'image par la route d'aperçu existante (§ 5.8) ;
+- le signaleur n'est **jamais** nommé : ni pseudo, ni compte, seulement le nombre de signalements ;
+- entrée de menu « Signalements » dans `AdminLayout` (curateur et au-dessus) ; le **compteur des cibles ouvertes** s'affiche en tête de la page de la file, pas dans le menu (aucune prop partagée ne porte de compteur de navigation).
+
+**Gestes** (POST `admin/content-reports/{contentReport}/unpublish-movie|unpublish-frame|dismiss`, `throttle:admin-curation`, FormRequest dédiée, `ContentReportPolicy::resolve` **et** la policy du geste vérifiées à chaque écriture ; `resolve` ne pose **aucune condition sur la cible** : un film ou une image retirés gardent « Ignorer », qui clôt leurs signalements en `already_handled`, sans quoi ils resteraient ouverts jusqu'à la purge, les dépublications y restant refusées par leurs policies — précisé le 07/10 à la relecture). Un geste désigne la cible par **l'un de ses signalements** (le plus ancien encore ouvert, celui que la file présente) et agit sur la cible entière :
+
+| Nom | Effet | Requête | Clôture |
+|---|---|---|---|
+| `admin.content-reports.unpublish-movie` | `App\Actions\Curation\UnpublishReportedMovie`, qui appelle `UnpublishMovie` (§ 8.3), ligne `movie.unpublished` ; bouton masqué si `Gate::denies('unpublish', $movie)` | motif **obligatoire**, ≤ 500, saisi par le curateur | **tous** les signalements ouverts du film, portées film et image → `resolved` / `movie_unpublished` |
+| `admin.content-reports.unpublish-frame` | `App\Actions\Curation\UnpublishReportedFrame`, qui appelle `UnpublishFrame` (§ 8.4), ligne `frame.unpublished` ; avertissement de perte de couverture par `CoverageLossPreview::forFrame()` | motif facultatif | signalements ouverts de l'image → `resolved` / `frame_unpublished` |
+| `admin.content-reports.dismiss` | `App\Actions\Curation\DismissContentReports` : aucun changement de catalogue ; ligne `content_report.dismissed` (§ 2.7) | motif facultatif | signalements ouverts de la cible → `dismissed` / `dismissed` ; cible **déjà hors jeu** (film ou image non `published`) → `resolved` / `already_handled` |
+
+La clôture s'écrit **dans la transaction du geste**, avec `resolved_at` et `resolved_by_id` ; elle est **idempotente** : une cible sans signalement ouvert ne change pas et n'écrit aucune ligne de journal. La résolution `already_handled` est celle de « Ignorer » sur une cible déjà hors jeu : la clôture ne prétend pas écarter un signalement que la curation a déjà suivi.
+
+**Pas de suspension depuis cette file au J1** : la suspension conservatoire est un geste admin du J2 (§ 11.2, L20-20). Quand L20-20 sera livré, la file recevra un bouton « Suspendre » (admin seul) et sa clôture ; c'est une question restante (`questions-ouvertes.md`, D63 du 07/10), pas un oubli.
+
+**Rétention** : 12 mois sur `created_at`, quel que soit le statut (`10` § 11.1, périmètre `content_report`) ; les gestes survivent dans `admin_action`.
 
 ---
 
@@ -1399,6 +1435,7 @@ Estimations en heures, **barre « terminé » incluse** (tests Pest et Vitest, t
 | L20-35 | D42 du 30/09 — amendé le 30/09 ; **livré le 30/09** | Validation en lot des images d'un film (§ 7.9) : « Tout valider » sur la fiche et dans la file, une preuve par image, une ligne `movie.frames_reviewed` | L20-12, L20-34 | 2-3 (mesure du rédacteur, hors des totaux ci-dessous) | — |
 | L20-36 | D46 du 01/10 — amendé le 01/10 | Parties, sièges et réponses (§ 12.2) ; table `wrong_answer` écrite au refus compté (`10` § 7.6 bis, `70` § 7.5, § 7.6) | L70-5, L70-9 ; L20-34 | 8-12 | — |
 | L20-38 | D59 du 06/10 — amendé le 06/10 ; **livré le 06/10** | Publier les films prêts (§ 8.1 bis) : lot, avertissement du lot, publication tout ou rien | L20-13 (publication et aperçu) | 2-3 (mesure du rédacteur, hors des totaux ci-dessous) | — |
+| L20-39 | D63 du 07/10 — amendé le 07/10 | Signalements de contenu (§ 11.6) : file groupée par cible, compteur des cibles ouvertes sur la page, dépublier le film ou l'image depuis la file, ignorer ; cas `content_report.dismissed` ; clôture dans la transaction du geste | L20-8, L20-13, L20-34 ; `10` § 8.1 bis ; page `/report` de `90` (L90-11) | 5-7 (mesure du rédacteur, hors des totaux ci-dessous) | — |
 | L20-37 | D57 du 05/10 — amendé le 05/10 ; **livré le 05/10** | Lots d'images proposés hors production (§ 5.10) : collecte et export locaux, dépôt local, écran d'import en production | L20-7, L20-35 | 6-8 (mesure du rédacteur, hors des totaux ci-dessous) | — |
 
 **Taille J1 : 69 à 101 h**, tous lots livrés au J1 (D35 du 23/09). **Taille J2 : 62 à 89 h**, dont 6 à 8 h conditionnées à l'arbitrage de la capture (L20-19 porte en plus la correction du nom réel, conditionnée à EN20-3 ; L20-19, EN20-3 comprise, et l'annuaire des comptes sont livrés en avance le 28/09 — amendé le 28/09). Ce sont des mesures de taille, jamais un calendrier ni un budget à tenir (D36 du 23/09). Hors de ces tailles : la réserve de re-livraison après le pilote (environ 6 h de taille, `questions-ouvertes.md` § 8) et la constitution de la liste d'amorçage (4 à 6 h de travail produit du porteur, sur le chemin critique humain du J1, § 3.5). `00` § Jalons agrège les tailles des sections « Lots » de toutes les specs ; il n'en déduit aucune date — amendé le 23/09. Amendé le 28/09 (D38 du 28/09) : L20-33 passe au J1, livré — **taille J1 : 75 à 109 h**, **taille J2 : 56 à 81 h**, plus aucune heure conditionnée à l'arbitrage de la capture ; l'exclusion des visuels porteurs d'une langue (D39 du 28/09), livrée avec, tient dans la même mesure. Amendé le 01/10 (D43 du 01/10) : L20-28 passe au J1, élargi (9 à 13 h), la difficulté corrigée restant au J2 sous L20-28b (1 à 2 h) — **taille J1 : 84 à 122 h**, **taille J2 : 50 à 73 h**.
@@ -1678,6 +1715,14 @@ Amendé le 06/10. Règle et écran : § 8.1 bis ; ligne 47 de la matrice ; aucun
 - **Livré le 06/10 sur `develop`, non commité** :
   - **Fichiers** : `app/Support/Curation/ReadyBatch.php`, `app/Actions/Curation/PublishReadyMovies.php`, `app/Http/Controllers/Admin/MovieBatchPublishController.php`, `app/Http/Requests/Admin/MovieBatchPublishRequest.php` [nouveaux] ; `PublishMovie` découpée en `assertPublishable()` et `write()` (comportement inchangé) ; `AmbiguityPreview::forPublication()` reçoit `$alsoPublishing` ; `MoviePolicy::publishReady()` ; deux routes avant `catalog/{movie}` ; `resources/js/pages/admin/catalog/ready.tsx` [nouveau], bouton sur `admin/catalog/index`, types `AdminReadyBatch` ; clés `admin.catalog.publish_ready.*`.
   - **Tests** : `tests/Feature/Catalog/PublishReadyTest.php` [nouveau] — « l'écran liste les seuls brouillons prêts et met de côté ceux dont aucun titre ne se tape » ; « le lot publie chaque film au nom du curateur, une ligne de journal par film » ; « l'avertissement du lot compte les autres films du lot comme publiés » ; « un lot changé depuis son affichage ne publie aucun film » ; deux lignes de la matrice (`tests/Datasets/AdminRoutes.php`, ligne 47).
+
+### L20-39 — Signalements de contenu [D63 du 07/10]
+
+Amendé le 07/10. Règle et écran : § 11.6 ; ligne 48 de la matrice ; table `content_report` et colonne `frame.public_id` (`10` § 8.1 bis, § 4.1).
+
+- **Implémenté le 07/10 sur `develop`, non commité** : `ContentReportPolicy` (`viewAny`, `resolve`), contrôleur et FormRequest de la file, quatre routes `admin.content-reports.*` (gestes adressés par `{contentReport}`, le plus ancien signalement ouvert de la cible), actions `UnpublishReportedMovie`, `UnpublishReportedFrame` et `DismissContentReports`, cas `content_report.dismissed` et sujet `content_report`, page `admin/content-reports/index` (filtre ouvert/clos, compteur des cibles ouvertes), entrée de menu « Signalements » sans compteur, clés du domaine `admin`.
+- **Tests** : file et gestes dans `tests/Feature/Curation/ContentReportQueueTest.php` (domaine `Curation`, `100` § 3.2) — groupement par cible, clôture dans la transaction du geste, idempotence, journal ; lignes `admin.content-reports.*` de `tests/Datasets/AdminRoutes.php` (ligne 48) ; `AdminActionTypeTest` à un cas et un sujet de plus.
+- **Reste dû** : la suspension depuis la file (avec L20-20, J2) ; la relecture du porteur.
 
 ---
 

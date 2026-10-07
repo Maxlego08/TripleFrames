@@ -22,6 +22,7 @@ const TRANSLITERATED: RevealMovie = {
     originalLanguage: 'ja',
     year: 2003,
     letterboxdUrl: 'https://letterboxd.com/tmdb/1/',
+    tmdb: 1,
 };
 
 /**
@@ -38,6 +39,7 @@ const SAME_AS_ORIGINAL: RevealMovie = {
     originalLanguage: 'fr',
     year: null,
     letterboxdUrl: null,
+    tmdb: null,
 };
 
 /** Un film espagnol traduit, sans translittération. */
@@ -51,6 +53,7 @@ const TRANSLATED: RevealMovie = {
     originalLanguage: 'es',
     year: 1987,
     letterboxdUrl: null,
+    tmdb: null,
 };
 
 describe('reveal-titles', () => {

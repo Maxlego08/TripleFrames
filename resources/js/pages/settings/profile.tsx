@@ -1,4 +1,5 @@
-import { Form, Head, Link, usePage } from '@inertiajs/react';
+import { Form, Head, Link, router, usePage } from '@inertiajs/react';
+import { LogOut } from 'lucide-react';
 import ProfileController from '@/actions/App/Http/Controllers/Settings/ProfileController';
 import Heading from '@/components/heading';
 import InputError from '@/components/input-error';
@@ -6,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useTranslations } from '@/hooks/use-translations';
+import { logout } from '@/routes';
 import { edit } from '@/routes/profile';
 import { send } from '@/routes/verification';
 import type { Auth, BreadcrumbItem } from '@/types';
@@ -39,6 +41,10 @@ export default function Profile({
     if (!user) {
         return null;
     }
+
+    const handleLogout = () => {
+        router.flushAll();
+    };
 
     return (
         <>
@@ -117,7 +123,7 @@ export default function Profile({
                                             <Link
                                                 href={send()}
                                                 as="button"
-                                                className="text-foreground underline decoration-neutral-300 underline-offset-4 transition-colors duration-300 ease-out hover:decoration-current! dark:decoration-neutral-500"
+                                                className="settings-profile__verification-link rounded-sm underline underline-offset-4"
                                             >
                                                 {t(
                                                     'account.profile.verify_link',
@@ -127,7 +133,7 @@ export default function Profile({
 
                                         {status ===
                                             'verification-link-sent' && (
-                                            <div className="mt-2 text-sm font-medium text-green-600">
+                                            <div className="settings-profile__verification-sent">
                                                 {t(
                                                     'account.profile.verification_sent',
                                                 )}
@@ -147,6 +153,24 @@ export default function Profile({
                         </>
                     )}
                 </Form>
+
+                <div className="settings-profile__session">
+                    <Button
+                        variant="outline"
+                        className="settings-profile__logout"
+                        asChild
+                    >
+                        <Link
+                            href={logout()}
+                            as="button"
+                            onClick={handleLogout}
+                            data-test="logout-button"
+                        >
+                            <LogOut aria-hidden="true" />
+                            {t('common.nav.log_out')}
+                        </Link>
+                    </Button>
+                </div>
             </div>
         </>
     );

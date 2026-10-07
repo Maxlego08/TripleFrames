@@ -2,6 +2,7 @@
 
 use App\Settings\EngineConstants;
 use App\Settings\PlatformLimits;
+use App\Support\ContentReport\ContentReportRateLimits;
 use App\Support\Room\RoomRateLimits;
 
 return [
@@ -104,6 +105,21 @@ return [
     'room' => [
         'creates_per_hour' => RoomRateLimits::DEFAULT_CREATES_PER_HOUR,
         'joins_per_minute' => RoomRateLimits::DEFAULT_JOINS_PER_MINUTE,
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Signalement de contenu par les joueurs (D63 du 07/10)
+    |--------------------------------------------------------------------------
+    |
+    | Section lue EXCLUSIVEMENT par
+    | `App\Support\ContentReport\ContentReportRateLimits` : garde anti-abus
+    | du limiteur `content-report`, jamais une valeur de jeu.
+    |
+    */
+
+    'content_report' => [
+        'reports_per_hour' => ContentReportRateLimits::DEFAULT_REPORTS_PER_HOUR,
     ],
 
 ];

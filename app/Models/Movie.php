@@ -91,6 +91,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  * @property-read EloquentCollection<int, NearMiss> $nearMisses
  * @property-read EloquentCollection<int, Round> $rounds
  * @property-read EloquentCollection<int, TakedownRequest> $takedownRequests
+ * @property-read EloquentCollection<int, ContentReport> $contentReports
  */
 #[Table('movie')]
 #[Fillable(['collection_id', 'group_id', 'movie_difficulty_override'])]
@@ -385,5 +386,16 @@ class Movie extends Model
     public function takedownRequests(): HasMany
     {
         return $this->hasMany(TakedownRequest::class, 'target_movie_id');
+    }
+
+    /**
+     * Signalements de joueurs visant ce film ou l'une de ses images (D63 du
+     * 07/10). `restrictOnDelete`.
+     *
+     * @return HasMany<ContentReport, $this>
+     */
+    public function contentReports(): HasMany
+    {
+        return $this->hasMany(ContentReport::class);
     }
 }

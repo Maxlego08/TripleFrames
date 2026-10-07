@@ -278,6 +278,7 @@ export function GameStage({
                 roundNumber={round.roundNumber}
                 roundsCount={round.roundsCount}
                 movie={round.reveal.movie}
+                frames={round.reveal.frames}
                 finders={round.reveal.finders}
                 seats={state.seats}
                 leaderboard={state.leaderboard}

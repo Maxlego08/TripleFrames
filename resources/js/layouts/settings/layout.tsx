@@ -39,18 +39,6 @@ export default function SettingsLayout({ children }: PropsWithChildren) {
 
     return (
         <div className="settings-page">
-            <header className="settings-page__hero">
-                <div className="settings-page__hero-copy">
-                    <h1>{t('account.settings.heading')}</h1>
-                    <p>{t('account.settings.description')}</p>
-                </div>
-                <div className="settings-page__frames" aria-hidden="true">
-                    <span />
-                    <span />
-                    <span />
-                </div>
-            </header>
-
             <div className="settings-page__workspace">
                 <aside className="settings-nav">
                     <nav aria-label={t('account.settings.heading')}>

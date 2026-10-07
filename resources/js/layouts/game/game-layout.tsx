@@ -22,9 +22,8 @@ import type { GameLayoutProps } from '@/types/ui';
  *    expirée, le seul flash qu'une page de jeu subit ;
  * 2. `<main id="game-main">`, la page ;
  * 3. la ligne basse : le sélecteur de langue en icône seule et le déclencheur
- *    du pied de page replié — liens légaux et attribution TMDB dans une
- *    feuille, ouverts en nouvel onglet, jamais par une visite qui quitterait
- *    la partie ;
+ *    du pied de page replié — liens légaux dans une feuille, ouverts en nouvel
+ *    onglet, jamais par une visite qui quitterait la partie ;
  * 4. le bandeau de consentement, superposé en bas de la coquille ;
  * 5. `GameAnnouncer`, la SEULE région `aria-live` de la page (C16 § 4), montée
  *    dès la coquille parce qu'une région vivante doit exister avant son

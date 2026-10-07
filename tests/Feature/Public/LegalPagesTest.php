@@ -106,9 +106,19 @@ it('rend le corps légal dans un fragment français quelle que soit la locale du
     // par un lecteur d'écran (05 § Attribut `lang`).
     $source = legalPagesSource();
 
-    expect(preg_match('/<div\s+lang="fr"[^>]*?dangerouslySetInnerHTML=\{\{\s*__html:\s*body\s*\}\}/s', $source))
+    // Le corps passe d'abord par `prepareLegalDocument` (sommaire et ancres
+    // des sections), qui n'en rend que la forme préparée.
+    expect(preg_match('/prepareLegalDocument\(\s*body\s*\)/', $source))
+        ->toBe(1, 'le corps doit passer par prepareLegalDocument')
+        ->and(preg_match('/<div\s+lang="fr"[^>]*?dangerouslySetInnerHTML=\{\{\s*__html:\s*document\.html\s*,?\s*\}\}/s', $source))
         ->toBe(1, 'le corps doit être injecté dans un <div lang="fr">')
-        ->and(substr_count($source, 'dangerouslySetInnerHTML'))->toBe(1);
+        ->and(substr_count($source, 'dangerouslySetInnerHTML'))->toBe(1)
+        // Le sommaire reprend les intitulés `<h2>` du corps français : sa
+        // liste porte `lang="fr"` elle aussi, et aucun intitulé n'est rendu
+        // ailleurs.
+        ->and(preg_match('/<ol\s+lang="fr"[^>]*>(?:(?!<\/ol>).)*?\{section\.label\}/s', $source))
+        ->toBe(1, 'les intitulés du sommaire doivent être rendus dans un <ol lang="fr">')
+        ->and(substr_count($source, 'section.label'))->toBe(1);
 
     foreach (LegalPage::cases() as $page) {
         $partial = view()->file($page->viewPath())->render();

@@ -111,7 +111,10 @@ export default function LegalShow({
                         >
                             <div className="legal-toc__inner">
                                 <h2>{t('legal.toc.title')}</h2>
-                                <ol>
+                                {/* Les intitulés viennent du corps français :
+                                    `lang` sur la liste, jamais sur le
+                                    `<nav>`, dont le titre suit le visiteur. */}
+                                <ol lang="fr">
                                     {document.sections.map((section) => (
                                         <li key={section.id}>
                                             <a href={`#${section.id}`}>

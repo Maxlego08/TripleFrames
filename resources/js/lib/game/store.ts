@@ -1286,7 +1286,11 @@ export function createGameStore(options: GameStoreOptions): GameStore {
                     phase: 'revealing',
                     revealEndsAt: event.revealEndsAt,
                     images: mergeImages([], event.images),
-                    reveal: { movie: event.movie, finders: event.finders },
+                    reveal: {
+                        movie: event.movie,
+                        frames: event.frames,
+                        finders: event.finders,
+                    },
                 }),
             );
             commit({ ...state, leaderboard: event.leaderboard });

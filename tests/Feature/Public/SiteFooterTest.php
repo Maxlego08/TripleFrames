@@ -12,10 +12,10 @@ use Tests\Support\I18n\FrontSource;
 |--------------------------------------------------------------------------
 |
 | Le pied de page est présent sur TOUS les écrans joueurs, écran de jeu
-| compris : les pages légales y sont toujours atteignables et l'attribution
-| TMDB toujours visible (principe 12). Il est rendu côté client ; ce qui se
-| prouve côté serveur, c'est que chaque page joueur REÇOIT les clés qu'il
-| appelle — sinon il afficherait des clés brutes (règle 4). D'où la règle
+| compris : les pages légales y sont toujours atteignables. Il est rendu côté
+| client ; ce qui se prouve côté serveur, c'est que chaque page joueur REÇOIT
+| les clés qu'il appelle — sinon il afficherait des clés brutes (règle 4).
+| D'où la règle
 | « `legal` déclaré sur toute route joueur » (n° 68, D3 du 23/09).
 |
 | Le cas « envoie au back-office les clés du pied admin et aucune clé legal »
@@ -25,7 +25,7 @@ use Tests\Support\I18n\FrontSource;
 */
 
 /**
- * Les deux fichiers qui composent le pied de page joueur.
+ * Le fichier qui compose le pied de page joueur.
  *
  * @return list<string>
  */
@@ -33,7 +33,6 @@ function siteFooterFiles(): array
 {
     return [
         resource_path('js/components/public/site-footer.tsx'),
-        resource_path('js/components/public/tmdb-attribution.tsx'),
     ];
 }
 
@@ -61,8 +60,6 @@ function siteFooterExpectedKeys(): array
         'legal.footer.privacy',
         'legal.footer.report',
         'legal.new_tab',
-        'legal.tmdb.attribution',
-        'legal.tmdb.logo_alt',
         'common.action.close',
         ...$called,
     ]));
@@ -91,7 +88,8 @@ it('envoie les clés du pied de page à toute page joueur', function () {
         array_push($called, ...FrontSource::literalKeys((string) file_get_contents($file)));
     }
 
-    expect($called)->toContain('legal.footer.label', 'legal.tmdb.attribution', 'legal.tmdb.logo_alt');
+    expect($called)->toContain('legal.footer.label')
+        ->and($called)->not->toContain('legal.tmdb.attribution', 'legal.tmdb.logo_alt');
 
     $verified = User::factory()->create();
     $unverified = User::factory()->unverified()->create();

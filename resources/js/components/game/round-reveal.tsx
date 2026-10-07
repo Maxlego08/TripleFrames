@@ -4,6 +4,7 @@ import { GameFrame } from '@/components/game/game-frame';
 import type { FrameFormat } from '@/components/game/game-frame';
 import { LetterboxdLink } from '@/components/game/letterboxd-link';
 import { PlayerAvatar } from '@/components/game/player-avatar';
+import { ReportLink } from '@/components/game/report-link';
 import { StandingsTable } from '@/components/game/standings-table';
 import { TmdbAttribution } from '@/components/public/tmdb-attribution';
 import { useTranslations } from '@/hooks/use-translations';
@@ -14,7 +15,7 @@ import {
     recapTitles,
     titleSegments,
 } from '@/lib/game/scoring-format';
-import type { RevealMovie, SeatView } from '@/types/game-wire';
+import type { RevealFrame, RevealMovie, SeatView } from '@/types/game-wire';
 import type { Leaderboard, RoundFinder } from '@/types/scoring';
 
 export type RoundRevealProps = {
@@ -22,6 +23,11 @@ export type RoundRevealProps = {
     roundsCount: number;
     /** Le film révélé (`round.revealed.movie`, `RoundState.reveal.movie`). */
     movie: RevealMovie;
+    /**
+     * L'identité publique des images servies, par palier ouvert
+     * (`reveal.frames`, D63 du 07/10) : le lien « Signaler cette image ».
+     */
+    frames: readonly RevealFrame[];
     /** Qui a trouvé, à quel palier, en combien de temps, pour combien (C13). */
     finders: readonly RoundFinder[];
     /** Les sièges de la partie : pseudo et avatar des trouveurs et du classement. */
@@ -57,7 +63,9 @@ const MS_PER_SECOND = 1000;
  *   et l'**année**, par l'assistant unique `revealTitles()` (via
  *   `recapTitles()`, qui réduit la locale active à celles du paquet) : chaque
  *   titre dans un fragment qui porte son `lang` (05), jamais interpolé en
- *   texte brut, puis le **lien Letterboxd** (D58 du 06/10). Le paquet porte les titres de toutes les locales activées ;
+ *   texte brut, puis le **lien Letterboxd** (D58 du 06/10) et le lien
+ *   « Signaler » du film, et un lien « Signaler » sous chaque image
+ *   (D63 du 07/10). Le paquet porte les titres de toutes les locales activées ;
  *   le client choisit le sien **à l'affichage**, et une révélation déjà
  *   affichée ne se recompose pas au changement de langue (05 § exceptions,
  *   60 § 9.5) : la locale des titres est figée au montage, les libellés
@@ -78,6 +86,7 @@ export function RoundReveal({
     roundNumber,
     roundsCount,
     movie,
+    frames,
     finders,
     seats,
     leaderboard,
@@ -96,6 +105,9 @@ export function RoundReveal({
     const [titleLocale] = useState(locale);
     const { title, original, year } = recapTitles(movie, titleLocale);
     const seatOf = new Map(seats.map((seat) => [seat.publicId, seat]));
+    const framePublicIdOf = new Map(
+        frames.map((frame) => [frame.tierIndex, frame.framePublicId]),
+    );
     const nextSeconds =
         nextStartsInMs === null
             ? null
@@ -154,7 +166,17 @@ export function RoundReveal({
                     </p>
                 )}
 
-                <LetterboxdLink url={movie.letterboxdUrl} title={title.text} />
+                <div className="flex flex-wrap gap-2">
+                    <LetterboxdLink
+                        url={movie.letterboxdUrl}
+                        title={title.text}
+                    />
+                    <ReportLink
+                        kind="movie"
+                        tmdb={movie.tmdb}
+                        title={title.text}
+                    />
+                </div>
             </div>
 
             {images !== null && images.length > 0 && (
@@ -162,22 +184,41 @@ export function RoundReveal({
                     aria-label={t('game.reveal.images')}
                     className="grid grid-cols-2 gap-2 sm:grid-cols-3"
                 >
-                    {images.map((image) => (
-                        <li key={image.tierIndex}>
-                            <GameFrame
-                                src={image.view.src}
-                                pending={image.view.pending}
-                                alt={t('game.frame.alt', {
-                                    index: number.format(image.tierIndex),
-                                    total: number.format(tierCount),
-                                })}
-                                loadingLabel={t('game.frame.loading')}
-                                unavailableLabel={t('game.frame.unavailable')}
-                                format={frameFormat}
-                                className="rounded-md"
-                            />
-                        </li>
-                    ))}
+                    {images.map((image) => {
+                        const framePublicId = framePublicIdOf.get(
+                            image.tierIndex,
+                        );
+
+                        return (
+                            <li
+                                key={image.tierIndex}
+                                className="flex flex-col gap-1"
+                            >
+                                <GameFrame
+                                    src={image.view.src}
+                                    pending={image.view.pending}
+                                    alt={t('game.frame.alt', {
+                                        index: number.format(image.tierIndex),
+                                        total: number.format(tierCount),
+                                    })}
+                                    loadingLabel={t('game.frame.loading')}
+                                    unavailableLabel={t(
+                                        'game.frame.unavailable',
+                                    )}
+                                    format={frameFormat}
+                                    className="rounded-md"
+                                />
+                                {framePublicId !== undefined && (
+                                    <ReportLink
+                                        kind="frame"
+                                        tmdb={movie.tmdb}
+                                        framePublicId={framePublicId}
+                                        index={number.format(image.tierIndex)}
+                                    />
+                                )}
+                            </li>
+                        );
+                    })}
                 </ul>
             )}
 

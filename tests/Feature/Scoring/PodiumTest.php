@@ -535,6 +535,7 @@ test('le récapitulatif porte un paquet de titres par locale activée et aucun i
         'originalLanguage' => 'ja',
         'year' => 2001,
         'letterboxdUrl' => "https://letterboxd.com/tmdb/{$translated->tmdb_id}/",
+        'tmdb' => $translated->tmdb_id,
     ])
         // Le repli garde la langue du titre servi, jamais celle du joueur.
         ->and($podium['recap'][1]['titles']['titles'] ?? null)->toBe([
@@ -558,7 +559,7 @@ test('le récapitulatif porte un paquet de titres par locale activée et aucun i
         'standings', 'publicId', 'nickname', 'masked', 'avatar', 'kind', 'url', 'altKey', 'initials', 'status',
         'firstRoundNumber', 'rank', 'rankShared', 'finalScore', 'correctAnswers', 'roundsPlayed', 'totalAnswerTimeMs',
         'recap', 'roundNumber', 'outcome', 'titles', ...$locales, 'text', 'lang', 'originalTitle', 'originalTitleLatin',
-        'originalLanguage', 'year', 'letterboxdUrl', 'foundCount', 'finders', 'lockRank', 'tierIndex', 'answeredAtMs', 'pointsTier',
+        'originalLanguage', 'year', 'letterboxdUrl', 'tmdb', 'foundCount', 'finders', 'lockRank', 'tierIndex', 'answeredAtMs', 'pointsTier',
         'pointsBonus', 'pointsTotal', 'highlights', 'bestAnswer', 'fastestFind', 'unfoundRoundNumbers',
     ];
 
@@ -653,6 +654,7 @@ test('le podium d’une partie interrompue porte k et M', function (): void {
                     'originalLanguage' => 'ja',
                     'year' => 2001,
                     'letterboxdUrl' => "https://letterboxd.com/tmdb/{$movie->tmdb_id}/",
+                    'tmdb' => $movie->tmdb_id,
                 ],
                 'foundCount' => 2,
                 'finders' => [

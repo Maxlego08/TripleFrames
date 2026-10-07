@@ -23,20 +23,33 @@
             display: flex;
             width: min(100% - 2rem, 76rem);
             max-width: none;
-            min-height: 4.5rem;
+            min-height: 2.75rem;
             margin-inline: auto;
             flex-flow: row wrap;
             align-items: center;
-            justify-content: space-between;
-            gap: 0.5rem 1.5rem;
-            padding: 0.5rem 0;
+            justify-content: center;
+            gap: 0;
+            padding: 0;
             color: $ink;
+        }
+
+        nav {
+            width: 100%;
+        }
+
+        ul {
+            justify-content: center;
+            gap: 0 0.75rem;
         }
 
         a,
         p {
             color: $ink;
             font-weight: 800;
+        }
+
+        a {
+            min-height: 2.5rem;
         }
     }
 

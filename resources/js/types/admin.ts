@@ -69,6 +69,67 @@ export type AdminAliasSuggestion = {
     };
 };
 
+/** `App\Enums\ContentReportReason` (D63 du 07/10). */
+export type ContentReportReason =
+    | 'wrong_movie'
+    | 'title_visible'
+    | 'wrong_level'
+    | 'poor_quality'
+    | 'offensive'
+    | 'other';
+
+/** `App\Enums\ContentReportResolution`. */
+export type ContentReportResolution =
+    | 'movie_unpublished'
+    | 'frame_unpublished'
+    | 'dismissed'
+    | 'already_handled';
+
+/** Filtre de la file des signalements de contenu. */
+export type ContentReportFilter = 'open' | 'closed';
+
+/**
+ * Une CIBLE de la file des signalements de contenu (spec 20 § 11.6, D63 du
+ * 07/10) : l'image, sinon le film, avec ses signalements regroupés. Les
+ * gestes l'adressent par `report_id`, son plus ancien signalement.
+ */
+export type AdminContentReportGroup = {
+    report_id: number;
+    scope: 'frame' | 'movie';
+    reports_count: number;
+    first_reported_at: string | null;
+    last_reported_at: string | null;
+    /** Nombre de signalements par motif, du plus fréquent au moins fréquent. */
+    reasons: Partial<Record<ContentReportReason, number>>;
+    comments: {
+        reason: ContentReportReason;
+        comment: string;
+        reported_at: string | null;
+    }[];
+    /** Nuls pour une cible ouverte. */
+    resolution: ContentReportResolution | null;
+    resolved_at: string | null;
+    movie: {
+        id: number;
+        title_original: string;
+        release_year: number | null;
+        availability: ContentAvailability;
+    };
+    frame: {
+        id: number;
+        frame_level: FrameLevel;
+        availability: ContentAvailability;
+        thumbnail_url: string | null;
+        /** `CoverageLossPreview::forFrame()` ; nul : rien à annoncer. */
+        coverage_warning: AdminUnpublishPreview | null;
+    } | null;
+    abilities: {
+        unpublish_movie: boolean;
+        unpublish_frame: boolean;
+        dismiss: boolean;
+    };
+};
+
 export type ThemeMembershipState = 'added' | 'removed';
 
 /** Natures d'un thème — miroir de `App\Enums\ThemeKind`. */
@@ -1381,7 +1442,8 @@ export type AdminActionTypeValue =
     | 'theme.created'
     | 'theme.updated'
     | 'theme.published'
-    | 'theme.unpublished';
+    | 'theme.unpublished'
+    | 'content_report.dismissed';
 
 /** Les sujets du journal — miroir de `App\Enums\AdminActionSubject`. */
 export type AdminActionSubjectValue =
@@ -1396,7 +1458,8 @@ export type AdminActionSubjectValue =
     | 'theme'
     | 'game'
     | 'games'
-    | 'players';
+    | 'players'
+    | 'content_report';
 
 /** Les deux classes de conservation — `App\Enums\AdminActionRetention`. */
 export type AdminActionRetentionValue = 'permanent' | 'rolling_12m';

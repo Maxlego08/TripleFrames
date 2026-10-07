@@ -241,6 +241,7 @@ const MOVIE: RevealMovie = {
     originalLanguage: 'fr',
     year: 1999,
     letterboxdUrl: null,
+    tmdb: null,
 };
 
 /** Un événement tel qu'il arrive du fil : enveloppe, puis charge. */
@@ -579,7 +580,7 @@ describe('store', () => {
                     endedAt: iso(30_000),
                     revealStartsAt: iso(30_300),
                     revealEndsAt: iso(38_300 + 10_000),
-                    reveal: { movie: MOVIE, finders: [] },
+                    reveal: { movie: MOVIE, frames: [], finders: [] },
                 }),
                 nextTransitionAt: iso(48_300 - LEAD_MS),
             }),
@@ -831,6 +832,7 @@ describe('store', () => {
                 revealEndsAt: iso(30_300),
                 movie: MOVIE,
                 images: [image(5_000, 1), image(5_000, 2)],
+                frames: [],
                 finders: [],
                 leaderboard: { scoreless: false, roundNumber: 1, rows: [] },
             }),
@@ -1138,7 +1140,7 @@ describe('store', () => {
                 round: round(1, 0, 'revealing', {
                     images: [image(0, 1)],
                     ...closedRound,
-                    reveal: { movie: MOVIE, finders: [] },
+                    reveal: { movie: MOVIE, frames: [], finders: [] },
                 }),
                 self: { ...packet(0).self, input: lockedInput },
                 nextTransitionAt: iso(8500),
@@ -1341,6 +1343,7 @@ describe('store', () => {
                 revealEndsAt: iso(38_300),
                 movie: MOVIE,
                 images: [image(0, 1), image(0, 2), image(0, 3)],
+                frames: [],
                 finders: [],
                 leaderboard: { scoreless: false, roundNumber: 1, rows: [] },
             });
@@ -1534,7 +1537,7 @@ describe('store', () => {
                     endedAt: iso(30_000),
                     revealStartsAt: iso(30_300),
                     revealEndsAt: iso(38_300),
-                    reveal: { movie: MOVIE, finders: [] },
+                    reveal: { movie: MOVIE, frames: [], finders: [] },
                 }),
                 self: {
                     ...packet(0).self,
@@ -1716,12 +1719,17 @@ describe('store', () => {
                 revealEndsAt: iso(17_800),
                 movie: MOVIE,
                 images: [image(0, 1)],
+                frames: [{ tierIndex: 1, framePublicId: 'K7M2Q9X4B1ZT' }],
                 finders: [],
                 leaderboard: { scoreless: false, roundNumber: 1, rows: [] },
             }),
         );
 
         expect(game.store.getState().rounds[0].images).toEqual([image(0, 1)]);
+        // `reveal.frames` voyage avec la révélation (D63 du 07/10).
+        expect(game.store.getState().rounds[0].reveal?.frames).toEqual([
+            { tierIndex: 1, framePublicId: 'K7M2Q9X4B1ZT' },
+        ]);
 
         // Film suspendu pendant la révélation : ses URL sont omises (60
         // § 15.4), et celles que le magasin détenait ne sont plus demandées.
@@ -1746,6 +1754,7 @@ describe('store', () => {
                 revealEndsAt: iso(38_300),
                 movie: MOVIE,
                 images: [],
+                frames: [],
                 finders: [],
                 leaderboard: { scoreless: false, roundNumber: 5, rows: [] },
             }),

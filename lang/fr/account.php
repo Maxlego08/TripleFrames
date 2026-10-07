@@ -127,11 +127,13 @@ return [
         'setup' => [
             'code_placeholder' => 'Saisissez le code à 6 chiffres',
             'confirm' => 'Confirmer',
+            'copy_key' => 'Copier la clé de configuration',
             'done' => [
                 'description' => 'L’authentification à deux facteurs est active. Scannez le QR code ou saisissez la clé de configuration dans votre application d’authentification.',
                 'heading' => 'Authentification à deux facteurs activée',
                 'submit' => 'Fermer',
             ],
+            'key_copied' => 'Clé de configuration copiée',
             'manual_entry' => 'ou saisissez la clé de configuration à la main',
             'scan' => [
                 'description' => 'Pour terminer l’activation, scannez le QR code ou saisissez la clé de configuration dans votre application d’authentification',

@@ -92,9 +92,10 @@ use LogicException;
  * @phpstan-import-type RoundFinderPayload from Scoreboard
  * @phpstan-import-type TierImageRefPayload from TierImageRefPresenter
  * @phpstan-import-type RevealMoviePayload from RevealMovieBuilder
+ * @phpstan-import-type RevealFramePayload from RevealFramesPresenter
  *
  * @phpstan-type RoundPhase 'scheduled'|'running'|'closed'|'revealing'|'cancelled'
- * @phpstan-type RoundStatePayload array{sequenceIndex: int, roundNumber: int, roundsCount: int, startsAt: string, durationMs: int, tiers: list<array{tierIndex: int, startsAtOffsetMs: int, durationMs: int, points: int}>, choicesAtTierIndex: int|null, phase: RoundPhase, currentTierIndex: int|null, images: list<TierImageRefPayload>, locked: list<array{publicId: string, lockRank: int}>, endedAt: string|null, revealStartsAt: string|null, revealEndsAt: string|null, reveal: array{movie: RevealMoviePayload, finders: list<RoundFinderPayload>}|null, choicesUnavailable: bool}
+ * @phpstan-type RoundStatePayload array{sequenceIndex: int, roundNumber: int, roundsCount: int, startsAt: string, durationMs: int, tiers: list<array{tierIndex: int, startsAtOffsetMs: int, durationMs: int, points: int}>, choicesAtTierIndex: int|null, phase: RoundPhase, currentTierIndex: int|null, images: list<TierImageRefPayload>, locked: list<array{publicId: string, lockRank: int}>, endedAt: string|null, revealStartsAt: string|null, revealEndsAt: string|null, reveal: array{movie: RevealMoviePayload, frames: list<RevealFramePayload>, finders: list<RoundFinderPayload>}|null, choicesUnavailable: bool}
  * @phpstan-type SelfStatePayload array{publicId: string, seatActive: bool, isHost: bool, member: bool, participates: bool, input: array<string, mixed>|null, ownScore: int}
  * @phpstan-type GameStatePacketPayload array{v: int, serverNow: string, gameRef: string|null, mode: 'multiplayer'|'solo', channels: array{room: string, seat: string}|null, status: string|null, roundsCount: int|null, roundsCompleted: int|null, framesPerRound: int|null, inputDifficulty: string|null, maxAnswerLength: int|null, seats: list<SeatViewPayload>, pause: array{pausedAt: string, interruptsAt: string}|null, round: RoundStatePayload|null, self: SelfStatePayload, leaderboard: LeaderboardPayload, podium: PodiumPayload|null, nextTransitionAt: string|null}
  */
@@ -339,6 +340,7 @@ final class GameStateBuilder
             'reveal' => $phase === 'revealing' && $revealStartsAt !== null && $now->greaterThanOrEqualTo($revealStartsAt)
                 ? [
                     'movie' => RevealMovieBuilder::build(Movie::query()->findOrFail($round->movie_id)),
+                    'frames' => RevealFramesPresenter::frames($round->tiers),
                     'finders' => Scoreboard::roundFinders($round),
                 ]
                 : null,

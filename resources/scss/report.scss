@@ -1,0 +1,136 @@
+@use 'auth/tokens' as *;
+@use 'auth/mixins' as mix;
+
+// « Signaler un problème » (`report/create`, D63 du 07/10) : le gabarit des
+// pages d'entrée (`room-entry.scss`, coquille `public-shell--room-entry`),
+// complété ici du film signalé, des tuiles de portée et de motif, de la zone
+// de précisions et du renvoi des ayants droit.
+
+// Le film signalé, en étiquette de billet : titre et année, jamais l'image.
+.report-movie {
+    display: inline-flex;
+    align-self: flex-start;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0;
+    border: 0.125rem solid $ink;
+    border-radius: $radius-small;
+    padding: 0.4rem 0.75rem;
+    background: $yellow;
+    color: $ink;
+    font-family: $display;
+    font-size: 1rem;
+    line-height: 1.3;
+    overflow-wrap: anywhere;
+    box-shadow: 0.2rem 0.2rem 0 $ink;
+
+    svg {
+        flex: none;
+        width: 1rem;
+        height: 1rem;
+    }
+}
+
+.room-entry-notice.report-notice--success {
+    background: $lavender;
+}
+
+.room-entry-form.report-form {
+    .report-field__legend {
+        margin: 0;
+        color: $ink;
+        font-size: 0.82rem;
+        font-weight: 900;
+    }
+
+    .report-options {
+        gap: 0.6rem;
+    }
+
+    .report-option {
+        border: $line solid $ink;
+        border-radius: $radius-medium;
+        padding: 0.7rem 0.9rem;
+        background: $white;
+        color: $ink;
+        transition:
+            translate 120ms ease,
+            box-shadow 120ms ease;
+
+        &:hover {
+            translate: -0.06rem -0.06rem;
+            box-shadow: 0.2rem 0.2rem 0 $ink;
+        }
+
+        &:has([data-state='checked']) {
+            background: $cyan;
+            box-shadow: 0.25rem 0.25rem 0 $ink;
+        }
+
+        &:has(:focus-visible) {
+            @include mix.focus-ring;
+        }
+
+        [data-slot='radio-group-item'] {
+            border: 0.125rem solid $ink;
+            background: $white;
+        }
+    }
+
+    .report-option__label {
+        font-size: 0.9rem;
+        font-weight: 800;
+        line-height: 1.35;
+    }
+
+    [data-slot='textarea'] {
+        width: 100%;
+        min-height: 7rem;
+        border: $line solid $ink;
+        border-radius: $radius-medium;
+        padding: 0.7rem 0.85rem;
+        background: $white;
+        color: $ink;
+        font-family: $body;
+        font-size: 0.92rem;
+        font-weight: 700;
+        box-shadow: none;
+
+        &:focus-visible {
+            border-color: $violet;
+            outline: 0;
+            box-shadow: 0.22rem 0.22rem 0 $cyan;
+        }
+
+        &[aria-invalid='true'] {
+            border-color: $error;
+            box-shadow: 0.22rem 0.22rem 0 $coral;
+        }
+    }
+}
+
+// Le renvoi des ayants droit vers la page de retrait.
+.report-content .report-rights {
+    margin: 0;
+    color: $muted;
+    font-size: 0.8rem;
+
+    a {
+        color: $ink;
+        font-weight: 800;
+    }
+
+    a:focus-visible {
+        @include mix.focus-ring;
+    }
+}
+
+.public-shell--room-entry textarea:focus-visible {
+    @include mix.focus-ring;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .report-option {
+        transition: none;
+    }
+}

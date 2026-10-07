@@ -243,4 +243,47 @@ return [
         ],
     ],
 
+    // D63 of 07/10: report a movie or an image seen in play, from the reveal
+    // and the podium, on the public `/report` page. No automatic effect: the
+    // curation team reviews every report.
+    'report' => [
+        'title' => 'Report a problem',
+        'description' => 'Does an image or a movie entry look wrong? Let the curation team know.',
+        'movie' => ':title (:year)',
+        'movie_without_year' => ':title',
+        'no_automatic_effect' => 'A report never removes anything automatically: a team member reviews it.',
+        'fields' => [
+            'scope' => 'What is wrong',
+            'reason' => 'Reason',
+            'comment' => 'Details (optional)',
+        ],
+        'scopes' => [
+            'frame' => 'This image',
+            'movie' => 'The whole movie',
+        ],
+        'reasons' => [
+            'wrong_movie' => 'This is not that movie, or the entry is wrong',
+            'title_visible' => 'The title or a giveaway text is readable',
+            'wrong_level' => 'Image too easy or too hard for its place',
+            'poor_quality' => 'Poor quality image',
+            'offensive' => 'Offensive content',
+            'other' => 'Other',
+        ],
+        'comment_hint' => ':max characters at most.',
+        'submit' => 'Send the report',
+        'thanks' => 'Thank you! Your report has been passed on to the curation team.',
+        'already_reported' => 'You have already reported this content. Thank you!',
+        'need_seat' => 'Play a game first: only players can report a movie or an image.',
+        'rights_holder' => 'Do you hold rights to this content?',
+        'rights_holder_link' => 'Request a takedown',
+        'errors' => [
+            'reason_needs_frame' => 'This reason only applies to an image: choose “This image”.',
+        ],
+        // Reveal and podium links, always in a new tab.
+        'report_movie' => 'Report',
+        'report_movie_label' => 'Report a problem with :title (new tab)',
+        'report_frame' => 'Report',
+        'report_frame_label' => 'Report a problem with image :index (new tab)',
+    ],
+
 ];
