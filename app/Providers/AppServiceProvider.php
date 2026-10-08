@@ -14,6 +14,7 @@ use App\Listeners\SyncCarbonLocale;
 use App\Models\PerfSample;
 use App\Settings\EngineConstants;
 use App\Settings\PlatformLimits;
+use App\Support\Catalog\TmdbQuotaLimiter;
 use App\Support\Draw\PoolQuery;
 use App\Support\I18n\CookiePlayerTokenLocale;
 use App\Support\I18n\LangVersion;
@@ -60,6 +61,11 @@ class AppServiceProvider extends ServiceProvider
         // La mesure des performances (spec 100 § 10.11, D47 du 01/10) : une
         // seule instance, qui porte les portées ouvertes de la requête ou du job.
         $this->app->singleton(PerfRecorder::class);
+
+        // Le limiteur de quota TMDB est partagé entre la commande d'import et
+        // le client (spec 20 § 3.6, L20-24a) : un appel admis par le balayage
+        // ne doit pas être recompté comme interactif.
+        $this->app->singleton(TmdbQuotaLimiter::class);
     }
 
     /**

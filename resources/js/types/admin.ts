@@ -188,6 +188,8 @@ export type AdminCurationQueueRow = AdminMovieRow & {
     rank: number;
     is_started: boolean;
     touched_at: string | null;
+    /** Nom réel d'un AUTRE curateur qui réserve ce film (L20-32), sinon `null`. */
+    claimed_by: string | null;
 };
 
 /** Un film écarté (spec 20 § 4.2), motif relu tel quel. */
@@ -1965,6 +1967,23 @@ export type PerfReport = {
 
 export type PerfWindow = '1h' | '24h' | '7d';
 
+/** Un score de bonne réponse, tel qu'écrit ou rejoué (spec 80 § 6.3). */
+export type InspectionTierScore = {
+    tierIndex: number;
+    pointsTier: number;
+    pointsBonus: number;
+    pointsTotal: number;
+};
+
+/** Un écart de rejeu d'une partie close (L80-9). */
+export type InspectionReplayMismatch = {
+    sequence_index: number;
+    round_number: number | null;
+    player: { public_id: string; nickname: string | null };
+    stored: InspectionTierScore;
+    replayed: InspectionTierScore;
+};
+
 export type InspectionTraceLine = {
     event: string;
     sequence_index: number | null;
@@ -2069,4 +2088,22 @@ export type AdminBlocklistForm = {
     id: number;
     nickname: string;
     form: string;
+};
+
+/**
+ * Une ligne de l’écran « Films jamais trouvés et incidents » (spec 20
+ * § 12.1, L20-29) : agrégat par film, aucune identité de joueur. Les deux
+ * dictionnaires sont indexés par motif d’incident.
+ */
+export type AdminIncidentRow = {
+    movie: {
+        id: number;
+        title_original: string;
+        release_year: number | null;
+        availability: string;
+    };
+    completed: number;
+    never_found: number;
+    cancelled: Partial<Record<InspectionIncidentReason, number>>;
+    substituted: Partial<Record<InspectionIncidentReason, number>>;
 };

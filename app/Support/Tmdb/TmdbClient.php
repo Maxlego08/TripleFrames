@@ -2,6 +2,7 @@
 
 namespace App\Support\Tmdb;
 
+use App\Support\Catalog\TmdbQuotaLimiter;
 use Carbon\CarbonInterface;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Factory;
@@ -66,8 +67,11 @@ final class TmdbClient
      * object, et retient sa valeur par défaut. Le passer explicitement sert aux
      * tests qui veulent une configuration hors `config/services.php`.
      */
-    public function __construct(private readonly Factory $http, ?TmdbConfig $config = null)
-    {
+    public function __construct(
+        private readonly Factory $http,
+        ?TmdbConfig $config = null,
+        private readonly ?TmdbQuotaLimiter $limiter = null,
+    ) {
         $this->config = $config ?? TmdbConfig::fromConfig();
     }
 
@@ -313,6 +317,11 @@ final class TmdbClient
         if (! $this->config->usesToken()) {
             $query['api_key'] = $this->config->apiKey();
         }
+
+        // Le limiteur partagé (spec 20 § 3.6, L20-24a) : un appel de balayage
+        // y est déjà admis par `throttle()` ; tout autre est interactif, passe
+        // en priorité et repousse les balayages d'un créneau.
+        ($this->limiter ?? app(TmdbQuotaLimiter::class))->admit();
 
         try {
             $response = $this->pendingRequest()->get($path, $query);

@@ -31,7 +31,9 @@ import { show as playersShow } from '@/routes/admin/players';
 import type {
     InspectionGameDetail,
     InspectionLeaderboardLine,
+    InspectionReplayMismatch,
     InspectionRound,
+    InspectionTierScore,
     InspectionTraceLine,
 } from '@/types/admin';
 import type { BreadcrumbItem } from '@/types/navigation';
@@ -41,6 +43,7 @@ type Props = {
     leaderboard: InspectionLeaderboardLine[];
     rounds: InspectionRound[];
     trace: InspectionTraceLine[];
+    replay_mismatches: InspectionReplayMismatch[] | null;
 };
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -59,6 +62,7 @@ export default function AdminGamesShow({
     leaderboard,
     rounds,
     trace,
+    replay_mismatches,
 }: Props) {
     const { t, locale } = useTranslations();
 
@@ -357,6 +361,8 @@ export default function AdminGamesShow({
                     ))}
                 </section>
 
+                <ReplayMismatches mismatches={replay_mismatches} />
+
                 <InspectionTrace lines={trace} />
             </div>
         </>
@@ -364,6 +370,102 @@ export default function AdminGamesShow({
 }
 
 AdminGamesShow.layout = { breadcrumbs };
+
+/**
+ * Les écarts de rejeu (spec 80 § 6.3, L80-9) : rien tant que la partie n'est
+ * pas close, « journal cohérent » sans écart, sinon l'écrit et le rejoué côte
+ * à côte.
+ */
+function ReplayMismatches({
+    mismatches,
+}: {
+    mismatches: InspectionReplayMismatch[] | null;
+}) {
+    const { t, locale } = useTranslations();
+
+    const score = (value: InspectionTierScore): string =>
+        t('admin.inspection.game.replay.score', {
+            tier: formatInteger(value.tierIndex, locale),
+            tier_points: formatInteger(value.pointsTier, locale),
+            bonus: formatInteger(value.pointsBonus, locale),
+            total: formatInteger(value.pointsTotal, locale),
+        });
+
+    return (
+        <Card>
+            <CardHeader>
+                <AdminCardTitle>
+                    {t('admin.inspection.game.replay.heading')}
+                </AdminCardTitle>
+                <p className="text-sm text-muted-foreground">
+                    {t('admin.inspection.game.replay.description')}
+                </p>
+            </CardHeader>
+            <CardContent>
+                {mismatches === null ? (
+                    <p className="text-sm text-muted-foreground">
+                        {t('admin.inspection.game.replay.pending')}
+                    </p>
+                ) : mismatches.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                        {t('admin.inspection.game.replay.consistent')}
+                    </p>
+                ) : (
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>
+                                    {t('admin.inspection.game.replay.round')}
+                                </TableHead>
+                                <TableHead>
+                                    {t('admin.inspection.game.replay.player')}
+                                </TableHead>
+                                <TableHead>
+                                    {t('admin.inspection.game.replay.stored')}
+                                </TableHead>
+                                <TableHead>
+                                    {t('admin.inspection.game.replay.replayed')}
+                                </TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {mismatches.map((mismatch) => (
+                                <TableRow
+                                    key={`${mismatch.sequence_index}-${mismatch.player.public_id}`}
+                                >
+                                    <TableCell className="tabular-nums">
+                                        {formatInteger(
+                                            mismatch.round_number ??
+                                                mismatch.sequence_index,
+                                            locale,
+                                        )}
+                                    </TableCell>
+                                    <TableCell>
+                                        <Link
+                                            href={playersShow(
+                                                mismatch.player.public_id,
+                                            )}
+                                            className="underline-offset-4 hover:underline"
+                                        >
+                                            {mismatch.player.nickname ??
+                                                mismatch.player.public_id}
+                                        </Link>
+                                    </TableCell>
+                                    <TableCell className="text-destructive">
+                                        {score(mismatch.stored)}
+                                    </TableCell>
+                                    <TableCell>
+                                        {score(mismatch.replayed)}
+                                    </TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
+                )}
+            </CardContent>
+        </Card>
+    );
+}
 
 /** Une carte de couples libellé–valeur, déjà traduits. */
 function DefinitionCard({

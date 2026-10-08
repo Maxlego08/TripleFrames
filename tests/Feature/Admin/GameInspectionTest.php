@@ -15,6 +15,8 @@ use App\Models\RoundPlayer;
 use App\Models\RoundTier;
 use App\Models\User;
 use App\Models\WrongAnswer;
+use App\Support\Scoring\ScoreReplayer;
+use Illuminate\Support\Facades\DB;
 use Inertia\Testing\AssertableInertia as Assert;
 
 /*
@@ -217,6 +219,38 @@ test('une partie terminée montre toutes ses manches jouées', function (): void
             ->where('rounds.1.disclosed', true)
             ->where('rounds.1.movie.title_original', 'Secret Orchard')
             ->where('rounds.1.participants.0.wrong_answers.0.submitted_text', 'Secret Orchar'));
+});
+
+test('l\'inspection rend les écarts de rejeu de ScoreReplayer', function (): void {
+    $admin = User::factory()->admin()->create();
+
+    // Partie en cours : aucun rejeu, les bonnes réponses d'une manche non
+    // révélée ne sont jamais chargées.
+    ['game' => $live] = inspectedGame();
+
+    $this->actingAs($admin)
+        ->get(route('admin.games.show', ['game' => $live->id]))
+        ->assertInertia(fn (Assert $page) => $page->where('replay_mismatches', null));
+
+    // Partie close : le rapport est celui de ScoreReplayer, ligne pour ligne.
+    ['game' => $game, 'alice' => $alice] = inspectedGame(ended: true);
+    $guess = Guess::query()->whereIn('round_id', Round::query()->where('game_id', $game->id)->select('id'))->sole();
+
+    DB::table('guess')->where('id', $guess->id)->update(['points_total' => $guess->points_total + 1]);
+
+    $expected = ScoreReplayer::mismatches($game);
+    $last = count($expected) - 1;
+
+    expect($expected)->not->toBe([]);
+
+    $this->actingAs($admin)
+        ->get(route('admin.games.show', ['game' => $game->id]))
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('replay_mismatches', count($expected))
+            ->where("replay_mismatches.{$last}.player.public_id", $alice->public_id)
+            ->where("replay_mismatches.{$last}.player.nickname", 'Alice')
+            ->where("replay_mismatches.{$last}.stored.pointsTotal", $guess->points_total + 1)
+            ->where("replay_mismatches.{$last}.replayed", $expected[$last]['replayed']->toArray()));
 });
 
 test('la fiche d\'un siège reprend ses parties et ses seules réponses', function (): void {

@@ -3,13 +3,17 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Actions\Curation\PublishMovie;
+use App\Enums\ContentAvailability;
+use App\Enums\ImportSource;
 use App\Http\Controllers\Controller;
 use App\Models\Frame;
 use App\Models\Movie;
+use App\Models\User;
 use App\Settings\PlatformLimits;
 use App\Support\Admin\AdminCatalogPresenter;
 use App\Support\Catalog\AmbiguityPreview;
 use App\Support\Curation\CoverageLossPreview;
+use App\Support\Curation\CurationClaim;
 use App\Support\Curation\FrameBankSnapshot;
 use App\Support\Curation\TmdbFrameIntake;
 use App\Support\Frames\FrameGeometry;
@@ -24,6 +28,7 @@ use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
 use Inertia\Response;
+use Inertia\Support\Header;
 
 /**
  * L'éditeur de la banque d'images d'un film — spec 20 § 6, ligne 4 de la
@@ -101,6 +106,18 @@ class FrameBankController extends Controller
         AmbiguityPreview $ambiguity,
     ): Response {
         $bank = new FrameBankSnapshot($movie);
+
+        // Ouvrir l'éditeur d'un film de la file le réserve (§ 4.1, L20-32),
+        // à la visite seulement : un rechargement partiel (sondage du
+        // traitement) ne prolonge rien, seul le battement le fait.
+        $user = $request->user();
+
+        if ($user instanceof User
+            && ! $request->hasHeader(Header::PARTIAL_ONLY)
+            && $movie->availability === ContentAvailability::Draft
+            && $movie->import_source !== ImportSource::Demo) {
+            CurationClaim::claim($user, $movie->id);
+        }
 
         return Inertia::render('admin/catalog/bank', [
             'movie' => fn (): array => $this->movie($bank),

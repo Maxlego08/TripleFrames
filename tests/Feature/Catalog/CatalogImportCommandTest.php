@@ -3,6 +3,7 @@
 use App\Enums\AnswerKeyKind;
 use App\Enums\ImportRunKind;
 use App\Enums\ImportRunStatus;
+use App\Jobs\Catalog\DeriveMovieDifficulty;
 use App\Jobs\Catalog\RunCatalogImport;
 use App\Models\AnswerKey;
 use App\Models\ImportRun;
@@ -200,6 +201,34 @@ it('suspend le balayage au plafond de pages, et le reprend au même endroit', fu
     expect(ImportRun::query()->count())->toBe(1)
         ->and($run->total_seen)->toBeGreaterThan($seen)
         ->and(DiscoverCursor::fromColumn($run->tmdb_page_cursor)->page)->toBe(3);
+});
+
+test('un balayage clos relance la dérivation de la difficulté', function (): void {
+    Queue::fake();
+    tmdbFake();
+
+    // Une simulation n'écrit rien et ne relance rien.
+    $this->artisan('catalog:import-discover', ['--pages' => 9, '--dry-run' => true])->assertSuccessful();
+    Queue::assertNotPushed(DeriveMovieDifficulty::class);
+
+    $this->artisan('catalog:import-discover', ['--pages' => 9])->assertSuccessful();
+
+    expect(ImportRun::query()->sole()->status)->toBe(ImportRunStatus::Completed);
+    Queue::assertPushed(DeriveMovieDifficulty::class, 1);
+});
+
+test('un balayage suspendu ne relance pas la dérivation', function (): void {
+    Queue::fake();
+
+    tmdbFake(['*themoviedb.org/3/discover/movie*' => Http::sequence()
+        ->push(TmdbFixture::json('discover-page-1'), 200, ['Content-Type' => 'application/json']),
+    ]);
+
+    // Suspendu au plafond de pages : la population n'est pas encore fixée.
+    $this->artisan('catalog:import-discover', ['--pages' => 1])->assertSuccessful();
+
+    expect(ImportRun::query()->sole()->status)->toBe(ImportRunStatus::Running);
+    Queue::assertNotPushed(DeriveMovieDifficulty::class);
 });
 
 it('ne prétend pas reprendre un balayage qui n’existe pas', function (): void {

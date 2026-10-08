@@ -154,13 +154,16 @@ final class AdminCatalogPresenter
      *
      * @return array<string, mixed>
      */
-    public static function curationQueueRow(Movie $movie, ?CarbonImmutable $touchedAt, int $rank): array
+    public static function curationQueueRow(Movie $movie, ?CarbonImmutable $touchedAt, int $rank, ?string $claimedBy = null): array
     {
         return [
             ...self::movieRow($movie),
             'rank' => $rank,
             'is_started' => $touchedAt !== null,
             'touched_at' => self::moment($touchedAt),
+            // La réservation souple d'un AUTRE curateur (§ 4.1, L20-32), par
+            // son nom réel ; `null` pour un film libre ou réservé par le lecteur.
+            'claimed_by' => $claimedBy,
         ];
     }
 

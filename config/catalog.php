@@ -122,6 +122,32 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Difficulté dérivée (spec 30 § 14, lot L30-10)
+    |--------------------------------------------------------------------------
+    |
+    | Lues par `App\Support\Catalog\MovieDifficultyDeriver` SEUL, qui lève
+    | `InvalidArgumentException` hors bornes au démarrage de la dérivation —
+    | jamais d'écrêtage silencieux (règle 2) : une difficulté faussée en
+    | silence ne se verrait qu'à l'écran des thèmes.
+    |
+    | - `min_language_sample` (borne ≥ 1) : une langue originale qui compte
+    |   moins de films dans la population rejoint le seau commun ; un décile
+    |   calculé sur deux films coréens ne veut rien dire.
+    | - `saga_decile_bonus` (bornes [0, 9]) : déciles ajoutés à un film dont la
+    |   collection est désignée par un thème de saga ; 2 = une classe. Négatif,
+    |   il donnerait un décile ≤ 0 ; au-delà de 9, toute saga serait very_easy.
+    |
+    | Aucune ne touche une partie jouée : le tirage est matérialisé.
+    |
+    */
+
+    'difficulty' => [
+        'min_language_sample' => 20,
+        'saga_decile_bonus' => 2,
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Curation — chaîne d'image et bornes du back-office (spec 20 § 13.7)
     |--------------------------------------------------------------------------
     |
@@ -177,6 +203,13 @@ return [
     | - `poll_seconds` : cadence du rechargement partiel de l'éditeur tant
     |   qu'une image du film est en traitement (§ 6.1) : le curateur n'attend
     |   jamais le job. Au moins 1.
+    | - `incidents_window_days` (§ 12.1, J2) : fenêtre glissante, en jours, de
+    |   l'écran « Films jamais trouvés et incidents ». Au moins 1.
+    | - `claim_minutes` (§ 4.1, J2) : durée de vie de la réservation souple
+    |   d'un film par un curateur, prise à l'ouverture de l'éditeur et
+    |   prolongée par chaque battement ; sans battement, elle expire.
+    |   `claim_minutes × 60 > heartbeat_seconds`, sans quoi une réservation
+    |   tomberait entre deux battements d'un curateur au travail.
     | - `stale_pending_minutes` : au-delà, une image encore en traitement
     |   fait afficher « le traitement d'arrière-plan ne répond pas »
     |   (§ 13.5) — plus long qu'un import qui tient la file `default`, pour
@@ -256,6 +289,8 @@ return [
         'images_cache_minutes' => 1_440,
         'poll_seconds' => 3,
         'stale_pending_minutes' => 10,
+        'incidents_window_days' => 30,
+        'claim_minutes' => 15,
 
         'idle_seconds' => 60,
         'heartbeat_seconds' => 15,

@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Enums\ImportRunKind;
 use App\Enums\ImportRunStatus;
 use App\Enums\Locale;
+use App\Jobs\Catalog\DeriveMovieDifficulty;
 use App\Models\ImportRun;
 use App\Models\User;
 use App\Support\Catalog\ImportDecision;
@@ -300,6 +301,16 @@ abstract class CatalogImportCommand extends Command
 
             return true;
         });
+
+        // Un balayage clos — terminé ou échoué, jamais suspendu — relance la
+        // dérivation de la difficulté (spec 30 § 14.2, L30-10) : ses films
+        // changent la population des déciles. Import, collage et
+        // resynchronisation passent tous par ici ; après commit.
+        if ($closed && $status !== ImportRunStatus::Running) {
+            DB::afterCommit(static function (): void {
+                DeriveMovieDifficulty::dispatch();
+            });
+        }
 
         if (! $closed) {
             $run->refresh();

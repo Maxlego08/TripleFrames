@@ -6,6 +6,7 @@ use App\Enums\Locale;
 use App\Enums\MovieDifficulty;
 use App\Enums\SettingPresetKey;
 use App\Enums\ThemeKind;
+use App\Jobs\Catalog\DeriveMovieDifficulty;
 use App\Jobs\Catalog\SyncThemeMembership;
 use App\Models\Collection;
 use App\Models\SettingPreset;
@@ -81,6 +82,8 @@ use RuntimeException;
  * thème amorcé par le hook ne passe par aucun geste du back-office et naîtrait
  * sinon sans aucune appartenance (spec 30 § 13.2). Rien n'est dispatché pour une
  * ligne déjà présente, ni pour un thème écarté par une garde de désignation.
+ * Une saga réellement insérée dispatche en plus, une fois par passage,
+ * {@see DeriveMovieDifficulty} (spec 30 § 14.2, L30-10).
  *
  * @phpstan-type ThemeDefinition array{
  *     key: string,
@@ -181,11 +184,26 @@ class PlatformDataSeeder extends Seeder
             $this->reconcileSettingPresets();
             $this->seedTmdbCompanies();
 
+            $sagaInserted = false;
+
             foreach ($this->seedThemes() as $theme) {
                 // Après commit, règle portée par la classe (`ShouldQueueAfterCommit`) :
                 // le job ne lit jamais un thème encore invisible hors de cette
                 // transaction (spec 30 § 13.2).
                 SyncThemeMembership::dispatch($theme->id);
+
+                $sagaInserted = $sagaInserted || $theme->theme_kind === ThemeKind::Saga;
+            }
+
+            // Une saga insérée donne son bonus de déciles à sa collection
+            // (spec 30 § 14.2, L30-10) : une seule dérivation, quel que soit
+            // le nombre de sagas insérées, après commit elle aussi.
+            // Envoyée par `DB::afterCommit()` : son verrou d'unicité se prend à
+            // l'envoi, jamais pendant que la saga est encore invisible.
+            if ($sagaInserted) {
+                DB::afterCommit(static function (): void {
+                    DeriveMovieDifficulty::dispatch();
+                });
             }
         }));
     }

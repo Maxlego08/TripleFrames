@@ -43,6 +43,8 @@ return [
         'curation' => 'File de curation',
         'catalog' => 'Catalogue',
         'near_misses' => 'Suggestions d’alias',
+        // Films jamais trouvés et incidents (ligne 29, L20-29).
+        'incidents' => 'Incidents',
         // Les signalements de contenu par les joueurs (ligne 48, D63 du 07/10).
         'content_reports' => 'Signalements',
         // L'écran des thèmes (spec 20 § 9.6, D43 du 01/10).
@@ -583,7 +585,11 @@ return [
         'heading' => 'File de curation',
         'description' => 'Les films à curer, dans l’ordre de travail : d’abord les films entamés, du plus récemment touché au plus ancien, puis les autres par nombre de votes décroissant. Le catalogue de démonstration n’y figure pas.',
         'next' => 'Film suivant',
-        'next_hint' => 'Ouvre l’éditeur du premier film de la file, filtres conservés.',
+        'next_hint' => 'Ouvre l’éditeur du premier film de la file que personne d’autre ne cure, filtres conservés.',
+        // La réservation souple (spec 20 § 4.1, L20-32) : un film ouvert par
+        // un autre curateur, que « Film suivant » saute.
+        'claimed_by' => 'En cours chez :name',
+        'claimed_hint' => 'Un autre curateur travaille sur ce film : « Film suivant » le saute. La réservation tombe d’elle-même après quelques minutes sans activité.',
         'empty' => 'Aucun autre film n’attend dans la file de curation. Importez de nouveaux films pour la remplir.',
         'empty_filtered' => 'Aucun film de la file ne correspond à ces filtres. Effacez-les pour revoir toute la file.',
         'empty_stratum' => 'Aucun autre film de cette sélection n’attend dans la file. Effacez les filtres pour revoir toute la file.',
@@ -834,6 +840,28 @@ return [
             'movie_suspended' => 'Film suspendu. Signalements clos : :count.',
             'frame_suspended' => 'Image suspendue. Signalements clos : :count.',
         ],
+    ],
+
+    /*
+    | Films jamais trouvés et incidents (spec 20 § 12.1, ligne 29, L20-29) :
+    | agrégat par film, sans aucune identité de joueur.
+    */
+    'incidents' => [
+        'title' => 'Incidents',
+        'heading' => 'Films jamais trouvés et incidents',
+        'description' => 'Sur les :days derniers jours : les manches que personne n’a trouvées, les manches annulées et les images remplacées en cours de manche, film par film. Aucun joueur n’y est nommé.',
+        'empty' => 'Aucun incident sur cette période.',
+        'list' => 'Films concernés',
+        'reaction' => 'Une réaction est un geste de curation ordinaire : une autre variante, un niveau revu, un alias.',
+        'column' => [
+            'movie' => 'Film',
+            'never_found' => 'Jamais trouvé',
+            'cancelled' => 'Manches annulées',
+            'substituted' => 'Images remplacées',
+        ],
+        'never_found' => ':never sur :completed manches terminées',
+        'reason_count' => ':reason : :count',
+        'none' => '—',
     ],
 
     'near_misses' => [
@@ -3630,6 +3658,19 @@ return [
                 'no_participants' => 'Aucun participant à cette manche.',
                 'empty' => 'Aucune manche.',
             ],
+            // Les écarts de rejeu (spec 80 § 6.3, L80-9) : chaque bonne
+            // réponse rejouée sur les faits figés de la partie.
+            'replay' => [
+                'heading' => 'Rejeu des scores',
+                'description' => 'Chaque bonne réponse est recalculée depuis les faits figés de la partie (instant reçu, paliers, grâce, réglages, version de règle), manches annulées comprises. Un écart signale un journal altéré.',
+                'pending' => 'Disponible une fois la partie terminée.',
+                'consistent' => 'Journal cohérent : chaque bonne réponse redonne exactement son score.',
+                'round' => 'Manche',
+                'player' => 'Joueur',
+                'stored' => 'Écrit',
+                'replayed' => 'Rejoué',
+                'score' => 'palier :tier · :tier_points + :bonus = :total pts',
+            ],
         ],
         'trace' => [
             'heading' => 'Chronologie technique',
@@ -3975,7 +4016,8 @@ return [
         | l'instantané précède toute écriture.
         */
         'themes' => [
-            'snapshot_failed' => 'Instantané refusé : aucune appartenance n’a été réévaluée. Corrigez la cause signalée par backup:snapshot, puis relancez catalog:themes.',
+            'snapshot_failed' => 'Instantané refusé : aucune difficulté ni aucune appartenance n’a été réévaluée. Corrigez la cause signalée par backup:snapshot, puis relancez catalog:themes.',
+            'derived' => 'Difficulté dérivée : :changed films changés.',
             'theme' => 'lignes changées : :changed',
             'done' => 'Réévaluation terminée. Thèmes : :themes ; lignes d’appartenance changées : :changed.',
         ],

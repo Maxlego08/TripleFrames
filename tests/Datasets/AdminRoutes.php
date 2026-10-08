@@ -531,6 +531,16 @@ function adminRoutesMatrix(): array
             redirect: fn (array $parameters): string => route('admin.content-reports.index'),
         ),
 
+        // Ligne 29 — films jamais trouvés et incidents (L20-29), agrégat par
+        // film sans identité de joueur.
+        'admin.incidents.index' => adminRoutesRow(
+            row: 29,
+            method: 'GET',
+            guards: ['can:viewAny,'.Movie::class],
+            curator: 200,
+            admin: 200,
+        ),
+
         // Ligne 27 — file agrégée de suggestions, reconstruction idempotente,
         // promotion en alias curé et rejet sans auteur.
         'admin.near_misses.index' => adminRoutesRow(
