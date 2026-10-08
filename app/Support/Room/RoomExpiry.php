@@ -63,6 +63,17 @@ final class RoomExpiry
     }
 
     /**
+     * L'échéance d'archivage d'un salon actif à `$now` : au plus tard
+     * l'inactivité de 24 h plus une cadence de balayage. Une activité
+     * ultérieure la repousse ; c'est donc une borne basse de la vie du
+     * salon, durée de la marque d'avatar d'un rattachement (spec 40 § 13.2).
+     */
+    public static function archiveDeadlineFrom(CarbonImmutable $now): CarbonImmutable
+    {
+        return $now->addMinutes(self::ROOM_IDLE_MINUTES + self::SWEEP_EVERY_MINUTES);
+    }
+
+    /**
      * L'expression cron du balayage, bâtie sur {@see self::SWEEP_EVERY_MINUTES}
      * et jamais écrite ailleurs (`routes/console.php`).
      */

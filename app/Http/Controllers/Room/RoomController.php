@@ -3,10 +3,12 @@
 namespace App\Http\Controllers\Room;
 
 use App\Actions\Game\ClaimSeatTab;
+use App\Actions\Identity\ClaimSeatForAccount;
 use App\Actions\Room\CreateRoom;
 use App\Actions\Room\TransferHost;
 use App\Enums\RoomStatus;
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Room\Concerns\AttachesSeatToAccount;
 use App\Http\Controllers\Room\Concerns\PresentsSeatForm;
 use App\Http\Middleware\EnsureActiveSeat;
 use App\Http\Requests\Room\StoreRoomRequest;
@@ -44,6 +46,7 @@ use Symfony\Component\HttpFoundation\Response;
  */
 class RoomController extends Controller
 {
+    use AttachesSeatToAccount;
     use PresentsSeatForm;
 
     public function create(): InertiaResponse
@@ -78,8 +81,10 @@ class RoomController extends Controller
      * 2. aucun siège non expulsé pour ce jeton (`seatIn()`) → 303 vers la
      *    page d'entrée publique `room.entry` ;
      * 3. sinon : la réparation d'hôte (§ 11.1 : une lecture qui ne trouve pas
-     *    de cible valide déclenche un transfert, jamais une erreur), puis
-     *    `ClaimSeatTab` (le second onglet prend la main), puis **la page
+     *    de cible valide déclenche un transfert, jamais une erreur), puis le
+     *    rattachement automatique du siège invité au compte connecté
+     *    ({@see ClaimSeatForAccount}, spec 40 § 13.2, D66 du 07/10 : ce seul
+     *    siège, avis `room.seat.claimed` en flash), puis `ClaimSeatTab` (le second onglet prend la main), puis **la page
      *    `game/lobby`, dans tout statut non archivé** — `lobby` comme
      *    `playing`, podium compris (§ 8.1).
      *
@@ -116,7 +121,7 @@ class RoomController extends Controller
      * Aucune prop ne porte un identifiant interne de salon, de siège ou de
      * thème : les sièges voyagent par `public_id`, les thèmes par clé.
      */
-    public function show(Request $request, Room $room, PlayerTokenManager $tokens, ClaimSeatTab $claim, TransferHost $transfer): InertiaResponse|Response
+    public function show(Request $request, Room $room, PlayerTokenManager $tokens, ClaimSeatTab $claim, TransferHost $transfer, ClaimSeatForAccount $attach): InertiaResponse|Response
     {
         if ($room->status === RoomStatus::Archived) {
             return Inertia::render('game/room-expired')
@@ -131,6 +136,8 @@ class RoomController extends Controller
         }
 
         $this->repairHost($room, $transfer);
+
+        $this->attachToAccount($request, $seat, $attach);
 
         $seatToken = $claim->handle($seat, EnsureActiveSeat::presentedToken($request));
 

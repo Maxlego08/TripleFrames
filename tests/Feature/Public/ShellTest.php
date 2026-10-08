@@ -743,9 +743,10 @@ it("n'émet aucun toast depuis une page, un composant ou un hook de jeu", functi
     }
 
     // Côté serveur : aucun contrôleur de `routes/game.php`, traits compris,
-    // ne pose de flash `toast`. Le seul flash qu'une page de jeu subit est
-    // celui de la page expirée, posé par le gestionnaire d'exceptions (§ 4.8)
-    // et rendu en texte par `GameLayout`.
+    // ne pose de flash `toast`. Une page de jeu ne subit que celui de la page
+    // expirée, posé par le gestionnaire d'exceptions (§ 4.8), et l'avis
+    // `game_notice` du rattachement du siège (spec 40 § 13.2), tous deux
+    // rendus en texte par `GameLayout`.
     $classes = shellGameControllerClasses();
 
     expect(count($classes))->toBeGreaterThanOrEqual(5);

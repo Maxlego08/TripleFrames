@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Game;
 
 use App\Actions\Game\ClaimSeatTab;
 use App\Actions\Game\StartSoloGame;
+use App\Actions\Identity\ClaimSeatForAccount;
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Room\Concerns\AttachesSeatToAccount;
 use App\Http\Controllers\Room\Concerns\PresentsSeatForm;
 use App\Http\Middleware\EnsureActiveSeat;
 use App\Http\Requests\Game\SoloStartRequest;
@@ -48,6 +50,7 @@ use Throwable;
  */
 final class SoloGameController extends Controller
 {
+    use AttachesSeatToAccount;
     use PresentsSeatForm;
 
     /** Message d'un échec technique du démarrage (§ 16.2), clé de 50 réutilisée. */
@@ -120,7 +123,10 @@ final class SoloGameController extends Controller
      * 1. aucun siège solo tenu par le jeton (jeton absent, ou aucun `player`
      *    solo non parti) → 303 vers `solo.create`, **sans frapper de jeton**
      *    (C4 I4.1, § 16.4) ;
-     * 2. sinon `ClaimSeatTab` (l'onglet prend la main, § 12.7), puis
+     * 2. sinon le rattachement automatique du siège solo au compte connecté
+     *    ({@see ClaimSeatForAccount}, spec 40 § 13.2, n° 24 : solo compris,
+     *    sans bascule d'avatar), puis `ClaimSeatTab` (l'onglet prend la
+     *    main, § 12.7), puis
      *    `game/solo` avec :
      *    - `state` — la partie solo en cours, sinon la dernière partie close
      *      du siège pour son podium, sinon le paquet sans partie
@@ -138,13 +144,15 @@ final class SoloGameController extends Controller
      * fermetures ne sont évaluées que pour les props demandées : un
      * rechargement partiel ne reconstruit ni le paquet ni le vivier.
      */
-    public function show(Request $request, SoloSeat $soloSeat, ClaimSeatTab $claim, SoloPresets $presets): InertiaResponse|RedirectResponse
+    public function show(Request $request, SoloSeat $soloSeat, ClaimSeatTab $claim, SoloPresets $presets, ClaimSeatForAccount $attach): InertiaResponse|RedirectResponse
     {
         $seat = $soloSeat->of($request);
 
         if ($seat === null) {
             return to_route('solo.create', [], Response::HTTP_SEE_OTHER);
         }
+
+        $this->attachToAccount($request, $seat, $attach);
 
         $seatToken = $claim->handle($seat, EnsureActiveSeat::presentedToken($request));
         $now = Date::now()->toImmutable();

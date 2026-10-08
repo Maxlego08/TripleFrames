@@ -19,7 +19,8 @@ import type { GameLayoutProps } from '@/types/ui';
  *
  * De haut en bas, **exactement** :
  * 1. `MaintenanceBanner` (rien hors drainage) et, sous lui, l'avis de page
- *    expirée, le seul flash qu'une page de jeu subit ;
+ *    expirée ou de rattachement du siège au compte (spec 40 § 13.2), les
+ *    seuls flashs qu'une page de jeu subit ;
  * 2. `<main id="game-main">`, la page ;
  * 3. la ligne basse : le sélecteur de langue en icône seule et le déclencheur
  *    du pied de page replié — liens légaux dans une feuille, ouverts en nouvel

@@ -203,6 +203,14 @@ describe("avis de page expirée d'une page de jeu", () => {
             }),
         ).toBe('La page a expiré.');
 
+        // L'avis du rattachement du siège : flash propre aux pages de jeu,
+        // jamais un toast (spec 40 § 13.2, spec 90 § 2.3).
+        expect(
+            flashNoticeMessage({
+                game_notice: { message: 'Siège rattaché.' },
+            }),
+        ).toBe('Siège rattaché.');
+
         for (const flash of [
             null,
             undefined,
@@ -214,6 +222,8 @@ describe("avis de page expirée d'une page de jeu", () => {
             { toast: { type: 'error', message: '   ' } },
             { toast: { type: 'error', message: 42 } },
             { notice: { message: 'La page a expiré.' } },
+            { game_notice: 'Siège rattaché.' },
+            { game_notice: { message: '  ' } },
         ]) {
             expect(flashNoticeMessage(flash)).toBeNull();
         }
