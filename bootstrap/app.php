@@ -5,9 +5,11 @@ use App\Http\Middleware\EnforceAccountSwitches;
 use App\Http\Middleware\EnsureActiveSeat;
 use App\Http\Middleware\EnsurePrivilegedTwoFactor;
 use App\Http\Middleware\EnsureProbeToken;
+use App\Http\Middleware\EnsureTermsAccepted;
 use App\Http\Middleware\EnsureUserHasRole;
 use App\Http\Middleware\ForceAdminLocale;
 use App\Http\Middleware\HandleInertiaRequests;
+use App\Http\Middleware\KeepPrivilegedTwoFactor;
 use App\Http\Middleware\MeasureRequest;
 use App\Http\Middleware\RecordVisit;
 use App\Http\Middleware\RobotsDirectives;
@@ -88,6 +90,10 @@ return Application::configure(basePath: dirname(__DIR__))
             'admin.locale' => ForceAdminLocale::class,
             'role' => EnsureUserHasRole::class,
             'seat.active' => EnsureActiveSeat::class,
+            // Ré-acceptation des CGU (spec 40 § 13.1) : pages de compte seules.
+            'terms.current' => EnsureTermsAccepted::class,
+            // 2FA non désactivable par un rôle privilégié (spec 40 § 13.8).
+            'two_factor.keep' => KeepPrivilegedTwoFactor::class,
             'translations' => SelectTranslationDomains::class,
         ]);
 

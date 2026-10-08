@@ -1,5 +1,6 @@
 <?php
 
+use App\Support\Identity\PasskeyRelyingParty;
 use Laravel\Fortify\Features;
 
 return [
@@ -117,8 +118,12 @@ return [
      * ci-dessous, SANS condition : leurs routes doivent exister partout pour
      * que les helpers Wayfinder, régénérés au build, soient les mêmes sur
      * toute machine.
+     *
+     * `two_factor.keep` (spec 40 § 13.8, L40-15) refuse `two-factor.disable`
+     * à un compte `curator` ou `admin` : la porte `admin.2fa` exige un TOTP
+     * confirmé, que le titulaire ne peut donc plus retirer lui-même.
      */
-    'middleware' => ['web', 'translations:account,legal', 'accounts.switches'],
+    'middleware' => ['web', 'translations:account,legal', 'accounts.switches', 'two_factor.keep'],
 
     /*
     |--------------------------------------------------------------------------
@@ -160,8 +165,12 @@ return [
     */
 
     'passkeys' => [
-        'relying_party_id' => parse_url(config('app.url'), PHP_URL_HOST),
-        'allowed_origins' => [config('app.url')],
+        // Spec 40 § 13.8 (L40-15) : `PASSKEYS_RP_ID` et
+        // `PASSKEYS_ALLOWED_ORIGINS`, vides dans `.env.example`, à défaut
+        // l'hôte et l'URL d'`APP_URL`. Aucun nom de domaine ici : la première
+        // passkey de production fige l'identifiant (décision 5).
+        'relying_party_id' => PasskeyRelyingParty::id(env('PASSKEYS_RP_ID'), config('app.url')),
+        'allowed_origins' => PasskeyRelyingParty::origins(env('PASSKEYS_ALLOWED_ORIGINS'), config('app.url')),
         'user_handle_secret' => env('PASSKEYS_USER_HANDLE_SECRET', config('app.key')),
         'timeout' => 60000,
     ],

@@ -140,3 +140,35 @@ function engineConstantsConfigure(array $values): void
 
     app()->forgetInstance(EngineConstants::class);
 }
+
+/**
+ * Un `credential` d'assertion de passkey au FORMAT WebAuthn valide (lisible
+ * par `WebAuthn::fromJson`, que lit la requête du paquet), dont la signature
+ * n'est jamais vérifiée : les tests simulent `VerifyPasskey` (spec 40
+ * § 13.8). Aucune clé réelle, aucun authentificateur.
+ *
+ * @return array<string, mixed>
+ */
+function passkeyAssertionPayload(): array
+{
+    $b64 = static fn (string $bytes): string => rtrim(strtr(base64_encode($bytes), '+/', '-_'), '=');
+
+    $clientData = (string) json_encode([
+        'type' => 'webauthn.get',
+        'challenge' => $b64(random_bytes(32)),
+        'origin' => (string) config('app.url'),
+    ]);
+    $authenticatorData = hash('sha256', 'localhost', true).chr(0x05).pack('N', 1);
+
+    return [
+        'id' => $b64('credential'),
+        'rawId' => $b64('credential'),
+        'type' => 'public-key',
+        'response' => [
+            'clientDataJSON' => $b64($clientData),
+            'authenticatorData' => $b64($authenticatorData),
+            'signature' => $b64('signature'),
+            'userHandle' => null,
+        ],
+    ];
+}

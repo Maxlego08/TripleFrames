@@ -1,5 +1,5 @@
 import { Form, Head } from '@inertiajs/react';
-import { useRef } from 'react';
+import { useId, useRef } from 'react';
 import SecurityController from '@/actions/App/Http/Controllers/Settings/SecurityController';
 import Heading from '@/components/heading';
 import InputError from '@/components/input-error';
@@ -29,10 +29,17 @@ const breadcrumbs: BreadcrumbItem[] = [
     },
 ];
 
+/**
+ * Réglages › Sécurité (spec 40 § 8 et § 12.4, 90 § 11.2) : mot de passe
+ * (défini pour un compte né d'un fournisseur), 2FA et passkeys. Écran réécrit
+ * hors du starter : tokens et `settings.scss` seulement, chaque erreur reliée
+ * à son champ par `aria-describedby`.
+ */
 export default function Security(props: Props) {
     const passwordInput = useRef<HTMLInputElement>(null);
     const currentPasswordInput = useRef<HTMLInputElement>(null);
     const { t } = useTranslations();
+    const headingId = useId();
 
     return (
         <>
@@ -40,8 +47,12 @@ export default function Security(props: Props) {
 
             <h1 className="sr-only">{t('account.security.title')}</h1>
 
-            <div className="settings-section space-y-6">
+            <section
+                className="settings-section space-y-6"
+                aria-labelledby={headingId}
+            >
                 <Heading
+                    id={headingId}
                     variant="small"
                     title={
                         props.hasPassword
@@ -94,9 +105,20 @@ export default function Security(props: Props) {
                                         placeholder={t(
                                             'account.fields.current_password',
                                         )}
+                                        aria-invalid={
+                                            errors.current_password
+                                                ? true
+                                                : undefined
+                                        }
+                                        aria-describedby={
+                                            errors.current_password
+                                                ? 'current_password-error'
+                                                : undefined
+                                        }
                                     />
 
                                     <InputError
+                                        id="current_password-error"
                                         message={errors.current_password}
                                     />
                                 </div>
@@ -117,9 +139,20 @@ export default function Security(props: Props) {
                                         'account.fields.new_password',
                                     )}
                                     passwordrules={props.passwordRules}
+                                    aria-invalid={
+                                        errors.password ? true : undefined
+                                    }
+                                    aria-describedby={
+                                        errors.password
+                                            ? 'password-error'
+                                            : undefined
+                                    }
                                 />
 
-                                <InputError message={errors.password} />
+                                <InputError
+                                    id="password-error"
+                                    message={errors.password}
+                                />
                             </div>
 
                             <div className="grid gap-2">
@@ -136,16 +169,30 @@ export default function Security(props: Props) {
                                         'account.fields.password_confirmation',
                                     )}
                                     passwordrules={props.passwordRules}
+                                    aria-invalid={
+                                        errors.password_confirmation
+                                            ? true
+                                            : undefined
+                                    }
+                                    aria-describedby={
+                                        errors.password_confirmation
+                                            ? 'password_confirmation-error'
+                                            : undefined
+                                    }
                                 />
 
                                 <InputError
+                                    id="password_confirmation-error"
                                     message={errors.password_confirmation}
                                 />
                             </div>
 
                             <div className="flex items-center gap-4">
                                 <Button
+                                    type="submit"
+                                    className="min-h-11"
                                     disabled={processing}
+                                    aria-busy={processing}
                                     data-test="update-password-button"
                                 >
                                     {t('account.security.submit')}
@@ -154,10 +201,11 @@ export default function Security(props: Props) {
                         </>
                     )}
                 </Form>
-            </div>
+            </section>
 
             <ManageTwoFactor
                 canManageTwoFactor={props.canManageTwoFactor}
+                canDisableTwoFactor={props.canDisableTwoFactor}
                 requiresConfirmation={props.requiresConfirmation}
                 twoFactorEnabled={props.twoFactorEnabled}
             />

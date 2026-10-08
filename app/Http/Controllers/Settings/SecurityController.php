@@ -3,8 +3,10 @@
 namespace App\Http\Controllers\Settings;
 
 use App\Http\Controllers\Controller;
+use App\Http\Middleware\KeepPrivilegedTwoFactor;
 use App\Http\Requests\Settings\PasswordUpdateRequest;
 use App\Http\Requests\Settings\TwoFactorAuthenticationRequest;
+use App\Models\User;
 use App\Support\Identity\AccountSwitches;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Validation\Rules\Password;
@@ -54,6 +56,11 @@ class SecurityController extends Controller
 
             $props['twoFactorEnabled'] = $request->user()->hasEnabledTwoFactorAuthentication();
             $props['requiresConfirmation'] = Features::optionEnabled(Features::twoFactorAuthentication(), 'confirm');
+            // Un rôle privilégié ne coupe pas son second facteur (spec 40
+            // § 13.8) : le bouton est masqué, la route refusée
+            // (`two_factor.keep`).
+            $user = $request->user();
+            $props['canDisableTwoFactor'] = $user instanceof User && KeepPrivilegedTwoFactor::canDisable($user);
         }
 
         return Inertia::render('settings/security', $props);

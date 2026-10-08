@@ -42,7 +42,11 @@ use Symfony\Component\HttpFoundation\Response;
  * **Ce que la garde ne juge pas** : la manière dont la session s'est ouverte.
  * Elle suppose que tout chemin de connexion d'un compte à 2FA active passe le
  * défi (Fortify au J1 ; l'OAuth du J2 est tenu par la spec 40). Elle ne lit
- * que `two_factor_confirmed_at`.
+ * que `two_factor_confirmed_at`. Une connexion par passkey à vérification de
+ * l'utilisateur saute le défi (n° 37) mais ne dispense jamais d'enrôler le
+ * TOTP : une session ouverte par passkey sans TOTP confirmé reste dehors
+ * (spec 40 § 13.8, n° 10 option A, D66 du 07/10). Le titulaire ne peut pas
+ * non plus couper ce TOTP (`two_factor.keep`).
  *
  * Un compte sous le seuil `curator` n'a rien à faire ici : la garde le laisse
  * passer sans rien décider, `role` l'a déjà refusé en amont. C'est le seuil de
