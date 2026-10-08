@@ -1089,6 +1089,7 @@ Elles ont un destinataire unique, et sont donc résolues dans la langue de la re
 | R6 | `DeployDrain::isDraining()` → `draining` (D32 du 23/09). |
 | R7 | `room.status = lobby`, `last_activity_at = $now`. |
 | R8 | Après validation : `room.replayed` avec `RoomSettingsState` recalculé, puisque la non-répétition a réduit le vivier. |
+| R9 | Salon revenu au lobby : les marques d'avatar des sièges rattachés en cours de partie (`40` § 13.2) sont consommées par `ClaimSeatForAccount::applyPendingAvatars()`, dans une **seconde transaction** qui reprend le verrou du salon et relit `status = lobby` — jamais après le verrou de la partie de R5 (ordre `room → player → game`) ; `seat.updated` après sa validation — amendé le 07/10 (D66 du 07/10). |
 
 - **« Rejouer » est un geste d'hôte**, proposé sur le podium par `components/room/replay-button.tsx`, composant affiché par l'état podium de `game/lobby` (écran de `90`, contenu de `60` et `80`). Les non-hôtes voient `room.replay.waiting`.
 - Les échecs techniques de la transaction suivent le § 12.5.

@@ -1,6 +1,6 @@
 # Journal des décisions — TripleFrames
 
-Ce document était un questionnaire. Il ne l'est plus : les dix-neuf décisions qu'il appelait ont été prises le **22/09/2026**, et il devient le **registre** où l'on relira, dans six mois, ce qui a été décidé, quand, et surtout **ce qu'on a accepté de payer pour chaque décision**. Il ne demande plus rien. Le **23/09/2026**, les trente-sept décisions de la session de préparation des specs du jalon 1 s'y sont ajoutées, consignées de la même façon, dont trois (D35 à D37) posées après la consolidation du budget du jalon 1 — amendé le 23/09. Le **28/09/2026**, trois décisions du porteur (D38 à D40) s'y ajoutent, dans la section « Décisions du 28/09/2026 » — amendé le 28/09. Le **30/09/2026**, deux décisions du porteur (D41 et D42) s'y ajoutent, dans la section « Décisions du 30/09/2026 » — amendé le 30/09.
+Ce document était un questionnaire. Il ne l'est plus : les dix-neuf décisions qu'il appelait ont été prises le **22/09/2026**, et il devient le **registre** où l'on relira, dans six mois, ce qui a été décidé, quand, et surtout **ce qu'on a accepté de payer pour chaque décision**. Il ne demande plus rien. Le **23/09/2026**, les trente-sept décisions de la session de préparation des specs du jalon 1 s'y sont ajoutées, consignées de la même façon, dont trois (D35 à D37) posées après la consolidation du budget du jalon 1 — amendé le 23/09. Le **28/09/2026**, trois décisions du porteur (D38 à D40) s'y ajoutent, dans la section « Décisions du 28/09/2026 » — amendé le 28/09. Le **30/09/2026**, deux décisions du porteur (D41 et D42) s'y ajoutent, dans la section « Décisions du 30/09/2026 » — amendé le 30/09. Le **07/10/2026**, D66 consigne les cinquante et une réponses du porteur qui fixent l'écriture du jalon 2 (section « Décisions du 07/10/2026 ») — amendé le 07/10.
 
 **Une seule chose reste ouverte du questionnaire : le nom de domaine de production (décision 5).** Tant qu'il n'est pas acheté, toutes les specs écrivent le symbole `<DOMAINE>` et aucun compte de production ni aucune passkey n'est créé. D1 du 23/09 place son achat avant la semaine 4 du jalon 1. La session du 23/09 laisse en outre, sans rouvrir le questionnaire, trois questions délibérément ouvertes pour la section J2 de `40` et deux écarts signalés au porteur (R-46, R-47), listés à la fin de la section « Décisions du 23/09/2026 — jalon 1 » — amendé le 23/09. R-46 est confirmé par D38 du 28/09 — amendé le 28/09.
 
@@ -835,6 +835,79 @@ Demande du porteur (07/10) : « Ce thème ne compte que 2 œuvre(s) : il en faut
 |---|---|---|---|---|
 | D65 | Seuil d'œuvres à la publication d'un thème | **supprimé comme refus** : un thème se publie quel que soit son nombre d'œuvres ; l'écran avertit sous `DEFAULT_ROUNDS_COUNT` | **oui**, révise la forme « refus » de D43 du 01/10 (`20` § 9.6) | `20` § 9.6 ; `30` § 12.3 |
 
+### D66. Comment le jalon 2 s'écrit-il ? — **cinquante et une questions fermées : toutes les recommandations retenues, sauf le rattachement d'un siège invité, AUTOMATIQUE (n° 23) ; TOTP obligatoire des rôles privilégiés (n° 10 = A) ; dormance 24 mois + 30 jours confirmée**
+
+**Demande du porteur (07/10).** Implémenter tout le jalon 2 listé. Cinquante et une questions fermées lui ont été présentées, classées par impact structurel, chacune avec ses options et une recommandation (annexe archivée `docs/specs/j2-decisions-proposees.md`, qui fixe leur numérotation « n° 1 » à « n° 51 »). Réponses : **n° 10 → A** ; **n° 23 → rattachement automatique**, contre la recommandation ; **n° 24 → le seul siège de la page, solo compris** ; **n° 27 et n° 28 → refus pendant une partie en cours, dormance 24 mois + 30 jours** ; **toutes les autres → recommandation retenue**.
+
+**Ce que la décision arrête**, compactement (règle complète dans la spec citée) :
+
+*A. Schéma, dépendances, environnements*
+1. `saved_config` adressée par une colonne **`public_id`** `char(12)` (`PublicId`, patron D63) — `10` § 6.3, `50`.
+2. Export : **ZIP** = JSON lisible par machine + README localisé + fichiers d'avatar ; **`ext-zip`** déclarée (composer, CI, VPS) — `40` § 13.5.
+3. Export : **toutes les données du compte**, sans les signalements reçus ni `admin_action` — `40` § 13.5.
+4. Identité d'un demandeur de retrait (`takedown_identity`) : **5 ans après la décision**, constante `RetentionWindows`, à confirmer par le conseil — `10` § 8.2, `100` § 25.
+5. Préproduction : **catalogue de démonstration** sous `APP_ENV=staging` — `100` § 18.
+6. Services de préproduction : **unités systemd système plafonnées**, un seul geste root — `100` § 18.
+7. Parcours de bout en bout : **`@playwright/test` autonome** contre la préproduction — `100` § 19.
+8. « Bannir un pseudo » : **masquage définitif + forme ajoutée à la liste noire versionnée** au déploiement suivant — `40` § 13.3.
+9. État « site fermé » : **dérivé de la dernière ligne `site.*` du journal**, mis en cache, aucune table — `100` § 24.
+
+*B. Sécurité et accès*
+10. **A** : **TOTP obligatoire** pour `curator` et `admin` ; une passkey ne fait que sauter le défi — `40` § 13.8.
+11. Téléchargement de l'export : **signature + session du propriétaire** — `40` § 13.5.
+12. CGU non acceptées : **toutes les pages de compte suspendues**, sauf déconnexion, export et suppression ; le jeu jamais — `40` § 13.1.
+13. Back-office **exempté** de la garde des CGU — `40` § 13.1.
+14. Un **administrateur peut anonymiser un tiers** (geste du back-office, motif obligatoire, `user.anonymized`, garde du dernier admin) — `40` § 13.6.
+15. Formulaire public de retrait : **pot de miel + délai signé** — `10` § 8.2, `20` § 11.4.
+16. Limiteur `answer` **rendu atomique**, avec L70-13 — `70` § 13.2.
+17. Page de fermeture : **503 sans `Retry-After`** + `noindex` — `90` § 11.7.
+18. Back-office **ouvert aux administrateurs** pendant la fermeture — `100` § 24.
+19. Une page légale **provisoire** reste `noindex` même indexable (garde de code) — `90` § 11.5, `100` § 21.
+
+*C. Règles produit*
+20. `users.name` suit la **règle de pseudo de jeu** partout (sans unicité par salon) ; noms non conformes jamais migrés, seulement pas préremplis — `40` § 13.1.
+21. Un pseudo saisi au siège **ne réécrit jamais** `users.name` — `40` § 13.9.
+22. Préremplissage **aussi** pour curateurs et administrateurs, depuis `users.name`, jamais `real_name` (amende `40` § 8.4.2) — `40` § 13.9.
+23. **Rattachement d'un siège invité AUTOMATIQUE** au rendu de la page du siège pour un compte connecté, sans confirmation — `40` § 13.2. **Seul choix contraire à la recommandation** (ci-dessous).
+24. Portée : **le seul siège de la page, solo compris** — `40` § 13.2.
+25. Avatar après rattachement : **immédiatement en lobby, sinon au retour au lobby** (règle D55) ; le pseudo ne change jamais — `40` § 13.2.
+26. Joueur masqué : **avis privé discret**, sans e-mail — `40` § 13.3.
+27. Suppression d'un compte en partie : **refusée** tant que la partie est en cours — `40` § 13.6.
+28. Dormance : **24 mois + 30 jours confirmés** — `40` § 13.7.
+29. Partie sans score : **exclue du seul meilleur score**, comptée ailleurs — `80` § 13, `40` § 13.4.
+30. Films d'une partie : page **`history.show`** (trouvé ou non, points, Letterboxd) ; adresse `game.public_id` (exigence nouvelle à `10`) — `40` § 13.4.
+31. Partie à 0 manche jouée : **masquée** de « Mes parties » — `40` § 13.4.
+32. Export prêt : **e-mail si l'adresse est vérifiée**, plus l'état à l'écran — `40` § 13.5.
+33. Invité : **e-mail de contact + commande admin**, explication de l'article 11 sur la confidentialité — `40` § 13.5.
+34. Suspension depuis la file : signalements clos en **`resolved`**, issues **`movie_suspended`** et **`frame_suspended`** — `20` § 11.6, `10` § 8.1 bis.
+35. Crochet **`RoundAnswersClosed` retiré** — `60` § 9.4, `70` L70-12.
+36. Ré-ajout des octets d'une image retirée **bloqué sur tout le catalogue** — `20` § 11.3.
+37. Une décision `rejected` / `out_of_scope` **ne lève jamais** la suspension liée — `20` § 11.2.
+38. Seconde adresse d'administration : **alerte interne en français** à `LEGAL_CONTACT_EMAIL` et `LEGAL_ALERT_EMAIL` (référence + lien, sans le corps) — `20` § 11.4, `100` § 23.
+39. Changement de CGU : **interstitiel seul**, aucun e-mail — `40` § 13.1.
+40. Cadence de réponse : **1-2/s** et **5-30 par manche** — `70` § 13.2, `50`.
+41. Sonde de force brute : **`K` = 5** — `70` § 13.2, `100` § 25.
+42. `maxAnswerLength` : **minimum fixe 60** — `70` § 13.2, `50`.
+43. `theme_selector_min_pool` : **environ 60 en configuration de production**, défaut du code 150 — `30`, `50` (geste humain).
+44. Avancé : **avertissement non bloquant** `waiting_pays` — `90` § 11.9, `50`.
+45. `site:close` : **entrées et lancements fermés**, parties en cours jusqu'au podium — `90` § 11.7, `100` § 24.
+46. QCM : **une légende unique** « titres originaux » au-dessus des quatre propositions — `90` § 11.10.
+47. Open Graph : **génériques sur toutes les pages**, sans image ni `room_code` — `90` § 11.5.
+48. Canonique : **sur les quatre routes indexables seulement** (`05` corrigé) — `90` § 11.5, `05`.
+49. Effacement d'un siège solo publié : **« au plus 48 h »** — `90` § 11.5.
+50. Icônes du starter : **remplacées** par une icône propre au projet — `100` § 28.
+51. Sonde `stale_lobby` : **seuil propre de 1 h** — `100` § 25.
+
+**Le choix contraire à la recommandation — n° 23, rattachement automatique.** La recommandation était un bandeau de confirmation en un clic, à cause de l'appareil partagé. Le porteur retient l'automatique : quand un compte connecté ouvre la page d'un siège invité tenu par son jeton (`game/lobby` du lobby au podium, `game/solo`), ce siège est rattaché sans confirmation. Bornes tenues : jamais dans un écouteur de connexion (I4.6 intact) ; un seul siège, celui de la page (n° 24) ; jamais un siège déjà lié, expulsé, ni un second siège du compte dans un même salon ; jamais après l'archivage. **Résidu assumé** : sur un navigateur partagé, la partie d'une autre personne tenue par le même cookie rejoint le compte qui s'y connecte ; aucun geste de détachement en v1 (demande par le contact, anonymisation par l'administrateur) ; la page de confidentialité le dit.
+
+**Écart assumé.** Révise : la recommandation du n° 23 et la piste « appareil partagé » de `40` § 10.1 sujet 5 ; `40` § 8.4 point 2 (préremplissage des rôles privilégiés) ; `60` § 9.4 et `70` L70-12 (crochet retiré) ; `05` (canonique « partout ») ; `70` L70-13 (version 3, non 2) ; les bornes de `RoomSettingsBounds` (resserrements : `RoomSettings::VERSION` incrémentée, configurations sauvegardées écrêtées au chargement). Exigences de schéma inscrites à `10` : `player.nickname_reports_from`, `saved_config.public_id`, **`game.public_id`** (exigence nouvelle de `40`, au-delà de la liste préparée, signalée), `users.dormancy_notified_at` confirmée, disque `exports`, cas `movie.resynced`, `import.abandoned`, `movie.difficulty_corrected`, `user.anonymized`, motif obligatoire de `nickname.banned`, issues `movie_suspended` et `frame_suspended`, durée de `takedown_identity`. Trois colonnes additives, **aucune sur une table de la règle 12**. Une décision : elle se cite « D66 du 07/10 », et ses points « n° k de D66 ».
+
+**Restent ouverts** (gestes humains, aucune règle) : les textes juridiques opposables et le passage de `legal.terms_version` à la version définitive ; la confirmation par le conseil des 5 ans de `takedown_identity` ; les noms des sous-traitants ; le SMTP transactionnel UE ; deux administrateurs nominatifs, la personne de confiance, la seconde adresse ; le relevé sur données réelles de L70-13, qui relit sans les rouvrir les bornes des n° 40 à 42 ; les variables de production (`ACCOUNTS_REGISTRATION_OPEN`, `ACCOUNTS_PASSKEYS_ENABLED`, `PASSKEYS_*`, `SITE_INDEXABLE`, `theme_selector_min_pool`, `MAIL_*`, `LEGAL_*`, `EXPORTS_DISK_ROOT`). Liste complète : `REPRISE.md` § « Gestes humains du J2 ».
+
+| # | Décision | Réponse retenue | Écart | Inscrite dans |
+|---|---|---|---|---|
+| D66 | Règles du jalon 2 (51 questions fermées) | **recommandations retenues**, sauf **n° 23 : rattachement automatique** ; n° 10 = A (TOTP obligatoire) ; n° 24 seul siège de la page ; n° 27 refus en partie ; n° 28 dormance 24 mois + 30 j | **oui** — n° 23 contre la recommandation ; révise `40` § 8.4.2, `60` § 9.4, `70` L70-12, `05` (canonique) ; trois colonnes, un disque, quatre cas de journal | `40` § 13 ; `100` § 18 à § 28 ; `90` § 11.5, § 11.7 à § 11.10 ; `20` § 11.2 à § 11.6, matrice lignes 35, 48, 49 ; `10` § 5.1, § 5.4, § 5.5, § 6.3, § 7.1, § 7.2, § 8.1 bis, § 8.2, § 8.3, § 11.1, § 13.2 ; `60` § 9.4, L60-17 ; `70` § 11, § 13.2, L70-12, L70-13 ; `05` ; `80` § 13 ; `50` (bornes, configurations, avertissement : par ses lots L50-10 à L50-13) |
+
 ## Seule question encore ouverte — le nom de domaine (décision 5)
 
 La réponse est **« à acheter »**, mais **le nom n'a pas été fourni**. C'est le dernier point du questionnaire, et il bloque plus tôt qu'annoncé : le montage de développement retenu — `dev.<DOMAINE>` résolu en 127.0.0.1, certificat par défi DNS-01, RP ID de passkey fixé à `<DOMAINE>` — est le **seul** qui satisfasse simultanément Google, Discord, WebAuthn et les cookies `Secure`. `tripleframes.test` ne conviendra jamais : Google refuse tout redirect URI en `http` hors `localhost` et les TLD non enregistrés. **Le domaine conditionne donc le développement d'OAuth et des passkeys, pas seulement la mise en production.** C'est un achat à une dizaine d'euros par an, et c'est le seul achat réellement sur le chemin critique. Amendé le 23/09 (D1 du 23/09) : il conditionne aussi le jalon 1 lui-même, dont le back-office et la curation naissent en production sur `<DOMAINE>` ; l'achat est donc placé **avant la semaine 4**.
@@ -866,12 +939,12 @@ Ce ne sont pas des questions : ce sont des informations à relever ou des noms �
 - **Noms des sous-traitants UE** à citer : hébergeur, SMTP, suivi d'erreurs, stockage objet de sauvegarde (fournisseur **différent** du VPS), supervision externe, second canal d'alerte. **Sans ces six noms, la page de confidentialité ne peut pas être écrite, donc le site ne peut pas ouvrir.** Amendé le 23/09 (n° 78) : un nom **par catégorie branchée** — le suivi d'erreurs n'est nommé que s'il est branché (entrée suivante) —, plus le registrar ; à fournir pour le jalon 2 (`100`, section « Jalon 2 — à écrire »).
 - **Décision de brancher ou non un suivi d'erreurs externe** : seulement s'il est contractualisé, en région UE et configurable sans cookie ni identifiant d'appareil. Sinon, logs locaux et sonde `/up` suffisent, et il ne figure pas dans la page de confidentialité.
 - **Personne de confiance** pour l'inventaire des accès scellé et la seconde adresse d'administration ; **existence d'un second administrateur réel et nominatif** (la décision 9 le permet naturellement). Amendé le 23/09 (D4 du 23/09) : au jalon 1, le porteur est le seul compte privilégié ; le second administrateur est une condition du jalon 2.
-- **2FA des rôles privilégiés — valeur retenue : `curator` ET `admin`**, écrite comme telle dans `00-overview.md` et dans les risques. Réversible d'un mot vers `admin` seulement, tant que la spec `40` n'est pas écrite. Amendé le 23/09 (n° 19 ; remplace « tant que la spec `40` n'est pas écrite ») : réversible tant que la garde de `20` (`admin.2fa`, `20` § 2.4, mécanisme de `10` A16) n'est pas implémentée ; la valeur est reprise, à confirmer par le porteur, dans la section J2 de `40`.
+- **2FA des rôles privilégiés — valeur retenue : `curator` ET `admin`**, écrite comme telle dans `00-overview.md` et dans les risques. Réversible d'un mot vers `admin` seulement, tant que la spec `40` n'est pas écrite. Amendé le 23/09 (n° 19 ; remplace « tant que la spec `40` n'est pas écrite ») : réversible tant que la garde de `20` (`admin.2fa`, `20` § 2.4, mécanisme de `10` A16) n'est pas implémentée ; la valeur est reprise, à confirmer par le porteur, dans la section J2 de `40`. **Confirmée le 07/10** (D66 du 07/10, n° 10 = A : TOTP obligatoire, une passkey ne fait que sauter le défi ; `40` § 13.8).
 - **Rédaction des trois textes légaux** (décision 4), par le porteur ou son conseil : **à commander dès le jalon 1, délai externe de 2 à 6 semaines**, seul livrable du projet dont le calendrier n'appartient pas au porteur.
 - **Licéité de l'acte de capture** (décision 7) : arrêter la **liste fermée des sources autorisées** avant le premier téléversement de capture, question à poser au même conseil et en même temps que les textes légaux. Sans arbitrage, repli : la voie TMDB seule est ouverte au jalon 1. Amendé le 28/09 : le porteur a ouvert la voie capture **avant** cet arbitrage (D38 du 28/09) ; la liste fermée reste due par le conseil, et une réponse restrictive ferme la voie par `CURATION_CAPTURE_ENABLED=false`.
 - **Liste d'amorçage des films d'exception** (~200 identifiants TMDB) : à constituer, puis à faire relire une fois — c'est un arbitrage de goût produit, pas une décision technique.
 - **Seuils chiffrés du lot pilote** (décision 10), à fixer **avant** le lot. Amendé le 23/09 (D10 et D11 du 23/09, AN20-5) : **fixés**, et ce sont ceux de `20` § 10.4 — disqualification inchangée (plus de 10 h de temps actif, ou une seule intervention en ligne de commande sur le chemin du curateur) ; le jalon 1 reste à 60 films tant que p90 × 40 films (ceux qui restent après le pilote) tient dans la réserve de curation de 36 h, sinon nombre de films du J1 = réserve ÷ p90 ; cible de volume projetée au p90, plafonnée à 500. Pilote **stratifié** : ≈ 15 films `discover` et ≈ 5 de la voie d'exception, mesures ventilées par voie (`20` § 10.3). Reste à déclarer avant le lot : les heures de curation hebdomadaires et l'horizon qui servent à projeter la cible de volume.
-- **Dormance — valeur retenue : rappel par e-mail à 24 mois sans connexion, anonymisation 30 jours plus tard**, écrite dans « Déjà tranché ». Le chiffre est volontairement différent de 12 pour qu'on ne les confonde jamais. Réversible tant que `40` n'est pas écrite. Amendé le 23/09 : réversible tant que la section J2 de `40` n'est pas écrite, où le porteur la confirme ou la révise (`40` § 10) ; résolution retenue le 23/09 (n° 38), à rédiger dans cette section J2 : balayage **quotidien**, et anonymisation seulement 30 jours après un rappel réellement envoyé, ou d'un compte sans e-mail, pour qu'un rappel manqué reste rattrapable.
+- **Dormance — valeur retenue : rappel par e-mail à 24 mois sans connexion, anonymisation 30 jours plus tard**, écrite dans « Déjà tranché ». Le chiffre est volontairement différent de 12 pour qu'on ne les confonde jamais. Réversible tant que `40` n'est pas écrite. Amendé le 23/09 : réversible tant que la section J2 de `40` n'est pas écrite, où le porteur la confirme ou la révise (`40` § 10) ; résolution retenue le 23/09 (n° 38), à rédiger dans cette section J2 : balayage **quotidien**, et anonymisation seulement 30 jours après un rappel réellement envoyé, ou d'un compte sans e-mail, pour qu'un rappel manqué reste rattrapable. **Confirmée le 07/10** (D66 du 07/10, n° 28 ; `40` § 13.7).
 - **Seuil d'affichage du taux de réussite — valeur retenue : 20 manches**, déclaré en configuration, jamais en dur.
 - **`users.plan` — valeur retenue : colonne présente à valeur unique `free`**, inscrite au périmètre de `10`.
 - **~~Validation de la coupe du jalon 1~~ — faite le 23/09 (D35 du 23/09)** (décision 3) : c'est une décision produit, elle revient au porteur. Amendé le 23/09 : elle se prend sur l'arithmétique que `00` § Jalons recalcule à partir des sections « Lots » des specs du 23/09 (voir le risque bloquant « budget du jalon 1 ») ; les variables d'ajustement décidées d'avance sont trois — recadreur minimal, nombre de films du J1, retardataires (D17 du 23/09). Amendé le 23/09 (D35 et D36 du 23/09) : après que D36 a retiré au développement la borne de l'enveloppe, le porteur a retenu le **jalon 1 complet, sans aucune coupe** ; le recadreur minimal et les retardataires sont sans objet (D17 n'a plus d'effet), seul le nombre de films du jalon 1 reste réglé par le verdict du pilote (D10 du 23/09), et le risque bloquant « budget du jalon 1 » est reformulé en risque de chemin humain. Cette entrée ne demande plus rien.
