@@ -3591,6 +3591,19 @@ return [
                 'no_participants' => 'Aucun participant à cette manche.',
                 'empty' => 'Aucune manche.',
             ],
+            // Les écarts de rejeu (spec 80 § 6.3, L80-9) : chaque bonne
+            // réponse rejouée sur les faits figés de la partie.
+            'replay' => [
+                'heading' => 'Rejeu des scores',
+                'description' => 'Chaque bonne réponse est recalculée depuis les faits figés de la partie (instant reçu, paliers, grâce, réglages, version de règle), manches annulées comprises. Un écart signale un journal altéré.',
+                'pending' => 'Disponible une fois la partie terminée.',
+                'consistent' => 'Journal cohérent : chaque bonne réponse redonne exactement son score.',
+                'round' => 'Manche',
+                'player' => 'Joueur',
+                'stored' => 'Écrit',
+                'replayed' => 'Rejoué',
+                'score' => 'palier :tier · :tier_points + :bonus = :total pts',
+            ],
         ],
         'trace' => [
             'heading' => 'Chronologie technique',

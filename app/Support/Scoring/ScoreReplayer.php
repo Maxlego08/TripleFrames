@@ -2,6 +2,7 @@
 
 namespace App\Support\Scoring;
 
+use App\Models\Game;
 use App\Models\Guess;
 use App\Models\Round;
 use App\ValueObjects\Scoring\TierSchedule;
@@ -28,8 +29,8 @@ use App\ValueObjects\Scoring\TierScore;
  *
  * Indifférent au statut de la manche : une manche annulée se rejoue comme une
  * autre, le journal devant rester cohérent là même où ses points ne comptent
- * pas. Le rapport d'écarts d'une partie entière (`mismatches()`) est dû au
- * jalon 2 (L80-9).
+ * pas. Le rapport d'écarts d'une partie entière ({@see self::mismatches()},
+ * L80-9) le consomme : l'écran « inspecter une partie » (spec 20 § 12.2).
  */
 final class ScoreReplayer
 {
@@ -52,5 +53,65 @@ final class ScoreReplayer
             $guess->answered_at_ms,
             $guess->source,
         );
+    }
+
+    /**
+     * Le rapport d'écarts d'une partie (spec 80 § 6.3, L80-9) : chaque bonne
+     * réponse rejouée, **manches annulées comprises** — le journal doit être
+     * cohérent là même où les points ne comptent pas —, et seules celles dont
+     * le rejeu diffère de ce qui a été écrit, triées par `sequence_index`
+     * puis `lock_rank`. Une liste vide dit « journal cohérent ».
+     *
+     * Même fonction pure et mêmes faits figés que {@see self::replay()} ; la
+     * partie est relue en base, et chaque manche ne charge son calendrier de
+     * paliers qu'une fois. `publicId` est l'identifiant public du siège,
+     * jamais une clé interne. Aucune écriture.
+     *
+     * @return list<array{sequenceIndex: int, publicId: string, stored: TierScore, replayed: TierScore}>
+     *
+     * @throws UnsupportedScoringVersion Version de règle de la partie inconnue de ce code.
+     */
+    public static function mismatches(Game $game): array
+    {
+        $game = Game::query()->findOrFail($game->id);
+
+        $rounds = Round::query()
+            ->where('game_id', $game->id)
+            ->orderBy('sequence_index')
+            ->get();
+
+        $mismatches = [];
+
+        foreach ($rounds as $round) {
+            $guesses = Guess::query()
+                ->where('round_id', $round->id)
+                ->with('player:id,public_id')
+                ->orderBy('lock_rank')
+                ->get();
+
+            if ($guesses->isEmpty()) {
+                continue;
+            }
+
+            $schedule = TierSchedule::fromRound($round);
+
+            foreach ($guesses as $guess) {
+                $stored = TierScore::fromGuess($guess);
+                $replayed = ScoreCalculator::forGuess($game, $schedule, $guess->answered_at_ms, $guess->source);
+
+                if ($stored->equals($replayed)) {
+                    continue;
+                }
+
+                $mismatches[] = [
+                    'sequenceIndex' => $round->sequence_index,
+                    'publicId' => $guess->player->public_id,
+                    'stored' => $stored,
+                    'replayed' => $replayed,
+                ];
+            }
+        }
+
+        return $mismatches;
     }
 }

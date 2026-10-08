@@ -1945,6 +1945,23 @@ export type PerfReport = {
 
 export type PerfWindow = '1h' | '24h' | '7d';
 
+/** Un score de bonne réponse, tel qu'écrit ou rejoué (spec 80 § 6.3). */
+export type InspectionTierScore = {
+    tierIndex: number;
+    pointsTier: number;
+    pointsBonus: number;
+    pointsTotal: number;
+};
+
+/** Un écart de rejeu d'une partie close (L80-9). */
+export type InspectionReplayMismatch = {
+    sequence_index: number;
+    round_number: number | null;
+    player: { public_id: string; nickname: string | null };
+    stored: InspectionTierScore;
+    replayed: InspectionTierScore;
+};
+
 export type InspectionTraceLine = {
     event: string;
     sequence_index: number | null;

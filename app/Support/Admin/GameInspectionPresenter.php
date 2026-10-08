@@ -15,6 +15,7 @@ use App\Models\Round;
 use App\Models\RoundPlayer;
 use App\Models\RoundTier;
 use App\Models\WrongAnswer;
+use App\Support\Scoring\ScoreReplayer;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 
@@ -164,7 +165,56 @@ final class GameInspectionPresenter
             ])->values()->all(),
             'rounds' => $lines,
             'trace' => self::trace($game, $rounds, $publicIds),
+            'replay_mismatches' => self::replayMismatches($game, $rounds, $nicknames, $publicIds),
         ];
+    }
+
+    /**
+     * Les écarts de rejeu de la partie (spec 80 § 6.3, L80-9 ;
+     * {@see ScoreReplayer::mismatches()}) : `null` tant que la partie n'est
+     * pas close — le rejeu lit toutes les bonnes réponses, et celles d'une
+     * manche non révélée ne sont jamais chargées ici (règle 3) —, une liste
+     * vide pour un journal cohérent.
+     *
+     * @param  Collection<int, Round>  $rounds
+     * @param  array<int, string|null>  $nicknames
+     * @param  array<int, string>  $publicIds
+     * @return list<array<string, mixed>>|null
+     */
+    private static function replayMismatches(Game $game, Collection $rounds, array $nicknames, array $publicIds): ?array
+    {
+        if (! self::isTerminal($game)) {
+            return null;
+        }
+
+        $roundNumbers = [];
+
+        foreach ($rounds as $round) {
+            $roundNumbers[$round->sequence_index] = $round->round_number;
+        }
+
+        $nicknameByPublicId = [];
+
+        foreach ($publicIds as $playerId => $publicId) {
+            $nicknameByPublicId[$publicId] = $nicknames[$playerId] ?? null;
+        }
+
+        $lines = [];
+
+        foreach (ScoreReplayer::mismatches($game) as $mismatch) {
+            $lines[] = [
+                'sequence_index' => $mismatch['sequenceIndex'],
+                'round_number' => $roundNumbers[$mismatch['sequenceIndex']] ?? null,
+                'player' => [
+                    'public_id' => $mismatch['publicId'],
+                    'nickname' => $nicknameByPublicId[$mismatch['publicId']] ?? null,
+                ],
+                'stored' => $mismatch['stored']->toArray(),
+                'replayed' => $mismatch['replayed']->toArray(),
+            ];
+        }
+
+        return $lines;
     }
 
     /**

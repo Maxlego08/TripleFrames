@@ -246,3 +246,56 @@ test('un changement de configuration de tier_grace_ms après la partie ne change
         ->and($replayed->tierIndex)->toBe(1)
         ->and($replayed->pointsTotal)->toBe($guess->points_total);
 });
+
+test('mismatches ne rend rien pour une partie cohérente et nomme un guess altéré', function (): void {
+    $settings = RoomSettings::fromInput(['inputDifficulty' => InputDifficulty::Normal->value]);
+    $game = Game::factory()->withSettings($settings)->create();
+
+    // Trois manches de la même partie, chacune ses paliers matérialisés.
+    $rounds = [];
+
+    foreach ([1, 2, 3] as $sequence) {
+        $round = Round::factory()->forGame($game)->atSequence($sequence)->running()->create([
+            'duration_ms' => $settings->roundDuration() * 1000,
+        ]);
+
+        foreach (range(1, $settings->framesPerRound) as $tierIndex) {
+            RoundTier::factory()->for($round)->atTier($tierIndex, settings: $settings)->create();
+        }
+
+        $rounds[$sequence] = $round;
+    }
+
+    $first = scoreReplayGuess($rounds[1], 2_000, GuessSource::Text, 1);
+    $second = scoreReplayGuess($rounds[1], 10_300, GuessSource::Text, 2);
+    $third = scoreReplayGuess($rounds[2], 20_150, GuessSource::Choice, 1);
+    $cancelled = scoreReplayGuess($rounds[3], 22_000, GuessSource::Text, 1);
+    $rounds[3]->forceFill(['status' => RoundStatus::Cancelled, 'cancelled_at' => now(), 'ended_at' => now()])->save();
+
+    // Journal cohérent : rien.
+    expect(ScoreReplayer::mismatches($game))->toBe([]);
+
+    // Trois lignes altérées, dont une manche annulée : nommées dans l'ordre
+    // `sequence_index` puis `lock_rank`, l'écrit et le rejoué côte à côte.
+    DB::table('guess')->where('id', $cancelled->id)->update(['points_total' => 999]);
+    DB::table('guess')->where('id', $second->id)->update(['points_bonus' => 0, 'points_total' => 200]);
+    DB::table('guess')->where('id', $first->id)->update(['tier_index' => 2]);
+
+    $report = ScoreReplayer::mismatches($game);
+
+    expect(array_map(static fn (array $row): array => [$row['sequenceIndex'], $row['publicId']], $report))->toBe([
+        [1, $first->player->public_id],
+        [1, $second->player->public_id],
+        [3, $cancelled->player->public_id],
+    ]);
+
+    expect($report[0]['stored']->tierIndex)->toBe(2)
+        ->and($report[0]['replayed']->toArray())->toBe(['tierIndex' => 1, 'pointsTier' => 300, 'pointsBonus' => 124, 'pointsTotal' => 424])
+        ->and($report[1]['stored']->pointsTotal)->toBe(200)
+        ->and($report[1]['replayed']->pointsTotal)->toBe($second->points_total)
+        ->and($report[2]['stored']->pointsTotal)->toBe(999)
+        ->and($report[2]['replayed']->pointsTotal)->toBe(141);
+
+    // La manche cohérente n'est jamais nommée.
+    expect(collect($report)->pluck('publicId'))->not->toContain($third->player->public_id);
+});

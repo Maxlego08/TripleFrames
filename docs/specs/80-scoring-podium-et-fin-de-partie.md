@@ -385,7 +385,7 @@ final class ScoreReplayer
 ```
 
 - `replay()` = `ScoreCalculator::forGuess($game, TierSchedule::fromRound($round), $guess->answered_at_ms, $guess->source)`, en ne lisant que des faits figés : `answered_at_ms`, `round_tier`, `game.tier_grace_ms`, `settings_snapshot->speedBonus`, `frames_per_round`, `input_difficulty`, `guess.source`, `scoring_version` (10 § 7.5, E10-48). Il doit redonner **exactement** `TierScore::fromGuess($guess)`. Il est dû au J1, parce que le test de 10 § 7.5 l'exige. **Livré** — amendé le 28/09 (E80-1) : la manche et sa partie sont **relues en base** (`Round::query()->with('game')->findOrFail($guess->round_id)`), jamais une relation déjà chargée ; aucune garde de statut (une manche annulée se rejoue comme une autre, prérequis de `mismatches()`) ; aucune écriture.
-- `mismatches()` (J2) rejoue chaque `guess` de la partie, **manches annulées comprises** — le journal doit être cohérent même là où les points ne comptent pas —, et rend les seuls écarts, triés par `sequence_index` puis `lock_rank`. Une liste vide dit « journal cohérent ». Consommateur : l'écran « inspecter une partie » de 20 (J2), dont la mise en forme appartient à 20.
+- `mismatches()` (J2) rejoue chaque `guess` de la partie, **manches annulées comprises** — le journal doit être cohérent même là où les points ne comptent pas —, et rend les seuls écarts, triés par `sequence_index` puis `lock_rank`. Une liste vide dit « journal cohérent ». Consommateur : l'écran « inspecter une partie » de 20 (J2), dont la mise en forme appartient à 20. **Livré — amendé le 08/10 (L80-9, D66 du 07/10)** : la partie est relue en base ; chaque manche, triée par `sequence_index`, charge ses bonnes réponses par `lock_rank` et son calendrier `TierSchedule::fromRound()` **une fois**, puis chaque `guess` est rejoué par la même fonction pure que `replay()` (`ScoreCalculator::forGuess()`) ; `publicId` est le `player.public_id` du siège ; aucune écriture. Une version de règle inconnue lève `UnsupportedScoringVersion`, comme `replay()`.
 
 ### 6.4 Empreinte de la version 1
 
@@ -927,7 +927,7 @@ Noms en phrase française au présent (C18) ; les tests hérités du contrat C13
 **`tests/Feature/Scoring/ScoreReplayTest.php`**
 - `le rejeu de (answered_at_ms, round_tier, tier_grace_ms, settings_snapshot, scoring_version) redonne exactement tier_index et points_total` — 10 § 7.5, avec un cas `N = 5` et un clic QCM en Normal (L80-2)
 - `un changement de configuration de tier_grace_ms après la partie ne change pas le rejeu` — la partie porte un `tier_grace_ms` différent de `PlatformLimits::tierGraceMs()`, et le rejeu relit la colonne (L80-2)
-- ajout, J2 : `mismatches ne rend rien pour une partie cohérente et nomme un guess altéré` (L80-9)
+- ajout, J2 : `mismatches ne rend rien pour une partie cohérente et nomme un guess altéré` (L80-9) — **livré le 08/10**, une manche annulée altérée comprise
 
 **`tests/Feature/Scoring/RankingTest.php`** (L80-3)
 - `ordre : score, puis bonnes réponses, puis temps cumulé, puis trouvailles aux paliers 1 à N − 1`
@@ -1151,7 +1151,7 @@ Estimations en heures, barre « terminé » comprise (tests verts, textes FR et 
 - Modifiés : `ScoringRules.php` (`waitingPays()`) ; `standings-table.tsx`, `podium.tsx` (affichage sans score) ; `lang/{fr,en}/game.php` (`game.podium.scoreless`, `game.help.scoring.scoreless`).
 - Tests : `ScoringRulesTest` (ajout J2) ; `PodiumTest`, ajout : `le podium d'une partie sans score met en tête les bonnes réponses puis le temps`.
 
-**L80-9 — Rapport d'écarts du rejeu** (J2, 2–3 h)
+**L80-9 — Rapport d'écarts du rejeu** (J2, 2–3 h) — **livré le 08/10 (D66 du 07/10, BO-A)** : `ScoreReplayer::mismatches()`, `ScoreReplayTest` (ajout J2) ; consommé par l'inspection de `20` § 12.2 (`GameInspectionTest` — « l'inspection rend les écarts de rejeu de ScoreReplayer »).
 - Dépendances : L80-2 ; écran « inspecter une partie » (20, J2).
 - Modifiés : `ScoreReplayer.php` (`mismatches()`).
 - Tests : `ScoreReplayTest` (ajout J2).
