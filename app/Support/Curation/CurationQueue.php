@@ -6,6 +6,7 @@ use App\Enums\ContentAvailability;
 use App\Enums\ContentFlag;
 use App\Enums\ImportSource;
 use App\Models\Movie;
+use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
@@ -52,8 +53,9 @@ use InvalidArgumentException;
  * motif d'exception, drapeau de contenu. Ils servent à composer le lot pilote,
  * stratifié par voie (§ 10.3) ; ils ne changent jamais l'ordre.
  *
- * **Aucune réservation au J1** (un seul curateur, D4 du 23/09) : la
- * réservation souple du J2 viendra sauter ici les films réservés par un autre.
+ * **Réservation souple** (§ 4.1, J2, L20-32) : « Film suivant » saute les films
+ * réservés par un autre curateur ({@see CurationClaim}) et réserve celui qu'il
+ * retient ; la liste, elle, les montre tous, réservation affichée.
  */
 final readonly class CurationQueue
 {
@@ -170,9 +172,10 @@ final readonly class CurationQueue
 
     /**
      * « Film suivant » (§ 4.1) : le premier film de la file autre que le film
-     * courant — `null` quand la file n'en a pas d'autre.
+     * courant — `null` quand la file n'en a pas d'autre. Avec un curateur, le
+     * premier qu'il peut réserver, réservé dans la foulée (L20-32).
      */
-    public function next(?int $currentMovieId = null): ?Movie
+    public function next(?int $currentMovieId = null, ?User $claimFor = null): ?Movie
     {
         $query = $this->query();
 
@@ -180,7 +183,22 @@ final readonly class CurationQueue
             $query->where('movie.id', '<>', $currentMovieId);
         }
 
-        return $query->first();
+        if (! $claimFor instanceof User) {
+            return $query->first();
+        }
+
+        // Le premier film que ce curateur peut réserver : un film réservé par
+        // un autre est sauté (§ 4.1). La prise est atomique, si bien que deux
+        // curateurs qui pressent « Film suivant » ensemble repartent chacun
+        // avec un film différent. Lecture en flux : seuls les films de tête
+        // sont lus, et la projection n'est pas chargée (inutile à un renvoi).
+        foreach ($query->setEagerLoads([])->cursor() as $movie) {
+            if (CurationClaim::claim($claimFor, $movie->id)) {
+                return $movie;
+            }
+        }
+
+        return null;
     }
 
     /**

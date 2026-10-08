@@ -585,7 +585,11 @@ return [
         'heading' => 'File de curation',
         'description' => 'Les films à curer, dans l’ordre de travail : d’abord les films entamés, du plus récemment touché au plus ancien, puis les autres par nombre de votes décroissant. Le catalogue de démonstration n’y figure pas.',
         'next' => 'Film suivant',
-        'next_hint' => 'Ouvre l’éditeur du premier film de la file, filtres conservés.',
+        'next_hint' => 'Ouvre l’éditeur du premier film de la file que personne d’autre ne cure, filtres conservés.',
+        // La réservation souple (spec 20 § 4.1, L20-32) : un film ouvert par
+        // un autre curateur, que « Film suivant » saute.
+        'claimed_by' => 'En cours chez :name',
+        'claimed_hint' => 'Un autre curateur travaille sur ce film : « Film suivant » le saute. La réservation tombe d’elle-même après quelques minutes sans activité.',
         'empty' => 'Aucun autre film n’attend dans la file de curation. Importez de nouveaux films pour la remplir.',
         'empty_filtered' => 'Aucun film de la file ne correspond à ces filtres. Effacez-les pour revoir toute la file.',
         'empty_stratum' => 'Aucun autre film de cette sélection n’attend dans la file. Effacez les filtres pour revoir toute la file.',

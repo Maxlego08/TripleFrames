@@ -183,6 +183,8 @@ export type AdminCurationQueueRow = AdminMovieRow & {
     rank: number;
     is_started: boolean;
     touched_at: string | null;
+    /** Nom réel d'un AUTRE curateur qui réserve ce film (L20-32), sinon `null`. */
+    claimed_by: string | null;
 };
 
 /** Un film écarté (spec 20 § 4.2), motif relu tel quel. */

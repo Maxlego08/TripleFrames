@@ -205,6 +205,11 @@ return [
     |   jamais le job. Au moins 1.
     | - `incidents_window_days` (§ 12.1, J2) : fenêtre glissante, en jours, de
     |   l'écran « Films jamais trouvés et incidents ». Au moins 1.
+    | - `claim_minutes` (§ 4.1, J2) : durée de vie de la réservation souple
+    |   d'un film par un curateur, prise à l'ouverture de l'éditeur et
+    |   prolongée par chaque battement ; sans battement, elle expire.
+    |   `claim_minutes × 60 > heartbeat_seconds`, sans quoi une réservation
+    |   tomberait entre deux battements d'un curateur au travail.
     | - `stale_pending_minutes` : au-delà, une image encore en traitement
     |   fait afficher « le traitement d'arrière-plan ne répond pas »
     |   (§ 13.5) — plus long qu'un import qui tient la file `default`, pour
@@ -285,6 +290,7 @@ return [
         'poll_seconds' => 3,
         'stale_pending_minutes' => 10,
         'incidents_window_days' => 30,
+        'claim_minutes' => 15,
 
         'idle_seconds' => 60,
         'heartbeat_seconds' => 15,

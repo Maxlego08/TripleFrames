@@ -883,6 +883,8 @@ export type TranslationKey =
     | 'admin.cropper.reset'
     | 'admin.cropper.retry'
     | 'admin.cropper.widen'
+    | 'admin.curation.claimed_by'
+    | 'admin.curation.claimed_hint'
     | 'admin.curation.column.actions'
     | 'admin.curation.column.content_flag'
     | 'admin.curation.column.entry'
