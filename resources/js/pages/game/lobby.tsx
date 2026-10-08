@@ -9,6 +9,7 @@ import { GameHelp } from '@/components/game/game-help';
 import { GameStage } from '@/components/game/game-stage';
 import { NextRoundButton } from '@/components/game/next-round-button';
 import { PauseButton } from '@/components/game/pause-button';
+import { PlayerOrdinalsProvider } from '@/components/game/player-ordinals';
 import { Podium } from '@/components/game/podium';
 import { AuthBrand } from '@/components/auth/auth-brand';
 import { GameToast } from '@/components/game/game-toast';
@@ -373,6 +374,18 @@ export default function Lobby({
 
             {seatNotice !== null && <ReadOnlyNotice message={seatNotice} />}
 
+            {/* Avis discret au seul siège masqué (spec 40 § 13.3, n° 26) :
+                il se reconnaît dans sa propre identité, rien n'est diffusé
+                aux autres. */}
+            {selfSeat?.masked === true && (
+                <Alert role="note">
+                    <CircleAlert aria-hidden="true" />
+                    <AlertDescription className="text-foreground">
+                        {t('common.player.masked_notice')}
+                    </AlertDescription>
+                </Alert>
+            )}
+
             {refusal !== null && (
                 <Alert role="note">
                     <CircleAlert aria-hidden="true" />
@@ -517,7 +530,7 @@ export default function Lobby({
     );
 
     return (
-        <>
+        <PlayerOrdinalsProvider seats={state.seats}>
             <Head title={t('room.lobby.title')} />
 
             {phase === 'game' && !onPodium ? (
@@ -691,7 +704,7 @@ export default function Lobby({
                     </div>
                 </ScrollArea>
             )}
-        </>
+        </PlayerOrdinalsProvider>
     );
 }
 

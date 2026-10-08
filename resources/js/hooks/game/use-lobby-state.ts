@@ -12,6 +12,7 @@ import type { GameStateView } from '@/hooks/game/use-game-state';
 import { useHeartbeat } from '@/hooks/game/use-heartbeat';
 import { useTranslations } from '@/hooks/use-translations';
 import { announce } from '@/lib/game/announcer';
+import { playerLabel, seatOrdinals } from '@/lib/game/player-label';
 import { fetchGameState } from '@/lib/game/store';
 import { settingsChangeLines, settingsChangesFrom } from '@/lib/room-settings';
 import type { SettingsChangeReport } from '@/lib/room-settings';
@@ -364,7 +365,7 @@ export function useLobbyState(options: UseLobbyStateOptions): LobbyStateView {
         if (seat !== undefined) {
             announce(
                 t('room.lobby.host_changed', {
-                    nickname: seat.nickname ?? seat.avatar.initials,
+                    nickname: playerLabel(seat, seatOrdinals(state.seats), t),
                 }),
             );
         }

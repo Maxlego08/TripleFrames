@@ -4,6 +4,7 @@ import { GameFrame } from '@/components/game/game-frame';
 import type { FrameFormat } from '@/components/game/game-frame';
 import { LetterboxdLink } from '@/components/game/letterboxd-link';
 import { PlayerAvatar } from '@/components/game/player-avatar';
+import { usePlayerLabel } from '@/components/game/player-ordinals';
 import { ReportLink } from '@/components/game/report-link';
 import { StandingsTable } from '@/components/game/standings-table';
 import { TmdbAttribution } from '@/components/public/tmdb-attribution';
@@ -97,6 +98,7 @@ export function RoundReveal({
     action,
 }: RoundRevealProps) {
     const { t, tChoice, locale } = useTranslations();
+    const label = usePlayerLabel();
     const headingId = useId();
     const findersId = useId();
     const headingRef = useRef<HTMLHeadingElement>(null);
@@ -266,9 +268,7 @@ export function RoundReveal({
                                     {/* Pseudo abrégé sans élargir la ligne
                                         (`contain-inline-size`, E118-7). */}
                                     <span className="min-w-0 flex-1 truncate font-medium contain-inline-size">
-                                        {seat?.nickname ??
-                                            seat?.avatar.initials ??
-                                            ''}
+                                        {seat === undefined ? '' : label(seat)}
                                     </span>
 
                                     <span className="tabular-nums">

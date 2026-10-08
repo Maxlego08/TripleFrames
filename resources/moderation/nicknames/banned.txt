@@ -1,0 +1,7 @@
+# Pseudos bannis au back-office, refusés comme pseudos : spec 40 § 13.3 (n° 8 de D66 du 07/10), lue par App\Support\Identity\NicknameBlocklist avec les listes de chaque locale activée et les noms réservés.
+# UTF-8, LF, une entrée par ligne ; « # » en début de ligne : commentaire.
+# Chaque entrée est la forme repliée d'un pseudo banni, recopiée depuis l'écran « Modération » (admin/moderation) au commit suivant, geste humain relu ; jamais écrite au journal d'administration.
+# Seule liste qui peut ne porter aucune entrée.
+# source: back-office TripleFrames, gestes nickname.banned (spec 40 § 13.3)
+# license: tous droits réservés, comme le dépôt (LICENSE)
+# retrieved: 2026-10-07

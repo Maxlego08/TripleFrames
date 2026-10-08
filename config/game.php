@@ -105,6 +105,7 @@ return [
     'room' => [
         'creates_per_hour' => RoomRateLimits::DEFAULT_CREATES_PER_HOUR,
         'joins_per_minute' => RoomRateLimits::DEFAULT_JOINS_PER_MINUTE,
+        'seat_reports_per_minute' => RoomRateLimits::DEFAULT_SEAT_REPORTS_PER_MINUTE,
     ],
 
     /*

@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useId } from 'react';
 import { BrandMark } from '@/components/auth/auth-brand';
 import { PlayerAvatar } from '@/components/game/player-avatar';
+import { usePlayerLabel } from '@/components/game/player-ordinals';
 import { useTranslations } from '@/hooks/use-translations';
 import type { SeatView } from '@/types/game-wire';
 import type { AvatarData } from '@/types/player';
@@ -44,6 +45,7 @@ export function CinemaSeatMap({
     onOpenAvatar,
 }: CinemaSeatMapProps) {
     const { t } = useTranslations();
+    const label = usePlayerLabel();
     const { name } = usePage().props;
     const headingId = useId();
     const presentSeats = seats.filter(
@@ -96,8 +98,8 @@ export function CinemaSeatMap({
                         const position = index + 1;
                         const seat = slots.get(position);
                         const isSelf = seat?.publicId === selfPublicId;
-                        const nickname =
-                            seat?.nickname ?? seat?.avatar.initials ?? '';
+                        // « Joueur n » pour un pseudo masqué (spec 40 § 13.3).
+                        const nickname = seat === undefined ? '' : label(seat);
 
                         return (
                             <li

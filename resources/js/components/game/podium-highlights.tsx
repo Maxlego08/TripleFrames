@@ -1,6 +1,7 @@
 import { CircleSlash, SearchX, Timer, Trophy } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { usePlayerLabel } from '@/components/game/player-ordinals';
 import { useTranslations } from '@/hooks/use-translations';
 import {
     formatDuration,
@@ -91,6 +92,7 @@ export function PodiumHighlights({
     recap,
 }: PodiumHighlightsProps) {
     const { t, tChoice, locale } = useTranslations();
+    const label = usePlayerLabel();
     const number = new Intl.NumberFormat(locale);
 
     const nicknameOf = (publicId: string): string | null => {
@@ -98,9 +100,7 @@ export function PodiumHighlights({
             (candidate) => candidate.publicId === publicId,
         );
 
-        return standing === undefined
-            ? null
-            : (standing.nickname ?? standing.avatar.initials);
+        return standing === undefined ? null : label(standing);
     };
 
     const titleOf = (roundNumber: number): RevealTitle | null => {

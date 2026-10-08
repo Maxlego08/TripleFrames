@@ -18,16 +18,22 @@ it('déclare une clé game.room par débit d\'entrée, et réciproquement', func
     expect(config('game.room'))->toBe([
         'creates_per_hour' => RoomRateLimits::DEFAULT_CREATES_PER_HOUR,
         'joins_per_minute' => RoomRateLimits::DEFAULT_JOINS_PER_MINUTE,
+        'seat_reports_per_minute' => RoomRateLimits::DEFAULT_SEAT_REPORTS_PER_MINUTE,
     ]);
 
     expect(RoomRateLimits::createsPerHour())->toBe(RoomRateLimits::DEFAULT_CREATES_PER_HOUR);
     expect(RoomRateLimits::joinsPerMinute())->toBe(RoomRateLimits::DEFAULT_JOINS_PER_MINUTE);
+    expect(RoomRateLimits::seatReportsPerMinute())->toBe(RoomRateLimits::DEFAULT_SEAT_REPORTS_PER_MINUTE);
 
     config()->set('game.room.creates_per_hour', 3);
     config()->set('game.room.joins_per_minute', 4);
 
     expect(RoomRateLimits::createsPerHour())->toBe(3);
     expect(RoomRateLimits::joinsPerMinute())->toBe(4);
+
+    config()->set('game.room.seat_reports_per_minute', 5);
+
+    expect(RoomRateLimits::seatReportsPerMinute())->toBe(5);
 });
 
 it('refuse un débit d\'entrée nul ou négatif', function (string $key, int $value, string $accessor): void {
@@ -37,4 +43,5 @@ it('refuse un débit d\'entrée nul ou négatif', function (string $key, int $va
 })->with([
     'créations nulles' => ['creates_per_hour', 0, 'createsPerHour'],
     'entrées négatives' => ['joins_per_minute', -1, 'joinsPerMinute'],
+    'signalements nuls' => ['seat_reports_per_minute', 0, 'seatReportsPerMinute'],
 ]);

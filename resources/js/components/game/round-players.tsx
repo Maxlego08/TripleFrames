@@ -3,6 +3,7 @@ import type { LucideIcon } from 'lucide-react';
 import { useId } from 'react';
 import type { ReactNode } from 'react';
 import { PlayerAvatar } from '@/components/game/player-avatar';
+import { usePlayerLabel } from '@/components/game/player-ordinals';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
@@ -94,6 +95,7 @@ export function RoundPlayers({
     className,
 }: RoundPlayersProps) {
     const { t, locale } = useTranslations();
+    const label = usePlayerLabel();
     const headingId = useId();
     const number = new Intl.NumberFormat(locale);
     const rankOf = new Map(
@@ -202,7 +204,7 @@ export function RoundPlayers({
                                     />
 
                                     <span className="max-w-28 min-w-0 truncate text-sm font-medium lg:max-w-none lg:grow lg:contain-inline-size">
-                                        {seat.nickname ?? seat.avatar.initials}
+                                        {label(seat)}
                                     </span>
 
                                     {seat.publicId === selfPublicId && (

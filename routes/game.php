@@ -20,6 +20,7 @@ use App\Http\Controllers\Room\HostTransferController;
 use App\Http\Controllers\Room\KickController;
 use App\Http\Controllers\Room\LaunchController;
 use App\Http\Controllers\Room\LeaveRoomController;
+use App\Http\Controllers\Room\NicknameReportController;
 use App\Http\Controllers\Room\ReplayController;
 use App\Http\Controllers\Room\RoomController;
 use App\Http\Controllers\Room\RoomEntryController;
@@ -249,6 +250,13 @@ Route::middleware(['seat.active', 'throttle:game-write'])->group(function (): vo
     // D49 du 01/10) : tout siège actif, aucune autorité d'hôte.
     Route::post('r/{room}/players/{target}/report-avatar', [AvatarReportController::class, 'store'])
         ->name('room.players.report_avatar');
+
+    // Signalement du pseudo d'un autre siège (spec 40 § 13.3, D66 du 07/10) :
+    // tout siège actif, aucune autorité d'hôte ; limiteur `seat-report` par
+    // siège, en plus de `game-write`.
+    Route::post('r/{room}/players/{target}/report-nickname', [NicknameReportController::class, 'store'])
+        ->middleware('throttle:seat-report')
+        ->name('room.players.report_nickname');
 
     Route::post('r/{room}/host', [HostTransferController::class, 'store'])
         ->name('room.host.transfer');

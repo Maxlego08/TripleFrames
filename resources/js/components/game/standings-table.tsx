@@ -1,6 +1,7 @@
 import { LogOut, UserX } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { PlayerAvatar } from '@/components/game/player-avatar';
+import { usePlayerLabel } from '@/components/game/player-ordinals';
 import { Badge } from '@/components/ui/badge';
 import {
     Table,
@@ -189,9 +190,12 @@ type StandingRowProps = {
 /** Une ligne du classement. */
 function StandingRow({ line, withDelta }: StandingRowProps) {
     const { t, tChoice, locale } = useTranslations();
+    const label = usePlayerLabel();
     const number = new Intl.NumberFormat(locale);
     const signed = new Intl.NumberFormat(locale, { signDisplay: 'always' });
-    const nickname = line.identity.nickname ?? line.identity.avatar.initials;
+    // « Joueur n » pour un pseudo masqué : le rang du siège dans le salon,
+    // jamais sa place au classement (spec 40 § 13.3).
+    const nickname = label(line.identity);
     const outcome = line.status === 'playing' ? null : OUTCOMES[line.status];
     const Outcome = outcome?.icon ?? null;
     const lateJoiner =

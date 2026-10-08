@@ -2,8 +2,10 @@ import { Crown, LogOut, UserX, WifiOff } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useId, useRef } from 'react';
 import { PlayerAvatar } from '@/components/game/player-avatar';
+import { usePlayerLabel } from '@/components/game/player-ordinals';
 import {
     ReportAvatarAction,
+    ReportNicknameAction,
     SeatActions,
 } from '@/components/room/seat-actions';
 import type { RoomGestureContext } from '@/components/room/seat-actions';
@@ -29,9 +31,9 @@ type SeatListProps = {
      */
     actions?: RoomGestureContext | null;
     /**
-     * Le signalement d'un avatar téléversé (spec 40 § 11.6) : un geste de
-     * TOUT siège, offert sur chaque autre siège qui affiche une image ;
-     * `null` sans contexte de geste.
+     * Les signalements (spec 40 § 11.6 et § 13.3) : gestes de TOUT siège,
+     * offerts sur chaque autre siège — son pseudo s'il est affiché, son
+     * avatar s'il est une image téléversée ; `null` sans contexte de geste.
      */
     reports?: RoomGestureContext | null;
 };
@@ -79,10 +81,17 @@ function SeatRow({
     onGestureDone,
 }: SeatRowProps) {
     const { t } = useTranslations();
+    const label = usePlayerLabel();
     const nicknameId = useId();
     const presence = presenceOf(seat);
     const Presence = presence === null ? null : PRESENCE[presence].icon;
-    const nickname = seat.nickname ?? seat.avatar.initials;
+    // Pseudo, « Joueur n » s'il est masqué (spec 40 § 13.3), initiales s'il
+    // a été effacé.
+    const nickname = label(seat);
+    const reportable = reports !== null && !isSelf && !seat.kicked;
+    const avatarReportable = reportable && seat.avatar.kind === 'upload';
+    const nicknameReportable =
+        reportable && !seat.masked && seat.nickname !== null;
 
     return (
         <li className="flex min-h-11 flex-col gap-2 rounded-md border border-border px-3 py-2">
@@ -134,15 +143,27 @@ function SeatRow({
                 />
             )}
 
-            {reports !== null && !isSelf && seat.avatar.kind === 'upload' && (
-                <div className="flex justify-end">
-                    <ReportAvatarAction
-                        {...reports}
-                        seat={seat}
-                        nickname={nickname}
-                        describedBy={nicknameId}
-                        onDone={onGestureDone}
-                    />
+            {reports !== null && (avatarReportable || nicknameReportable) && (
+                <div className="flex flex-wrap justify-end gap-2">
+                    {nicknameReportable && (
+                        <ReportNicknameAction
+                            {...reports}
+                            seat={seat}
+                            nickname={nickname}
+                            describedBy={nicknameId}
+                            onDone={onGestureDone}
+                        />
+                    )}
+
+                    {avatarReportable && (
+                        <ReportAvatarAction
+                            {...reports}
+                            seat={seat}
+                            nickname={nickname}
+                            describedBy={nicknameId}
+                            onDone={onGestureDone}
+                        />
+                    )}
                 </div>
             )}
         </li>
