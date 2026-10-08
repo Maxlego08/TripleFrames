@@ -205,7 +205,7 @@ it('clôt en already_handled les signalements d’un film retiré et ne propose 
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->has('groups.data', 1)
-            ->where('groups.data.0.abilities', ['unpublish_movie' => false, 'unpublish_frame' => false, 'dismiss' => true]));
+            ->where('groups.data.0.abilities', ['unpublish_movie' => false, 'unpublish_frame' => false, 'dismiss' => true, 'suspend_movie' => false, 'suspend_frame' => false]));
 
     $this->actingAs($curator)
         ->post(route('admin.content-reports.unpublish-movie', ['contentReport' => $report->id]), ['reason' => 'Retiré.'])
@@ -231,7 +231,91 @@ it('ne propose plus aucun geste dans l’historique des cibles traitées', funct
             ->where('filter', 'closed')
             ->has('groups.data', 1)
             ->where('groups.data.0.resolution', 'dismissed')
-            ->where('groups.data.0.abilities', ['unpublish_movie' => false, 'unpublish_frame' => false, 'dismiss' => false]));
+            ->where('groups.data.0.abilities', ['unpublish_movie' => false, 'unpublish_frame' => false, 'dismiss' => false, 'suspend_movie' => false, 'suspend_frame' => false]));
+});
+
+it('suspendre depuis la file clôt les signalements de la cible en movie_suspended dans la transaction du geste', function (): void {
+    [$movie, $frames] = FrameBank::publishedMovie([1, 3, 3, 5]);
+    $admin = User::factory()->admin()->create();
+    $movieReport = ContentReport::factory()->forMovie($movie)->create();
+    $frameReport = ContentReport::factory()->forFrame($frames[0])->create();
+    $other = ContentReport::factory()->create();
+
+    $this->actingAs($admin)
+        ->get(route('admin.content-reports.index'))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('groups.data.1.abilities.suspend_movie', true)
+            ->where('groups.data.1.abilities.suspend_frame', true));
+
+    // L'image seule d'abord : ses signalements, et eux seuls, sont clos.
+    $this->actingAs($admin)
+        ->post(route('admin.content-reports.suspend-frame', ['contentReport' => $frameReport->id]), ['reason' => 'Titre lisible.'])
+        ->assertRedirect(route('admin.content-reports.index'));
+
+    $frameLine = AdminAction::query()->where('action', AdminActionType::FrameSuspended->value)->sole();
+
+    expect($frames[0]->fresh()?->availability)->toBe(ContentAvailability::Suspended)
+        ->and($frameLine->subject_id)->toBe($frames[0]->id)
+        ->and($frameLine->reason)->toBe('Titre lisible.')
+        ->and($frameReport->fresh()?->resolution)->toBe(ContentReportResolution::FrameSuspended)
+        ->and($frameReport->fresh()?->status)->toBe(ContentReportStatus::Resolved)
+        ->and($movieReport->fresh()?->status)->toBe(ContentReportStatus::Open);
+
+    // Puis le film : tous ses signalements ouverts, portées film et image.
+    $second = ContentReport::factory()->forFrame($frames[1])->create();
+
+    $this->actingAs($admin)
+        ->post(route('admin.content-reports.suspend-movie', ['contentReport' => $movieReport->id]))
+        ->assertRedirect(route('admin.content-reports.index'));
+
+    expect($movie->fresh()?->availability)->toBe(ContentAvailability::Suspended)
+        ->and(AdminAction::query()->where('action', AdminActionType::MovieSuspended->value)->sole()->subject_id)->toBe($movie->id)
+        ->and($movieReport->fresh()?->resolution)->toBe(ContentReportResolution::MovieSuspended)
+        ->and($movieReport->fresh()?->resolved_by_id)->toBe($admin->id)
+        ->and($second->fresh()?->resolution)->toBe(ContentReportResolution::MovieSuspended)
+        ->and($frameReport->fresh()?->resolution)->toBe(ContentReportResolution::FrameSuspended)
+        ->and($other->fresh()?->status)->toBe(ContentReportStatus::Open);
+
+    // Un geste refusé sous verrou — le film est déjà suspendu — ne clôt rien.
+    $late = ContentReport::factory()->forMovie($movie)->create();
+
+    $this->actingAs($admin)
+        ->post(route('admin.content-reports.suspend-movie', ['contentReport' => $late->id]))
+        ->assertForbidden();
+
+    expect($late->fresh()?->status)->toBe(ContentReportStatus::Open);
+});
+
+it('un curateur ne voit ni n’emploie la suspension depuis la file', function (): void {
+    [$movie, $frames] = FrameBank::publishedMovie([1, 3, 5]);
+    $curator = User::factory()->curator()->create();
+    $movieReport = ContentReport::factory()->forMovie($movie)->create();
+    $frameReport = ContentReport::factory()->forFrame($frames[0])->create();
+
+    $this->actingAs($curator)
+        ->get(route('admin.content-reports.index'))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('groups.data.0.abilities.suspend_movie', false)
+            ->where('groups.data.0.abilities.suspend_frame', false)
+            ->where('groups.data.1.abilities.suspend_movie', false)
+            ->where('groups.data.1.abilities.suspend_frame', false)
+            ->where('groups.data.1.abilities.unpublish_movie', true));
+
+    $this->actingAs($curator)
+        ->post(route('admin.content-reports.suspend-movie', ['contentReport' => $movieReport->id]))
+        ->assertForbidden();
+
+    $this->actingAs($curator)
+        ->post(route('admin.content-reports.suspend-frame', ['contentReport' => $frameReport->id]))
+        ->assertForbidden();
+
+    expect($movie->fresh()?->availability)->toBe(ContentAvailability::Published)
+        ->and($frames[0]->fresh()?->availability)->toBe(ContentAvailability::Published)
+        ->and($movieReport->fresh()?->status)->toBe(ContentReportStatus::Open)
+        ->and($frameReport->fresh()?->status)->toBe(ContentReportStatus::Open)
+        ->and(AdminAction::query()->count())->toBe(0);
 });
 
 it('purge un signalement de plus de douze mois et garde un signalement récent', function (): void {

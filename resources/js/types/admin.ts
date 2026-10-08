@@ -83,7 +83,9 @@ export type ContentReportResolution =
     | 'movie_unpublished'
     | 'frame_unpublished'
     | 'dismissed'
-    | 'already_handled';
+    | 'already_handled'
+    | 'movie_suspended'
+    | 'frame_suspended';
 
 /** Filtre de la file des signalements de contenu. */
 export type ContentReportFilter = 'open' | 'closed';
@@ -127,6 +129,9 @@ export type AdminContentReportGroup = {
         unpublish_movie: boolean;
         unpublish_frame: boolean;
         dismiss: boolean;
+        /** Administrateur seul (J2, spec 20 § 11.6). */
+        suspend_movie: boolean;
+        suspend_frame: boolean;
     };
 };
 
@@ -686,6 +691,11 @@ export type AdminMovieFrame = {
      * décision (§ 7.3, § 7.5) : `curation_state` la dit `in_play`.
      */
     review_rejected: boolean;
+    /**
+     * Suspendre une image publiée, lever sa suspension (spec 20 § 11.2) :
+     * administrateur seul. Affichage seulement, la route rejoue sa policy.
+     */
+    abilities: { suspend: boolean; unsuspend: boolean };
 };
 
 /**
@@ -999,11 +1009,22 @@ export type AdminReviewBatch = {
 export type AdminQueueReviewBatch = AdminReviewBatch & { movie_id: number };
 
 /** Les gestes de la fiche film, pour l'affichage seulement. */
+/**
+ * La levée d'une suspension vue par la fiche (spec 20 § 11.2) : l'état que
+ * le journal fait rendre au film — `published` exige l'aperçu d'ambiguïté.
+ */
+export type AdminUnsuspension = {
+    restores: 'published' | 'unpublished' | 'draft' | null;
+};
+
 export type AdminMovieAbilities = {
     curate: boolean;
     publish: boolean;
     unpublish: boolean;
     verifyContent: boolean;
+    /** Suspendre le film, lever sa suspension (spec 20 § 11.2) : administrateur seul. */
+    suspend: boolean;
+    unsuspend: boolean;
     /** Le lien « Historique » vers le journal : administrateur seul. */
     viewJournal: boolean;
     /** « Créer la saga depuis cette collection » (`ThemePolicy::create`). */
@@ -1722,6 +1743,7 @@ export type InspectionIncidentReason =
     | 'frame_unavailable'
     | 'no_variant_available'
     | 'movie_withdrawn'
+    | 'movie_suspended'
     | 'choices_unavailable';
 
 /** L'identité d'un siège ; `nickname` nul = pseudo effacé à l'archivage. */

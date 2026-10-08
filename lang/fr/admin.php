@@ -785,6 +785,8 @@ return [
             'frame_unpublished' => 'Image dépubliée',
             'dismissed' => 'Ignoré',
             'already_handled' => 'Déjà hors jeu',
+            'movie_suspended' => 'Film suspendu',
+            'frame_suspended' => 'Image suspendue',
         ],
         'column' => [
             'target' => 'Cible',
@@ -805,6 +807,8 @@ return [
             'unpublish_movie' => 'Dépublier le film',
             'unpublish_frame' => 'Dépublier l’image',
             'dismiss' => 'Ignorer',
+            'suspend_movie' => 'Suspendre le film',
+            'suspend_frame' => 'Suspendre l’image',
         ],
         'resolved_on' => 'Traité le :date',
         'availability' => 'État actuel : :state',
@@ -818,11 +822,17 @@ return [
             'unpublish_frame_description' => 'L’image sort du jeu et ses signalements ouverts sont clos.',
             'dismiss_title' => 'Ignorer ces signalements ?',
             'dismiss_description' => 'La cible reste en jeu ; ses signalements ouverts sont clos et le geste est journalisé.',
+            'suspend_movie_title' => 'Suspendre « :title » ?',
+            'suspend_movie_description' => 'Suspension conservatoire : le film sort du jeu à la seconde, avec ses images en jeu, et tous ses signalements ouverts sont clos. La levée de la suspension, depuis la fiche du film, le rendra.',
+            'suspend_frame_title' => 'Suspendre cette image ?',
+            'suspend_frame_description' => 'Suspension conservatoire : l’image sort du jeu à la seconde et ses signalements ouverts sont clos. La levée de la suspension, depuis la banque d’images, la rendra.',
         ],
         'flash' => [
             'movie_unpublished' => 'Film dépublié. Signalements clos : :count.',
             'frame_unpublished' => 'Image dépubliée. Signalements clos : :count.',
             'dismissed' => 'Signalements ignorés : :count.',
+            'movie_suspended' => 'Film suspendu. Signalements clos : :count.',
+            'frame_suspended' => 'Image suspendue. Signalements clos : :count.',
         ],
     ],
 
@@ -1593,6 +1603,40 @@ return [
             'blocked_notice' => 'Contenu bloqué par une classification restrictive : ce film n’entrera jamais au vivier, et aucun geste ne lève ce blocage.',
             'flash' => 'Contenu vérifié : cette condition de publication est levée.',
         ],
+
+        /*
+        | Suspension conservatoire et levée (spec 20 § 11.2, administrateur
+        | seul) : un clic, motif facultatif, aucun examen. `guard_failed` est
+        | le motif que le SERVEUR écrit, en texte, sur `movie.unpublished`
+        | quand la garde de publication rejouée à la levée échoue (§ 2.7).
+        | `restores.*` : l'état que la levée rendra, lu dans le journal.
+        */
+        'suspend' => [
+            'action' => 'Suspendre le film',
+            'title' => 'Suspendre le film',
+            'description' => 'Le film sort du jeu à la seconde, ses images en jeu avec lui, et la manche en cours qui le joue est annulée puis remplacée. Rien n’est supprimé : la levée de la suspension le rendra dans son état antérieur.',
+            'reason' => 'Motif (facultatif), inscrit au journal',
+            'submit' => 'Suspendre le film',
+            'flash' => 'Film suspendu : il est sorti du jeu, et toute manche en cours qui le jouait est annulée.',
+        ],
+
+        'unsuspend' => [
+            'action' => 'Lever la suspension',
+            'title' => 'Lever la suspension du film',
+            'description' => 'Le film retrouve l’état qu’il avait avant la suspension. Ses images suspendues avec lui reviennent en jeu si leur revue vaut toujours pour leur rendu et la grille courante ; sinon elles repassent en revue.',
+            'restores' => [
+                'published' => 'Avant la suspension, le film était publié : il rentre au vivier si les conditions de publication tiennent toujours, sinon il revient dépublié.',
+                'unpublished' => 'Avant la suspension, le film était dépublié ou écarté : il le redevient.',
+                'draft' => 'Avant la suspension, le film était un brouillon : il le redevient.',
+            ],
+            'reason' => 'Motif (facultatif), inscrit au journal',
+            'submit' => 'Lever la suspension',
+            'guard_failed' => 'Levée de suspension : les conditions de publication ne tiennent plus (contenu, couverture 1-3-5 ou titre devinable), le film revient dépublié.',
+            'flash_published' => 'Suspension levée : le film est de nouveau publié.',
+            'flash_unpublished' => 'Suspension levée : le film est de nouveau dépublié.',
+            'flash_draft' => 'Suspension levée : le film est de nouveau un brouillon.',
+            'flash_guard_failed' => 'Suspension levée, mais les conditions de publication ne tiennent plus : le film revient dépublié.',
+        ],
     ],
 
     /*
@@ -1755,6 +1799,28 @@ return [
             'level_changed_review' => 'Niveau de l’image enregistré : elle sort du jeu et repasse en revue.',
             'unpublished' => 'Image dépubliée : elle sort du jeu, et une revue pourra l’y remettre.',
             'set_aside' => 'Image écartée : elle ne sera pas proposée en revue. Pour réutiliser son visuel, ajoutez une nouvelle variante.',
+        ],
+
+        /*
+        | Suspension conservatoire d'une image et levée (spec 20 § 11.2,
+        | administrateur seul) : une image publiée seulement ; la levée est
+        | refusée tant que le film est lui-même suspendu.
+        */
+        'suspend' => [
+            'action' => 'Suspendre l’image',
+            'title' => 'Suspendre l’image',
+            'description' => 'L’image sort du jeu à la seconde ; une manche en cours qui l’affiche est annulée puis remplacée. Rien n’est supprimé, et la levée de la suspension la rendra.',
+            'submit' => 'Suspendre l’image',
+            'flash' => 'Image suspendue : elle est sortie du jeu.',
+        ],
+
+        'unsuspend' => [
+            'action' => 'Lever la suspension',
+            'title' => 'Lever la suspension de l’image',
+            'description' => 'L’image revient en jeu si sa revue vaut toujours pour son rendu et la grille courante ; sinon elle repasse en revue.',
+            'submit' => 'Lever la suspension',
+            'flash_published' => 'Suspension levée : l’image est de nouveau en jeu.',
+            'flash_review' => 'Suspension levée : l’image repasse en revue avant de revenir en jeu.',
         ],
     ],
 
@@ -3461,6 +3527,7 @@ return [
                 'frame_unavailable' => 'Image indisponible',
                 'no_variant_available' => 'Aucune variante disponible',
                 'movie_withdrawn' => 'Film retiré',
+                'movie_suspended' => 'Film suspendu',
                 'choices_unavailable' => 'Propositions indisponibles',
             ],
         ],

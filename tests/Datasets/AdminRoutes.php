@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\ContentAvailability;
 use App\Enums\ContentFlag;
 use App\Enums\FrameLevel;
 use App\Enums\Locale;
@@ -286,6 +287,30 @@ function adminRoutesMatrix(): array
             redirect: fn (array $parameters): string => route('admin.catalog.show', $parameters),
         ),
 
+        // Ligne 30 — suspendre un film, lever sa suspension (L20-20) :
+        // administrateur seul, motif facultatif. Un film suspendu sans ligne
+        // au journal revient brouillon : la levée n'exige alors aucun aperçu.
+        'admin.catalog.suspend' => adminRoutesRow(
+            row: 30,
+            method: 'POST',
+            guards: ['can:suspend,movie'],
+            curator: 403,
+            admin: 302,
+            parameters: fn (): array => adminRoutesMovieGestureParameters(Movie::factory()->published()->create()),
+            payload: fn (): array => ['reason' => 'Motif de la matrice.'],
+            redirect: fn (array $parameters): string => route('admin.catalog.show', $parameters),
+        ),
+
+        'admin.catalog.unsuspend' => adminRoutesRow(
+            row: 30,
+            method: 'POST',
+            guards: ['can:unsuspend,movie'],
+            curator: 403,
+            admin: 302,
+            parameters: fn (): array => adminRoutesMovieGestureParameters(Movie::factory()->suspended()->create()),
+            redirect: fn (array $parameters): string => route('admin.catalog.show', $parameters),
+        ),
+
         // Ligne 21 — cocher « contenu vérifié » sur un film dont la
         // classification reste à vérifier : motif obligatoire.
         'admin.catalog.content_verified' => adminRoutesRow(
@@ -477,6 +502,35 @@ function adminRoutesMatrix(): array
             redirect: fn (array $parameters): string => route('admin.content-reports.index'),
         ),
 
+        // Ligne 48, au J2 (D66 du 07/10, n° 34) — suspendre depuis la file :
+        // `resolve` garde la route, et la policy de la suspension, repassée
+        // sous verrou par l'action, refuse le curateur.
+        'admin.content-reports.suspend-movie' => adminRoutesRow(
+            row: 48,
+            method: 'POST',
+            guards: ['can:resolve,contentReport'],
+            curator: 403,
+            admin: 302,
+            parameters: fn (): array => [
+                'contentReport' => ContentReport::factory()->forMovie(Movie::factory()->published()->create())->create()->id,
+            ],
+            redirect: fn (array $parameters): string => route('admin.content-reports.index'),
+        ),
+
+        'admin.content-reports.suspend-frame' => adminRoutesRow(
+            row: 48,
+            method: 'POST',
+            guards: ['can:resolve,contentReport'],
+            curator: 403,
+            admin: 302,
+            parameters: function (): array {
+                $frame = Frame::query()->findOrFail(adminRoutesFrameGestureParameters(published: true)['frame']);
+
+                return ['contentReport' => ContentReport::factory()->forFrame($frame)->create()->id];
+            },
+            redirect: fn (array $parameters): string => route('admin.content-reports.index'),
+        ),
+
         // Ligne 27 — file agrégée de suggestions, reconstruction idempotente,
         // promotion en alias curé et rejet sans auteur.
         'admin.near_misses.index' => adminRoutesRow(
@@ -657,6 +711,37 @@ function adminRoutesMatrix(): array
             admin: 302,
             parameters: fn (): array => adminRoutesFrameGestureParameters(published: true),
             payload: fn (): array => ['reason' => 'Motif de la matrice.'],
+            redirect: fn (array $parameters): string => route('admin.catalog.show', ['movie' => $parameters['movie']]),
+        ),
+
+        // Ligne 30 — suspendre une image publiée, lever sa suspension
+        // (L20-20) : administrateur seul ; la levée suppose un film qui
+        // n'est pas lui-même suspendu.
+        'admin.catalog.frames.suspend' => adminRoutesRow(
+            row: 30,
+            method: 'POST',
+            guards: ['can:suspend,frame'],
+            curator: 403,
+            admin: 302,
+            parameters: fn (): array => adminRoutesFrameGestureParameters(published: true),
+            redirect: fn (array $parameters): string => route('admin.catalog.show', ['movie' => $parameters['movie']]),
+        ),
+
+        'admin.catalog.frames.unsuspend' => adminRoutesRow(
+            row: 30,
+            method: 'POST',
+            guards: ['can:unsuspend,frame'],
+            curator: 403,
+            admin: 302,
+            parameters: function (): array {
+                $parameters = adminRoutesFrameGestureParameters(published: true);
+
+                Frame::query()->findOrFail($parameters['frame'])
+                    ->forceFill(['availability' => ContentAvailability::Suspended])
+                    ->save();
+
+                return $parameters;
+            },
             redirect: fn (array $parameters): string => route('admin.catalog.show', ['movie' => $parameters['movie']]),
         ),
 

@@ -18,8 +18,10 @@ use App\Http\Controllers\Admin\FrameLevelController;
 use App\Http\Controllers\Admin\FrameRetryController;
 use App\Http\Controllers\Admin\FrameReviewController;
 use App\Http\Controllers\Admin\FrameReviewQueueController;
+use App\Http\Controllers\Admin\FrameSuspendController;
 use App\Http\Controllers\Admin\FrameTmdbController;
 use App\Http\Controllers\Admin\FrameUnpublishController;
+use App\Http\Controllers\Admin\FrameUnsuspendController;
 use App\Http\Controllers\Admin\GameInspectionController;
 use App\Http\Controllers\Admin\GuideController;
 use App\Http\Controllers\Admin\ImportAbandonController;
@@ -41,9 +43,11 @@ use App\Http\Controllers\Admin\MovieFramesReviewController;
 use App\Http\Controllers\Admin\MovieGroupController;
 use App\Http\Controllers\Admin\MoviePublishController;
 use App\Http\Controllers\Admin\MovieResyncController;
+use App\Http\Controllers\Admin\MovieSuspendController;
 use App\Http\Controllers\Admin\MovieThemeController;
 use App\Http\Controllers\Admin\MovieTitleController;
 use App\Http\Controllers\Admin\MovieUnpublishController;
+use App\Http\Controllers\Admin\MovieUnsuspendController;
 use App\Http\Controllers\Admin\NearMissController;
 use App\Http\Controllers\Admin\PerformanceController;
 use App\Http\Controllers\Admin\PlayerInspectionController;
@@ -265,6 +269,19 @@ Route::middleware(['auth', 'verified', 'role:curator', 'admin.2fa', 'admin.local
             ->middleware(['can:unpublish,movie', 'throttle:admin-curation'])
             ->name('catalog.unpublish');
 
+        // Suspendre un film, lever sa suspension (§ 11.2, ligne 30, L20-20) :
+        // administrateur seul — la policy le dit, et un curateur reçoit 403.
+        // Motif facultatif ; la levée rejoue la garde de publication sous
+        // verrou et poste l'empreinte de l'aperçu d'ambiguïté quand le film
+        // revient publié (refus `preview_stale`, jamais un 403).
+        Route::post('catalog/{movie}/suspend', [MovieSuspendController::class, 'store'])
+            ->middleware(['can:suspend,movie', 'throttle:admin-curation'])
+            ->name('catalog.suspend');
+
+        Route::post('catalog/{movie}/unsuspend', [MovieUnsuspendController::class, 'store'])
+            ->middleware(['can:unsuspend,movie', 'throttle:admin-curation'])
+            ->name('catalog.unsuspend');
+
         // Cocher « contenu vérifié » (§ 4.4, ligne 21) : un film
         // `unrated_pending` seulement, motif obligatoire. Aucune route ne
         // décoche, aucune ne lève `blocked` (décision 12).
@@ -383,6 +400,17 @@ Route::middleware(['auth', 'verified', 'role:curator', 'admin.2fa', 'admin.local
             Route::post('catalog/{movie}/frames/{frame}/unpublish', [FrameUnpublishController::class, 'store'])
                 ->middleware(['can:unpublish,frame', 'throttle:admin-curation'])
                 ->name('catalog.frames.unpublish');
+
+            // Suspendre une image publiée, lever sa suspension (§ 11.2,
+            // ligne 30, L20-20) : administrateur seul ; la levée est refusée
+            // tant que le film est lui-même suspendu.
+            Route::post('catalog/{movie}/frames/{frame}/suspend', [FrameSuspendController::class, 'store'])
+                ->middleware(['can:suspend,frame', 'throttle:admin-curation'])
+                ->name('catalog.frames.suspend');
+
+            Route::post('catalog/{movie}/frames/{frame}/unsuspend', [FrameUnsuspendController::class, 'store'])
+                ->middleware(['can:unsuspend,frame', 'throttle:admin-curation'])
+                ->name('catalog.frames.unsuspend');
 
             // Passer une revue (§ 7.5, ligne 17) : une revue passante PUBLIE
             // l'image. La garde nomme la CLASSE `FrameReview` — la revue
@@ -506,6 +534,18 @@ Route::middleware(['auth', 'verified', 'role:curator', 'admin.2fa', 'admin.local
         Route::post('content-reports/{contentReport}/dismiss', [ContentReportController::class, 'dismiss'])
             ->middleware(['can:resolve,contentReport', 'throttle:admin-curation'])
             ->name('content-reports.dismiss');
+
+        // Suspendre depuis la file (J2, D66 du 07/10, n° 34) : administrateur
+        // seul. `resolve` garde la route ; `MoviePolicy::suspend` et
+        // `FramePolicy::suspend`, repassées sous verrou par l'action, rendent
+        // 403 à un curateur.
+        Route::post('content-reports/{contentReport}/suspend-movie', [ContentReportController::class, 'suspendMovie'])
+            ->middleware(['can:resolve,contentReport', 'throttle:admin-curation'])
+            ->name('content-reports.suspend-movie');
+
+        Route::post('content-reports/{contentReport}/suspend-frame', [ContentReportController::class, 'suspendFrame'])
+            ->middleware(['can:resolve,contentReport', 'throttle:admin-curation'])
+            ->name('content-reports.suspend-frame');
 
         // Les écrans de l'administrateur seul (§ 2.8, lignes 34 et 40) :
         // une seconde porte, `role:admin`, en plus de la garde `can:` de

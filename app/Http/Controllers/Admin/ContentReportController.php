@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Actions\Curation\DismissContentReports;
+use App\Actions\Curation\SuspendReportedFrame;
+use App\Actions\Curation\SuspendReportedMovie;
 use App\Actions\Curation\UnpublishReportedFrame;
 use App\Actions\Curation\UnpublishReportedMovie;
 use App\Enums\ContentAvailability;
@@ -12,6 +14,7 @@ use App\Http\Requests\Admin\ContentReportDismissRequest;
 use App\Http\Requests\Admin\ContentReportIndexRequest;
 use App\Http\Requests\Admin\FrameUnpublishRequest;
 use App\Http\Requests\Admin\MovieUnpublishRequest;
+use App\Http\Requests\Admin\SuspensionRequest;
 use App\Models\ContentReport;
 use App\Models\Frame;
 use App\Models\Movie;
@@ -37,7 +40,10 @@ use Throwable;
  * l'image (motif facultatif, avertissement de perte de couverture), ignorer.
  * Les deux dépublications sont les gestes mêmes du catalogue et de la banque
  * d'images, journalisés par eux ; ignorer écrit `content_report.dismissed`.
- * **Pas de suspension** : non livrée au J1 (L20-20).
+ * **Au J2** (D66 du 07/10, n° 34), deux gestes de plus, **administrateur
+ * seul** : suspendre le film ou l'image (`SuspendMovie`, `SuspendFrame`,
+ * § 11.2), dont les policies sont repassées sous verrou — un curateur, que
+ * `resolve` laisse passer la route, reçoit 403 de l'action.
  *
  * Les routes adressent un groupe par l'un de ses signalements, le plus
  * ancien encore ouvert : un geste vaut pour toute la cible.
@@ -169,6 +175,9 @@ final class ContentReportController extends Controller
                             'unpublish_movie' => $open && Gate::allows('unpublish', $movie),
                             'unpublish_frame' => $open && $frame instanceof Frame && Gate::allows('unpublish', $frame),
                             'dismiss' => $open && $representative instanceof ContentReport && Gate::allows('resolve', $representative),
+                            // Administrateur seul (J2, § 11.6) : masqué au curateur.
+                            'suspend_movie' => $open && Gate::allows('suspend', $movie),
+                            'suspend_frame' => $open && $frame instanceof Frame && Gate::allows('suspend', $frame),
                         ],
                     ];
                 },
@@ -196,6 +205,28 @@ final class ContentReportController extends Controller
         $closed = $unpublish->handle($contentReport, $curator, $request->reason());
 
         return self::done('admin.content_report.flash.frame_unpublished', $closed);
+    }
+
+    /** @throws Throwable */
+    public function suspendMovie(SuspensionRequest $request, ContentReport $contentReport, SuspendReportedMovie $suspend): RedirectResponse
+    {
+        /** @var User $admin */
+        $admin = $request->user();
+
+        $closed = $suspend->handle($contentReport, $admin, $request->reason());
+
+        return self::done('admin.content_report.flash.movie_suspended', $closed);
+    }
+
+    /** @throws Throwable */
+    public function suspendFrame(SuspensionRequest $request, ContentReport $contentReport, SuspendReportedFrame $suspend): RedirectResponse
+    {
+        /** @var User $admin */
+        $admin = $request->user();
+
+        $closed = $suspend->handle($contentReport, $admin, $request->reason());
+
+        return self::done('admin.content_report.flash.frame_suspended', $closed);
     }
 
     /** @throws Throwable */

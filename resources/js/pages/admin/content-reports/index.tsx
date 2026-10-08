@@ -1,33 +1,23 @@
-import { Form, Head, Link } from '@inertiajs/react';
+import { Head, Link } from '@inertiajs/react';
 import {
     EyeOffIcon,
     FlagIcon,
     ImageOffIcon,
+    PauseCircleIcon,
     TriangleAlertIcon,
     XIcon,
 } from 'lucide-react';
-import { useId, useState } from 'react';
+import { useState } from 'react';
 import { AdminCardTitle } from '@/components/admin/admin-card-title';
 import { AdminEmptyState } from '@/components/admin/admin-empty-state';
-import { AdminInputError } from '@/components/admin/admin-input-error';
 import { AdminPageHeading } from '@/components/admin/admin-page-heading';
 import { AdminPagination } from '@/components/admin/admin-pagination';
+import { OptionalReasonDialog } from '@/components/admin/optional-reason-dialog';
 import { ReasonDialog } from '@/components/admin/reason-dialog';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
-import {
-    Dialog,
-    DialogClose,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-} from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { useTranslations } from '@/hooks/use-translations';
 import { AVAILABILITY_KEYS } from '@/lib/admin-enum-keys';
 import { formatInteger, formatMoment } from '@/lib/admin-format';
@@ -36,6 +26,8 @@ import { bank, show as catalogShow } from '@/routes/admin/catalog';
 import {
     dismiss,
     index as contentReportsIndex,
+    suspendFrame,
+    suspendMovie,
     unpublishFrame,
     unpublishMovie,
 } from '@/routes/admin/content-reports';
@@ -48,7 +40,6 @@ import type {
 } from '@/types/admin';
 import type { BreadcrumbItem } from '@/types/navigation';
 import type { TranslationKey } from '@/types/translations';
-import type { RouteFormDefinition } from '@/wayfinder';
 
 type Props = {
     filter: ContentReportFilter;
@@ -82,6 +73,8 @@ const RESOLUTION_KEYS: Record<ContentReportResolution, TranslationKey> = {
     frame_unpublished: 'admin.content_report.resolution.frame_unpublished',
     dismissed: 'admin.content_report.resolution.dismissed',
     already_handled: 'admin.content_report.resolution.already_handled',
+    movie_suspended: 'admin.content_report.resolution.movie_suspended',
+    frame_suspended: 'admin.content_report.resolution.frame_suspended',
 };
 
 const SCOPE_KEYS: Record<AdminContentReportGroup['scope'], TranslationKey> = {
@@ -89,7 +82,12 @@ const SCOPE_KEYS: Record<AdminContentReportGroup['scope'], TranslationKey> = {
     movie: 'admin.content_report.scope.movie',
 };
 
-type GestureKind = 'unpublish_movie' | 'unpublish_frame' | 'dismiss';
+type GestureKind =
+    | 'unpublish_movie'
+    | 'unpublish_frame'
+    | 'dismiss'
+    | 'suspend_movie'
+    | 'suspend_frame';
 
 /** Le geste ouvert : sur quelle cible, et lequel. */
 type OpenGesture = { group: AdminContentReportGroup; kind: GestureKind } | null;
@@ -115,9 +113,11 @@ function movieLabel(movie: AdminContentReportGroup['movie']): string {
  *   couverture 1-3-5 AVANT l'envoi ;
  * - « Ignorer » : motif facultatif.
  *
- * Pas de suspension : non livrée au J1 (L20-20). Chaque bouton n'est rendu
- * que si la policy l'accorde (`abilities`) ; le serveur la revérifie à
- * l'écriture.
+ * Au J2 (D66 du 07/10, n° 34), **administrateur seul** : « Suspendre le
+ * film » et « Suspendre l'image », motif facultatif, qui closent les
+ * signalements de leur cible (`movie_suspended`, `frame_suspended`). Chaque
+ * bouton n'est rendu que si la policy l'accorde (`abilities`) ; le serveur
+ * la revérifie à l'écriture.
  */
 export default function AdminContentReportsIndex({
     filter,
@@ -276,10 +276,51 @@ export default function AdminContentReportsIndex({
                         ? coverageNotice(gesture.group, t, locale)
                         : undefined
                 }
+                reasonLabel={t('admin.content_report.reason_optional_label')}
                 submitLabel={
                     gesture?.kind === 'dismiss'
                         ? t('admin.content_report.actions.dismiss')
                         : t('admin.content_report.actions.unpublish_frame')
+                }
+                onClose={close}
+                onReturnFocus={returnFocus}
+            />
+
+            <OptionalReasonDialog
+                open={
+                    gesture?.kind === 'suspend_movie' ||
+                    gesture?.kind === 'suspend_frame'
+                }
+                form={
+                    gesture?.kind === 'suspend_frame'
+                        ? suspendFrame.form(gesture.group.report_id)
+                        : suspendMovie.form(gesture?.group.report_id ?? 0)
+                }
+                title={
+                    gesture?.kind === 'suspend_frame'
+                        ? t('admin.content_report.dialogs.suspend_frame_title')
+                        : t(
+                              'admin.content_report.dialogs.suspend_movie_title',
+                              {
+                                  title:
+                                      gesture?.group.movie.title_original ?? '',
+                              },
+                          )
+                }
+                description={
+                    gesture?.kind === 'suspend_frame'
+                        ? t(
+                              'admin.content_report.dialogs.suspend_frame_description',
+                          )
+                        : t(
+                              'admin.content_report.dialogs.suspend_movie_description',
+                          )
+                }
+                reasonLabel={t('admin.content_report.reason_optional_label')}
+                submitLabel={
+                    gesture?.kind === 'suspend_frame'
+                        ? t('admin.content_report.actions.suspend_frame')
+                        : t('admin.content_report.actions.suspend_movie')
                 }
                 onClose={close}
                 onReturnFocus={returnFocus}
@@ -331,6 +372,8 @@ function ReportGroupCard({ group, onGesture }: ReportGroupCardProps) {
     const anyGesture =
         abilities.unpublish_movie ||
         abilities.unpublish_frame ||
+        abilities.suspend_movie ||
+        abilities.suspend_frame ||
         abilities.dismiss;
 
     return (
@@ -531,6 +574,48 @@ function ReportGroupCard({ group, onGesture }: ReportGroupCardProps) {
                                 )}
                             </Button>
                         )}
+                        {abilities.suspend_frame && (
+                            <Button
+                                variant="outline"
+                                className="min-h-11"
+                                aria-label={t(
+                                    'admin.content_report.gesture_label',
+                                    {
+                                        action: t(
+                                            'admin.content_report.actions.suspend_frame',
+                                        ),
+                                        title,
+                                    },
+                                )}
+                                onClick={() => onGesture('suspend_frame')}
+                            >
+                                <PauseCircleIcon aria-hidden />
+                                {t(
+                                    'admin.content_report.actions.suspend_frame',
+                                )}
+                            </Button>
+                        )}
+                        {abilities.suspend_movie && (
+                            <Button
+                                variant="outline"
+                                className="min-h-11"
+                                aria-label={t(
+                                    'admin.content_report.gesture_label',
+                                    {
+                                        action: t(
+                                            'admin.content_report.actions.suspend_movie',
+                                        ),
+                                        title,
+                                    },
+                                )}
+                                onClick={() => onGesture('suspend_movie')}
+                            >
+                                <PauseCircleIcon aria-hidden />
+                                {t(
+                                    'admin.content_report.actions.suspend_movie',
+                                )}
+                            </Button>
+                        )}
                         {abilities.dismiss && (
                             <Button
                                 variant="secondary"
@@ -554,138 +639,5 @@ function ReportGroupCard({ group, onGesture }: ReportGroupCardProps) {
                 )}
             </CardContent>
         </Card>
-    );
-}
-
-type OptionalReasonDialogProps = {
-    open: boolean;
-    form: RouteFormDefinition<'post'>;
-    title: string;
-    description: string;
-    notice?: string;
-    submitLabel: string;
-    onClose: () => void;
-    onReturnFocus: () => void;
-};
-
-/**
- * Un geste à motif FACULTATIF (dépublier l'image, ignorer), d'où une boîte
- * propre — `ReasonDialog` exige le sien. Même forme : focus piégé,
- * fermeture étiquetée `admin.a11y.close`, focus rendu au déclencheur ;
- * l'avertissement de couverture précède l'envoi.
- */
-function OptionalReasonDialog({
-    open,
-    form,
-    title,
-    description,
-    notice,
-    submitLabel,
-    onClose,
-    onReturnFocus,
-}: OptionalReasonDialogProps) {
-    const { t } = useTranslations();
-    const reasonId = useId();
-    const errorId = useId();
-
-    return (
-        <Dialog
-            open={open}
-            onOpenChange={(next) => {
-                if (!next) {
-                    onClose();
-                }
-            }}
-        >
-            <DialogContent
-                onCloseAutoFocus={(event) => {
-                    event.preventDefault();
-                    onReturnFocus();
-                }}
-                className="max-h-[90dvh] overflow-y-auto sm:max-w-lg [&>button:last-child]:hidden"
-            >
-                <DialogClose asChild>
-                    <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        aria-label={t('admin.a11y.close')}
-                        className="absolute top-3 right-3 min-h-11 min-w-11"
-                    >
-                        <XIcon aria-hidden />
-                    </Button>
-                </DialogClose>
-
-                <Form
-                    {...form}
-                    noValidate
-                    options={{ preserveScroll: true }}
-                    onSuccess={onClose}
-                    className="flex flex-col gap-4"
-                >
-                    {({ processing, errors }) => (
-                        <>
-                            <DialogHeader className="pr-12">
-                                <DialogTitle>{title}</DialogTitle>
-                                <DialogDescription>
-                                    {description}
-                                </DialogDescription>
-                            </DialogHeader>
-
-                            {notice !== undefined && (
-                                <Alert>
-                                    <TriangleAlertIcon aria-hidden />
-                                    <AlertDescription>
-                                        {notice}
-                                    </AlertDescription>
-                                </Alert>
-                            )}
-
-                            <div className="flex flex-col gap-1.5">
-                                <Label htmlFor={reasonId}>
-                                    {t(
-                                        'admin.content_report.reason_optional_label',
-                                    )}
-                                </Label>
-                                <Textarea
-                                    id={reasonId}
-                                    name="reason"
-                                    aria-invalid={
-                                        errors.reason ? true : undefined
-                                    }
-                                    aria-describedby={errorId}
-                                />
-                                <AdminInputError
-                                    id={errorId}
-                                    message={errors.reason}
-                                />
-                            </div>
-
-                            <AdminInputError message={errors.frame} />
-
-                            <DialogFooter className="gap-2">
-                                <DialogClose asChild>
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        className="min-h-11"
-                                    >
-                                        {t('admin.common.cancel')}
-                                    </Button>
-                                </DialogClose>
-                                <Button
-                                    type="submit"
-                                    disabled={processing}
-                                    aria-busy={processing || undefined}
-                                    className="min-h-11"
-                                >
-                                    {submitLabel}
-                                </Button>
-                            </DialogFooter>
-                        </>
-                    )}
-                </Form>
-            </DialogContent>
-        </Dialog>
     );
 }
