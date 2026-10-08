@@ -154,6 +154,11 @@ const WATCHED = [
     'resources/js/pages/settings/history.tsx',
     'resources/js/pages/settings/history-show.tsx',
     'resources/js/lib/account',
+    // Le banc d'essai du design (spec 20 § 13.8, demande du porteur du 08/10) :
+    // données fictives, bac à sable et clés des scénarios, et l'hôte des
+    // écrans d'authentification (`pages/game` et `pages/legal` le sont déjà).
+    'resources/js/lib/design',
+    'resources/js/pages/auth/design-preview.tsx',
 
     // Fichiers hérités PROPRES que retouche un lot (spec 90 § 9.3, règle
     // d'entrée n° 2) : ils entrent dans le commit qui les modifie.

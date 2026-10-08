@@ -31,6 +31,13 @@ export type UseSoloStateOptions = {
     seatToken: string;
     /** Prop `settingsNotice`. */
     settingsNotice: SoloSettingsNotice | null;
+    /**
+     * Aperçu du banc d'essai du design (spec 20 § 13.8, demande du porteur du
+     * 08/10) : paquet fictif. Aucun sondage de `solo.state` (la relecture rend
+     * le paquet reçu, sans requête ni bandeau « hors ligne »), aucun
+     * battement, aucune sortie vers `solo.show`.
+     */
+    designPreview?: boolean;
 };
 
 export type SoloStateView = GameStateView & {
@@ -76,11 +83,17 @@ export type SoloStateView = GameStateView & {
 export function useSoloState(options: UseSoloStateOptions): SoloStateView {
     const { t, locale } = useTranslations();
     const [unreachable, setUnreachable] = useState(false);
+    const preview = options.designPreview === true;
 
     const view = useGameState({
         state: options.state,
         seatToken: options.seatToken,
+        designPreview: preview,
         resync: async (): Promise<ResyncOutcome> => {
+            if (preview) {
+                return { kind: 'packet', packet: options.state };
+            }
+
             const outcome = await fetchGameState(soloState.url());
 
             setUnreachable(outcome.kind === 'failed');
@@ -108,7 +121,9 @@ export function useSoloState(options: UseSoloStateOptions): SoloStateView {
 
     // --- Battement (§ 13.1) ----------------------------------------------------
 
-    const heartbeatStatus = useHeartbeat(active ? heartbeat.url() : null);
+    const heartbeatStatus = useHeartbeat(
+        active && !preview ? heartbeat.url() : null,
+    );
 
     useEffect(() => {
         if (heartbeatStatus === 'refused') {

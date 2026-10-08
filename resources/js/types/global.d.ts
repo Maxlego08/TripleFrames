@@ -78,6 +78,12 @@ declare module '@inertiajs/core' {
              * frappe : c'est un domaine non déclaré.
              */
             translations: TranslationMessages;
+            /**
+             * Le banc d'essai du design s'ouvre à ce compte (route
+             * enregistrée, `previewDesign`) : jamais en production. Sur les
+             * seules pages `admin.*`, absent ailleurs (spec 20, ligne 50).
+             */
+            designPreview?: boolean;
             [key: string]: unknown;
         };
     }

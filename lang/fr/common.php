@@ -56,30 +56,36 @@ return [
     ],
 
     'error' => [
+        // Design final des pages d'erreur (maquette `design-test/html/error-*.html`,
+        // 08/10) : titres de la maquette, au vouvoiement du site ; actions.
         'back_home' => 'Retour à l’accueil',
+        'retry' => 'Réessayer',
+        'reload' => 'Recharger la page',
+        'join_game' => 'Rejoindre une partie',
+        'other_account' => 'Se connecter avec un autre compte',
         'forbidden' => [
             'title' => 'Accès refusé',
-            'description' => 'Vous n’avez pas l’autorisation d’ouvrir cette page.',
+            'description' => 'Vous n’avez pas l’autorisation d’accéder à cette page.',
         ],
         'not_found' => [
-            'title' => 'Page introuvable',
+            'title' => 'Scène introuvable',
             'description' => 'Cette page n’existe pas ou n’existe plus. Vérifiez l’adresse, ou le code du salon si vous rejoigniez une partie.',
         ],
         'page_expired' => [
-            'title' => 'Page expirée',
+            'title' => 'Session expirée',
             'description' => 'La page a expiré faute d’activité récente. Recommencez votre dernière action.',
         ],
         'too_many_requests' => [
-            'title' => 'Trop de demandes',
-            'description' => 'Trop de demandes en peu de temps. Patientez quelques instants avant de réessayer.',
+            'title' => 'Trop de tentatives',
+            'description' => 'Trop de demandes ont été envoyées. Attendez un instant, puis réessayez.',
         ],
         'server_error' => [
-            'title' => 'Erreur du serveur',
-            'description' => 'Une erreur inattendue est survenue de notre côté. Réessayez dans un instant.',
+            'title' => 'Coupure en régie',
+            'description' => 'Une erreur interne empêche la page de s’afficher. Réessayez dans un instant.',
         ],
         'service_unavailable' => [
-            'title' => 'Service indisponible',
-            'description' => 'Le site est momentanément indisponible, sans doute le temps d’une mise à jour. Réessayez un peu plus tard.',
+            'title' => 'Séance en pause',
+            'description' => 'Le service est temporairement indisponible, sans doute le temps d’une mise à jour. Revenez dans quelques instants.',
         ],
     ],
 

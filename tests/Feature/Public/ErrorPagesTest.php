@@ -112,6 +112,23 @@ function errorPagesSharedKeys(): array
     return array_keys(app(HandleInertiaRequests::class)->share(Request::create('/')));
 }
 
+/**
+ * Les sorties de la page d'erreur (design final du 08/10) : accueil,
+ * rejoindre une partie, autre compte, réessayer, recharger.
+ *
+ * @return list<string>
+ */
+function errorPagesExitKeys(): array
+{
+    return [
+        'common.error.back_home',
+        'common.error.join_game',
+        'common.error.other_account',
+        'common.error.retry',
+        'common.error.reload',
+    ];
+}
+
 it('rend la page error traduite pour 403, 404, 429, 500 et 503 hors mode debug', function () {
     Route::middleware('web')->get('/__errors/abort/{status}', fn (string $status) => abort((int) $status));
 
@@ -138,8 +155,8 @@ it('rend la page error traduite pour 403, 404, 429, 500 et 503 hors mode debug',
 
             $translations = $response->inertiaProps('translations');
 
-            // Le texte de CE statut, dans CETTE langue, et la sortie.
-            foreach ([$status->titleKey(), $status->descriptionKey(), 'common.error.back_home'] as $key) {
+            // Le texte de CE statut, dans CETTE langue, et les sorties.
+            foreach ([$status->titleKey(), $status->descriptionKey(), ...errorPagesExitKeys()] as $key) {
                 expect($translations[$key] ?? null)
                     ->toBeString()
                     ->toBe(__($key, [], $locale->value), "{$key} en {$locale->value}");
@@ -163,7 +180,7 @@ it('rend la page error traduite pour 403, 404, 429, 500 et 503 hors mode debug',
     $pageKeys = FrontSource::literalKeys((string) file_get_contents(resource_path('js/pages/error.tsx')));
     $adminKeys = FrontSource::literalKeys((string) file_get_contents(resource_path('js/pages/admin/error.tsx')));
 
-    expect(array_values(array_diff($pageKeys, ['common.error.back_home'])))->toEqualCanonicalizing($expected)
+    expect(array_values(array_diff($pageKeys, errorPagesExitKeys())))->toEqualCanonicalizing($expected)
         ->and(array_values(array_filter($adminKeys, static fn (string $key): bool => str_starts_with($key, 'admin.error.http.'))))
         ->toEqualCanonicalizing($expectedAdmin);
 

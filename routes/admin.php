@@ -8,6 +8,7 @@ use App\Http\Controllers\Admin\ContentReportController;
 use App\Http\Controllers\Admin\CurationHeartbeatController;
 use App\Http\Controllers\Admin\CurationQueueController;
 use App\Http\Controllers\Admin\DashboardController;
+use App\Http\Controllers\Admin\DesignPreviewController;
 use App\Http\Controllers\Admin\ExclusionGridRetroactiveController;
 use App\Http\Controllers\Admin\FrameBankController;
 use App\Http\Controllers\Admin\FrameBatchController;
@@ -70,6 +71,7 @@ use App\Models\PerfSample;
 use App\Models\Player;
 use App\Models\Theme;
 use App\Models\User;
+use App\Support\Design\DesignScenarios;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -678,5 +680,46 @@ Route::middleware(['auth', 'verified', 'role:curator', 'admin.2fa', 'admin.local
             Route::post('exclusion-grid/retroactive', [ExclusionGridRetroactiveController::class, 'store'])
                 ->middleware(['can:applyRetroactiveGrid,'.Frame::class, 'throttle:admin-curation'])
                 ->name('exclusion_grid.retroactive.store');
+
+            // Le banc d'essai du design (ligne 50, demande du porteur du
+            // 08/10) : chaque page joueur avec des données de test, dans une
+            // `iframe`. **Jamais en production** : la route n'y est même pas
+            // enregistrée — 404, pas 403 —, et `UserPolicy::previewDesign`
+            // le redit. Lecture seule, aucune écriture en base.
+            if (! app()->environment('production')) {
+                Route::get('design', [DesignPreviewController::class, 'index'])
+                    ->middleware('can:previewDesign,'.User::class)
+                    ->name('design.index');
+            }
         });
     });
+
+/*
+|--------------------------------------------------------------------------
+| Banc d'essai du design — les pages fictives (`design.frame`)
+|--------------------------------------------------------------------------
+|
+| HORS du groupe `admin.*`, et c'est voulu : ce groupe force le français et le
+| seul domaine `admin` (`admin.locale`), alors que la page rendue est une
+| page JOUEUR, dans la langue choisie (`?locale=`) et avec ses domaines —
+| `legal` compris, comme toute route joueur. La même porte que le
+| back-office, sauf la locale : `auth`, `verified`, `role:admin`,
+| `admin.2fa`, puis la garde `previewDesign`. Un administrateur seul,
+| jamais en production (route absente : 404). Aucune écriture : les
+| données sont fictives et décrites en TypeScript.
+|
+*/
+
+if (! app()->environment('production')) {
+    Route::get('admin/design/frame/{scenario}', [DesignPreviewController::class, 'frame'])
+        ->where('scenario', DesignScenarios::ROUTE_PATTERN)
+        ->middleware([
+            'auth',
+            'verified',
+            'role:admin',
+            'admin.2fa',
+            'can:previewDesign,'.User::class,
+            'translations:account,game,room,legal',
+        ])
+        ->name('design.frame');
+}

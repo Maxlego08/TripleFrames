@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { Toaster } from '@/components/ui/sonner';
 import { useTranslations } from '@/hooks/use-translations';
 import AuthLayoutTemplate from '@/layouts/auth/auth-simple-layout';
+import type { DesignPreviewLayoutProps } from '@/lib/design/sandbox';
 import type { AuthLayoutKeys } from '@/types';
 
 /**
@@ -18,10 +19,14 @@ import type { AuthLayoutKeys } from '@/types';
 export default function AuthLayout({
     title,
     description,
+    previewComponent,
     children,
-}: AuthLayoutKeys & { children: ReactNode }) {
+}: AuthLayoutKeys & DesignPreviewLayoutProps & { children: ReactNode }) {
     const { t } = useTranslations();
-    const page = usePage().component;
+    // Le banc d'essai du design rend la page sous le nom de son hôte : il
+    // nomme la page montée, pour que la variante du gabarit soit la sienne.
+    const component = usePage().component;
+    const page = previewComponent ?? component;
 
     return (
         <>

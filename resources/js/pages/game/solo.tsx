@@ -45,6 +45,12 @@ type SoloPageProps = {
     limits: PlatformLimitsPayload;
     /** Les quatre presets et leur `N` jouable le plus proche, pour la relance. */
     presets: PresetOption[];
+    /**
+     * Aperçu du banc d'essai du design (spec 20 § 13.8, demande du porteur du
+     * 08/10), posé par l'hôte `game/design-preview` seul : paquet fictif,
+     * aucune requête de jeu (voir `useSoloState`). Absent de `solo.show`.
+     */
+    designPreview?: boolean;
 };
 
 /**
@@ -83,10 +89,16 @@ export default function Solo({
     settingsNotice,
     limits,
     presets,
+    designPreview = false,
 }: SoloPageProps) {
     const { t } = useTranslations();
     const { maintenance } = usePage().props;
-    const solo = useSoloState({ state: packet, seatToken, settingsNotice });
+    const solo = useSoloState({
+        state: packet,
+        seatToken,
+        settingsNotice,
+        designPreview,
+    });
     const {
         state,
         store,

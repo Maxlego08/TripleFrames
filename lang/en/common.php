@@ -60,29 +60,33 @@ return [
 
     'error' => [
         'back_home' => 'Back to home',
+        'retry' => 'Try again',
+        'reload' => 'Reload the page',
+        'join_game' => 'Join a game',
+        'other_account' => 'Sign in with another account',
         'forbidden' => [
             'title' => 'Access denied',
             'description' => 'You are not allowed to open this page.',
         ],
         'not_found' => [
-            'title' => 'Page not found',
+            'title' => 'Scene not found',
             'description' => 'This page does not exist, or no longer does. Check the address, or the room code if you were joining a game.',
         ],
         'page_expired' => [
-            'title' => 'Page expired',
+            'title' => 'Session expired',
             'description' => 'The page expired after a period of inactivity. Please try your last action again.',
         ],
         'too_many_requests' => [
-            'title' => 'Too many requests',
-            'description' => 'Too many requests in a short time. Please wait a moment before trying again.',
+            'title' => 'Too many attempts',
+            'description' => 'Too many requests were sent. Wait a moment, then try again.',
         ],
         'server_error' => [
-            'title' => 'Server error',
-            'description' => 'Something unexpected went wrong on our side. Please try again in a moment.',
+            'title' => 'Cut in the control room',
+            'description' => 'An internal error is preventing this page from loading. Please try again in a moment.',
         ],
         'service_unavailable' => [
-            'title' => 'Service unavailable',
-            'description' => 'The site is temporarily unavailable, most likely for an update. Please try again a little later.',
+            'title' => 'Intermission',
+            'description' => 'The service is temporarily unavailable, most likely for an update. Come back in a few moments.',
         ],
     ],
 

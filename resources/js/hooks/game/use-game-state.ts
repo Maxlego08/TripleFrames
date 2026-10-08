@@ -101,6 +101,14 @@ export type UseGameStateOptions = {
      * le salon, dont le temps réel dit déjà la coupure, jamais.
      */
     unreachable?: boolean;
+    /**
+     * Aperçu du banc d'essai du design (spec 20 § 13.8, demande du porteur du
+     * 08/10) : le paquet est fictif. Ni poignée de main d'horloge ni relecture
+     * au retour de visibilité, aucun canal Echo, et jamais `onExit`. La page
+     * fournit une `resync` qui ne part pas sur le réseau. Faux par défaut :
+     * le chemin normal est inchangé.
+     */
+    designPreview?: boolean;
 };
 
 /** Les images de jeu, vues de l'écran ; `version` change à chaque chargement. */
@@ -258,8 +266,14 @@ export function useGameState(options: UseGameStateOptions): GameStateView {
     }, [store, options.seatToken]);
 
     // Poignée de main d'horloge au montage ; reconnexion, visibilité, retour
-    // en ligne : horloge et état relus.
+    // en ligne : horloge et état relus. Rien en aperçu : aucune requête.
+    const preview = options.designPreview === true;
+
     useEffect(() => {
+        if (preview) {
+            return;
+        }
+
         void handshakeServerClock(clockSamples);
 
         const offReconnected = subscribeReconnected(() => {
@@ -282,11 +296,12 @@ export function useGameState(options: UseGameStateOptions): GameStateView {
             document.removeEventListener('visibilitychange', onVisibility);
             window.removeEventListener('online', onOnline);
         };
-    }, [store, clockSamples]);
+    }, [store, clockSamples, preview]);
 
     // Canaux du siège, quittés à la sortie (`seat.kicked`, `room.archived`,
     // 403) et au démontage ; l'état relu à chaque confirmation de la paire.
-    const channels = state.exit === null ? state.channels : null;
+    // Jamais en aperçu.
+    const channels = state.exit === null && !preview ? state.channels : null;
     const realtimeStatus = useGameChannel(
         channels,
         realtime,
@@ -319,6 +334,10 @@ export function useGameState(options: UseGameStateOptions): GameStateView {
     }, [connection]);
 
     const leave = useEffectEvent((exit: GameExit): void => {
+        if (preview) {
+            return;
+        }
+
         options.onExit?.(exit);
     });
 

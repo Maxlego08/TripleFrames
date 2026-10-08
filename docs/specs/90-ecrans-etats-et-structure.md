@@ -322,6 +322,8 @@ Conséquence voulue : un joueur refusé par `role:curator` voit une page d'erreu
 
 ---
 
+**Forme livrée — design final, amendé le 08/10 (demande du porteur, maquette `design-test/html/error-*.html`)** : la page `error` est la carte `error-card` de la maquette (code en très grand, masqué aux lecteurs d'écran ; titre ; explication ; action principale en bouton jaune ; sortie secondaire soulignée), dans `PublicLayout` en variante `public-shell--error` (`resources/scss/error.scss`, fond rayé, en-tête et pied de page du site). Titres repris de la maquette, au vouvoiement du site (`common.error.*` : « Scène introuvable », « Session expirée », « Trop de tentatives », « Coupure en régie », « Séance en pause », « Accès refusé ») ; sorties par statut — 403 : accueil, puis « Se connecter avec un autre compte » ; 404 : accueil, puis « Rejoindre une partie » (formulaire de l'accueil) ; 419 : « Recharger la page », puis accueil ; 429, 500 et 503 : « Réessayer » (rechargement), puis accueil — liens ordinaires, jamais des visites Inertia. Les maquettes 400, 401, 408, 422 et 502 ne sont pas servies par l'application (`ErrorPageResponder` ne rend que les six statuts ci-dessus ; 502 vient du serveur web) : elles restent hors périmètre.
+
 ## 5. Indexation, `robots.txt` et en-têtes
 
 ### 5.1 Au J1 : `noindex` intégral
