@@ -78,8 +78,8 @@ function adminJournalRawLine(AdminActionType $action, array $overrides = []): Ad
     return $line;
 }
 
-test('la liste fermée compte exactement cinquante-trois cas', function (): void {
-    expect(AdminActionType::cases())->toHaveCount(53)
+test('la liste fermée compte exactement cinquante-six cas', function (): void {
+    expect(AdminActionType::cases())->toHaveCount(56)
         ->and(array_map(static fn (AdminActionType $case): string => $case->value, AdminActionType::cases()))
         ->toEqualCanonicalizing([
             'role.changed',
@@ -142,6 +142,10 @@ test('la liste fermée compte exactement cinquante-trois cas', function (): void
             'movie.theme_set',
             // D63 du 07/10 : les signalements de contenu ignorés.
             'content_report.dismissed',
+            // D66 du 07/10 : resynchronisation, balayage clos, difficulté corrigée.
+            'movie.resynced',
+            'import.abandoned',
+            'movie.difficulty_corrected',
         ]);
 
     // `action` reste un `string(40)` : aucun cas ne dépasse la colonne, et
@@ -355,6 +359,7 @@ test('un motif vide est refusé quand l\'action l\'exige', function (): void {
         AdminActionType::FrameGridUnpublished,
         AdminActionType::FrameWithdrawn,
         AdminActionType::AvatarRemoved,
+        AdminActionType::NicknameBanned,
         AdminActionType::TakedownDecided,
         AdminActionType::SiteClosed,
     ]);

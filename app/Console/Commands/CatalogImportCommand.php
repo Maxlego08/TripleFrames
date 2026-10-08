@@ -19,6 +19,7 @@ use App\ValueObjects\Catalog\ImportFilter;
 use Carbon\CarbonImmutable;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\App;
+use Illuminate\Support\Facades\DB;
 use Symfony\Component\Console\Helper\ProgressBar;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
@@ -252,14 +253,23 @@ abstract class CatalogImportCommand extends Command
             $query->whereKey($runId);
         }
 
-        $run = $query->first();
+        // Lecture et estampille sous le verrou de la ligne, celui que prend
+        // `ImportLauncher::abandon()` : si la clôture manuelle a commité
+        // d'abord, le filtre `status = running` ne retrouve plus rien et la
+        // commande ne fait rien ; si l'estampille passe d'abord, la clôture
+        // voit `started_at` posé dans le délai de grâce et refuse. Sans ce
+        // verrou, une clôture glissée entre la lecture et l'estampille était
+        // ensuite écrasée par `closeRun()`.
+        return DB::transaction(static function () use ($query): ?ImportRun {
+            $run = $query->lockForUpdate()->first();
 
-        if ($run instanceof ImportRun && $run->started_at === null) {
-            $run->started_at = CarbonImmutable::now();
-            $run->save();
-        }
+            if ($run instanceof ImportRun && $run->started_at === null) {
+                $run->started_at = CarbonImmutable::now();
+                $run->save();
+            }
 
-        return $run;
+            return $run;
+        });
     }
 
     /**
@@ -268,6 +278,38 @@ abstract class CatalogImportCommand extends Command
      * que l'index `(status)` sert à retrouver au démarrage du worker suivant.
      */
     protected function closeRun(ImportRun $run, ImportRunStatus $status): void
+    {
+        if ($this->simulation || ! $run->exists) {
+            $this->writeClosure($run, $status);
+
+            return;
+        }
+
+        // Défense en profondeur : la clôture ne s'écrit que si la ligne est
+        // encore `running` sous son verrou. Un balayage clos à la main entre
+        // deux pages (`import.abandoned`, spec 20 § 3.8) garde `failed` ; le
+        // modèle en mémoire est relu pour que le compte rendu dise vrai.
+        $closed = DB::transaction(function () use ($run, $status): bool {
+            $current = ImportRun::query()->whereKey($run->id)->lockForUpdate()->value('status');
+
+            if ($current !== ImportRunStatus::Running) {
+                return false;
+            }
+
+            $this->writeClosure($run, $status);
+
+            return true;
+        });
+
+        if (! $closed) {
+            $run->refresh();
+            $this->components->warn(
+                'Balayage #'.$run->id.' clos à la main pendant son exécution : son état est conservé.',
+            );
+        }
+    }
+
+    private function writeClosure(ImportRun $run, ImportRunStatus $status): void
     {
         $run->status = $status;
 

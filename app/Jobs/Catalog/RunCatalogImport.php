@@ -5,6 +5,7 @@ namespace App\Jobs\Catalog;
 use App\Enums\ImportRunKind;
 use App\Enums\ImportRunStatus;
 use App\Models\ImportRun;
+use App\Models\Movie;
 use App\Models\User;
 use App\Support\Catalog\DiscoverCursor;
 use App\Support\Catalog\ImportSnapshotGuard;
@@ -138,6 +139,21 @@ class RunCatalogImport implements ShouldBeUniqueUntilProcessing, ShouldQueue
     }
 
     /**
+     * Une resynchronisation depuis l'écran (spec 20 § 3.7, L20-24) : les
+     * identifiants TMDB de films déjà au catalogue, relus sous la liste close
+     * du § 9.3 par `catalog:import-ids --resync`. Comme un collage, la liste
+     * voyage dans la charge utile et nulle part ailleurs ; chaque film dont
+     * une valeur change écrit sa ligne `movie.resynced`, signée de l'auteur
+     * du balayage (`MovieImporter`).
+     *
+     * @param  list<int>  $identifiers
+     */
+    public static function resync(ImportRun $run, array $identifiers): self
+    {
+        return new self($run->id, ImportRunKind::Resync, 1, $identifiers);
+    }
+
+    /**
      * Deux workers ne traitent jamais le même curseur.
      */
     public function uniqueId(): string
@@ -170,6 +186,7 @@ class RunCatalogImport implements ShouldBeUniqueUntilProcessing, ShouldQueue
             'ids' => array_map(strval(...), $this->identifiers),
             '--resume' => true,
             '--run' => $this->runId,
+            '--resync' => $this->kind === ImportRunKind::Resync,
         ]));
 
         // La commande clôt elle-même le balayage dans tous les cas qu'elle
@@ -264,7 +281,11 @@ class RunCatalogImport implements ShouldBeUniqueUntilProcessing, ShouldQueue
             return true;
         }
 
-        return Gate::forUser($actor)->allows('create', ImportRun::class);
+        // Une resynchronisation garde son propre seuil (`MoviePolicy::resync`,
+        // ligne 26) ; les deux autres voies, celui d'un import.
+        return $this->kind === ImportRunKind::Resync
+            ? Gate::forUser($actor)->allows('resync', Movie::class)
+            : Gate::forUser($actor)->allows('create', ImportRun::class);
     }
 
     /**

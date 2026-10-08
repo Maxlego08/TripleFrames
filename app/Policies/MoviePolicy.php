@@ -24,7 +24,7 @@ use App\Models\User;
  * l'admin seul suspend et prononce un retrait juridique. Ces deux gestes, et la
  * resynchronisation, sont des méthodes du jalon 2 (`resync`, `suspend`,
  * `unsuspend`, `withdraw`) : elles arrivent avec les lots qui livrent leurs
- * routes (L20-20, L20-21, L20-24), jamais avant — une méthode qu'aucune route
+ * routes (L20-20, L20-21, L20-24 — `resync` livrée le 07/10), jamais avant — une méthode qu'aucune route
  * n'appelle serait une décision que personne ne voit passer.
  *
  * **Vérifiée à chaque écriture** : chaque route du back-office la nomme par son
@@ -87,6 +87,19 @@ class MoviePolicy
     {
         return $user->role->atLeast(UserRole::Curator)
             && $movie->availability !== ContentAvailability::Withdrawn;
+    }
+
+    /**
+     * Resynchroniser des films depuis TMDB (spec 20 § 3.7, ligne 26, L20-24) :
+     * l'écran de différences et le lancement du balayage `resync`. Curateur
+     * au moins, comme tout import — la resynchronisation ne touche que la
+     * liste close du § 9.3, jamais un état de curation ni une disponibilité.
+     * Méthode de classe : l'écran porte une sélection de films, et chaque
+     * film non éligible (retiré, de démonstration) y est écarté et nommé.
+     */
+    public function resync(User $user): bool
+    {
+        return $user->role->atLeast(UserRole::Curator);
     }
 
     /**

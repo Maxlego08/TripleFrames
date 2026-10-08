@@ -1,10 +1,12 @@
 import { Head, Link, router } from '@inertiajs/react';
 import {
     ArrowLeftIcon,
+    CircleSlashIcon,
     ClapperboardIcon,
     TriangleAlertIcon,
 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
+import ImportAbandonController from '@/actions/App/Http/Controllers/Admin/ImportAbandonController';
 import {
     ImportRunKindBadge,
     ImportRunStatusBadge,
@@ -19,6 +21,10 @@ import { AdminMovieTable } from '@/components/admin/admin-movie-table';
 import { AdminPageHeading } from '@/components/admin/admin-page-heading';
 import { AdminPagination } from '@/components/admin/admin-pagination';
 import { AdminStatTile } from '@/components/admin/admin-stat-tile';
+import {
+    ConfirmGestureDialog,
+    useGestureFocus,
+} from '@/components/admin/confirm-gesture-dialog';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -56,6 +62,8 @@ type Props = {
      * laisse pas un bouton actif derrière lui.
      */
     can_resume: boolean;
+    /** « Clore ce balayage » (spec 20 § 3.8) : en file ou suspendu, et l'auteur peut le geste. */
+    can_abandon: boolean;
     tmdb_configured: boolean;
 };
 
@@ -85,6 +93,7 @@ const REFRESH_INTERVAL_MS = 5000;
 export default function AdminImportShow({
     run,
     movies,
+    can_abandon,
     tmdb_configured,
 }: Props) {
     const { t, locale } = useTranslations();
@@ -95,7 +104,7 @@ export default function AdminImportShow({
 
     const refresh = useCallback(() => {
         router.reload({
-            only: ['run', 'movies', 'can_resume'],
+            only: ['run', 'movies', 'can_resume', 'can_abandon'],
             onStart: () => setRefreshing(true),
             onFinish: () => setRefreshing(false),
             onSuccess: () => setRefreshFailed(false),
@@ -346,11 +355,12 @@ export default function AdminImportShow({
                             ]}
                         />
 
-                        <div className="flex justify-start">
+                        <div className="flex flex-wrap justify-start gap-3">
                             <ResumeButton
                                 run={run}
                                 tmdbConfigured={tmdb_configured}
                             />
+                            {can_abandon && <AbandonButton runId={run.id} />}
                         </div>
                     </CardContent>
                 </Card>
@@ -449,3 +459,43 @@ export default function AdminImportShow({
 }
 
 AdminImportShow.layout = { breadcrumbs };
+
+/**
+ * « Clore ce balayage » (spec 20 § 3.8, L20-24) : le balayage passe
+ * « échoué », journalisé ; une confirmation d'abord, jamais un geste muet.
+ */
+function AbandonButton({ runId }: { runId: number }) {
+    const { t } = useTranslations();
+    const focus = useGestureFocus();
+    const [open, setOpen] = useState(false);
+
+    return (
+        <>
+            <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                    focus.remember();
+                    setOpen(true);
+                }}
+                className="min-h-11"
+            >
+                <CircleSlashIcon aria-hidden />
+                {t('admin.import.abandon.action')}
+            </Button>
+
+            {open && (
+                <ConfirmGestureDialog
+                    open
+                    form={ImportAbandonController.store.form(runId)}
+                    title={t('admin.import.abandon.title')}
+                    description={t('admin.import.abandon.description')}
+                    submitLabel={t('admin.import.abandon.submit')}
+                    errorFields={[]}
+                    onClose={() => setOpen(false)}
+                    onReturnFocus={focus.restore}
+                />
+            )}
+        </>
+    );
+}

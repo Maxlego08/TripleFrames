@@ -8,6 +8,7 @@ use App\Models\AnswerKey;
 use App\Models\ImportRun;
 use App\Models\Movie;
 use App\Models\User;
+use App\Support\Admin\ImportLauncher;
 use App\Support\Admin\PastePreview;
 use App\Support\Catalog\DiscoverCursor;
 use Illuminate\Http\Client\ConnectionException;
@@ -324,6 +325,61 @@ test('un aperçu ne laisse aucun état à l\'appel suivant de la même instance 
     expect($run->fresh()?->status)->toBe(ImportRunStatus::Completed)
         ->and($run->fresh()?->total_imported)->toBe(1)
         ->and(Movie::query()->where('tmdb_id', 987654)->exists())->toBeTrue();
+});
+
+test('un balayage en file clos à la main ne reprend pas quand le worker le prend ensuite', function (): void {
+    tmdbFake();
+
+    $curator = User::factory()->curator()->create();
+
+    // Ouvert par le back-office, jamais pris par un worker.
+    $run = ImportRun::factory()->paste()->running()->create([
+        'started_at' => null,
+        'total_seen' => 0,
+        'total_imported' => 0,
+        'total_skipped' => 0,
+        'total_refused_content' => 0,
+    ]);
+
+    expect(ImportLauncher::abandon($run, $curator))->toBeTrue();
+
+    $this->artisan('catalog:import-ids', ['ids' => ['987654'], '--resume' => true, '--run' => (string) $run->id])
+        ->assertSuccessful();
+
+    $fresh = $run->fresh();
+
+    expect($fresh?->status)->toBe(ImportRunStatus::Failed)
+        ->and($fresh?->started_at)->toBeNull()
+        ->and($fresh?->total_imported)->toBe(0)
+        ->and(Movie::query()->where('tmdb_id', 987654)->exists())->toBeFalse();
+});
+
+test('une clôture manuelle glissée pendant le balayage n’est pas réécrite par la fin du worker', function (): void {
+    $run = ImportRun::factory()->paste()->running()->create([
+        'started_at' => null,
+        'total_seen' => 0,
+        'total_imported' => 0,
+        'total_skipped' => 0,
+        'total_refused_content' => 0,
+    ]);
+
+    // La clôture commite entre la prise du balayage et sa fin : simulée au
+    // premier appel de détail, quand le worker tient déjà son modèle.
+    Http::fake([
+        '*themoviedb.org/3/movie/987654*' => function () use ($run) {
+            ImportRun::query()->whereKey($run->id)->update([
+                'status' => ImportRunStatus::Failed->value,
+                'finished_at' => now(),
+            ]);
+
+            return tmdbJson('movie-987654');
+        },
+    ]);
+
+    $this->artisan('catalog:import-ids', ['ids' => ['987654'], '--resume' => true, '--run' => (string) $run->id])
+        ->assertSuccessful();
+
+    expect($run->fresh()?->status)->toBe(ImportRunStatus::Failed);
 });
 
 /*

@@ -435,6 +435,79 @@ export type AdminGroupCandidate = AdminMovieIdentity & {
     default_label: string;
 };
 
+/** Pourquoi un film est proposé par proximité (`MovieGroupCandidates`). */
+export type AdminProximityReason = 'title_distance' | 'same_collection';
+
+/**
+ * Un candidat `movie_group` par proximité (spec 20 § 9.4 [J2], L20-27), servi
+ * en prop facultative `group_candidates` au rechargement partiel qui le
+ * demande : une suggestion, jamais un regroupement.
+ */
+export type AdminProximityCandidate = AdminGroupCandidate & {
+    reasons: AdminProximityReason[];
+};
+
+/** Les champs que compare l'écran de resynchronisation — `ResyncSnapshot::FIELDS`. */
+export type AdminResyncField =
+    | 'title_original'
+    | 'title_original_latin'
+    | 'original_language'
+    | 'release_year'
+    | 'vote_count'
+    | 'adult'
+    | 'collection_id'
+    | 'genres'
+    | 'companies'
+    | 'movie_certification'
+    | 'movie_title'
+    | 'alias'
+    | 'content_flag';
+
+/** Le motif qui écarte un film d'une resynchronisation. */
+export type AdminResyncIneligibility = 'withdrawn' | 'demo' | 'no_tmdb';
+
+/** Un film de la sélection d'une resynchronisation (spec 20 § 3.7). */
+export type AdminResyncMovie = AdminMovieIdentity & {
+    tmdb_id: number | null;
+    content_flag: ContentFlag;
+    ineligible: AdminResyncIneligibility | null;
+};
+
+/** Une ligne de l'écran de différences : valeurs affichables, vides pour NULL. */
+export type AdminResyncRow = {
+    field: AdminResyncField;
+    changed: boolean;
+    before: string[];
+    after: string[];
+};
+
+/**
+ * L'écran de différences d'un film seul : la fiche TMDB relue, appliquée
+ * puis annulée (`MovieImporter::previewResync()`), ou l'état qui l'empêche.
+ */
+export type AdminResyncPreview =
+    | { status: 'not_configured' | 'unavailable' | 'not_found' }
+    | {
+          status: 'ready';
+          rows: AdminResyncRow[];
+          changed: AdminResyncField[];
+          content_flag_blocked: boolean;
+          reappeared_aliases: string[];
+          curator_title_locales: string[];
+          certifications_read_at: string | null;
+          propose_unpublish: boolean;
+      };
+
+/**
+ * Un film que le geste rétroactif de grille toucherait (spec 20 § 7.7) :
+ * images visées et, s'il devient incomplet, son `N` jouable maximal après.
+ */
+export type AdminRetroactiveMovie = AdminMovieIdentity & {
+    frames: number;
+    becomes_incomplete: boolean;
+    playable_up_to: number | null;
+};
+
 /** Ce qu'un texte saisi deviendra : un titre ou un alias (`TextTarget`). */
 export type AdminTextTarget = 'title' | 'alias';
 
@@ -935,6 +1008,11 @@ export type AdminMovieAbilities = {
     viewJournal: boolean;
     /** « Créer la saga depuis cette collection » (`ThemePolicy::create`). */
     editThemes: boolean;
+    /**
+     * « Resynchroniser depuis TMDB » (`MoviePolicy::resync`, spec 20 § 3.7) :
+     * jamais un film retiré ni de démonstration.
+     */
+    resync: boolean;
 };
 
 export type AdminImportRunRow = {
@@ -1443,7 +1521,10 @@ export type AdminActionTypeValue =
     | 'theme.updated'
     | 'theme.published'
     | 'theme.unpublished'
-    | 'content_report.dismissed';
+    | 'content_report.dismissed'
+    | 'movie.resynced'
+    | 'import.abandoned'
+    | 'movie.difficulty_corrected';
 
 /** Les sujets du journal — miroir de `App\Enums\AdminActionSubject`. */
 export type AdminActionSubjectValue =
@@ -1936,3 +2017,34 @@ export type AdminAvatarRow = {
 };
 
 export type AdminAvatarFilter = 'hidden' | 'reported';
+
+/**
+ * Une ligne de l'écran « Modération » des pseudos (ligne 35, spec 20
+ * § 11.5 ; D66 du 07/10), miroir de `ModerationController::row()`.
+ */
+export type AdminModerationRow = {
+    /** `player.id` : lie les deux gestes, ne sort que vers le back-office. */
+    id: number;
+    /** Lie la fiche du siège (`admin.players.show`). */
+    public_id: string;
+    /** Le pseudo, montré à l'administrateur seul ; nul s'il a été effacé. */
+    nickname: string | null;
+    /** Code du salon, nul pour un siège solo. */
+    room_code: string | null;
+    account: { id: number; name: string } | null;
+    masked_at: string | null;
+    /** `reports_count` de la dernière ligne `nickname.masked` ; nul sans elle. */
+    reports_count: number | null;
+    /** Sièges distincts depuis le début de la fenêtre courante. */
+    current_reports: number;
+    banned: boolean;
+    /** Chaque signaleur, avec ses signalements de pseudo conservés. */
+    reporters: { id: number; nickname: string | null; reports: number }[];
+};
+
+/** Une forme à recopier dans `resources/moderation/nicknames/banned.txt`. */
+export type AdminBlocklistForm = {
+    id: number;
+    nickname: string;
+    form: string;
+};

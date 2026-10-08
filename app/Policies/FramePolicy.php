@@ -140,6 +140,18 @@ class FramePolicy
     }
 
     /**
+     * Le geste rétroactif de grille (spec 20 § 7.7, ligne 33, D13 du 23/09,
+     * L20-25) : **administrateur seul**. Il dépublie d'un coup des images
+     * publiées par des curateurs, pour un motif juridique — un régime de
+     * l'admin (§ 11.1), jamais un geste de curation. Méthode de classe : le
+     * geste vise un ensemble d'images, pas une ligne.
+     */
+    public function applyRetroactiveGrid(User $user): bool
+    {
+        return $user->role->atLeast(UserRole::Admin);
+    }
+
+    /**
      * Refus sans condition : une image n'est jamais supprimée. Écartée, elle
      * passe `unpublished` ; retirée, elle passe `withdrawn` et seuls ses
      * fichiers disparaissent — la ligne, sa source déclarée et ses revues

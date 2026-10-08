@@ -3,6 +3,7 @@
 namespace App\Support\Catalog;
 
 use App\Actions\Curation\SetMovieThemeMembership;
+use App\Enums\AdminActionType;
 use App\Enums\ContentAvailability;
 use App\Enums\ContentFlag;
 use App\Enums\ContentOrigin;
@@ -20,10 +21,12 @@ use App\Models\MovieTmdbTag;
 use App\Models\Theme;
 use App\Models\TmdbCompany;
 use App\Models\User;
+use App\Support\Admin\AdminJournal;
 use App\Support\Tmdb\TmdbMovie;
 use App\Support\Tmdb\TmdbMovieSummary;
 use App\Support\Tmdb\TmdbTitle;
 use App\Support\Tmdb\TmdbTitleKind;
+use App\ValueObjects\Admin\AdminActionDetails;
 use App\ValueObjects\Catalog\ExceptionMotives;
 use App\ValueObjects\Catalog\ImportFilter;
 use Carbon\CarbonImmutable;
@@ -171,7 +174,7 @@ final class MovieImporter
 
             return $dryRun
                 ? ImportOutcome::resynchronized($existing)
-                : $this->resynchronize($existing, $tmdb);
+                : $this->resynchronize($existing, $tmdb, $run);
         }
 
         $gate = ContentGate::inspect($tmdb);
@@ -523,70 +526,148 @@ final class MovieImporter
      * `content_verified_*` est dans la colonne « jamais touché », et un import
      * qui le contredirait annulerait une vérification humaine signée.
      */
-    private function resynchronize(Movie $movie, TmdbMovie $tmdb): ImportOutcome
+    private function resynchronize(Movie $movie, TmdbMovie $tmdb, ImportRun $run): ImportOutcome
     {
         $gate = ContentGate::inspect($tmdb);
 
         /** @var Movie $refreshed */
-        $refreshed = DB::transaction(function () use ($movie, $tmdb, $gate): Movie {
-            $movie->forceFill([
-                'title_original' => mb_substr($tmdb->originalTitle, 0, 255),
-                'title_original_latin' => $this->latinTitle($tmdb),
-                'original_language' => mb_substr($tmdb->originalLanguage, 0, 8),
-                'release_year' => $tmdb->releaseYear(),
-                'vote_count' => $tmdb->voteCount,
-                'adult' => $tmdb->adult,
-                'collection_id' => $this->collectionId($tmdb),
-            ]);
+        $refreshed = DB::transaction(function () use ($movie, $tmdb, $gate, $run): Movie {
+            // Le film verrouillé avant l'instantané : un geste de curation
+            // concurrent (titre, alias) ne glisse pas entre la lecture
+            // « avant » et l'écriture.
+            $locked = Movie::query()->whereKey($movie->id)->lockForUpdate()->firstOrFail();
 
-            if ($gate->isRefused()) {
-                $movie->content_flag = ContentFlag::Blocked;
-            } elseif (
-                $movie->content_flag === ContentFlag::UnratedPending
-                && $gate->flag === ContentFlag::Clear
-            ) {
-                // Sortie du défaut de la colonne, et de lui seul : un film importé
-                // avant que TMDB ne porte son visa restait hors du vivier à vie
-                // alors que sa classification est désormais connue et non
-                // restrictive — et le curateur devait cocher `content_verified_*`
-                // pour l'en sortir, c'est-à-dire signer une vérification qu'il
-                // n'a pas faite. Ce n'est PAS un lever de `blocked`.
-                $movie->content_flag = ContentFlag::Clear;
-            }
+            $before = ResyncSnapshot::capture($locked);
+            $this->writeResync($locked, $tmdb, $gate);
+            $diff = ResyncDiff::between($locked, $before, ResyncSnapshot::capture($locked));
 
-            $movie->save();
+            $this->journalResync($locked, $run, $diff);
 
-            MovieTmdbTag::query()->where('movie_id', $movie->id)->delete();
-            $this->writeTmdbTags($movie, $tmdb);
-            $this->writeTmdbCompanies($tmdb);
+            return $locked;
+        }, self::DEADLOCK_ATTEMPTS);
 
-            MovieCertification::query()->where('movie_id', $movie->id)->delete();
-            $this->writeCertifications($movie, $gate);
-
-            MovieTitle::query()
-                ->where('movie_id', $movie->id)
-                ->where('origin', ContentOrigin::Tmdb->value)
-                ->delete();
-            $this->writeTmdbTitles($movie, $tmdb);
-            OriginalLanguageTitle::write($movie);
-
-            Alias::query()
-                ->where('movie_id', $movie->id)
-                ->where('origin', ContentOrigin::Tmdb->value)
-                ->delete();
-            $this->writeTmdbAliases($movie, $tmdb);
-
-            // `is_auto` réécrit pour tous les thèmes ; `manual_state` jamais
-            // touché (spec 30 § 13.1, spec 10 § 9.3).
-            $this->themes->syncMovie($movie, tagKeys: $this->tagKeys($tmdb));
-
-            $this->answerKeys->project($movie);
-            $this->projection->recompute($movie);
-
-            return $movie;
-        });
+        $movie->setRawAttributes($refreshed->getAttributes(), true);
 
         return ImportOutcome::resynchronized($refreshed);
+    }
+
+    /**
+     * L'écran de différences d'une resynchronisation (spec 20 § 3.7) : la
+     * lecture TMDB **appliquée puis annulée**, dans une transaction qui ne
+     * valide jamais. C'est la même écriture que {@see self::resynchronize()},
+     * donc l'écran ne peut montrer ni plus ni moins que ce que le geste
+     * écrira — la liste close du § 9.3 n'est pas recopiée une seconde fois
+     * dans un calcul à part qui finirait par en diverger.
+     *
+     * Rien ne survit : ni ligne de journal (aucune n'est écrite), ni
+     * collection ou nom de société créés par la lecture. Le film passé en
+     * argument n'est pas touché, la lecture travaille sur une copie relue.
+     */
+    public function previewResync(Movie $movie, TmdbMovie $tmdb): ResyncDiff
+    {
+        $gate = ContentGate::inspect($tmdb);
+
+        DB::beginTransaction();
+
+        try {
+            $copy = Movie::query()->whereKey($movie->id)->lockForUpdate()->firstOrFail();
+
+            $before = ResyncSnapshot::capture($copy);
+            $this->writeResync($copy, $tmdb, $gate);
+
+            return ResyncDiff::between($copy, $before, ResyncSnapshot::capture($copy));
+        } finally {
+            DB::rollBack();
+        }
+    }
+
+    /**
+     * La ligne `movie.resynced` (spec 10 § 8.3, EL41-3) : une par film dont
+     * une valeur de la liste close change, signée de l'auteur du balayage
+     * `resync` — le curateur qui l'a lancé depuis l'écran. Une
+     * resynchronisation sans auteur (console sans `--actor`) n'écrit rien :
+     * le journal n'admet la console que pour trois gestes, et celui-ci n'en
+     * est pas.
+     */
+    private function journalResync(Movie $movie, ImportRun $run, ResyncDiff $diff): void
+    {
+        if ($diff->isEmpty() || $run->actor_id === null) {
+            return;
+        }
+
+        $actor = User::query()->find($run->actor_id);
+
+        if (! $actor instanceof User) {
+            return;
+        }
+
+        app(AdminJournal::class)->record(
+            $actor,
+            AdminActionType::MovieResynced,
+            $movie->id,
+            details: AdminActionDetails::movieResynced($run->id, $diff->changed, $diff->contentFlagBlocked),
+        );
+    }
+
+    /**
+     * L'écriture de la liste close, dans la transaction de l'appelant — la
+     * resynchronisation réelle, ou l'écran de différences qui l'annule.
+     */
+    private function writeResync(Movie $movie, TmdbMovie $tmdb, ContentGate $gate): void
+    {
+        $movie->forceFill([
+            'title_original' => mb_substr($tmdb->originalTitle, 0, 255),
+            'title_original_latin' => $this->latinTitle($tmdb),
+            'original_language' => mb_substr($tmdb->originalLanguage, 0, 8),
+            'release_year' => $tmdb->releaseYear(),
+            'vote_count' => $tmdb->voteCount,
+            'adult' => $tmdb->adult,
+            'collection_id' => $this->collectionId($tmdb),
+        ]);
+
+        if ($gate->isRefused()) {
+            $movie->content_flag = ContentFlag::Blocked;
+        } elseif (
+            $movie->content_flag === ContentFlag::UnratedPending
+            && $gate->flag === ContentFlag::Clear
+        ) {
+            // Sortie du défaut de la colonne, et de lui seul : un film importé
+            // avant que TMDB ne porte son visa restait hors du vivier à vie
+            // alors que sa classification est désormais connue et non
+            // restrictive — et le curateur devait cocher `content_verified_*`
+            // pour l'en sortir, c'est-à-dire signer une vérification qu'il
+            // n'a pas faite. Ce n'est PAS un lever de `blocked`.
+            $movie->content_flag = ContentFlag::Clear;
+        }
+
+        $movie->save();
+
+        MovieTmdbTag::query()->where('movie_id', $movie->id)->delete();
+        $this->writeTmdbTags($movie, $tmdb);
+        $this->writeTmdbCompanies($tmdb);
+
+        MovieCertification::query()->where('movie_id', $movie->id)->delete();
+        $this->writeCertifications($movie, $gate);
+
+        MovieTitle::query()
+            ->where('movie_id', $movie->id)
+            ->where('origin', ContentOrigin::Tmdb->value)
+            ->delete();
+        $this->writeTmdbTitles($movie, $tmdb);
+        OriginalLanguageTitle::write($movie);
+
+        Alias::query()
+            ->where('movie_id', $movie->id)
+            ->where('origin', ContentOrigin::Tmdb->value)
+            ->delete();
+        $this->writeTmdbAliases($movie, $tmdb);
+
+        // `is_auto` réécrit pour tous les thèmes ; `manual_state` jamais
+        // touché (spec 30 § 13.1, spec 10 § 9.3).
+        $this->themes->syncMovie($movie, tagKeys: $this->tagKeys($tmdb));
+
+        $this->answerKeys->project($movie);
+        $this->projection->recompute($movie);
     }
 
     /**

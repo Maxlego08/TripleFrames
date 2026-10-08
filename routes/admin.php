@@ -8,6 +8,7 @@ use App\Http\Controllers\Admin\ContentReportController;
 use App\Http\Controllers\Admin\CurationHeartbeatController;
 use App\Http\Controllers\Admin\CurationQueueController;
 use App\Http\Controllers\Admin\DashboardController;
+use App\Http\Controllers\Admin\ExclusionGridRetroactiveController;
 use App\Http\Controllers\Admin\FrameBankController;
 use App\Http\Controllers\Admin\FrameBatchController;
 use App\Http\Controllers\Admin\FrameCaptureController;
@@ -21,6 +22,7 @@ use App\Http\Controllers\Admin\FrameTmdbController;
 use App\Http\Controllers\Admin\FrameUnpublishController;
 use App\Http\Controllers\Admin\GameInspectionController;
 use App\Http\Controllers\Admin\GuideController;
+use App\Http\Controllers\Admin\ImportAbandonController;
 use App\Http\Controllers\Admin\ImportController;
 use App\Http\Controllers\Admin\ImportDiscoverController;
 use App\Http\Controllers\Admin\ImportIdsController;
@@ -29,12 +31,16 @@ use App\Http\Controllers\Admin\ImportResumeController;
 use App\Http\Controllers\Admin\ImportSearchController;
 use App\Http\Controllers\Admin\ImportSeedListController;
 use App\Http\Controllers\Admin\JournalController;
+use App\Http\Controllers\Admin\ModerationController;
+use App\Http\Controllers\Admin\ModerationNicknameController;
 use App\Http\Controllers\Admin\MovieAliasController;
 use App\Http\Controllers\Admin\MovieBatchPublishController;
 use App\Http\Controllers\Admin\MovieContentVerifiedController;
+use App\Http\Controllers\Admin\MovieDifficultyController;
 use App\Http\Controllers\Admin\MovieFramesReviewController;
 use App\Http\Controllers\Admin\MovieGroupController;
 use App\Http\Controllers\Admin\MoviePublishController;
+use App\Http\Controllers\Admin\MovieResyncController;
 use App\Http\Controllers\Admin\MovieThemeController;
 use App\Http\Controllers\Admin\MovieTitleController;
 use App\Http\Controllers\Admin\MovieUnpublishController;
@@ -179,6 +185,19 @@ Route::middleware(['auth', 'verified', 'role:curator', 'admin.2fa', 'admin.local
             ->middleware(['can:publishReady,'.Movie::class, 'throttle:admin-curation'])
             ->name('catalog.ready.publish');
 
+        // Resynchroniser depuis TMDB (§ 3.7, ligne 26, L20-24) : l'écran de
+        // différences d'un film ou la sélection d'un lot, puis le lancement
+        // d'un balayage `resync` mis en file — jamais un appel TMDB dans le
+        // POST. L'écran relit la fiche TMDB d'un film seul : appel interactif,
+        // sous le limiteur de la recherche. Déclarées AVANT `catalog/{movie}`.
+        Route::get('catalog/resync', [MovieResyncController::class, 'show'])
+            ->middleware(['can:resync,'.Movie::class, 'throttle:admin-tmdb-search'])
+            ->name('catalog.resync.show');
+
+        Route::post('catalog/resync', [MovieResyncController::class, 'store'])
+            ->middleware(['can:resync,'.Movie::class, 'throttle:admin-import'])
+            ->name('catalog.resync.store');
+
         Route::get('catalog/{movie}', [CatalogController::class, 'show'])
             ->middleware('can:view,movie')
             ->name('catalog.show');
@@ -288,6 +307,13 @@ Route::middleware(['auth', 'verified', 'role:curator', 'admin.2fa', 'admin.local
         Route::patch('catalog/{movie}/themes', [MovieThemeController::class, 'update'])
             ->middleware(['can:curate,movie', 'throttle:admin-curation'])
             ->name('catalog.themes.update');
+
+        // Corriger la difficulté d'un film (§ 9.6, ligne 28, L20-28b) : la
+        // correction survit au réimport et resynchronise les thèmes de
+        // difficulté dans la transaction du geste ; jamais de dérivation.
+        Route::patch('catalog/{movie}/difficulty', [MovieDifficultyController::class, 'update'])
+            ->middleware(['can:curate,movie', 'throttle:admin-curation'])
+            ->name('catalog.difficulty.update');
 
         // L'éditeur de la banque d'images (§ 6, ligne 4) : `MoviePolicy::curate`,
         // refusé sur un film retiré. Il n'écrit rien : chaque geste qu'il
@@ -425,6 +451,12 @@ Route::middleware(['auth', 'verified', 'role:curator', 'admin.2fa', 'admin.local
         Route::post('import/run/{importRun}/resume', [ImportResumeController::class, 'store'])
             ->middleware(['can:update,importRun', 'throttle:admin-import'])
             ->name('import.resume');
+
+        // Clore un balayage suspendu (§ 3.8, ligne 25, L20-24) : `failed` et
+        // `finished_at`, journalisé `import.abandoned` (D41 du 30/09).
+        Route::post('import/run/{importRun}/abandon', [ImportAbandonController::class, 'store'])
+            ->middleware(['can:update,importRun', 'throttle:admin-import'])
+            ->name('import.abandon');
 
         // L'aperçu à blanc d'un collage et la liste d'amorçage (§ 3.3, § 3.5,
         // ligne 11). L'aperçu n'ouvre aucune ligne `import_run` mais confie un
@@ -571,5 +603,33 @@ Route::middleware(['auth', 'verified', 'role:curator', 'admin.2fa', 'admin.local
             Route::post('avatars/{user}/remove', [AvatarModerationController::class, 'remove'])
                 ->middleware(['can:moderateAvatar,user', 'throttle:admin-curation'])
                 ->name('avatars.remove');
+
+            // La modération des pseudos (ligne 35, spec 20 § 11.5, D66 du
+            // 07/10) : sièges masqués et bannis, deux gestes consignés —
+            // lever (motif facultatif), bannir (motif obligatoire).
+            // `{player}` est lié par `id`, qui ne sort que vers le back-office.
+            Route::get('moderation', [ModerationController::class, 'index'])
+                ->middleware('can:moderateNicknames,'.Player::class)
+                ->name('moderation.index');
+
+            Route::post('moderation/players/{player:id}/unmask', [ModerationNicknameController::class, 'unmask'])
+                ->middleware(['can:moderateNickname,player', 'throttle:admin-curation'])
+                ->name('moderation.nickname.unmask');
+
+            Route::post('moderation/players/{player:id}/ban', [ModerationNicknameController::class, 'ban'])
+                ->middleware(['can:moderateNickname,player', 'throttle:admin-curation'])
+                ->name('moderation.nickname.ban');
+
+            // Le geste rétroactif de grille (§ 7.7, ligne 33, D13 du 23/09,
+            // L20-25) : l'écran de confirmation, puis le geste — une
+            // transaction par film, `frame.grid_unpublished` par image.
+            // Offert seulement sous une version de grille rétroactive.
+            Route::get('exclusion-grid/retroactive', [ExclusionGridRetroactiveController::class, 'show'])
+                ->middleware('can:applyRetroactiveGrid,'.Frame::class)
+                ->name('exclusion_grid.retroactive.show');
+
+            Route::post('exclusion-grid/retroactive', [ExclusionGridRetroactiveController::class, 'store'])
+                ->middleware(['can:applyRetroactiveGrid,'.Frame::class, 'throttle:admin-curation'])
+                ->name('exclusion_grid.retroactive.store');
         });
     });

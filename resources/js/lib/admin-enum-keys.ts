@@ -358,6 +358,10 @@ export const ADMIN_ACTION_KEYS: Record<AdminActionTypeValue, TranslationKey> = {
     'theme.unpublished': 'admin.enum.admin_action.theme_unpublished',
     'content_report.dismissed':
         'admin.enum.admin_action.content_report_dismissed',
+    'movie.resynced': 'admin.enum.admin_action.movie_resynced',
+    'import.abandoned': 'admin.enum.admin_action.import_abandoned',
+    'movie.difficulty_corrected':
+        'admin.enum.admin_action.movie_difficulty_corrected',
 };
 
 /** Les sujets du journal — `AdminActionSubject::labelKey()`. */

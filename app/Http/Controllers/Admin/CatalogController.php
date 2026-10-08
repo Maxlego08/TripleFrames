@@ -35,6 +35,7 @@ use App\Support\Catalog\AmbiguityPreview;
 use App\Support\Catalog\AnswerKeyNormalizer;
 use App\Support\Catalog\TextTarget;
 use App\Support\Curation\CurationStatus;
+use App\Support\Curation\MovieGroupCandidates;
 use App\Support\Curation\ReviewQueue;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
@@ -128,7 +129,7 @@ class CatalogController extends Controller
      * de fichier ne quitte le serveur** — la banque d'images n'expose que
      * niveau, disponibilité et état de traitement (§ 10).
      */
-    public function show(Request $request, Movie $movie, AmbiguityPreview $ambiguity): Response
+    public function show(Request $request, Movie $movie, AmbiguityPreview $ambiguity, MovieGroupCandidates $candidates): Response
     {
         $movie->load([
             'projection',
@@ -159,6 +160,13 @@ class CatalogController extends Controller
             // Le regroupement « même œuvre » et ses candidats exacts (§ 9.4).
             'group' => $this->group($movie),
             'group_exact_candidates' => $this->groupCandidates($movie),
+            // Les candidats par proximité (§ 9.4 [J2], L20-27) : titre proche
+            // à chiffres identiques, ou même collection. Calcul payé au seul
+            // rechargement partiel qui les demande ; une suggestion, jamais
+            // un regroupement.
+            'group_candidates' => Inertia::optional(
+                fn (): array => $this->proximityCandidates($movie, $candidates),
+            ),
             // La voie manuelle du regroupement : le film désigné par son
             // identifiant, servi au seul rechargement partiel qui ouvre la
             // même confirmation que celle d'un candidat — libellé pré-rempli,
@@ -214,6 +222,10 @@ class CatalogController extends Controller
                 // le seul lien que cette capacité masque ; les gestes
                 // d'appartenance suivent `curate`.
                 'editThemes' => Gate::allows('create', Theme::class),
+                // « Resynchroniser depuis TMDB » (§ 3.7, L20-24) : jamais
+                // un film retiré ni un film de démonstration.
+                'resync' => Gate::allows('resync', Movie::class)
+                    && MovieResyncController::ineligibility($movie) === null,
             ],
             // La cadence du battement de débit (§ 10.1) : la fiche est une
             // page du film, où le temps actif se mesure.
@@ -570,6 +582,26 @@ class CatalogController extends Controller
             ->get(['id', 'title_original', 'release_year', 'availability']);
 
         return AdminCatalogPresenter::movieGroup($group, $members);
+    }
+
+    /**
+     * Les candidats par proximité au regroupement (§ 9.4 [J2], L20-27),
+     * chacun avec ses raisons (`title_distance`, `same_collection`).
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function proximityCandidates(Movie $movie, MovieGroupCandidates $candidates): array
+    {
+        $rows = [];
+
+        foreach ($candidates->for($movie) as $candidate) {
+            $rows[] = [
+                ...AdminCatalogPresenter::groupCandidate($movie, $candidate['movie']),
+                'reasons' => $candidate['reasons'],
+            ];
+        }
+
+        return $rows;
     }
 
     /**

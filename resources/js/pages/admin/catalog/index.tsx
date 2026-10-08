@@ -1,6 +1,7 @@
 import { Head, Link, router } from '@inertiajs/react';
-import { ClapperboardIcon, SendIcon } from 'lucide-react';
+import { ClapperboardIcon, RefreshCwIcon, SendIcon } from 'lucide-react';
 import MovieBatchPublishController from '@/actions/App/Http/Controllers/Admin/MovieBatchPublishController';
+import MovieResyncController from '@/actions/App/Http/Controllers/Admin/MovieResyncController';
 import { useEffect, useState } from 'react';
 import { AdminCatalogFiltersForm } from '@/components/admin/admin-catalog-filters';
 import { AdminEmptyState } from '@/components/admin/admin-empty-state';
@@ -137,6 +138,31 @@ export default function AdminCatalogIndex({
                                     {t('admin.catalog.publish_ready.action')}
                                 </Link>
                             </Button>
+                            {/*
+                             * Resynchroniser la page affichée (spec 20 § 3.7) :
+                             * une sélection du catalogue, filtrée et paginée ;
+                             * l'écran nomme les films qu'il écarte.
+                             */}
+                            {movies.data.length > 0 && (
+                                <Button
+                                    variant="outline"
+                                    asChild
+                                    className="min-h-11"
+                                >
+                                    <Link
+                                        href={MovieResyncController.show({
+                                            query: {
+                                                movies: movies.data.map(
+                                                    (movie) => movie.id,
+                                                ),
+                                            },
+                                        })}
+                                    >
+                                        <RefreshCwIcon aria-hidden />
+                                        {t('admin.resync.catalog_action')}
+                                    </Link>
+                                </Button>
+                            )}
                         </>
                     }
                 />

@@ -178,6 +178,95 @@ final class ImportLauncher
     }
 
     /**
+     * Clôt à la main un balayage suspendu (spec 20 § 3.8, D41 du 30/09) :
+     * `status = failed`, `finished_at`, et la ligne `import.abandoned`, dans
+     * une transaction, sous le verrou de la ligne. Rend `false`, sans aucune
+     * écriture, si le balayage n'est plus clos-able — terminé, échoué ou
+     * tenu par un worker entre l'affichage et le clic.
+     *
+     * Un balayage qu'un worker tient encore ({@see self::isAbandonable()})
+     * est refusé : la commande réécrirait son état à la page suivante, et la
+     * clôture mentirait.
+     *
+     * @throws Throwable
+     */
+    public static function abandon(ImportRun $run, User $actor): bool
+    {
+        return DB::transaction(static function () use ($run, $actor): bool {
+            $locked = ImportRun::query()->whereKey($run->id)->lockForUpdate()->firstOrFail();
+
+            Gate::forUser($actor)->authorize('update', $locked);
+
+            if (! self::isAbandonable($locked)) {
+                return false;
+            }
+
+            $statusBefore = $locked->status;
+
+            $locked->forceFill([
+                'status' => ImportRunStatus::Failed,
+                'finished_at' => CarbonImmutable::now(),
+            ])->save();
+
+            app(AdminJournal::class)->record(
+                $actor,
+                AdminActionType::ImportAbandoned,
+                $locked->id,
+                details: AdminActionDetails::importAbandoned($statusBefore),
+            );
+
+            return true;
+        });
+    }
+
+    /**
+     * Un balayage se clôt à la main s'il est `running` et qu'aucun worker ne
+     * le tient : « en file » (`started_at` nul — le job, s'il passe ensuite,
+     * ne retrouve plus de balayage à reprendre et ne fait rien ; la garantie
+     * vient du verrou de ligne que `CatalogImportCommand::resumableRun()`
+     * prend pour lire et estampiller, le même que {@see self::abandon()},
+     * doublé d'une clôture conditionnelle à `status = running`), ou suspendu
+     * depuis plus de {@see self::BUSY_GRACE_MINUTES} minutes — le prédicat
+     * inverse de « en cours » de {@see self::openRuns()}.
+     */
+    public static function isAbandonable(ImportRun $run): bool
+    {
+        if ($run->status !== ImportRunStatus::Running) {
+            return false;
+        }
+
+        if ($run->started_at === null) {
+            return true;
+        }
+
+        $threshold = CarbonImmutable::now()->subMinutes(self::BUSY_GRACE_MINUTES);
+
+        return $run->started_at->lessThan($threshold)
+            && ($run->last_request_at === null || $run->last_request_at->lessThan($threshold));
+    }
+
+    /**
+     * Ouvre un balayage `resync` sous le même verrou que les autres voies
+     * (spec 20 § 3.7, ligne 26) : rend `null` si une resynchronisation est
+     * déjà en cours. La ligne `import_run` est la trace du lancement ; chaque
+     * film dont une valeur change écrira ensuite sa ligne `movie.resynced`
+     * (D66 du 07/10), signée de `$actor`, auteur du balayage.
+     */
+    public static function openResync(User $actor): ?ImportRun
+    {
+        try {
+            return Cache::lock('catalog-import-open-'.ImportRunKind::Resync->value, 10)->block(
+                3,
+                static fn (): ?ImportRun => self::hasOpenRun(ImportRunKind::Resync)
+                    ? null
+                    : self::open(ImportRunKind::Resync, ImportFilter::default(), $actor->id),
+            );
+        } catch (LockTimeoutException) {
+            return null;
+        }
+    }
+
+    /**
      * Délai au-delà duquel un balayage `running` n'est plus une concurrence.
      *
      * Un balayage `discover` ne se clôt de lui-même que lorsque TOUTES les

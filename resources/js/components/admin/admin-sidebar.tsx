@@ -14,7 +14,9 @@ import {
     ListChecks,
     ListOrdered,
     ScrollText,
+    ShieldAlert,
     ShieldCheck,
+    ShieldOff,
     Sparkles,
     Tags,
     UserRound,
@@ -54,10 +56,12 @@ import { index as audienceIndex } from '@/routes/admin/audience';
 import { index as avatarsIndex } from '@/routes/admin/avatars';
 import { index as catalogIndex } from '@/routes/admin/catalog';
 import { index as curationIndex } from '@/routes/admin/curation';
+import { show as exclusionGridRetroactiveShow } from '@/routes/admin/exclusion_grid/retroactive';
 import { index as frameBatchIndex } from '@/routes/admin/frame_batch';
 import { index as gamesIndex } from '@/routes/admin/games';
 import { index as importIndex } from '@/routes/admin/import';
 import { index as journalIndex } from '@/routes/admin/journal';
+import { index as moderationIndex } from '@/routes/admin/moderation';
 import { index as contentReportsIndex } from '@/routes/admin/content-reports';
 import { index as nearMissesIndex } from '@/routes/admin/near_misses';
 import { index as performanceIndex } from '@/routes/admin/performance';
@@ -258,6 +262,23 @@ export function AdminSidebar() {
             title: t('admin.nav.avatars'),
             href: avatarsIndex(),
             icon: CircleUserRound,
+            minRole: 'admin',
+            prefetch: false,
+        },
+        // La modération des pseudos (ligne 35, D66 du 07/10).
+        {
+            title: t('admin.nav.moderation'),
+            href: moderationIndex(),
+            icon: ShieldOff,
+            minRole: 'admin',
+            prefetch: false,
+        },
+        // Le geste rétroactif de grille (ligne 33, L20-25) : l'écran lit
+        // tout le catalogue publié, jamais préchargé.
+        {
+            title: t('admin.nav.exclusion_grid'),
+            href: exclusionGridRetroactiveShow(),
+            icon: ShieldAlert,
             minRole: 'admin',
             prefetch: false,
         },

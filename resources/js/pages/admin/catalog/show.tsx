@@ -7,12 +7,14 @@ import {
     HistoryIcon,
     ImageOffIcon,
     ImagesIcon,
+    RefreshCwIcon,
     ShieldCheckIcon,
 } from 'lucide-react';
 import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import type { RefObject } from 'react';
 import { toast } from 'sonner';
 import MovieContentVerifiedController from '@/actions/App/Http/Controllers/Admin/MovieContentVerifiedController';
+import MovieResyncController from '@/actions/App/Http/Controllers/Admin/MovieResyncController';
 import MovieUnpublishController from '@/actions/App/Http/Controllers/Admin/MovieUnpublishController';
 import {
     AvailabilityBadge,
@@ -25,6 +27,7 @@ import type { AdminField } from '@/components/admin/admin-field-list';
 import { AdminFieldList } from '@/components/admin/admin-field-list';
 import { AdminPageHeading } from '@/components/admin/admin-page-heading';
 import { AdminLevelDots } from '@/components/admin/admin-stat-tile';
+import { MovieDifficultyPanel } from '@/components/admin/movie-difficulty-panel';
 import { MovieGroupPanel } from '@/components/admin/movie-group-panel';
 import { MovieThemesPanel } from '@/components/admin/movie-themes-panel';
 import {
@@ -69,6 +72,10 @@ import {
     TMDB_TAG_KIND_KEYS,
 } from '@/lib/admin-enum-keys';
 import {
+    PROPOSE_QUERY_PARAMETER,
+    PROPOSE_UNPUBLISH,
+} from '@/lib/admin-catalog-query';
+import {
     formatDay,
     formatInteger,
     formatMoment,
@@ -96,6 +103,7 @@ import type {
     AdminMovieCollection,
     AdminMovieTitle,
     AdminPublication,
+    AdminProximityCandidate,
     AdminPublicationPreview,
     AdminReviewBatch,
     AdminTextPreview,
@@ -126,6 +134,12 @@ type Props = {
      * réponse de ce rechargement, jamais ici.
      */
     group_manual_candidate?: AdminGroupManualLookup | null;
+    /**
+     * Prop facultative : les candidats par proximité (§ 9.4 [J2], L20-27),
+     * servis au seul rechargement partiel qui les demande ; `MovieGroupPanel`
+     * les lit dans la réponse de ce rechargement, jamais ici.
+     */
+    group_candidates?: AdminProximityCandidate[];
     certifications: AdminMovieCertification[];
     tags: AdminMovieTag[];
     themes: AdminMovieTheme[];
@@ -240,8 +254,25 @@ export default function AdminCatalogShow({
     // fiche est une page du film. Jamais sur un film qui ne se cure plus.
     useCurationHeartbeat(abilities.curate ? movie.id : null, heartbeat_seconds);
 
+    // `?propose=unpublish` : la dépublication proposée par une
+    // resynchronisation qui a découvert une certification restrictive
+    // (spec 20 § 3.7) — la boîte s'ouvre, motif pré-rempli et modifiable ;
+    // le curateur décide, rien n'est dépublié sans son envoi.
+    const [proposedUnpublish] = useState<boolean>(
+        () =>
+            new URLSearchParams(
+                typeof window === 'undefined' ? '' : window.location.search,
+            ).get(PROPOSE_QUERY_PARAMETER) === PROPOSE_UNPUBLISH,
+    );
+
     // Les gestes : lequel est ouvert, et d'où il est parti.
-    const [gesture, setGesture] = useState<MovieGesture | null>(null);
+    const [gesture, setGesture] = useState<MovieGesture | null>(() =>
+        proposedUnpublish &&
+        abilities.unpublish &&
+        movie.availability === 'published'
+            ? 'unpublish'
+            : null,
+    );
     const triggerRef = useRef<HTMLElement | null>(null);
     const gesturesRef = useRef<HTMLElement>(null);
     const preview = usePublicationPreview();
@@ -308,6 +339,18 @@ export default function AdminCatalogShow({
                                     <Link href={bank(movie.id)}>
                                         <ImagesIcon aria-hidden />
                                         {t('admin.movie.curate')}
+                                    </Link>
+                                </Button>
+                            )}
+                            {abilities.resync && (
+                                <Button variant="outline" size="sm" asChild>
+                                    <Link
+                                        href={MovieResyncController.show({
+                                            query: { movies: [movie.id] },
+                                        })}
+                                    >
+                                        <RefreshCwIcon aria-hidden />
+                                        {t('admin.movie.resync.action')}
                                     </Link>
                                 </Button>
                             )}
@@ -480,7 +523,7 @@ export default function AdminCatalogShow({
                     </div>
 
                     {/* Identité */}
-                    <TabsContent value="identity">
+                    <TabsContent value="identity" className="space-y-6">
                         <Card>
                             <CardHeader>
                                 <AdminCardTitle>
@@ -493,6 +536,15 @@ export default function AdminCatalogShow({
                                 />
                             </CardContent>
                         </Card>
+
+                        {/* Difficulté corrigée (§ 9.6, L20-28b) */}
+                        {abilities.curate && (
+                            <MovieDifficultyPanel
+                                movieId={movie.id}
+                                override={movie.movie_difficulty_override}
+                                derived={movie.movie_difficulty_derived}
+                            />
+                        )}
                     </TabsContent>
 
                     {/*
@@ -974,6 +1026,11 @@ export default function AdminCatalogShow({
                 title={t('admin.movie.unpublish.title')}
                 description={t('admin.movie.unpublish.description')}
                 reasonLabel={t('admin.movie.unpublish.reason')}
+                defaultReason={
+                    proposedUnpublish
+                        ? t('admin.movie.unpublish_proposed.default_reason')
+                        : undefined
+                }
                 submitLabel={t('admin.movie.unpublish.submit')}
                 onClose={closeGesture}
                 onReturnFocus={returnFocus}

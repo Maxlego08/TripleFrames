@@ -9,7 +9,7 @@ use App\Support\Admin\AdminJournal;
  * Liste FERMÉE des gestes consignés au journal d'administration : cast de
  * `admin_action.action` (spec 10 § 8.3, contrat C14).
  *
- * **Cinquante-deux cas.** Les vingt-deux gestes engageants du jalon 1 — les
+ * **Cinquante-six cas.** Les vingt-deux gestes engageants du jalon 1 — les
  * vingt et un du contrat C14, dont six entrés le 23/09 (`movie.published`,
  * `frame.unpublished`, `frame.grid_unpublished`, `frame.unsuspended`,
  * `site.closed`, `site.reopened`), plus `user.real_name_changed` (28/09,
@@ -40,6 +40,13 @@ use App\Support\Admin\AdminJournal;
  *   `content_report.dismissed`, sujet {@see AdminActionSubject::ContentReport},
  *   la clôture sans suite des signalements ouverts d'une cible, motif
  *   facultatif, le nombre de signalements clos en `details`.
+ *
+ * - trois cas entrés par **D66 du 07/10** (spec 10 § 8.3, lots L20-24 et
+ *   L20-28b) : `movie.resynced`, la resynchronisation TMDB d'un film depuis
+ *   l'écran — une ligne par film dont une valeur de la liste close change ;
+ *   `import.abandoned`, un balayage suspendu clos à la main, sujet
+ *   {@see AdminActionSubject::ImportRun} ; `movie.difficulty_corrected`, la
+ *   difficulté corrigée d'un film. Tous à motif facultatif, `details` requis.
  *
  * Tous sans migration de colonne : `action` reste un `string(40)`. `10`
  * possède la liste ; un cas nouveau s'y demande en exigence, jamais par un
@@ -215,6 +222,21 @@ enum AdminActionType: string
     /** Les signalements ouverts d'une cible clos sans dépublication. */
     case ContentReportDismissed = 'content_report.dismissed';
 
+    // --- D66 du 07/10 : resynchronisation, balayage clos, difficulté -------
+
+    /**
+     * Resynchronisation TMDB d'un film (spec 20 § 3.7, EL41-3) : une ligne
+     * par film dont une valeur de la liste close change (`details` : le
+     * balayage `resync`, les champs écrasés, la bascule vers `blocked`).
+     */
+    case MovieResynced = 'movie.resynced';
+
+    /** Balayage suspendu clos à la main (spec 20 § 3.8, `details` : l'état d'avant). */
+    case ImportAbandoned = 'import.abandoned';
+
+    /** Difficulté corrigée d'un film (spec 20 § 9.6, `details` : la correction d'avant et d'après). */
+    case MovieDifficultyCorrected = 'movie.difficulty_corrected';
+
     /** Préfixe des libellés du back-office, un par cas. */
     public const string LABEL_PREFIX = 'admin.enum.admin_action.';
 
@@ -287,7 +309,9 @@ enum AdminActionType: string
             self::MovieGrouped,
             self::MovieUngrouped,
             self::MovieThemeSet,
-            self::MovieFramesReviewed => AdminActionSubject::Movie,
+            self::MovieFramesReviewed,
+            self::MovieResynced,
+            self::MovieDifficultyCorrected => AdminActionSubject::Movie,
             self::FrameUnpublished,
             self::FrameGridUnpublished,
             self::FrameSuspended,
@@ -318,7 +342,8 @@ enum AdminActionType: string
             self::ImportDiscoverStarted,
             self::ImportPasteStarted,
             self::ImportSeedListStarted,
-            self::ImportResumed => AdminActionSubject::ImportRun,
+            self::ImportResumed,
+            self::ImportAbandoned => AdminActionSubject::ImportRun,
             self::AccountsDirectoryViewed,
             self::AccountsAccessViewed => AdminActionSubject::Accounts,
             self::ThemeCreated,
@@ -382,6 +407,9 @@ enum AdminActionType: string
             self::ThemePublished,
             self::ThemeUnpublished,
             self::ContentReportDismissed,
+            self::MovieResynced,
+            self::ImportAbandoned,
+            self::MovieDifficultyCorrected,
         ], true);
     }
 
@@ -405,6 +433,7 @@ enum AdminActionType: string
             self::FrameGridUnpublished,
             self::FrameWithdrawn,
             self::AvatarRemoved,
+            self::NicknameBanned,
             self::TakedownDecided,
             self::SiteClosed,
         ], true);

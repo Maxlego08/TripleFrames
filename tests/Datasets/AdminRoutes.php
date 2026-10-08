@@ -956,6 +956,105 @@ function adminRoutesMatrix(): array
             payload: fn (): array => ['reason' => 'Retrait matrice'],
             redirect: fn (array $parameters): string => route('admin.avatars.index'),
         ),
+
+        // Ligne 35 — la modération des pseudos (D66 du 07/10) : administrateur
+        // seul, deux gestes consignés — lever, bannir (motif obligatoire).
+        'admin.moderation.index' => adminRoutesRow(
+            row: 35,
+            method: 'GET',
+            guards: ['can:moderateNicknames,'.Player::class],
+            curator: 403,
+            admin: 200,
+        ),
+
+        'admin.moderation.nickname.unmask' => adminRoutesRow(
+            row: 35,
+            method: 'POST',
+            guards: ['can:moderateNickname,player'],
+            curator: 403,
+            admin: 302,
+            parameters: fn (): array => ['player' => Player::factory()->masked()->create()->getKey()],
+            redirect: fn (array $parameters): string => route('admin.moderation.index'),
+        ),
+
+        // Ligne 26 — resynchroniser depuis TMDB (§ 3.7, L20-24). L'écran
+        // d'un film de démonstration n'appelle jamais TMDB : il le nomme
+        // écarté. Le lancement ouvre un balayage `resync` et le met en file
+        // (`Bus::fake()`), jamais un appel TMDB dans la requête.
+        'admin.catalog.resync.show' => adminRoutesRow(
+            row: 26,
+            method: 'GET',
+            guards: ['can:resync,'.Movie::class],
+            curator: 200,
+            admin: 200,
+            payload: fn (): array => ['movies' => [Movie::factory()->demo()->create()->getKey()]],
+        ),
+
+        'admin.catalog.resync.store' => adminRoutesRow(
+            row: 26,
+            method: 'POST',
+            guards: ['can:resync,'.Movie::class],
+            curator: 302,
+            admin: 302,
+            payload: fn (): array => ['movies' => [Movie::factory()->create()->getKey()]],
+            redirect: $latestRun,
+        ),
+
+        // Ligne 25 — clore un balayage suspendu (§ 3.8, L20-24) : un
+        // balayage « en file », qu'aucun traitement ne tient.
+        'admin.import.abandon' => adminRoutesRow(
+            row: 25,
+            method: 'POST',
+            guards: ['can:update,importRun'],
+            curator: 302,
+            admin: 302,
+            parameters: fn (): array => ['importRun' => ImportRun::factory()->paste()->running()->create(['started_at' => null])->getKey()],
+            redirect: fn (array $parameters): string => route('admin.import.show', $parameters),
+        ),
+
+        // Ligne 28 — corriger la difficulté d'un film (§ 9.6, L20-28b).
+        'admin.catalog.difficulty.update' => adminRoutesRow(
+            row: 28,
+            method: 'PATCH',
+            guards: ['can:curate,movie'],
+            curator: 302,
+            admin: 302,
+            parameters: fn (): array => adminRoutesMovieGestureParameters(Movie::factory()->create()),
+            payload: fn (): array => ['movie_difficulty_override' => 'hard'],
+            redirect: fn (array $parameters): string => route('admin.catalog.show', $parameters),
+        ),
+
+        // Ligne 33 — le geste rétroactif de grille (§ 7.7, L20-25),
+        // administrateur seul. Sous la grille v1, non rétroactive, l'envoi
+        // valide revient à l'écran, qui dit « indisponible ».
+        'admin.exclusion_grid.retroactive.show' => adminRoutesRow(
+            row: 33,
+            method: 'GET',
+            guards: ['can:applyRetroactiveGrid,'.Frame::class],
+            curator: 403,
+            admin: 200,
+        ),
+
+        'admin.exclusion_grid.retroactive.store' => adminRoutesRow(
+            row: 33,
+            method: 'POST',
+            guards: ['can:applyRetroactiveGrid,'.Frame::class],
+            curator: 403,
+            admin: 302,
+            payload: fn (): array => ['version' => ExclusionGrid::CURRENT_VERSION, 'reason' => 'Motif juridique de la matrice.'],
+            redirect: fn (array $parameters): string => route('admin.exclusion_grid.retroactive.show'),
+        ),
+
+        'admin.moderation.nickname.ban' => adminRoutesRow(
+            row: 35,
+            method: 'POST',
+            guards: ['can:moderateNickname,player'],
+            curator: 403,
+            admin: 302,
+            parameters: fn (): array => ['player' => Player::factory()->create()->getKey()],
+            payload: fn (): array => ['reason' => 'Bannissement matrice'],
+            redirect: fn (array $parameters): string => route('admin.moderation.index'),
+        ),
     ];
 }
 

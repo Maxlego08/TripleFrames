@@ -108,3 +108,12 @@ export function hasActiveFilters(filters: AdminCatalogFilters): boolean {
         filters.theme_id !== null
     );
 }
+
+/**
+ * Le paramètre de la fiche film qui ouvre la dépublication **proposée** par
+ * une resynchronisation (spec 20 § 3.7) — motif pré-rempli, modifiable — et
+ * sa seule valeur. La resynchronisation ne la prononce jamais elle-même.
+ */
+export const PROPOSE_QUERY_PARAMETER = 'propose';
+
+export const PROPOSE_UNPUBLISH = 'unpublish';
