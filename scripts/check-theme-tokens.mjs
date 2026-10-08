@@ -144,8 +144,16 @@ const WATCHED = [
     // L40-9 (spec 40 § 12, D51 du 01/10) : finalisation d'inscription et
     // comptes liés.
     'resources/js/pages/auth/oauth-finish.tsx',
+    // L40-10 (spec 40 § 13.1, D66 du 07/10) : l'interstitiel de ré-acceptation
+    // des CGU.
+    'resources/js/pages/auth/terms-update.tsx',
     'resources/js/pages/settings/accounts.tsx',
     'resources/js/layouts/settings/layout.tsx',
+    // L40-13 (spec 40 § 13.4, D66 du 07/10) : « Mes parties », son détail
+    // et leur module de mise en forme.
+    'resources/js/pages/settings/history.tsx',
+    'resources/js/pages/settings/history-show.tsx',
+    'resources/js/lib/account',
 
     // Fichiers hérités PROPRES que retouche un lot (spec 90 § 9.3, règle
     // d'entrée n° 2) : ils entrent dans le commit qui les modifie.
@@ -159,10 +167,10 @@ const WATCHED = [
     'resources/js/pages/auth/confirm-password.tsx',
     // L90-3 (spec 90 § 2.4, § 9.3) : pied de page joueur et `<Toaster />` dans
     // les deux coquilles du starter, liens du starter retirés de la barre
-    // latérale.
+    // latérale (`app-sidebar.tsx`, supprimé depuis avec la chaîne morte de la
+    // barre latérale par PK-C, D66 du 07/10).
     'resources/js/layouts/app-layout.tsx',
     'resources/js/layouts/auth-layout.tsx',
-    'resources/js/components/app-sidebar.tsx',
     // L40-6 (spec 40 § 7.4) : réexporte `types/player.ts`.
     'resources/js/types/index.ts',
     // L90-7 (spec 90 § 2.3, § 9.3) : `GameLayoutProps`.
@@ -172,6 +180,26 @@ const WATCHED = [
     // sortent d'`EXEMPT` et entrent ici dans le commit qui les réécrit.
     // L90-8 (spec 90 § 4.7) : la page du starter devient l'accueil.
     'resources/js/pages/welcome.tsx',
+    // PK-C (spec 90 § 11.2, D66 du 07/10) : les écrans de compte sortent du
+    // starter — réglages Profil et Sécurité, 2FA, passkeys, défi 2FA,
+    // réinitialisation du mot de passe et leurs composants partagés.
+    'resources/js/pages/settings/profile.tsx',
+    'resources/js/pages/settings/security.tsx',
+    'resources/js/pages/auth/reset-password.tsx',
+    'resources/js/pages/auth/two-factor-challenge.tsx',
+    'resources/js/components/alert-error.tsx',
+    'resources/js/components/heading.tsx',
+    'resources/js/components/input-error.tsx',
+    'resources/js/components/manage-passkeys.tsx',
+    'resources/js/components/manage-two-factor.tsx',
+    'resources/js/components/passkey-item.tsx',
+    'resources/js/components/passkey-register.tsx',
+    'resources/js/components/password-input.tsx',
+    'resources/js/components/text-link.tsx',
+    'resources/js/components/two-factor-recovery-codes.tsx',
+    'resources/js/components/two-factor-setup-modal.tsx',
+    'resources/js/hooks/use-clipboard.ts',
+    'resources/js/hooks/use-two-factor-auth.ts',
 ];
 
 /**
@@ -193,50 +221,20 @@ const WATCHED = [
  * puis relu : 63 fichiers ; `app.tsx`, `components/language-switcher.tsx` et
  * `hooks/use-appearance.tsx` en sont sortis pour `WATCHED` — ce dernier
  * supprimé depuis, avec `appearance-tabs.tsx` et `settings/appearance.tsx`
- * (D56 du 02/10).
+ * (D56 du 02/10). PK-C (D66 du 07/10) en a sorti les écrans de compte réécrits
+ * et supprimé la chaîne morte du starter (barre latérale, en-tête, menus
+ * utilisateur, gabarits `app/*`, `auth-card` et `auth-split`).
  */
 const EXEMPT = [
-    'resources/js/components/alert-error.tsx',
-    'resources/js/components/app-content.tsx',
-    'resources/js/components/app-header.tsx',
     'resources/js/components/app-logo-icon.tsx',
-    'resources/js/components/app-logo.tsx',
-    'resources/js/components/app-shell.tsx',
-    'resources/js/components/app-sidebar-header.tsx',
     'resources/js/components/breadcrumbs.tsx',
-    'resources/js/components/heading.tsx',
-    'resources/js/components/input-error.tsx',
-    'resources/js/components/manage-passkeys.tsx',
-    'resources/js/components/manage-two-factor.tsx',
-    'resources/js/components/nav-footer.tsx',
-    'resources/js/components/nav-main.tsx',
-    'resources/js/components/nav-user.tsx',
-    'resources/js/components/passkey-item.tsx',
-    'resources/js/components/passkey-register.tsx',
-    'resources/js/components/password-input.tsx',
-    'resources/js/components/text-link.tsx',
-    'resources/js/components/two-factor-recovery-codes.tsx',
-    'resources/js/components/two-factor-setup-modal.tsx',
-    'resources/js/components/user-info.tsx',
-    'resources/js/components/user-menu-content.tsx',
-    'resources/js/hooks/use-clipboard.ts',
     'resources/js/hooks/use-current-url.ts',
     'resources/js/hooks/use-flash-toast.ts',
     'resources/js/hooks/use-initials.tsx',
-    'resources/js/hooks/use-mobile-navigation.ts',
     'resources/js/hooks/use-mobile.tsx',
     'resources/js/hooks/use-translations.ts',
-    'resources/js/hooks/use-two-factor-auth.ts',
-    'resources/js/layouts/app/app-header-layout.tsx',
-    'resources/js/layouts/app/app-sidebar-layout.tsx',
-    'resources/js/layouts/auth/auth-card-layout.tsx',
-    'resources/js/layouts/auth/auth-split-layout.tsx',
     'resources/js/lib/i18n.ts',
     'resources/js/lib/utils.ts',
-    'resources/js/pages/auth/reset-password.tsx',
-    'resources/js/pages/auth/two-factor-challenge.tsx',
-    'resources/js/pages/settings/profile.tsx',
-    'resources/js/pages/settings/security.tsx',
     'resources/js/types/navigation.ts',
     'resources/js/types/vite-env.d.ts',
 ];

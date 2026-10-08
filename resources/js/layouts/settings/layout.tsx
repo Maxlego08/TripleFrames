@@ -1,10 +1,17 @@
 import { Link } from '@inertiajs/react';
-import { CircleUserRound, Image, Link2, ShieldCheck } from 'lucide-react';
+import {
+    CircleUserRound,
+    History,
+    Image,
+    Link2,
+    ShieldCheck,
+} from 'lucide-react';
 import type { PropsWithChildren } from 'react';
 import { useCurrentUrl } from '@/hooks/use-current-url';
 import { useTranslations } from '@/hooks/use-translations';
 import { toUrl } from '@/lib/utils';
 import { edit as editAvatar } from '@/routes/avatar';
+import { index as historyIndex } from '@/routes/history';
 import { edit as editLinkedAccounts } from '@/routes/linked_accounts';
 import { edit } from '@/routes/profile';
 import { edit as editSecurity } from '@/routes/security';
@@ -24,6 +31,11 @@ export default function SettingsLayout({ children }: PropsWithChildren) {
             title: t('account.settings.nav.avatar'),
             href: editAvatar(),
             icon: Image,
+        },
+        {
+            title: t('account.settings.nav.history'),
+            href: historyIndex(),
+            icon: History,
         },
         {
             title: t('account.settings.nav.linked'),

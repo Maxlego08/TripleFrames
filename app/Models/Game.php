@@ -8,6 +8,7 @@ use App\Enums\GamePauseKind;
 use App\Enums\GameStatus;
 use App\Enums\InputDifficulty;
 use App\Settings\RoomSettings;
+use App\Support\Identity\PublicId;
 use Carbon\CarbonImmutable;
 use Database\Factories\GameFactory;
 use Illuminate\Database\Eloquent\Attributes\DateFormat;
@@ -47,6 +48,7 @@ use LogicException;
  * simple lecture de l'instantané ne change rien.
  *
  * @property int $id
+ * @property string $public_id Identité publique (D66 du 07/10, spec 10 § 7.2) : seule adresse du détail d'une partie dans l'historique de son titulaire (`history.show`), frappée par le serveur à la création, jamais dérivée de l'`id`, jamais dans une charge de jeu. `#[Hidden]`, hors `#[Fillable]`.
  * @property int|null $room_id NULL en solo ; `restrictOnDelete` vers `room`. `#[Hidden]` — `room.id` est cachée à la source (§ 6.2).
  * @property GameMode $mode Figé à la création, aucun chemin ne le mute (§ 7.10).
  * @property GameStatus $status Aucun état `pending` : la partie naît au lancement.
@@ -78,7 +80,7 @@ use LogicException;
 #[Table('game')]
 #[DateFormat('Y-m-d H:i:s.v')]
 #[Fillable([])]
-#[Hidden(['room_id', 'draw_seed', 'draw_pool_size', 'settings_snapshot'])]
+#[Hidden(['public_id', 'room_id', 'draw_seed', 'draw_pool_size', 'settings_snapshot'])]
 class Game extends Model
 {
     /** @use HasFactory<GameFactory> */
@@ -178,6 +180,15 @@ class Game extends Model
      */
     protected static function booted(): void
     {
+        // `public_id` (D66 du 07/10) est frappé par le serveur à la création,
+        // par `OpenGame` comme par les fabriques : jamais par l'appelant,
+        // jamais dérivé de l'`id` ({@see PublicId}).
+        static::creating(static function (Game $game): void {
+            if ($game->getAttribute('public_id') === null) {
+                $game->public_id = PublicId::generate();
+            }
+        });
+
         static::updating(static function (Game $game): void {
             $changed = $game->changedFrozenColumns();
 

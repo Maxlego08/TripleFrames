@@ -70,8 +70,9 @@ function forbiddenSerializedKeys(): array
             'active_seat_token',
             'nickname_normalized',
             'kicked_at',
+            'nickname_reports_from',
         ]],
-        'game' => [Game::class, ['room_id', 'draw_seed', 'draw_pool_size', 'settings_snapshot']],
+        'game' => [Game::class, ['public_id', 'room_id', 'draw_seed', 'draw_pool_size', 'settings_snapshot']],
         'game_player' => [GamePlayer::class, ['player_id']],
         'round' => [Round::class, [
             'game_id',
@@ -148,7 +149,7 @@ it('keeps visible on users exactly what the spec leaves visible', function () {
 
 it('appends the user avatar as a strict string or null', function () {
     // § 5.3, test nommé : un `Attribute` rendant l'objet complet produirait
-    // `"avatar":{"url":…}`, que `user-info.tsx` poserait en `src="[object Object]"`.
+    // `"avatar":{"url":…}`, que `admin-user-panel.tsx` poserait en `src="[object Object]"`.
     $serialized = User::factory()->create()->toArray();
 
     expect($serialized)->toHaveKey('avatar');

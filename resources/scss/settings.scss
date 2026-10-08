@@ -431,6 +431,9 @@
 }
 
 .settings-credential-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
     overflow: hidden;
     border: 0.125rem solid $ink;
     border-radius: 0.9rem;
@@ -585,6 +588,15 @@
     }
 }
 
+/* Message d'erreur d'un champ (`input-error.tsx`), dans le panneau comme
+   dans les dialogues, rendus en portail. */
+.settings-panel .input-error,
+.settings-dialog .input-error {
+    color: $error;
+    font-size: 0.82rem;
+    font-weight: 800;
+}
+
 /* Les dialogues sont rendus dans un portail, donc hors de .settings-shell. */
 .settings-dialog[data-slot='dialog-content'] {
     overflow: hidden;
@@ -681,6 +693,12 @@
         border: $line solid $ink;
         background: $white;
         box-shadow: 0.3rem 0.3rem 0 $ink;
+    }
+
+    /* Fond clair et modules sombres : seul contraste que lisent toutes les
+       applications d'authentification. */
+    .settings-two-factor-qr__code {
+        background: $white;
     }
 
     .settings-two-factor-divider {
@@ -814,4 +832,115 @@
         scroll-behavior: auto !important;
         transition-duration: 0.01ms !important;
     }
+}
+
+// « Mes parties » (spec 40 § 13.4, L40-13) : compteurs, liste et détail
+// d'une partie. Couleurs de la palette des réglages seulement.
+.settings-history__counters {
+    display: grid;
+    gap: 0.75rem;
+    margin: 0;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
+}
+
+.settings-history__counter,
+.settings-history__row,
+.settings-history__round {
+    border: 0.125rem solid $ink;
+    border-radius: 0.8rem;
+    padding: 0.85rem 1rem;
+    background: $white;
+    color: $ink;
+    box-shadow: 0.18rem 0.18rem 0 $lavender;
+
+    dt {
+        font-size: 0.82rem;
+        font-weight: 900;
+    }
+
+    dd {
+        margin: 0;
+    }
+}
+
+.settings-history__value {
+    @include mix.display-type;
+    font-size: clamp(1.5rem, 4vw, 2rem);
+    line-height: 1.1;
+}
+
+.settings-history__note {
+    margin: 0;
+    color: $muted;
+    font-size: 0.84rem;
+    line-height: 1.45;
+}
+
+.settings-history__list {
+    display: grid;
+    gap: 0.75rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.settings-history__facts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 1rem;
+    margin: 0.5rem 0 0;
+    font-size: 0.86rem;
+
+    div {
+        display: flex;
+        gap: 0.35rem;
+    }
+
+    dt {
+        font-size: inherit;
+        font-weight: 800;
+    }
+}
+
+.settings-history__link {
+    color: $ink;
+    font-weight: 900;
+    text-decoration-color: $muted;
+
+    &:hover {
+        text-decoration-color: $ink;
+    }
+
+    &:focus-visible {
+        @include mix.focus-ring;
+    }
+}
+
+.settings-history__outcome {
+    display: inline-block;
+    border: 0.125rem solid $ink;
+    border-radius: 999rem;
+    padding: 0.1rem 0.6rem;
+    font-size: 0.8rem;
+    font-weight: 900;
+
+    &[data-outcome='found'] {
+        background: $cyan;
+    }
+
+    &[data-outcome='missed'] {
+        background: $yellow;
+    }
+
+    &[data-outcome='absent'] {
+        background: $paper;
+    }
+}
+
+.settings-history__pagination {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
 }

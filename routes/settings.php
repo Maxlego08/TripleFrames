@@ -4,8 +4,10 @@ use App\Avatars\UploadedAvatars;
 use App\Http\Controllers\Avatar\AvatarFileController;
 use App\Http\Controllers\Settings\AvatarController;
 use App\Http\Controllers\Settings\LinkedAccountController;
+use App\Http\Controllers\Settings\PlayHistoryController;
 use App\Http\Controllers\Settings\ProfileController;
 use App\Http\Controllers\Settings\SecurityController;
+use App\Http\Controllers\Settings\TermsAcceptanceController;
 use Illuminate\Auth\Middleware\RequirePassword;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
@@ -17,7 +19,11 @@ use Illuminate\View\Middleware\ShareErrorsFromSession;
 // comptes liés, avatars) ; `common` est joint d'office, et `legal` l'est sur
 // toute route joueur, pour le pied de page présent sur chaque écran (liens
 // légaux, attribution TMDB ; spec 90 § 6.3).
-Route::middleware(['auth', 'translations:account,legal'])->group(function () {
+//
+// `terms.current` (spec 40 § 13.1) renvoie un compte dont la version des CGU
+// est périmée vers l'interstitiel : posé sur toute page de compte, JAMAIS sur
+// le jeu, le back-office, la déconnexion, l'export ni la suppression.
+Route::middleware(['auth', 'translations:account,legal', 'terms.current'])->group(function () {
     Route::redirect('settings', '/settings/profile');
 
     Route::get('settings/profile', [ProfileController::class, 'edit'])->name('profile.edit');
@@ -41,6 +47,16 @@ Route::middleware(['auth', 'translations:account,legal'])->group(function () {
         ->whereIn('provider', ['google', 'discord'])
         ->middleware(RequirePassword::class)
         ->name('linked_accounts.destroy');
+
+    // « Mes parties » (spec 40 § 13.4, L40-13, D66 du 07/10) : la liste et
+    // ses quatre compteurs, puis le détail d'une partie par `game.public_id`
+    // (404 hors de l'historique du compte). Le détail joint `game` pour le
+    // lien Letterboxd partagé avec la révélation (`letterboxd-link.tsx`).
+    Route::get('settings/history', [PlayHistoryController::class, 'index'])->name('history.index');
+    Route::get('settings/history/{game:public_id}', [PlayHistoryController::class, 'show'])
+        ->where('game', '[0-9A-HJKMNP-TV-Z]{12}')
+        ->middleware('translations:game')
+        ->name('history.show');
 });
 
 // Ce groupe ne porte plus `profile.destroy` : aucune suppression de compte au
@@ -48,7 +64,7 @@ Route::middleware(['auth', 'translations:account,legal'])->group(function () {
 // = anonymisation), et le seul compte de production — l'administrateur, qui
 // signe toute la curation — tomberait en un clic. La route renaîtra au jalon 2
 // sur l'action d'anonymisation.
-Route::middleware(['auth', 'verified', 'translations:account,legal'])->group(function () {
+Route::middleware(['auth', 'verified', 'translations:account,legal', 'terms.current'])->group(function () {
     Route::get('settings/security', [SecurityController::class, 'edit'])
         ->middleware(RequirePassword::class)
         ->name('security.edit');
@@ -56,6 +72,14 @@ Route::middleware(['auth', 'verified', 'translations:account,legal'])->group(fun
     Route::put('settings/password', [SecurityController::class, 'update'])
         ->middleware('throttle:6,1')
         ->name('user-password.update');
+});
+
+// L'interstitiel de ré-acceptation des CGU (spec 40 § 13.1, D66 du 07/10) :
+// sans `terms.current`, qui y renverrait en boucle, et sans `verified`, pour
+// qu'un compte à l'adresse non vérifiée puisse aussi accepter.
+Route::middleware(['auth', 'translations:account,legal'])->group(function () {
+    Route::get('account/terms', [TermsAcceptanceController::class, 'show'])->name('terms.show');
+    Route::post('account/terms', [TermsAcceptanceController::class, 'store'])->name('terms.accept');
 });
 
 // Hors du groupe de Fortify, donc `accounts.switches` posé ici aussi : quand

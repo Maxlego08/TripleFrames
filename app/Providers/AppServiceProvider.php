@@ -5,6 +5,7 @@ namespace App\Providers;
 use App\Events\Game\AnswerAccepted;
 use App\Events\Game\GameFinalized;
 use App\Events\Game\InputClosed;
+use App\Listeners\Account\ForgetPlayHistoryCache;
 use App\Listeners\DiagnoseDependencies;
 use App\Listeners\Game\BroadcastGameEnded;
 use App\Listeners\Game\CloseSeatInput;
@@ -101,13 +102,16 @@ class AppServiceProvider extends ServiceProvider
      * crochets de fin de saisie sur les événements de domaine de 70
      * (`AnswerAccepted`, `InputClosed`), qui émettent `player.locked` et
      * réévaluent la fin anticipée, et l'annonce `game.ended` sur le gel de 80
-     * (`GameFinalized`). Tous sont livrés après commit, synchrones.
+     * (`GameFinalized`). Tous sont livrés après commit, synchrones. Le même
+     * gel oublie le cache court de l'historique des comptes de la partie
+     * (spec 40 § 13.4, L40-13).
      */
     protected function registerGameListeners(): void
     {
         Event::listen(AnswerAccepted::class, [CloseSeatInput::class, 'answerAccepted']);
         Event::listen(InputClosed::class, [CloseSeatInput::class, 'inputClosed']);
         Event::listen(GameFinalized::class, BroadcastGameEnded::class);
+        Event::listen(GameFinalized::class, ForgetPlayHistoryCache::class);
     }
 
     /**
