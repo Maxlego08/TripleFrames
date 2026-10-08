@@ -346,15 +346,24 @@ export function displayedRound(
  * sa confirmation, et le serveur, qui rattrape avant tout jugement, la
  * traite déjà comme ouverte.
  *
- * Au J2 s'ajoutera le masquage du mode sans score (`leaderboard.scoreless`,
- * L60-17). Ne décide rien : un affichage indicatif, le serveur retient seul
- * le palier d'une réponse, à son instant de réception.
+ * **Mode sans score** (J2, L60-17 ; exigence de 80 § 14 et § 1.4) : masquée
+ * aussi quand `leaderboard.scoreless` est vrai — tous les paliers valant 0,
+ * « 0 point » n'apprendrait rien. Le drapeau arrive par le paquet et par
+ * chaque `round.revealed` ; à `game.launched`, qui ne le porte pas, il est lu
+ * dans les réglages du lobby au lancement (barème entièrement à zéro,
+ * `ScoringRules::isScoreless()`), comme `maxAnswerLength`. Ne décide rien :
+ * un affichage indicatif, le serveur retient seul le palier d'une réponse, à
+ * son instant de réception.
  */
 export function visibleTierValue(
     state: GameStoreState,
     nowMs: number,
 ): number | null {
-    if (state.gameRef === null || state.status !== 'running') {
+    if (
+        state.gameRef === null ||
+        state.status !== 'running' ||
+        state.leaderboard.scoreless
+    ) {
         return null;
     }
 
@@ -417,6 +426,20 @@ const EMPTY_LEADERBOARD: Leaderboard = {
     roundNumber: null,
     rows: [],
 };
+
+/**
+ * Le barème des réglages vaut-il 0 partout (`ScoringRules::isScoreless()`,
+ * 80 § 2.5) ? Faux sans réglages connus (solo, page sans lobby).
+ */
+function isScorelessSettings(settings: RoomSettingsState | null): boolean {
+    return (
+        settings !== null &&
+        settings.settings.tierPoints.reduce(
+            (sum, points) => sum + points,
+            0,
+        ) === 0
+    );
+}
 
 /** Suivi interne d'une manche : programmation retenue, dernier palier ouvert. */
 type RoundMeta = { scheduledAtMs: number; openedTier: number };
@@ -1498,7 +1521,13 @@ export function createGameStore(options: GameStoreOptions): GameStore {
                 ownScore: 0,
             },
             offeredChoices: null,
-            leaderboard: EMPTY_LEADERBOARD,
+            // Le mode sans score (80 § 2.5) avant le premier classement : lu
+            // dans les réglages du lobby au lancement, figés dans le
+            // snapshot ; le paquet et `round.revealed` le confirment.
+            leaderboard: {
+                ...EMPTY_LEADERBOARD,
+                scoreless: isScorelessSettings(state.settings),
+            },
             podium: null,
             nextTransitionAt: null,
         });
