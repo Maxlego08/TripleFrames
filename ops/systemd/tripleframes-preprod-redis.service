@@ -1,0 +1,40 @@
+# TripleFrames — instance Redis dédiée de la PRÉPRODUCTION (spec 100 § 18, L100-15).
+#
+# Gabarit versionné, recopié UNE fois par root (ops/mise-en-service.md § 12) ;
+# l'utilisateur système tfredis est celui de la production (étape 4 a) :
+#
+#   install -o root -g root -m 0644 ops/systemd/tripleframes-preprod-redis.service \
+#       /etc/systemd/system/tripleframes-preprod-redis.service
+#   systemctl daemon-reload && systemctl enable --now tripleframes-preprod-redis
+#
+# Toujours actif sous un plafond serré (n° 6, D66 du 07/10) : une promotion ne
+# demande jamais de geste root.
+#
+# Syntaxe systemd : un commentaire n'est lu qu'en DÉBUT de ligne.
+
+[Unit]
+Description=TripleFrames - Redis de preproduction (boucle locale)
+After=network.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=notify
+User=tfredis
+Group=tfredis
+# Même binaire que l'instance de production (ops/systemd/tripleframes-redis.service).
+ExecStart=/usr/bin/redis-server /etc/tripleframes/tripleframes-preprod-redis.conf
+Restart=always
+RestartSec=2
+StateDirectory=tripleframes-preprod-redis
+StateDirectoryMode=0700
+UMask=0077
+# Au-dessus du maxmemory de tripleframes-preprod-redis.conf (32mb).
+MemoryMax=64M
+CPUWeight=10
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

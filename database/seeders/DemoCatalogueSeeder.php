@@ -64,8 +64,10 @@ use RuntimeException;
  *    par exception » et le comptage **par motif** n'ont aucune donnée, et le
  *    marquage devient silencieux — ce que la décision 11 interdit nommément.
  *
- * **Jamais hors `local` et `testing`** : {@see self::assertSeedableEnvironment()}
- * lève. La garde est une **liste blanche** et non une liste noire, parce que
+ * **Jamais hors `local`, `testing` et `staging`** : {@see self::assertSeedableEnvironment()}
+ * lève. `staging` est la préproduction (spec 100 § 18, n° 5 de D66 du 07/10) :
+ * elle reçoit ce catalogue, signé par {@see PreprodCurationAccountsSeeder}, et
+ * jamais les comptes de démonstration, gardés par leur propre seeder. La garde est une **liste blanche** et non une liste noire, parce que
  * `composer setup` — le chemin d'installation documenté — copie `.env.example`,
  * qui pose `APP_ENV=local` : adosser la garde à la seule variable que la
  * procédure d'installation laisse à `local` livrerait `admin@tripleframes.test`
@@ -114,8 +116,11 @@ class DemoCatalogueSeeder extends Seeder
             );
         }
 
-        $curator = DemoAccountsSeeder::demoAccount(UserRole::Curator);
-        $admin = DemoAccountsSeeder::demoAccount(UserRole::Admin);
+        // En préproduction, les auteurs sont les deux comptes inouvrables de
+        // PreprodCurationAccountsSeeder, jamais les comptes de démonstration.
+        [$curator, $admin] = app()->environment('staging')
+            ? [PreprodCurationAccountsSeeder::account(UserRole::Curator), PreprodCurationAccountsSeeder::account(UserRole::Admin)]
+            : [DemoAccountsSeeder::demoAccount(UserRole::Curator), DemoAccountsSeeder::demoAccount(UserRole::Admin)];
 
         // Idempotence par COMPLÉTUDE, jamais par existence. Chaque film est posé
         // dans sa propre transaction et aucune n'enveloppe la boucle : un seul film
@@ -168,20 +173,21 @@ class DemoCatalogueSeeder extends Seeder
      * point d'entrée.
      *
      * Le catalogue de démonstration est du contenu de fixture : des titres posés à
-     * la main, des comptes au mot de passe connu, et des images de bruit. Rien de
+     * la main et des images de bruit (les comptes au mot de passe connu ont leur
+     * propre garde, plus stricte : {@see DemoAccountsSeeder}). Rien de
      * tout cela n'a sa place dans une base servie à des joueurs — et « pas
      * production » ne suffit pas à le garantir, `APP_ENV` valant `local` dans le
      * `.env.example` que `composer setup` recopie sur toute installation.
      */
     public static function assertSeedableEnvironment(): void
     {
-        if (app()->environment(['local', 'testing'])) {
+        if (app()->environment(['local', 'testing', 'staging'])) {
             return;
         }
 
         throw new RuntimeException(
-            'Le catalogue de démonstration ne tourne qu’en `local` ou en `testing` ; APP_ENV vaut ['
-            .app()->environment().']. Il pose des comptes au mot de passe connu et des images de fixture. '
+            'Le catalogue de démonstration ne tourne qu’en `local`, en `testing` ou en `staging` ; APP_ENV vaut ['
+            .app()->environment().']. Il pose des images de fixture. '
             .'Seul '.PlatformDataSeeder::class.' est joué partout.',
         );
     }

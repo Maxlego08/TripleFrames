@@ -7,7 +7,9 @@ use App\Enums\AdminActionType;
 use App\Enums\UserRole;
 use App\Models\AdminAction;
 use App\Models\User;
+use App\Support\Preprod\PreprodAuthors;
 use Carbon\CarbonImmutable;
+use Database\Seeders\PreprodCurationAccountsSeeder;
 use Illuminate\Support\Facades\Hash;
 
 /*
@@ -194,7 +196,7 @@ test('en session interactive avec --create, elle crée le compte, le promeut, et
             firstAdminLine('confirm_create', ['email' => 'premiere@tripleframes.test']),
             'yes',
         )
-        ->expectsQuestion(firstAdminLine('ask_name'), 'Première Curatrice')
+        ->expectsQuestion(firstAdminLine('ask_name'), 'Première Joueuse')
         ->expectsQuestion(firstAdminLine('ask_password'), 'cheval-pile-agrafe-42')
         ->expectsQuestion(firstAdminLine('ask_password_confirmation'), 'cheval-pile-agrafe-42')
         ->expectsQuestion(firstAdminLine('real_name_prompt'), 'Camille Martin')
@@ -203,7 +205,7 @@ test('en session interactive avec --create, elle crée le compte, le promeut, et
     $user = User::query()->where('email', 'premiere@tripleframes.test')->sole();
 
     expect($user->role)->toBe(UserRole::Admin)
-        ->and($user->name)->toBe('Première Curatrice')
+        ->and($user->name)->toBe('Première Joueuse')
         ->and($user->real_name)->toBe('Camille Martin')
         ->and($user->email_verified_at)->not->toBeNull()
         ->and(Hash::check('cheval-pile-agrafe-42', (string) $user->password))->toBeTrue();
@@ -231,7 +233,7 @@ test('deux mots de passe discordants n’écrivent rien', function (): void {
             firstAdminLine('confirm_create', ['email' => 'premiere@tripleframes.test']),
             'yes',
         )
-        ->expectsQuestion(firstAdminLine('ask_name'), 'Première Curatrice')
+        ->expectsQuestion(firstAdminLine('ask_name'), 'Première Joueuse')
         ->expectsQuestion(firstAdminLine('ask_password'), 'cheval-pile-agrafe-42')
         ->expectsQuestion(firstAdminLine('ask_password_confirmation'), 'cheval-pile-agrafe-43')
         ->assertFailed();
@@ -351,4 +353,51 @@ test('relancer la commande sur l\'administrateur en place avec un autre nom rée
 
     expect($admin->refresh()->real_name)->toBe('Camille Martin')
         ->and(AdminAction::query()->count())->toBe(0);
+});
+
+test('en préproduction, l’administrateur inouvrable semé ne bloque pas la création de l’administrateur de recette, sans --force', function (): void {
+    app()->instance('env', 'staging');
+    $this->seed(PreprodCurationAccountsSeeder::class);
+
+    $this->artisan('admin:first-admin', ['email' => 'recette@tripleframes.test', '--create' => true])
+        ->expectsConfirmation(
+            firstAdminLine('confirm_create', ['email' => 'recette@tripleframes.test']),
+            'yes',
+        )
+        ->expectsQuestion(firstAdminLine('ask_name'), 'Recette')
+        ->expectsQuestion(firstAdminLine('ask_password'), 'cheval-pile-agrafe-42')
+        ->expectsQuestion(firstAdminLine('ask_password_confirmation'), 'cheval-pile-agrafe-42')
+        ->expectsQuestion(firstAdminLine('real_name_prompt'), 'Camille Martin')
+        ->assertSuccessful();
+
+    $user = User::query()->where('email', 'recette@tripleframes.test')->sole();
+
+    expect($user->role)->toBe(UserRole::Admin)
+        ->and($user->real_name)->toBe('Camille Martin');
+
+    // L'administrateur de recette, lui, compte : un second est refusé.
+    $curator = User::factory()->curator()->create(['email' => 'second@tripleframes.test']);
+
+    $this->artisan('admin:first-admin', [
+        'email' => 'second@tripleframes.test',
+        '--real-name' => 'Dominique Durand',
+        '--no-interaction' => true,
+    ])
+        ->expectsOutputToContain(firstAdminLine('already', ['name' => 'Recette']))
+        ->assertFailed();
+
+    expect($curator->refresh()->role)->toBe(UserRole::Curator);
+});
+
+test('hors préproduction, un administrateur à l’adresse de l’auteur semé compte comme administrateur en place', function (): void {
+    User::factory()->admin()->create(['email' => PreprodAuthors::ADMIN_EMAIL]);
+    $curator = User::factory()->curator()->create(['email' => 'second@tripleframes.test']);
+
+    $this->artisan('admin:first-admin', [
+        'email' => 'second@tripleframes.test',
+        '--real-name' => 'Camille Martin',
+        '--no-interaction' => true,
+    ])->assertFailed();
+
+    expect($curator->refresh()->role)->toBe(UserRole::Curator);
 });

@@ -1,0 +1,41 @@
+# TripleFrames — serveur Reverb de la PRÉPRODUCTION, en boucle locale
+# (spec 100 § 18, L100-15).
+#
+# Publié par les directives nginx de l'abonnement de préproduction
+# (ops/nginx/additional-directives.preprod.conf), sous la même authentification
+# HTTP que le site. Hôte et port lus dans le .env de préproduction
+# (REVERB_SERVER_HOST=127.0.0.1, REVERB_SERVER_PORT = port de préproduction).
+#
+# Gabarit versionné, recopié UNE fois par root (ops/mise-en-service.md § 12) :
+#
+#   install -o root -g root -m 0644 ops/systemd/tripleframes-preprod-reverb.service \
+#       /etc/systemd/system/tripleframes-preprod-reverb.service
+#   systemctl daemon-reload && systemctl enable tripleframes-preprod-reverb
+#
+# Toujours actif (n° 6, D66 du 07/10) ; « reverb:restart » (hook, étape 11)
+# l'arrête et Restart=always le relève sur le nouveau code.
+#
+# Syntaxe systemd : un commentaire n'est lu qu'en DÉBUT de ligne.
+
+[Unit]
+Description=TripleFrames - Reverb de preproduction (WebSocket, boucle locale)
+After=network-online.target tripleframes-preprod-redis.service
+Wants=network-online.target tripleframes-preprod-redis.service
+StartLimitIntervalSec=0
+
+[Service]
+User=__TF_PREPROD_SUBSCRIPTION_USER__
+Group=__TF_PREPROD_SUBSCRIPTION_GROUP__
+WorkingDirectory=__TF_PREPROD_DEPLOY_PATH__
+ExecStart=/opt/plesk/php/8.4/bin/php artisan reverb:start
+Restart=always
+RestartSec=2
+MemoryMax=96M
+CPUWeight=10
+LimitNOFILE=1024
+UMask=0027
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

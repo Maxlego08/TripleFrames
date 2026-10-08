@@ -1,0 +1,49 @@
+# TripleFrames — worker d'une file de la PRÉPRODUCTION, unité gabarit
+# (spec 100 § 18, L100-15).
+#
+# Mêmes deux instances qu'en production (« game » et « default »), sous
+# l'utilisateur de l'abonnement de préproduction, dans son répertoire de
+# déploiement, avec des plafonds plus serrés. Toujours actives (n° 6, D66 du
+# 07/10) : une promotion ne demande jamais de geste root ; le hook de
+# préproduction les relève par queue:restart, comme en production.
+#
+# Gabarit versionné, recopié UNE fois par root (ops/mise-en-service.md § 12) :
+#
+#   install -o root -g root -m 0644 "ops/systemd/tripleframes-preprod-worker@.service" \
+#       "/etc/systemd/system/tripleframes-preprod-worker@.service"
+#   for i in game default; do
+#       install -o root -g root -m 0644 "ops/systemd/preprod-worker-${i}.env" \
+#           "/etc/tripleframes/preprod-worker-${i}.env"
+#       install -D -o root -g root -m 0644 \
+#           "ops/systemd/tripleframes-preprod-worker@${i}.service.d/limits.conf" \
+#           "/etc/systemd/system/tripleframes-preprod-worker@${i}.service.d/limits.conf"
+#   done
+#   systemctl daemon-reload
+#   systemctl enable tripleframes-preprod-worker@game tripleframes-preprod-worker@default
+#
+# Syntaxe systemd : un commentaire n'est lu qu'en DÉBUT de ligne.
+
+[Unit]
+Description=TripleFrames - worker de preproduction de la file %i
+After=network-online.target tripleframes-preprod-redis.service mysql.service mysqld.service mariadb.service
+Wants=network-online.target tripleframes-preprod-redis.service
+StartLimitIntervalSec=0
+
+[Service]
+# Utilisateur système de l'abonnement de PRÉPRODUCTION et son groupe : jamais
+# celui de la production, jamais root.
+User=__TF_PREPROD_SUBSCRIPTION_USER__
+Group=__TF_PREPROD_SUBSCRIPTION_GROUP__
+# Chemin absolu de déploiement de Plesk Git de la préproduction.
+WorkingDirectory=__TF_PREPROD_DEPLOY_PATH__
+EnvironmentFile=/etc/tripleframes/preprod-worker-%i.env
+ExecStart=/opt/plesk/php/8.4/bin/php $PHP_ARGS artisan queue:work redis --queue=%i $WORKER_ARGS
+Restart=always
+RestartSec=2
+Nice=10
+UMask=0027
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
