@@ -64,6 +64,7 @@ use App\Support\Game\GameStateBuilder;
 use App\Support\Game\NextRoundOutcome;
 use App\Support\Game\RevealMovieBuilder;
 use App\Support\Game\RoundStep;
+use App\Support\Game\SeatViewPresenter;
 use App\Support\Game\TransitionBroadcasts;
 use App\Support\Identity\PlayerToken;
 use App\Support\Identity\PlayerTokenCookie;
@@ -98,6 +99,7 @@ use Tests\Support\Realtime\RecordingBroadcaster;
 use Tests\Support\Realtime\RecordingJob;
 use Tests\Support\Realtime\WireFixtures;
 use Tests\Support\Realtime\WireScene;
+use Tests\Support\Room\HostGestures;
 use Tests\Support\Room\SeatEntry;
 use Tests\Support\Scoring\ScoringFixtures;
 use Tests\TestCase;
@@ -2020,4 +2022,36 @@ it('chaque charge aux bornes tient sous la borne de requête de Reverb, pire cas
     foreach (WireFixtures::events($scene) as $event) {
         expect(strlen(eventPayloadReverbBody($event)) + $requestOverhead)->toBeLessThanOrEqual($bound, $event->broadcastAs());
     }
+});
+
+it('un pseudo masqué part à nul dans toute vue de siège, lobby comme partie, affichage gelé compris', function (): void {
+    PoolFixtures::fakeFramesDisk();
+    Queue::fake([AdvanceRound::class, InterruptPausedGame::class]);
+
+    // Spec 60 § 11.3 (J2, L60-17) et 40 § 13.3 : `nickname: null`,
+    // `masked: true`, jamais le pseudo ni ses initiales, sur le même
+    // transport que tout le reste.
+    [$room, $host] = HostGestures::room();
+    [$target] = HostGestures::seat($room, attributes: ['nickname' => 'Pseudo Vilain', 'nickname_normalized' => 'pseudovilain']);
+    [$game] = HostGestures::runningGame($room, [$host, $target]);
+
+    $target->forceFill(['nickname_masked_at' => Date::now()])->save();
+    $recorder = RecordingBroadcaster::install();
+
+    SeatJoined::dispatch($room, null, ['seat' => SeatViewPresenter::lobby($target, $room->host_player_id)]);
+    SeatUpdated::dispatch($room, $game, ['seat' => SeatViewPresenter::ofSeat($target, $game, $room->host_player_id)]);
+
+    expect(array_column($recorder->sent, 'event'))->toBe(['seat.joined', 'seat.updated']);
+
+    foreach ($recorder->sent as $sent) {
+        expect($sent['payload']['seat']['publicId'])->toBe($target->public_id)
+            ->and($sent['payload']['seat']['nickname'])->toBeNull()
+            ->and($sent['payload']['seat']['masked'])->toBeTrue()
+            ->and($sent['json'])->not->toContain('Pseudo Vilain')
+            ->and($sent['json'])->not->toContain('pseudovilain');
+    }
+
+    // La partie en cours garde son affichage gelé en base, jamais sur le fil.
+    expect(GamePlayer::query()->whereBelongsTo($game)->where('player_id', $target->id)->sole()->display_nickname)
+        ->toBe('Pseudo Vilain');
 });

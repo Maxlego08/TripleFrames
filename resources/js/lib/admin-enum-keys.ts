@@ -533,5 +533,6 @@ export const INSPECTION_INCIDENT_KEYS: Record<
     frame_unavailable: 'admin.inspection.enum.incident.frame_unavailable',
     no_variant_available: 'admin.inspection.enum.incident.no_variant_available',
     movie_withdrawn: 'admin.inspection.enum.incident.movie_withdrawn',
+    movie_suspended: 'admin.inspection.enum.incident.movie_suspended',
     choices_unavailable: 'admin.inspection.enum.incident.choices_unavailable',
 };
