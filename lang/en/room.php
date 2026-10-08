@@ -339,6 +339,15 @@ return [
     ],
 
     /*
+    | Rattachement automatique d’un siège invité au compte connecté (spec 40
+    | § 13.2, D66 du 07/10) : l’avis rendu une fois dans la page du siège.
+    */
+
+    'seat' => [
+        'claimed' => 'This game is now linked to your account.',
+    ],
+
+    /*
     | Salon expiré (spec 50 § 16.3, lot L50-8) : la page `game/room-expired`,
     | rendue en 410 par le lien d’un salon archivé. Aucune autre information
     | sur le salon ; deux sorties, un nouveau salon et l’accueil.

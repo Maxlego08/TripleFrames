@@ -152,6 +152,35 @@ return [
         ],
     ],
 
+    // Joueur (spec 90 § 6.4, sur la règle de 40 § 13.3 ; J2, D66 du 07/10).
+    // `masked` (« Joueur :ordinal ») est rédigé avec le rendu masqué
+    // (nickname-moderation). `report.*` : signalement du pseudo d'un autre
+    // siège, même patron que `avatar.report.*` ; `:nickname` est le pseudo du
+    // siège visé. `report.sent` est identique dans tous les cas acceptés.
+    // `masked_notice` n'est rendu qu'au siège masqué lui-même.
+    'player' => [
+        'masked' => 'Joueur :ordinal',
+        'masked_notice' => 'Votre pseudo a été signalé et il est masqué pour les autres joueurs. Vous pouvez continuer à jouer normalement.',
+        'report' => [
+            'action' => 'Signaler le pseudo',
+            'confirm_title' => 'Signaler le pseudo de :nickname ?',
+            'confirm_body' => 'Signalez un pseudo choquant ou inapproprié. Après deux signalements, il est masqué jusqu’à la décision d’un administrateur.',
+            'sent' => 'Signalement envoyé. Merci.',
+            'not_reportable' => 'Ce pseudo ne peut pas être signalé.',
+        ],
+    ],
+
+    // Page de fermeture du service (spec 90 § 11.7, `site:close` de 100 ;
+    // J2, D66 du 07/10). Aucun placeholder, aucune date de retour promise
+    // (la fermeture est réversible) et aucun engagement juridique : les
+    // liens mènent aux pages légales et au signalement, qui restent ouverts.
+    'closure' => [
+        'title' => 'TripleFrames est fermé',
+        'body' => 'Le service est fermé pour le moment : il n’est plus possible de créer ou de rejoindre une partie, ni de créer un compte. Vos données ne sont pas effacées, et vous pouvez toujours vous connecter pour les exporter ou supprimer votre compte.',
+        'legal_link' => 'Mentions légales',
+        'report_link' => 'Signaler un contenu',
+    ],
+
     // Accueil (spec 90 § 4.7) : le jeu en une phrase et ses trois entrées ;
     // « Rejoindre » demande le code ET le pseudo (D55 du 02/10).
     // Aucun placeholder. Aucun texte ne dit la longueur ni l'alphabet d'un
@@ -174,6 +203,16 @@ return [
         'nickname_label' => 'Ton pseudo',
         'nickname_placeholder' => 'Ex. Marty McFly',
         'tagline' => 'Devine le titre avant tes amis. Plus tu trouves tôt, plus tu marques de points.',
+    ],
+
+    // Description et Open Graph génériques (spec 90 § 11.5, D66 du 07/10),
+    // rendus côté serveur par `app.blade.php` via `App\Support\Http\PageMeta`,
+    // les mêmes sur toutes les pages. Aucun placeholder : jamais un code de
+    // salon, un titre de film ni un pseudo (règle 3), et aucun nombre
+    // d'images (un réglage, jamais une règle).
+    'meta' => [
+        'description' => 'Un blindtest de films et de dessins animés : quelques images, de la plus cryptique à la plus évidente, et un titre à trouver avant tes amis. Salons privés, sans compte.',
+        'title' => 'TripleFrames, devine le film à partir de ses images',
     ],
 
 ];

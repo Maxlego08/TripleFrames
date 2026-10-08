@@ -69,6 +69,10 @@ return [
         'audience' => 'Audience',
         // Les avatars téléversés (ligne 45, D49 du 01/10).
         'avatars' => 'Avatars',
+        // La modération des pseudos (ligne 35, D66 du 07/10).
+        'moderation' => 'Pseudos',
+        // Le geste rétroactif de grille (ligne 33, L20-25), administrateur seul.
+        'exclusion_grid' => 'Grille rétroactive',
         'back_to_site' => 'Retour au site',
         'role' => [
             'curator' => 'Curateur',
@@ -443,6 +447,9 @@ return [
             'theme_published' => 'Thème publié',
             'theme_unpublished' => 'Thème dépublié',
             'content_report_dismissed' => 'Signalements ignorés',
+            'movie_resynced' => 'Film resynchronisé depuis TMDB',
+            'import_abandoned' => 'Balayage clos à la main',
+            'movie_difficulty_corrected' => 'Difficulté du film corrigée',
         ],
         'admin_action_subject' => [
             'movie' => 'Film',
@@ -1042,6 +1049,35 @@ return [
             'updated_at' => 'Mis à jour le',
         ],
 
+        /*
+        | Difficulté corrigée (spec 20 § 9.6, L20-28b) : la correction survit
+        | au réimport ; « Aucune correction » rend la main à la dérivation. La
+        | correction met à jour les thèmes de difficulté du film aussitôt.
+        */
+        'difficulty' => [
+            'heading' => 'Corriger la difficulté',
+            'description' => 'La difficulté effective sert au seul thème « difficulté ». Une correction prime sur la valeur dérivée de la notoriété et n’est jamais réécrite par un réimport.',
+            'label' => 'Difficulté corrigée',
+            'derived_option' => 'Aucune correction (valeur dérivée)',
+            'derived_hint' => 'Valeur dérivée actuelle : :value.',
+            'submit' => 'Enregistrer la difficulté',
+            'flash' => [
+                'saved' => 'Difficulté enregistrée : les thèmes de difficulté du film sont à jour.',
+                'unchanged' => 'Rien n’a changé : cette difficulté était déjà en place.',
+            ],
+        ],
+
+        // Le lien vers l'écran de resynchronisation (spec 20 § 3.7).
+        'resync' => [
+            'action' => 'Resynchroniser depuis TMDB',
+        ],
+
+        // La dépublication proposée par une resynchronisation (spec 20
+        // § 3.7) : motif pré-rempli, modifiable.
+        'unpublish_proposed' => [
+            'default_reason' => 'Certification restrictive découverte à la resynchronisation TMDB.',
+        ],
+
         'availability' => [
             'heading' => 'Disponibilité',
             'state' => 'État',
@@ -1247,6 +1283,21 @@ return [
                 'same_group' => 'Déjà dans ce groupe',
                 'action' => 'Regrouper',
                 'action_label' => 'Regrouper avec :movie',
+            ],
+            // Candidats par proximité (spec 20 § 9.4 [J2], L20-27) : calculés
+            // à la demande, une suggestion, jamais un regroupement.
+            'proximity' => [
+                'heading' => 'Candidats : titre proche ou même saga',
+                'description' => 'Les films au titre proche, à chiffres identiques, et ceux de la même saga TMDB. Le calcul parcourt tout le catalogue : il ne se lance qu’à la demande. Une saga n’est pas une même œuvre — regroupez seulement un remake ou un homonyme.',
+                'load' => 'Chercher les candidats',
+                'reload' => 'Relancer la recherche',
+                'loading' => 'Recherche des candidats…',
+                'failed' => 'Les candidats n’ont pas pu être calculés : réessayez.',
+                'empty' => 'Aucun film proche ni de la même saga.',
+                'reason' => [
+                    'title_distance' => 'Titre proche',
+                    'same_collection' => 'Même saga',
+                ],
             ],
             // La voie manuelle : l'identifiant saisi est d'abord cherché,
             // puis le regroupement passe par la même confirmation que celle
@@ -1990,6 +2041,38 @@ return [
     | libellé impose une nouvelle version (§ 7.2), jamais une réécriture ici.
     */
     'exclusion_grid' => [
+        /*
+        | Geste rétroactif de grille (spec 20 § 7.7, D13 du 23/09, L20-25),
+        | administrateur seul. Offert sous une version rétroactive seulement.
+        | `done` : `:count` images dépubliées.
+        */
+        'retroactive' => [
+            'title' => 'Grille rétroactive',
+            'heading' => 'Appliquer la grille rétroactivement',
+            'description' => 'Une version de la grille marquée rétroactive ajoute un critère pour un motif juridique. Ce geste dépublie les images publiées qui n’ont pas été revues à cette version, aux seuls niveaux que le nouveau critère concerne. Elles reviennent en jeu par une nouvelle revue. Aucun film n’est dépublié.',
+            'unavailable' => 'La version courante de la grille n’est pas rétroactive : il n’y a rien à appliquer.',
+            'version' => 'Version courante de la grille : :version.',
+            'levels' => 'Niveaux concernés : :levels.',
+            'nothing' => 'Aucune image publiée n’attend ce geste : toutes ont été revues à la version courante.',
+            'summary' => ':frames image(s) seront dépubliées dans :movies film(s).',
+            'column' => [
+                'movie' => 'Film',
+                'frames' => 'Images visées',
+                'after' => 'Après le geste',
+            ],
+            'incomplete' => 'Devient incomplet, jouable jusqu’à :max images',
+            'incomplete_unplayable' => 'Devient incomplet et injouable',
+            'stays' => 'Reste complet',
+            'reason' => 'Motif juridique',
+            'reason_hint' => 'Recopié sur chaque ligne du journal.',
+            'reference' => 'Référence de la demande de retrait',
+            'reference_hint' => 'Facultative : la référence à 12 caractères de la demande liée.',
+            'confirm' => 'Dépublier ces images',
+            'confirm_title' => 'Appliquer la grille rétroactivement',
+            'confirm_description' => 'Les images listées sortiront du jeu maintenant. Les films nommés « incomplets » resteront publiés, jouables par repli de niveau.',
+            'version_changed' => 'La grille a changé de version depuis l’affichage : rechargez l’écran.',
+            'done' => '{0} Aucune image n’était plus à dépublier.|{1} Une image dépubliée.|[2,*] :count images dépubliées.',
+        ],
         'v1' => [
             'no_poster_or_cover' => [
                 'label' => 'Ni affiche ni jaquette',
@@ -2159,9 +2242,97 @@ return [
     | Un curateur qui ne la comprend pas collera des identifiants sans savoir
     | qu’il marque une exception.
     */
+    /*
+    | Resynchronisation TMDB (spec 20 § 3.7, L20-24). Écran de différences
+    | d'un film, bornées à la liste close de ce qui est écrasable ; lot
+    | depuis une page du catalogue. `fields.*` : un libellé par champ comparé.
+    | Le filtre d'import n'est jamais réappliqué.
+    */
+    'resync' => [
+        'title' => 'Resynchronisation TMDB',
+        'heading' => 'Resynchroniser depuis TMDB',
+        'description' => 'Relit les métadonnées TMDB des films choisis. Seules les métadonnées TMDB pures sont réécrites : vos titres et alias corrigés, la difficulté corrigée, les groupes, les thèmes ajoutés ou retirés à la main, la disponibilité, la coche de contenu et toutes les images restent intacts. Le filtre de notoriété n’est jamais réappliqué.',
+        'selection' => [
+            'heading' => 'Films choisis',
+            'description' => ':eligible film(s) seront relus sur :total choisi(s), au plus :max par envoi.',
+            'ineligible' => [
+                'withdrawn' => 'Retiré : jamais relu',
+                'demo' => 'Catalogue de démonstration : jamais relu',
+                'no_tmdb' => 'Sans identifiant TMDB',
+            ],
+        ],
+        'preview' => [
+            'heading' => 'Différences avec la fiche TMDB actuelle',
+            'description' => 'La fiche TMDB vient d’être relue. Les lignes marquées « changé » seront réécrites ; les autres restent identiques.',
+            'read_at' => 'Certifications lues précédemment le :date.',
+            'never_read' => 'Aucune certification n’avait encore été lue.',
+            'no_change' => 'Aucune différence : la fiche TMDB correspond déjà au catalogue.',
+            'not_found' => 'TMDB ne connaît plus cet identifiant : rien à relire.',
+            'unavailable' => 'TMDB n’a pas répondu : réessayez dans un moment.',
+            'not_configured' => 'Aucune clé TMDB n’est configurée sur le serveur : la resynchronisation est indisponible.',
+            'column' => [
+                'field' => 'Champ',
+                'before' => 'Au catalogue',
+                'after' => 'Sur TMDB',
+                'state' => 'État',
+            ],
+            'changed' => 'Changé',
+            'same' => 'Identique',
+            'empty' => 'Aucune valeur',
+            'curator_titles' => 'Titres corrigés à la main, jamais réécrits : :locales.',
+            'reappeared' => [
+                'heading' => 'Alias réapparus',
+                'description' => 'Ces alias TMDB avaient été retirés à la main ; la resynchronisation les recréera. Retirez-les de nouveau après coup s’il le faut.',
+            ],
+            'blocked' => [
+                'heading' => 'Certification restrictive découverte',
+                'description' => 'La fiche TMDB porte désormais une classification restrictive : après la resynchronisation, le film sortira aussitôt du vivier. Il ne sera pas dépublié pour autant : c’est à vous de le faire.',
+                'propose' => 'Dépublier le film ensuite',
+            ],
+        ],
+        'fields' => [
+            'title_original' => 'Titre original',
+            'title_original_latin' => 'Translittération latine',
+            'original_language' => 'Langue originale',
+            'release_year' => 'Année de sortie',
+            'vote_count' => 'Votes TMDB',
+            'adult' => 'Marqué « adulte »',
+            'collection_id' => 'Saga TMDB',
+            'genres' => 'Genres TMDB',
+            'companies' => 'Sociétés de production',
+            'movie_certification' => 'Certifications',
+            'movie_title' => 'Titres TMDB',
+            'alias' => 'Alias TMDB',
+            'content_flag' => 'Drapeau de contenu',
+        ],
+        'submit' => 'Lancer la resynchronisation',
+        'submit_batch' => 'Resynchroniser :count film(s)',
+        'running' => 'Une resynchronisation est déjà en cours : attendez qu’elle se termine.',
+        'running_link' => 'Voir la resynchronisation en cours',
+        'deferred_notice' => 'La resynchronisation tourne en tâche de fond : vous suivrez son résumé sur l’écran du balayage.',
+        'back' => 'Retour au catalogue',
+        'none_eligible' => 'Aucun des films choisis ne peut être resynchronisé.',
+        'busy' => 'Une resynchronisation est déjà en cours : attendez qu’elle se termine.',
+        'started' => 'Resynchronisation lancée.',
+        'catalog_action' => 'Resynchroniser cette page',
+    ],
+
     'import' => [
         'title' => 'Import du catalogue',
         'heading' => 'Import du catalogue',
+
+        /*
+        | Clore un balayage suspendu (spec 20 § 3.8, L20-24) : `failed`, et
+        | une ligne au journal. Refusé tant que le traitement le tient.
+        */
+        'abandon' => [
+            'action' => 'Clore ce balayage',
+            'title' => 'Clore ce balayage',
+            'description' => 'Le balayage passe « échoué » et ne se reprendra plus. Les films déjà entrés restent au catalogue, et ses compteurs gardent ce qu’il a fait.',
+            'submit' => 'Clore le balayage',
+            'done' => 'Balayage clos.',
+            'busy' => 'Ce balayage avance encore : il ne se clôt qu’une fois suspendu depuis quelques minutes.',
+        ],
         'description' => 'Deux voies d’entrée, et une asymétrie assumée. L’import est un acte d’administration : le jeu, lui, n’appelle jamais TMDB.',
 
         'asymmetry' => [
@@ -3039,6 +3210,61 @@ return [
         ],
     ],
 
+    // L'écran « Modération » des pseudos (ligne 35, spec 20 § 11.5 ; règle :
+    // spec 40 § 13.3, D66 du 07/10).
+    'moderation' => [
+        'title' => 'Pseudos masqués',
+        'description' => 'Deux signalements de sièges distincts masquent un pseudo pour la vie du siège. Vous seul pouvez lever le masquage ou bannir le pseudo ; un bannissement est définitif.',
+        'counts' => ':masked siège(s) masqué(s)',
+        'columns' => [
+            'nickname' => 'Pseudo',
+            'room' => 'Salon',
+            'account' => 'Compte',
+            'masked_at' => 'Masqué le',
+            'reports' => 'Signalements',
+            'reporters' => 'Signaleurs',
+            'state' => 'État',
+            'actions' => 'Gestes',
+        ],
+        'state' => [
+            'masked' => 'Masqué',
+            'banned' => 'Banni',
+        ],
+        'reports_value' => ':current dans la fenêtre courante, :frozen au masquage',
+        'reports_frozen_none' => ':current dans la fenêtre courante',
+        'reporter' => ':nickname (:count signalement(s) de pseudo)',
+        'reporter_erased' => 'Siège n° :id, pseudo effacé (:count signalement(s) de pseudo)',
+        'no_reporters' => 'Aucun signalement conservé',
+        'erased' => 'Pseudo effacé',
+        'solo' => 'Solo',
+        'guest' => 'Invité',
+        'seat_link' => 'Fiche du siège',
+        'empty' => 'Aucun pseudo masqué.',
+        'blocklist' => [
+            'title' => 'Formes à ajouter à la liste noire',
+            'description' => 'Pseudos bannis encore présents en base. Recopiez chaque forme dans resources/moderation/nicknames/banned.txt, au prochain commit, puis déployez : la liste noire est une ressource versionnée, relue par un humain.',
+            'form' => 'Forme repliée',
+            'nickname' => 'Pseudo',
+            'empty' => 'Aucune forme en attente.',
+        ],
+        'unmask' => 'Lever',
+        'unmask_title' => 'Lever le masquage de « :nickname » ?',
+        'unmask_body' => 'Le pseudo redevient visible des autres joueurs et le compteur de signalements repart de zéro.',
+        'ban' => 'Bannir',
+        'ban_title' => 'Bannir le pseudo « :nickname » ?',
+        'ban_body' => 'Le pseudo reste masqué pour la vie du siège, sans levée possible. Sa forme est à recopier dans la liste noire au prochain déploiement. Le motif est consigné au journal.',
+        'reason' => 'Motif',
+        'reason_optional' => 'Motif (facultatif)',
+        'cancel' => 'Annuler',
+        'unmasked' => 'Masquage levé.',
+        'banned' => 'Pseudo banni.',
+        'errors' => [
+            'not_masked' => 'Ce pseudo n’est pas masqué.',
+            'banned' => 'Ce pseudo est banni : le masquage ne se lève plus.',
+            'already_banned' => 'Ce pseudo est déjà banni.',
+        ],
+    ],
+
     'audience' => [
         'title' => 'Audience',
         'heading' => 'Audience',
@@ -3497,6 +3723,10 @@ return [
         'movie_theme_state' => 'exception de thème',
         'catalog_theme' => 'thème',
         'group_label' => 'libellé du groupe',
+        // Resynchronisation, difficulté, geste rétroactif (D66 du 07/10).
+        'resync_movies' => 'films à resynchroniser',
+        'movie_difficulty_override' => 'difficulté corrigée',
+        'takedown_reference' => 'référence de la demande de retrait',
         'group_note' => 'note',
         // L'écran des thèmes (spec 20 § 9.6, D43 du 01/10).
         'theme_kind' => 'nature du thème',
