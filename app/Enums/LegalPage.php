@@ -34,6 +34,47 @@ enum LegalPage: string
     }
 
     /**
+     * Nom de la route qui rend la page (`routes/legal.php`).
+     */
+    public function routeName(): string
+    {
+        return match ($this) {
+            self::Notice => 'legal.notice',
+            self::Terms => 'legal.terms',
+            self::Privacy => 'legal.privacy',
+            self::Report => 'takedown.create',
+        };
+    }
+
+    /**
+     * La page dont la route porte ce nom, ou `null` pour toute autre route.
+     */
+    public static function fromRouteName(?string $name): ?self
+    {
+        foreach (self::cases() as $page) {
+            if ($page->routeName() === $name) {
+                return $page;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Vrai tant que le texte est un squelette (`config/legal.php`, spec 90
+     * § 4.3). Ne tombe que sur un `false` EXPLICITE : une entrée absente ou
+     * d'un autre type garde la page provisoire, ce qui est l'erreur sans
+     * danger. Seule lecture de la clé : le bandeau de `legal/show` et la garde
+     * d'indexation de `RobotsDirectives` (n° 19, spec 90 § 11.5 : une page
+     * provisoire reste `noindex` même quand l'indexation est levée) en
+     * découlent.
+     */
+    public function isProvisional(): bool
+    {
+        return config("legal.pages.{$this->value}.provisional") !== false;
+    }
+
+    /**
      * Chemin ABSOLU du partiel français, rendu par `view()->file()`.
      *
      * Un chemin et non un nom de vue : le chercheur de vues de Laravel

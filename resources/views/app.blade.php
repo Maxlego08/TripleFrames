@@ -18,6 +18,22 @@
             }
         </style>
 
+        {{-- Canonique, description et Open Graph génériques (spec 90 § 11.5,
+             D66 du 07/10), rendus ICI parce qu'aucun SSR n'existe : un robot
+             ou l'aperçu d'une messagerie ne lit que ce HTML. Hors de
+             `<x-inertia::head>`, que le client réécrit. La canonique n'existe
+             que sur une route indexable (`RobotsDirectives::routeIndexable()`) ;
+             les balises `<meta>` sont les mêmes partout, sans image ni
+             `room_code`, ni titre de film, ni pseudo (règle 3). --}}
+        @inject('pageMeta', 'App\Support\Http\PageMeta')
+        @php($canonical = $pageMeta->canonical(request()))
+        @if ($canonical !== null)
+            <link rel="canonical" href="{{ $canonical }}">
+        @endif
+        @foreach ($pageMeta->tags($canonical) as $tag)
+            <meta {{ $tag['attribute'] }}="{{ $tag['key'] }}" content="{{ $tag['content'] }}">
+        @endforeach
+
         <link rel="icon" href="/favicon.ico" sizes="any">
         <link rel="icon" href="/favicon.svg" type="image/svg+xml">
         <link rel="apple-touch-icon" href="/apple-touch-icon.png">

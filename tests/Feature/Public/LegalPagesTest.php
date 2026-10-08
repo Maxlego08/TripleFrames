@@ -297,6 +297,38 @@ it('affiche le bandeau provisoire tant que la configuration le demande', functio
     }
 });
 
+it('une page légale non provisoire ne contient aucun marqueur [À FOURNIR', function () {
+    // Spec 90 § 11.5 (D66 du 07/10) : `provisional` passe à `false` dans le
+    // commit qui dépose le texte définitif, jamais avant. Une page déclarée
+    // définitive qui garderait un marqueur publierait un squelette comme texte
+    // opposable, et deviendrait indexable une fois `SITE_INDEXABLE` levée.
+    $marker = '/\[\s*À\s+FOURNIR/iu';
+
+    // Le détecteur d'abord : il voit les marqueurs du squelette.
+    foreach (['[À FOURNIR : hébergeur]', '[à fournir]', '[ À FOURNIR : x]'] as $sample) {
+        expect(preg_match($marker, $sample))->toBe(1, "le motif ne reconnaît pas « {$sample} »");
+    }
+
+    $shipped = require config_path('legal.php');
+    $checked = 0;
+
+    foreach (LegalPage::cases() as $page) {
+        $text = html_entity_decode(view()->file($page->viewPath())->render(), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+
+        if (($shipped['pages'][$page->value]['provisional'] ?? true) === false) {
+            expect(preg_match($marker, $text))->toBe(0, "{$page->value} est déclarée définitive mais garde un marqueur [À FOURNIR");
+        } else {
+            // Une page encore provisoire peut garder ses marqueurs : son
+            // bandeau et la garde d'indexation la couvrent.
+            expect($page->isProvisional())->toBeTrue();
+        }
+
+        $checked++;
+    }
+
+    expect($checked)->toBe(count(LegalPage::cases()));
+});
+
 it('remplace un contact absent par la mention traduite', function () {
     $this->withoutVite();
 
