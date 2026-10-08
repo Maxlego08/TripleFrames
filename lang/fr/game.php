@@ -13,6 +13,8 @@ return [
 
     'frame' => [
         'alt' => 'Image :index sur :total de la manche en cours',
+        // Pastille d'état de l'écran de manche (maquette `game.html`).
+        'status' => 'Image :index / :total',
         'loading' => 'Chargement de l’image…',
         'unavailable' => 'Image indisponible.',
     ],
@@ -57,7 +59,7 @@ return [
     // tout à fait ».
     'answer' => [
         'label' => 'Votre réponse',
-        'placeholder' => 'Titre du film',
+        'placeholder' => 'Écrivez le titre du film…',
         'submit' => 'Valider',
         'rejected' => 'Ce n’est pas ça.',
         'attempts_left' => '{0} Plus aucune tentative|{1} :count tentative restante|[2,*] :count tentatives restantes',
@@ -97,6 +99,11 @@ return [
     'round' => [
         'tier_value' => ':points point en jeu|:points points en jeu',
         'number' => 'Manche :number sur :total',
+        // Écran de manche (maquette `game.html`) : pastille d'état et barre
+        // du chrono.
+        'screen' => 'Écran de jeu',
+        'status_number' => 'Manche :number',
+        'question' => 'Quel est ce film ?',
         'starts_in' => 'La manche commence dans :seconds seconde|La manche commence dans :seconds secondes',
         'time_left' => 'Temps restant : :time',
         'time_up' => 'Fin de la manche : la réponse arrive.',
@@ -175,6 +182,8 @@ return [
 
     'score' => [
         'points' => ':count point|:count points',
+        // Forme courte de la bande des joueurs (maquette `game.html`).
+        'points_short' => ':count pt|:count pts',
         'bonus' => 'dont :points de bonus de rapidité',
         'gained' => 'Gagné : :points',
         'total' => 'Total : :points',

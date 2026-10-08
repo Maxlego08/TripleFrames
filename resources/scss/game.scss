@@ -1,0 +1,1185 @@
+@use 'auth/tokens' as *;
+@use 'auth/mixins' as mix;
+
+// Écran de manche — intégration de `design-test/html/game.html` et de sa
+// feuille `design-test/css/game.scss`. Les classes reprennent le BEM de la
+// maquette ; tout est rattaché à `.game`, la racine que pose `GameStage`
+// pendant une manche (et l'écran de pause), jamais à la révélation ni au
+// podium, qui gardent leur présentation.
+
+$cooldown-green: oklch(0.76 0.18 145);
+$cooldown-orange: oklch(0.78 0.17 65);
+$cooldown-red: oklch(0.65 0.23 25);
+$seat-shadow: oklch(0.32 0.12 25);
+$seat-cushion: oklch(0.65 0.19 31);
+$seat-cushion-current: oklch(0.72 0.14 195);
+$frame-glow: oklch(0.48 0.15 322);
+$screen-surface: oklch(0.2 0.07 293);
+$input-surface: oklch(0.95 0.035 295);
+$found: oklch(0.76 0.17 145);
+
+// Portrait étroit : l'écran, la bande et la saisie s'empilent ; si le
+// clavier ou un QCM les dépasse, c'est `main` qui défile, jamais la page.
+#game-main:has(.game) {
+    overflow-y: auto;
+    background: repeating-linear-gradient(
+        90deg,
+        $violet 0 5.5rem,
+        oklch(0.44 0.15 295) 5.5rem 9rem,
+        oklch(0.34 0.14 295) 9rem 13rem
+    );
+}
+
+.game {
+    position: relative;
+    display: flex;
+    width: min(100% - 2rem, 94rem);
+    min-width: 0;
+    height: 100%;
+    flex-direction: column;
+    margin-inline: auto;
+    gap: clamp(0.6rem, 1.25vh, 0.9rem);
+    padding-block: 1rem;
+    color: $ink;
+    font-family: $body;
+
+    a:focus-visible,
+    button:focus-visible,
+    input:focus-visible,
+    [tabindex]:focus-visible {
+        @include mix.focus-ring;
+    }
+
+    &__topbar {
+        display: flex;
+        min-width: 0;
+        flex-shrink: 0;
+        min-height: 3.35rem;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+
+        .auth-brand {
+            @include mix.hard-shadow(0.22rem, $night);
+            border: 0.125rem solid $ink;
+            border-radius: 999px;
+            padding: 0.38rem 0.8rem 0.38rem 0.48rem;
+            background: $paper;
+        }
+    }
+
+    &__controls {
+        display: flex;
+        min-width: 0;
+        flex-wrap: wrap;
+        align-items: flex-start;
+        justify-content: flex-end;
+        gap: 0.5rem;
+    }
+
+    // Bandeaux de la page (connexion, lecture seule, refus d'un geste) et
+    // « Pause demandée » : sous la barre, jamais sur l'image.
+    &__notices {
+        --background: #{$paper};
+        --foreground: #{$ink};
+        --muted-foreground: #{$muted};
+        --border: #{$ink};
+        display: grid;
+        flex-shrink: 0;
+        justify-items: center;
+        gap: 0.5rem;
+
+        &:empty {
+            display: none;
+        }
+
+        > * {
+            border: 0.125rem solid $ink;
+            background: $paper;
+            color: $ink;
+            box-shadow: 0.2rem 0.2rem 0 $night;
+        }
+
+        .text-foreground,
+        .text-muted-foreground {
+            color: $ink;
+        }
+    }
+
+    &__notice {
+        display: flex;
+        align-items: center;
+        border-radius: 999px;
+        padding: 0.45rem 0.9rem;
+        font-size: 0.82rem;
+        font-weight: 900;
+        gap: 0.5rem;
+        justify-self: center;
+
+        svg {
+            width: 1rem;
+            height: 1rem;
+            flex-shrink: 0;
+        }
+    }
+
+    &__lone {
+        margin: 0;
+        color: $paper;
+        font-size: 0.8rem;
+        font-weight: 800;
+        text-align: center;
+    }
+
+    // Gestes de la manche en cours (solo) : sous la saisie.
+    &__actions {
+        display: flex;
+        width: min(100%, 60rem);
+        flex-wrap: wrap;
+        justify-content: center;
+        margin-inline: auto;
+        gap: 0.5rem;
+
+        button {
+            @include mix.hard-shadow(0.18rem, $night);
+            min-height: 2.75rem;
+            border: 0.125rem solid $ink;
+            border-radius: $radius-small;
+            background: $paper;
+            color: $ink;
+            font-weight: 900;
+        }
+    }
+}
+
+.pause-button {
+    @include mix.hard-shadow(0.22rem, $night);
+    display: inline-flex;
+    min-height: 3rem;
+    align-items: center;
+    border: 0.125rem solid $ink;
+    border-radius: 999px;
+    padding: 0.35rem 0.9rem 0.35rem 0.4rem;
+    background: $yellow;
+    color: $ink;
+    font-size: 0.82rem;
+    font-weight: 900;
+    gap: 0.5rem;
+    cursor: pointer;
+
+    &__icon {
+        display: grid;
+        width: 2rem;
+        aspect-ratio: 1;
+        border: 0.125rem solid $ink;
+        border-radius: 50%;
+        background: $paper;
+        place-items: center;
+
+        svg {
+            width: 0.95rem;
+            height: 0.95rem;
+        }
+    }
+
+    &:hover:not([aria-disabled='true'], :disabled) {
+        translate: 0 -0.1rem;
+        box-shadow: 0.22rem 0.32rem 0 $night;
+    }
+
+    &[aria-disabled='true'],
+    &:disabled {
+        cursor: not-allowed;
+        opacity: 0.55;
+    }
+
+    &--players {
+        background: $paper;
+
+        .pause-button__icon {
+            background: $cyan;
+        }
+    }
+}
+
+.pause-control {
+    display: grid;
+    justify-items: end;
+    gap: 0.35rem;
+
+    &__error {
+        display: flex;
+        max-width: 18rem;
+        align-items: center;
+        margin: 0;
+        border: 0.125rem solid $ink;
+        border-radius: $radius-small;
+        padding: 0.3rem 0.6rem;
+        background: $paper;
+        color: $error;
+        font-size: 0.72rem;
+        font-weight: 900;
+        gap: 0.35rem;
+
+        svg {
+            width: 0.9rem;
+            height: 0.9rem;
+            flex-shrink: 0;
+        }
+    }
+}
+
+.game-screen {
+    display: grid;
+    min-width: 0;
+    min-height: 0;
+    flex: 1 1 0;
+    border: $line solid $ink;
+    border-radius: 2rem 2rem 1.2rem 1.2rem;
+    padding: clamp(0.65rem, 1.5vh, 1rem);
+    background: $screen-surface;
+    box-shadow:
+        0.45rem 0.45rem 0 $night,
+        -0.32rem -0.28rem 0 $yellow;
+
+    // Seule requête de conteneur de l'écran, de taille : le cadre 16:9 y
+    // prend la plus grande largeur qui tienne en largeur comme en hauteur.
+    &__stage {
+        display: grid;
+        width: 100%;
+        height: 100%;
+        min-height: 0;
+        container-type: size;
+        place-items: center;
+    }
+
+    &__frame {
+        position: relative;
+        width: min(
+            100cqw - 1.4rem,
+            calc((100cqh - 1.5rem) * var(--aspect-frame)),
+            70rem
+        );
+        overflow: hidden;
+        aspect-ratio: var(--aspect-frame);
+        border: 0.38rem solid $ink;
+        border-radius: 1.15rem;
+        background: $paper;
+        box-shadow:
+            0 0 0 0.34rem $frame-glow,
+            0 0.72rem 0 $night;
+    }
+
+    &__status {
+        position: absolute;
+        z-index: 3;
+        top: 0.8rem;
+        left: 0.8rem;
+        display: flex;
+        max-width: calc(100% - 7rem);
+        flex-wrap: wrap;
+        align-items: center;
+        margin: 0;
+        border: 0.125rem solid $ink;
+        border-radius: 999px;
+        padding: 0.38rem 0.68rem;
+        background: oklch(0.98 0.03 91 / 0.92);
+        font-size: clamp(0.65rem, 0.8vw, 0.8rem);
+        font-weight: 900;
+        gap: 0.2rem 0.55rem;
+
+        span + span {
+            border-left: 0.125rem solid $lavender;
+            padding-left: 0.55rem;
+        }
+    }
+
+    &__content {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        grid-template-rows: minmax(0, 1fr) auto;
+        background: $night;
+    }
+
+    &__picture {
+        position: relative;
+        overflow: hidden;
+        background: $night;
+
+        // `GameFrame` : le cadre remplit la zone image de la maquette.
+        > * {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            aspect-ratio: auto;
+            background: $night;
+            color: $paper;
+        }
+
+        img {
+            object-fit: cover;
+        }
+    }
+
+    // Décompte, annulation, attente : le texte prend la place de l'image.
+    &__notice {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 1rem;
+        color: $paper;
+        font-family: $display;
+        font-size: clamp(1rem, 2.2vw, 1.6rem);
+        font-weight: 900;
+        gap: 0.5rem;
+        text-align: center;
+        text-wrap: balance;
+
+        p {
+            margin: 0;
+        }
+    }
+
+    &__cooldown {
+        --cooldown-color: #{$cooldown-green};
+        --cooldown-progress: 100%;
+        position: relative;
+        isolation: isolate;
+        z-index: 2;
+        display: flex;
+        min-height: 3.35rem;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+        margin: 0;
+        padding: clamp(0.55rem, 1.2vh, 0.85rem);
+        background: $white;
+        font-family: $display;
+        font-size: clamp(1rem, 1.8vw, 1.45rem);
+        font-weight: 900;
+        text-align: center;
+
+        &::before {
+            position: absolute;
+            z-index: -1;
+            top: 0;
+            bottom: 0;
+            left: 0;
+            width: var(--cooldown-progress);
+            background: var(--cooldown-color);
+            content: '';
+        }
+
+        &--green {
+            --cooldown-color: #{$cooldown-green};
+        }
+
+        &--orange {
+            --cooldown-color: #{$cooldown-orange};
+        }
+
+        &--red {
+            --cooldown-color: #{$cooldown-red};
+        }
+    }
+
+    &__timer {
+        position: absolute;
+        z-index: 4;
+        top: 0.75rem;
+        right: 0.75rem;
+        display: flex;
+        min-width: 4.25rem;
+        align-items: center;
+        justify-content: center;
+        margin: 0;
+        border: 0.125rem solid $ink;
+        border-radius: 999px;
+        padding: 0.38rem 0.58rem;
+        background: $yellow;
+        font-family: $display;
+        font-variant-numeric: tabular-nums;
+        gap: 0.28rem;
+
+        svg {
+            width: 0.9rem;
+            height: 0.9rem;
+        }
+    }
+}
+
+.player-strip {
+    display: grid;
+    min-width: 0;
+    flex-shrink: 0;
+    grid-auto-columns: minmax(4.6rem, 1fr);
+    grid-auto-flow: column;
+    gap: clamp(0.22rem, 0.55vw, 0.55rem);
+    overflow-x: auto;
+    padding-top: 0.45rem;
+    scrollbar-width: thin;
+
+    &__list {
+        display: contents;
+    }
+}
+
+.game-player {
+    position: relative;
+    display: grid;
+    min-width: 0;
+    grid-template-rows: 4.65rem auto;
+    justify-items: center;
+    padding: 0.05rem 0.08rem 0;
+    gap: 0.2rem;
+    text-align: center;
+
+    &__badges {
+        position: absolute;
+        z-index: 8;
+        top: -0.45rem;
+        left: 50%;
+        display: flex;
+        max-width: 100%;
+        justify-content: center;
+        gap: 0.15rem;
+        translate: -50% 0;
+    }
+
+    &__you,
+    &__found {
+        display: inline-flex;
+        align-items: center;
+        border: 0.1rem solid $ink;
+        border-radius: 999px;
+        padding: 0.08rem 0.35rem;
+        font-size: 0.52rem;
+        font-weight: 900;
+        gap: 0.15rem;
+        text-transform: uppercase;
+        white-space: nowrap;
+
+        svg {
+            width: 0.6rem;
+            height: 0.6rem;
+            flex-shrink: 0;
+        }
+    }
+
+    &__you {
+        background: $cyan;
+    }
+
+    &__found {
+        background: $found;
+    }
+
+    &__seat {
+        position: relative;
+        width: min(100%, 5.8rem);
+        height: 4.65rem;
+    }
+
+    &__seat-back,
+    &__seat-cushion,
+    &__seat-arm {
+        position: absolute;
+        border: 0.15rem solid $ink;
+    }
+
+    &__seat-back {
+        z-index: 1;
+        top: 0.38rem;
+        right: 0.5rem;
+        left: 0.5rem;
+        height: 3.6rem;
+        border-radius: 1.65rem 1.65rem 0.75rem 0.75rem;
+        background: $coral;
+        box-shadow: 0 0.38rem 0 $seat-shadow;
+    }
+
+    &__seat-cushion {
+        z-index: 4;
+        right: 0.75rem;
+        bottom: 0;
+        left: 0.75rem;
+        height: 1.35rem;
+        border-radius: 0.62rem;
+        background: $seat-cushion;
+        transform: skewX(-4deg);
+    }
+
+    &__seat-arm {
+        z-index: 5;
+        bottom: 0.08rem;
+        width: 0.8rem;
+        height: 2.55rem;
+        border-radius: 0.52rem;
+        background: $yellow;
+
+        &--left {
+            left: 0;
+        }
+
+        &--right {
+            right: 0;
+        }
+    }
+
+    // L'avatar du siège (`PlayerAvatar`) : la tête posée sur le dossier.
+    .player-avatar {
+        position: absolute;
+        z-index: 2;
+        top: 0.05rem;
+        left: 50%;
+        width: 2.45rem;
+        height: 2.35rem;
+        border: 0.125rem solid $ink;
+        border-radius: 48% 48% 42% 42%;
+        background: $coral;
+        box-shadow: none;
+        font-size: 0.7rem;
+        scale: 1;
+        translate: -50% 0;
+    }
+
+    &__name,
+    &__score {
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    &__name {
+        position: absolute;
+        z-index: 6;
+        bottom: 0.12rem;
+        left: 50%;
+        width: 78%;
+        border: 0.1rem solid $ink;
+        border-radius: 999px;
+        padding: 0.08rem 0.2rem;
+        background: $yellow;
+        box-shadow: 0.12rem 0.12rem 0 $ink;
+        font-size: clamp(0.58rem, 0.72vw, 0.74rem);
+        font-weight: 900;
+        line-height: 1.15;
+        translate: -50% 0;
+    }
+
+    &__presence {
+        position: absolute;
+        z-index: 7;
+        top: 1.2rem;
+        right: 0;
+        display: grid;
+        width: 1.2rem;
+        height: 1.2rem;
+        border: 0.1rem solid $ink;
+        border-radius: 50%;
+        background: $paper;
+        place-items: center;
+
+        svg {
+            width: 0.7rem;
+            height: 0.7rem;
+        }
+    }
+
+    &__score {
+        border: 0.1rem solid $ink;
+        border-radius: 999px;
+        padding: 0.12rem 0.42rem;
+        background: $paper;
+        color: $ink;
+        font-size: clamp(0.56rem, 0.68vw, 0.7rem);
+        font-weight: 900;
+        line-height: 1.2;
+        font-variant-numeric: tabular-nums;
+        box-shadow: 0.1rem 0.1rem 0 $night;
+    }
+
+    &--current {
+        .game-player__seat-back {
+            background: $cyan;
+            outline: 0.15rem solid $yellow;
+            outline-offset: 0.1rem;
+        }
+
+        .game-player__seat-cushion {
+            background: $seat-cushion-current;
+        }
+
+        .game-player__score {
+            background: $yellow;
+        }
+    }
+
+    &--away {
+        filter: grayscale(0.55);
+        opacity: 0.72;
+    }
+}
+
+// L'écran de pause : la carte de la maquette, seule à l'écran (aucune
+// manche dessous), centrée sous la barre du haut.
+.game--paused .pause-overlay {
+    position: static;
+    flex: 1 1 auto;
+    background: none;
+}
+
+.current-score {
+    display: flex;
+    min-height: 3rem;
+    align-items: center;
+    justify-content: center;
+    margin: 0;
+    border: 0.125rem solid $ink;
+    border-radius: 999px;
+    padding: 0.35rem 0.8rem;
+    background: $yellow;
+    box-shadow: 0.18rem 0.18rem 0 $night;
+    font-size: 0.85rem;
+    font-weight: 900;
+    font-variant-numeric: tabular-nums;
+    gap: 0.45rem;
+    align-self: center;
+
+    svg {
+        width: 1rem;
+        height: 1rem;
+    }
+}
+
+.answer-zone {
+    display: grid;
+    flex-shrink: 0;
+    width: min(100%, 60rem);
+    min-width: 0;
+    margin-inline: auto;
+    gap: 0.45rem;
+}
+
+.answer-form {
+    display: grid;
+    gap: 0.3rem;
+
+    &__card {
+        @include mix.hard-shadow(0.32rem, $night);
+        display: grid;
+        min-width: 0;
+        min-height: 4rem;
+        grid-template-columns: minmax(0, 1fr) auto;
+        border: $line solid $ink;
+        border-radius: 1rem;
+        padding: 0.42rem;
+        background: $paper;
+        gap: 0.45rem;
+    }
+
+    &__input {
+        width: 100%;
+        min-width: 0;
+        height: 100%;
+        min-height: 3rem;
+        border: 0;
+        border-radius: 0.65rem;
+        padding: 0.25rem 1rem;
+        background: $input-surface;
+        color: $ink;
+        font: inherit;
+        font-size: 1rem;
+        font-weight: 800;
+
+        &::placeholder {
+            color: $muted;
+            opacity: 1;
+        }
+
+        &[aria-invalid='true'] {
+            outline: 0.16rem solid $error;
+        }
+
+        &:disabled {
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+    }
+
+    &__submit {
+        display: inline-flex;
+        min-width: 9.5rem;
+        min-height: 2.75rem;
+        align-items: center;
+        justify-content: center;
+        border: 0.125rem solid $ink;
+        border-radius: 0.75rem;
+        padding-inline: 1rem;
+        background: $coral;
+        box-shadow: 0.18rem 0.18rem 0 $ink;
+        color: $ink;
+        font-family: $display;
+        font-weight: 900;
+        gap: 0.55rem;
+        cursor: pointer;
+
+        svg {
+            width: 1rem;
+            height: 1rem;
+        }
+
+        &:hover:not([aria-disabled='true']) {
+            translate: 0 -0.08rem;
+            box-shadow: 0.18rem 0.26rem 0 $ink;
+        }
+
+        &[aria-disabled='true'] {
+            cursor: not-allowed;
+            opacity: 0.55;
+        }
+    }
+
+    // Retour neutre et tentatives restantes, sous la carte.
+    &__meta {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        margin: 0;
+        color: $paper;
+        font-size: 0.78rem;
+        font-weight: 800;
+        gap: 0.2rem 0.75rem;
+    }
+
+    &__feedback {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3rem;
+
+        svg {
+            width: 0.95rem;
+            height: 0.95rem;
+            flex-shrink: 0;
+        }
+
+        &--error {
+            border-radius: 999px;
+            padding: 0.1rem 0.55rem;
+            background: $paper;
+            color: $error;
+        }
+    }
+}
+
+// Le QCM : quatre cartes au pouce, ordre reçu, toutes identiques.
+.choice-grid {
+    display: grid;
+    gap: 0.35rem;
+
+    &__choices {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.45rem;
+    }
+
+    &__choice {
+        @include mix.hard-shadow(0.2rem, $night);
+        min-height: 2.75rem;
+        border: 0.125rem solid $ink;
+        border-radius: 0.75rem;
+        padding: 0.5rem 0.75rem;
+        background: $paper;
+        color: $ink;
+        font-weight: 900;
+        overflow-wrap: anywhere;
+        text-align: center;
+        cursor: pointer;
+
+        &:hover:not([aria-disabled='true']) {
+            background: $yellow;
+            translate: 0 -0.08rem;
+        }
+
+        &[aria-disabled='true'] {
+            cursor: not-allowed;
+            opacity: 0.55;
+        }
+    }
+
+    &__message {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0;
+        color: $paper;
+        font-size: 0.78rem;
+        font-weight: 800;
+        gap: 0.45rem;
+    }
+}
+
+.answer-zone__note {
+    margin: 0;
+    color: $paper;
+    font-size: 0.85rem;
+    font-weight: 800;
+    text-align: center;
+}
+
+// Le joueur verrouillé : « Trouvé ! », les points, le rang d'arrivée.
+.locked-panel {
+    @include mix.hard-shadow(0.32rem, $night);
+    display: grid;
+    justify-items: center;
+    border: $line solid $ink;
+    border-radius: 1rem;
+    padding: 0.65rem 1rem;
+    background: $paper;
+    gap: 0.2rem;
+    text-align: center;
+
+    &__title {
+        display: flex;
+        align-items: center;
+        margin: 0;
+        border: 0.125rem solid $ink;
+        border-radius: 999px;
+        padding: 0.2rem 0.7rem;
+        background: $found;
+        font-family: $display;
+        font-size: 1rem;
+        gap: 0.4rem;
+        outline: none;
+
+        svg {
+            width: 1.1rem;
+            height: 1.1rem;
+        }
+    }
+
+    &__points {
+        margin: 0;
+        font-family: $display;
+        font-size: clamp(1.3rem, 3vw, 1.75rem);
+        font-weight: 900;
+        font-variant-numeric: tabular-nums;
+    }
+
+    &__detail {
+        margin: 0;
+        color: $muted;
+        font-size: 0.8rem;
+        font-weight: 800;
+    }
+}
+
+// Dans `main` (et non sur toute la fenêtre) : la ligne basse de la coquille
+// — langue, liens légaux — reste atteignable pendant la pause.
+.pause-overlay {
+    position: absolute;
+    z-index: 80;
+    inset: 0;
+    display: grid;
+    padding: 1rem;
+    background: oklch(0.12 0.04 292 / 0.86);
+    place-items: center;
+
+    &__card {
+        @include mix.hard-shadow(0.5rem, $night);
+        display: grid;
+        width: min(100%, 29rem);
+        max-height: 100%;
+        overflow-y: auto;
+        border: $line solid $ink;
+        border-radius: 1.5rem;
+        padding: 2rem;
+        background: $paper;
+        color: $ink;
+        gap: 0.45rem;
+        justify-items: center;
+        text-align: center;
+    }
+
+    &__icon {
+        display: grid;
+        width: 4rem;
+        aspect-ratio: 1;
+        border: $line solid $ink;
+        border-radius: 50%;
+        background: $yellow;
+        place-items: center;
+
+        svg {
+            width: 1.6rem;
+            height: 1.6rem;
+        }
+    }
+
+    h2 {
+        margin: 0.55rem 0 0;
+        font-family: $display;
+        font-size: clamp(1.65rem, 4vw, 2.25rem);
+        outline: none;
+    }
+
+    p {
+        margin: 0;
+        color: $muted;
+    }
+
+    &__remaining {
+        font-variant-numeric: tabular-nums;
+    }
+
+    &__action {
+        margin-top: 0.8rem;
+
+        .pause-control {
+            justify-items: center;
+        }
+
+        .pause-button {
+            min-height: 3.1rem;
+            border-radius: 0.75rem;
+            padding: 0.45rem 1.15rem 0.45rem 0.5rem;
+            background: $coral;
+            box-shadow: 0.2rem 0.2rem 0 $ink;
+            font-family: $display;
+            font-size: 1rem;
+        }
+    }
+}
+
+.game-toast {
+    position: fixed;
+    z-index: 120;
+    top: 1rem;
+    left: 50%;
+    display: flex;
+    width: max-content;
+    max-width: calc(100% - 2rem);
+    align-items: center;
+    border: 0.125rem solid $ink;
+    border-radius: 999px;
+    padding: 0.4rem 0.45rem 0.4rem 1rem;
+    background: $cyan;
+    box-shadow: 0.25rem 0.25rem 0 $night;
+    color: $ink;
+    font-size: 0.82rem;
+    font-weight: 900;
+    gap: 0.6rem;
+    translate: -50% 0;
+
+    p {
+        margin: 0;
+    }
+
+    svg {
+        width: 1rem;
+        height: 1rem;
+        flex-shrink: 0;
+    }
+
+    &__close {
+        display: grid;
+        width: 2rem;
+        height: 2rem;
+        flex-shrink: 0;
+        border: 0.125rem solid $ink;
+        border-radius: 50%;
+        padding: 0;
+        background: $paper;
+        color: $ink;
+        cursor: pointer;
+        place-items: center;
+    }
+}
+
+@media (max-width: 55rem) {
+    .game {
+        width: min(100% - 1.25rem, 42rem);
+        height: auto;
+        min-height: 100%;
+        gap: 0.75rem;
+        padding-block: 0.7rem;
+    }
+
+    .game-screen {
+        flex: 0 0 auto;
+        border-radius: 1.65rem 1.65rem 1rem 1rem;
+        padding: 0.65rem;
+
+        &__stage {
+            height: auto;
+            container-type: normal;
+        }
+
+        &__frame {
+            width: 100%;
+        }
+    }
+
+    // Portrait : la bande des joueurs reste à l'écran (règle 10), plus
+    // compacte, et défile en largeur.
+    .player-strip {
+        grid-auto-columns: 4.4rem;
+    }
+}
+
+@media (max-width: $mobile) {
+    .game {
+        width: min(100% - 1rem, 31rem);
+        gap: 0.62rem;
+        padding-block: 0.55rem;
+
+        &__topbar {
+            min-height: 3rem;
+
+            .auth-brand {
+                padding: 0.3rem 0.62rem 0.3rem 0.38rem;
+            }
+        }
+    }
+
+    .pause-button {
+        min-height: 2.65rem;
+        padding: 0.28rem 0.7rem 0.28rem 0.32rem;
+
+        &__icon {
+            width: 1.8rem;
+        }
+
+        &__label {
+            font-size: 0.72rem;
+        }
+    }
+
+    .game-screen {
+        min-height: 0;
+        border-radius: 1.3rem 1.3rem 0.85rem 0.85rem;
+        padding: 0.48rem;
+        box-shadow:
+            0.3rem 0.3rem 0 $night,
+            -0.22rem -0.18rem 0 $yellow;
+
+        &__frame {
+            border-width: 0.26rem;
+            border-radius: 0.8rem;
+            box-shadow:
+                0 0 0 0.22rem $frame-glow,
+                0 0.42rem 0 $night;
+        }
+
+        &__status {
+            top: 0.42rem;
+            left: 0.42rem;
+            padding: 0.26rem 0.45rem;
+            font-size: 0.55rem;
+            gap: 0.15rem 0.35rem;
+
+            span + span {
+                padding-left: 0.35rem;
+            }
+        }
+
+        &__timer {
+            top: 0.4rem;
+            right: 0.4rem;
+            min-width: 3.35rem;
+            padding: 0.25rem 0.4rem;
+            font-size: 0.7rem;
+        }
+
+        &__cooldown {
+            min-height: 2.45rem;
+            padding: 0.45rem;
+            font-size: 0.82rem;
+        }
+    }
+
+    .current-score {
+        min-height: 2.55rem;
+        font-size: 0.76rem;
+    }
+
+    .answer-form {
+        &__card {
+            min-height: 3.5rem;
+            border-radius: 0.85rem;
+            padding: 0.32rem;
+        }
+
+        &__input {
+            min-height: 2.75rem;
+            padding: 0.2rem 0.65rem;
+            font-size: 0.9rem;
+        }
+
+        &__submit {
+            min-width: 6.3rem;
+            padding-inline: 0.65rem;
+            font-size: 0.76rem;
+        }
+    }
+}
+
+@media (max-width: 23rem) {
+    .game__topbar .auth-brand__name,
+    .pause-button__label {
+        display: none;
+    }
+
+    .game__topbar .auth-brand,
+    .pause-button {
+        padding: 0.3rem;
+    }
+
+    .answer-form__submit {
+        min-width: 3rem;
+
+        .answer-form__submit-label {
+            display: none;
+        }
+    }
+}
+
+@media (max-height: 45rem) and (min-width: 55.01rem) {
+    .game {
+        gap: 0.45rem;
+        padding-block: 0.5rem;
+
+        &__topbar {
+            min-height: 2.7rem;
+        }
+    }
+
+    .game-player {
+        grid-template-rows: 4.15rem auto;
+
+        &__seat {
+            height: 4.15rem;
+        }
+
+        .player-avatar {
+            width: 2.05rem;
+            height: 2rem;
+        }
+    }
+
+    .answer-form__card {
+        min-height: 3.45rem;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .pause-button,
+    .answer-form__submit,
+    .choice-grid__choice {
+        translate: none !important;
+    }
+}

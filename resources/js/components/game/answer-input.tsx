@@ -1,14 +1,10 @@
-import { CircleAlert, CircleCheck, SendHorizontal } from 'lucide-react';
+import { ArrowRight, CircleAlert, CircleCheck } from 'lucide-react';
 import { useEffect, useEffectEvent, useId, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
 import { useTranslations } from '@/hooks/use-translations';
 import { inputFeedback } from '@/lib/game/input-state-keys';
 import type { SubmissionError } from '@/lib/game/input-state-keys';
-import { cn } from '@/lib/utils';
 import type { InputState, SubmissionResult } from '@/types/answers';
 
 export type AnswerInputProps = {
@@ -63,8 +59,11 @@ export type AnswerInputProps = {
  *   page monte une saisie neuve à chaque ouverture de manche. Après un
  *   refus, le texte envoyé est sélectionné, pour que la frappe suivante le
  *   remplace ; un texte déjà retouché n'est jamais sélectionné.
+ * - Présentation : la carte `answer-form` de la maquette
+ *   `design-test/html/game.html` (champ et bouton « Valider » corail),
+ *   retours et tentatives sous la carte ; cibles d'au moins 2,75 rem.
  * - Composant découplé : ni Echo, ni horloge, ni requête (C16 § 2.9) ;
- *   tokens seulement ; cibles d'au moins `min-h-11 min-w-11`.
+ *   aucune couleur ni taille en dur, la présentation vit dans `game.scss`.
  */
 export function AnswerInput({
     state,
@@ -154,14 +153,14 @@ export function AnswerInput({
             noValidate
             onSubmit={submit}
             aria-busy={pending}
-            className="flex flex-col gap-1"
+            className="answer-form"
         >
-            <Label htmlFor={inputId} className="sr-only">
-                {t('game.answer.label')}
-            </Label>
+            <div className="answer-form__card">
+                <label htmlFor={inputId} className="sr-only">
+                    {t('game.answer.label')}
+                </label>
 
-            <div className="flex gap-2">
-                <Input
+                <input
                     ref={inputRef}
                     id={inputId}
                     type="text"
@@ -179,15 +178,18 @@ export function AnswerInput({
                     aria-describedby={
                         describedBy === '' ? undefined : describedBy
                     }
-                    className="min-h-11 min-w-0 flex-1"
+                    className="answer-form__input"
                 />
 
-                <Button
+                <button
                     type="submit"
                     aria-disabled={!active || pending}
                     onMouseDown={(event) => event.preventDefault()}
-                    className="min-h-11 min-w-11 shrink-0 aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+                    className="answer-form__submit"
                 >
+                    <span className="answer-form__submit-label">
+                        {t('game.answer.submit')}
+                    </span>
                     {pending ? (
                         <Spinner
                             aria-hidden="true"
@@ -196,43 +198,33 @@ export function AnswerInput({
                             className="motion-reduce:animate-none"
                         />
                     ) : (
-                        <SendHorizontal aria-hidden="true" />
+                        <ArrowRight aria-hidden="true" />
                     )}
-                    {t('game.answer.submit')}
-                </Button>
+                </button>
             </div>
 
             {(feedbackText !== null || open) && (
-                <p className="flex flex-wrap items-center gap-x-2 text-sm">
+                <p className="answer-form__meta">
                     {feedback !== null && feedbackText !== null && (
                         <span
                             id={feedbackId}
-                            className={cn(
-                                'inline-flex items-center gap-1',
+                            className={
                                 feedback.kind === 'message'
-                                    ? 'text-destructive'
-                                    : state === 'locked'
-                                      ? 'text-success'
-                                      : 'text-foreground',
-                            )}
+                                    ? 'answer-form__feedback answer-form__feedback--error'
+                                    : 'answer-form__feedback'
+                            }
                         >
                             {feedback.kind === 'message' && (
-                                <CircleAlert
-                                    aria-hidden="true"
-                                    className="size-4 shrink-0"
-                                />
+                                <CircleAlert aria-hidden="true" />
                             )}
                             {state === 'locked' && (
-                                <CircleCheck
-                                    aria-hidden="true"
-                                    className="size-4 shrink-0"
-                                />
+                                <CircleCheck aria-hidden="true" />
                             )}
                             {feedbackText}
                         </span>
                     )}
                     {open && (
-                        <span id={attemptsId} className="text-muted-foreground">
+                        <span id={attemptsId}>
                             {tChoice(
                                 'game.answer.attempts_left',
                                 attemptsLeft,

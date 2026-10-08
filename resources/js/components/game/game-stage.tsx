@@ -1,10 +1,11 @@
 import { useEffect, useEffectEvent, useRef } from 'react';
 import type { ReactNode } from 'react';
-import { CirclePause } from 'lucide-react';
+import { CirclePause, Star } from 'lucide-react';
+import { AuthBrand } from '@/components/auth/auth-brand';
 import type { FrameFormat } from '@/components/game/game-frame';
 import { GamePaused } from '@/components/game/game-paused';
 import { RoundInput } from '@/components/game/round-input';
-import { RoundPlayers } from '@/components/game/round-players';
+import { PlayersSheet, RoundPlayers } from '@/components/game/round-players';
 import { RoundReveal } from '@/components/game/round-reveal';
 import { RoundScene } from '@/components/game/round-scene';
 import type {
@@ -266,10 +267,15 @@ export function GameStage({
             : null;
     };
 
-    // Bandeau de la pause demandée et geste de pause, hors écran de pause.
-    const pauseBar =
-        pauseRequested || pauseControl !== null ? (
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+    const scrolling = (content: ReactNode, waiting: string | null) => (
+        <ScrollArea className="h-full">
+            <div className="mx-auto flex w-full max-w-2xl flex-col gap-6 px-4 py-6">
+                <h1 className="text-2xl font-semibold tracking-tight">
+                    {title}
+                </h1>
+
+                {banners}
+
                 {pauseRequested && (
                     <p className="flex items-center gap-2 text-sm text-muted-foreground">
                         <CirclePause
@@ -279,24 +285,8 @@ export function GameStage({
                         {t('game.pause.requested')}
                     </p>
                 )}
+
                 {pauseControl}
-            </div>
-        ) : null;
-
-    const scrolling = (
-        content: ReactNode,
-        waiting: string | null,
-        withPauseBar = true,
-    ) => (
-        <ScrollArea className="h-full">
-            <div className="mx-auto flex w-full max-w-2xl flex-col gap-6 px-4 py-6">
-                <h1 className="text-2xl font-semibold tracking-tight">
-                    {title}
-                </h1>
-
-                {banners}
-
-                {withPauseBar && pauseBar}
 
                 {waiting !== null && (
                     <p className="text-muted-foreground">{waiting}</p>
@@ -309,22 +299,52 @@ export function GameStage({
         </ScrollArea>
     );
 
+    // La barre du haut de l'écran de manche (maquette `game.html`) : la
+    // marque à gauche ; « Joueurs » et le geste de pause à droite.
+    const topbar = (withPause: boolean) => (
+        <header className="game__topbar">
+            <AuthBrand />
+            <div className="game__controls">
+                {seatsPanel !== undefined && seatsPanel !== null && (
+                    <PlayersSheet panel={seatsPanel} />
+                )}
+                {withPause && pauseControl}
+            </div>
+        </header>
+    );
+
+    const notices = (waiting: string | null) => (
+        <div className="game__notices">
+            {banners}
+            {pauseRequested && (
+                <p className="game__notice">
+                    <CirclePause aria-hidden="true" />
+                    {t('game.pause.requested')}
+                </p>
+            )}
+            {waiting !== null && <p className="game__notice">{waiting}</p>}
+        </div>
+    );
+
     if (state.status === 'paused' && state.pause !== null) {
-        return scrolling(
-            <GamePaused
-                interruptsAt={state.pause.interruptsAt}
-                kind={state.pause.kind}
-                solo={state.mode === 'solo'}
-                remainingMs={
-                    state.pause.kind === 'manual'
-                        ? parseIsoMs(state.pause.interruptsAt) - nowMs
-                        : null
-                }
-                action={pauseControl}
-                hostAbsent={pauseHostAbsent}
-            />,
-            waitingFor(null),
-            false,
+        return (
+            <div className="game game--paused">
+                <h1 className="sr-only">{title}</h1>
+                {topbar(false)}
+                {notices(waitingFor(null))}
+                <GamePaused
+                    interruptsAt={state.pause.interruptsAt}
+                    kind={state.pause.kind}
+                    solo={state.mode === 'solo'}
+                    remainingMs={
+                        state.pause.kind === 'manual'
+                            ? parseIsoMs(state.pause.interruptsAt) - nowMs
+                            : null
+                    }
+                    action={pauseControl}
+                    hostAbsent={pauseHostAbsent}
+                />
+            </div>
         );
     }
 
@@ -478,29 +498,23 @@ export function GameStage({
                 roundActions !== null &&
                 self.participates &&
                 inputOpen ? (
-                    <div className="flex flex-col gap-1.5">
+                    <div className="answer-zone">
                         {roundInput}
-                        {roundActions}
+                        <div className="game__actions">{roundActions}</div>
                     </div>
                 ) : (
                     roundInput
                 )
             ) : round.roundNumber < round.roundsCount ? (
-                <p className="text-sm text-muted-foreground">
+                <p className="answer-zone__note">
                     {t('game.round.waiting_next', {
                         number: number.format(round.roundNumber + 1),
                     })}
                 </p>
             ) : null;
     } else if (stage === 'closed') {
-        input =
-            member && locked ? (
-                roundInput
-            ) : (
-                <p className="text-sm text-muted-foreground">
-                    {t('game.round.time_up')}
-                </p>
-            );
+        // Hors verrou, la barre du chrono dit déjà « la réponse arrive ».
+        input = member && locked ? roundInput : null;
     }
 
     // Les sièges de la partie (lignes `game_player`, 60 § 12.2) : tous portent
@@ -515,16 +529,22 @@ export function GameStage({
         (seat) => seat.connection === 'connected' && !seat.kicked,
     ).length;
 
+    // Le score du joueur (classement publié), quand aucune bande ne le
+    // montre : en solo (maquette `game.html`, `current-score`).
+    const selfScore = state.leaderboard.scoreless
+        ? null
+        : (state.leaderboard.rows.find((row) => row.publicId === self.publicId)
+              ?.score ?? 0);
+
     return (
-        <div className="mx-auto flex h-full w-full max-w-5xl flex-col gap-1.5 px-4 py-1">
+        <div className="game">
             <h1 className="sr-only">{title}</h1>
 
-            {banners}
+            {topbar(true)}
 
-            {pauseBar}
+            {notices(null)}
 
             <RoundScene
-                className="min-h-0 flex-1"
                 stage={stage}
                 roundNumber={round.roundNumber}
                 roundsCount={round.roundsCount}
@@ -538,23 +558,33 @@ export function GameStage({
                 frame={frame}
                 frameFormat={frameFormat}
                 notice={notice}
-                input={input}
-                players={
-                    // En solo, aucune bande : le seul siège est le joueur,
-                    // dont la saisie et le verrou disent déjà tout (90 § 10,
-                    // « Solo » : sans autres joueurs).
-                    state.mode === 'solo' ? null : (
-                        <RoundPlayers
-                            className="shrink-0"
-                            seats={gameSeats}
-                            selfPublicId={self.publicId}
-                            locked={round.locked}
-                            lonePlayer={connected === 1}
-                            panel={seatsPanel}
-                        />
-                    )
-                }
             />
+
+            {state.mode === 'solo' ? (
+                // En solo, aucune bande : le seul siège est le joueur (90
+                // § 10, « Solo » : sans autres joueurs) ; son score à la place.
+                selfScore !== null && (
+                    <p className="current-score">
+                        <Star aria-hidden="true" />
+                        <span>
+                            {tChoice('game.score.points', selfScore, {
+                                count: number.format(selfScore),
+                            })}
+                        </span>
+                    </p>
+                )
+            ) : (
+                <RoundPlayers
+                    seats={gameSeats}
+                    selfPublicId={self.publicId}
+                    locked={round.locked}
+                    standings={state.leaderboard.rows}
+                    scoreless={state.leaderboard.scoreless}
+                    lonePlayer={connected === 1}
+                />
+            )}
+
+            {input}
         </div>
     );
 }

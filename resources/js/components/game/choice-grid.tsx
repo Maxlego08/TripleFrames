@@ -1,5 +1,4 @@
 import { useEffect, useEffectEvent, useId, useRef } from 'react';
-import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import { useTranslations } from '@/hooks/use-translations';
 import { announce } from '@/lib/game/announcer';
@@ -37,8 +36,9 @@ let announcedChoices: string | null = null;
 
 /**
  * La grille du QCM (spec 70 § 16, contrat C11 ; 90 § 7.2, § 7.5 et § 9.2) :
- * quatre boutons en `grid grid-cols-2`, au pouce, cibles d'au moins
- * `min-h-11 min-w-11`.
+ * quatre cartes sur deux colonnes (`choice-grid`, aux couleurs de l'écran
+ * de manche de la maquette `game.html`), au pouce, cibles d'au moins
+ * 2,75 rem.
  *
  * - **Règle 3** : l'ordre affiché est celui reçu, propre au siège ; aucune
  *   couleur, aucune classe, aucun `data-*`, aucune marque qui dépende
@@ -102,7 +102,7 @@ export function ChoiceGrid({
             aria-labelledby={labelId}
             aria-describedby={message === null ? undefined : messageId}
             aria-busy={pending}
-            className="flex flex-col gap-1"
+            className="choice-grid"
         >
             <span id={labelId} className="sr-only">
                 {t('game.choices.label')}
@@ -110,25 +110,24 @@ export function ChoiceGrid({
 
             <div
                 lang={payload.lang ?? undefined}
-                className="grid grid-cols-2 gap-2"
+                className="choice-grid__choices"
             >
                 {payload.choices.map((choice, index) => (
-                    <Button
+                    <button
                         key={index}
                         ref={index === 0 ? firstChoice : undefined}
                         type="button"
-                        variant="outline"
                         aria-disabled={disabled}
                         onClick={() => choose(choice)}
-                        className="h-auto min-h-11 min-w-11 py-2 text-center break-words whitespace-normal aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+                        className="choice-grid__choice"
                     >
                         {choice}
-                    </Button>
+                    </button>
                 ))}
             </div>
 
             {(pending || message !== null) && (
-                <p className="flex items-center gap-2 text-sm text-foreground">
+                <p className="choice-grid__message">
                     {pending && (
                         <Spinner
                             aria-hidden="true"
@@ -178,9 +177,5 @@ export function ChoicesUnavailable({ roundKey }: ChoicesUnavailableProps) {
 
     useEffect(() => arrive(), [roundKey]);
 
-    return (
-        <p className="text-sm text-muted-foreground">
-            {t('game.choices.unavailable')}
-        </p>
-    );
+    return <p className="answer-zone__note">{t('game.choices.unavailable')}</p>;
 }

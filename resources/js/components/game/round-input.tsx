@@ -97,7 +97,7 @@ export function RoundInput({
         choiceError ?? (easy && stateKey !== null ? t(stateKey) : null);
 
     return (
-        <div className="flex flex-col gap-2">
+        <div className="answer-zone">
             {!easy && (
                 <AnswerInput
                     key={`${roundKey}:text`}
@@ -125,7 +125,7 @@ export function RoundInput({
             ) : easy ? (
                 <LoadingState
                     label={t('common.state.loading')}
-                    className="py-2"
+                    className="answer-zone__note"
                 />
             ) : (
                 choicesUnavailable && <ChoicesUnavailable roundKey={roundKey} />
@@ -175,22 +175,19 @@ function LockedPanel({ lock, lockRank }: LockedPanelProps) {
     useEffect(() => reclaimFocus(), []);
 
     return (
-        <section
-            aria-labelledby={headingId}
-            className="flex flex-col gap-1 rounded-md border border-border px-3 py-2"
-        >
+        <section aria-labelledby={headingId} className="locked-panel">
             <h2
                 id={headingId}
                 ref={headingRef}
                 tabIndex={-1}
-                className="flex items-center gap-2 font-semibold text-success outline-none"
+                className="locked-panel__title"
             >
-                <CircleCheck aria-hidden="true" className="size-5 shrink-0" />
+                <CircleCheck aria-hidden="true" />
                 {t('game.answer.locked')}
             </h2>
 
             {lock !== null && (
-                <p className="text-2xl font-semibold tabular-nums">
+                <p className="locked-panel__points">
                     {t('game.score.gained', {
                         points: tChoice('game.score.points', lock.pointsTotal, {
                             count: number.format(lock.pointsTotal),
@@ -200,7 +197,7 @@ function LockedPanel({ lock, lockRank }: LockedPanelProps) {
             )}
 
             {lock !== null && lock.pointsBonus > 0 && (
-                <p className="text-sm text-muted-foreground">
+                <p className="locked-panel__detail">
                     {t('game.score.bonus', {
                         points: number.format(lock.pointsBonus),
                     })}
@@ -208,7 +205,7 @@ function LockedPanel({ lock, lockRank }: LockedPanelProps) {
             )}
 
             {rank !== null && (
-                <p className="text-sm">
+                <p className="locked-panel__detail">
                     {t('game.round.lock_rank', {
                         rank: t(ordinalKey(rank, locale), {
                             rank: number.format(rank),
