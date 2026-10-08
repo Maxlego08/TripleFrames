@@ -5,6 +5,7 @@ namespace App\Http\Middleware;
 use App\Support\Identity\AccountSwitches;
 use Closure;
 use Illuminate\Http\Request;
+use Illuminate\Routing\Middleware\ThrottleRequests;
 use Illuminate\Routing\Route;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -27,11 +28,22 @@ use Symfony\Component\HttpFoundation\Response;
  * code de retour ne doit rien apprendre de l'état du jalon. Il agit par NOM
  * de route, jamais par chemin : Fortify peut préfixer ses chemins
  * (`fortify.prefix`), jamais renommer ses routes.
+ *
+ * Il applique aussi le limiteur nommé `register` à l'envoi d'une inscription
+ * OUVERTE (spec 40 § 13.1) : Fortify n'a aucune clé de limiteur
+ * d'inscription, et la route doit rester enregistrée. Une inscription fermée
+ * répond 404 sans rien compter.
  */
 class EnforceAccountSwitches
 {
     /** Routes fermées quand l'inscription l'est : l'écran et l'envoi. */
     public const array REGISTRATION_ROUTES = ['register', 'register.store'];
+
+    /** L'envoi d'une inscription, que borne le limiteur {@see self::REGISTER_LIMITER}. */
+    public const string REGISTER_SUBMIT_ROUTE = 'register.store';
+
+    /** Le limiteur nommé de l'inscription, déclaré par `FortifyServiceProvider`. */
+    public const string REGISTER_LIMITER = 'register';
 
     /** Préfixe de nom de toutes les routes de passkeys de Fortify. */
     public const string PASSKEY_ROUTE_PREFIX = 'passkey.';
@@ -51,6 +63,10 @@ class EnforceAccountSwitches
 
         if ($name !== null && self::closes($name)) {
             abort(404);
+        }
+
+        if ($name === self::REGISTER_SUBMIT_ROUTE) {
+            return app(ThrottleRequests::class)->handle($request, $next, self::REGISTER_LIMITER);
         }
 
         return $next($request);

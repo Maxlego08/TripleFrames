@@ -1,4 +1,5 @@
 import { Form, Head, usePage } from '@inertiajs/react';
+import { ConsentFields } from '@/components/account/consent-fields';
 import { OAuthButtons } from '@/components/account/oauth-buttons';
 import InputError from '@/components/input-error';
 import PasswordInput from '@/components/password-input';
@@ -109,10 +110,12 @@ export default function Register({ passwordRules }: Props) {
                                 />
                             </div>
 
+                            <ConsentFields errors={errors} tabIndex={5} />
+
                             <Button
                                 type="submit"
                                 className="mt-2 w-full"
-                                tabIndex={5}
+                                tabIndex={6}
                                 data-test="register-user-button"
                             >
                                 {processing && (
@@ -126,7 +129,7 @@ export default function Register({ passwordRules }: Props) {
 
                         <div className="text-center text-sm text-muted-foreground">
                             {t('account.register.has_account')}{' '}
-                            <TextLink href={login()} tabIndex={6}>
+                            <TextLink href={login()} tabIndex={7}>
                                 {t('account.register.sign_in')}
                             </TextLink>
                         </div>

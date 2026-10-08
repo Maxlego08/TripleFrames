@@ -2,11 +2,11 @@
 
 namespace Database\Seeders;
 
+use App\Actions\Account\RecordConsents;
 use App\Enums\ConsentKind;
 use App\Enums\Locale;
 use App\Enums\UserRole;
 use App\Models\User;
-use App\Models\UserConsent;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
@@ -31,8 +31,10 @@ use RuntimeException;
  *
  * **Jamais hors `local` et `testing`** : la garde est portée par
  * {@see DatabaseSeeder} et redoublée ici par
- * {@see DemoCatalogueSeeder::assertSeedableEnvironment()}, parce qu'un
- * `db:seed --class=` contourne le point d'entrée. C'est une **liste blanche** :
+ * {@see self::assertSeedableEnvironment()}, parce qu'un `db:seed --class=`
+ * contourne le point d'entrée. Plus stricte que celle du catalogue, qui admet
+ * aussi `staging` (préproduction, spec 100 § 18) : un mot de passe publié dans
+ * le dépôt n'entre jamais sur une machine servie. C'est une **liste blanche** :
  * `APP_ENV` vaut `local` dans le `.env.example` que `composer setup` recopie, donc
  * une garde adossée au seul nom `production` livrerait ces trois comptes, mot de
  * passe connu compris, sur toute machine servie installée par ce chemin.
@@ -57,9 +59,6 @@ class DemoAccountsSeeder extends Seeder
      */
     public const string PASSWORD = 'password';
 
-    /** Version des CGU acceptée par les trois comptes. */
-    public const string TERMS_VERSION = '1.0';
-
     /**
      * Noms réels FICTIFS des deux comptes privilégiés (D12 du 23/09) : sans eux,
      * la garde `User::saving` refuse leur création, et les preuves du catalogue
@@ -72,13 +71,25 @@ class DemoAccountsSeeder extends Seeder
 
     public function run(): void
     {
-        DemoCatalogueSeeder::assertSeedableEnvironment();
+        self::assertSeedableEnvironment();
 
         DB::transaction(function (): void {
             $this->account(self::PLAYER_EMAIL, 'Joueur Démo', null, UserRole::Player, Locale::French);
             $this->account(self::CURATOR_EMAIL, 'Curateur Démo', self::CURATOR_REAL_NAME, UserRole::Curator, Locale::French);
             $this->account(self::ADMIN_EMAIL, 'Admin Démo', self::ADMIN_REAL_NAME, UserRole::Admin, Locale::English);
         });
+    }
+
+    public static function assertSeedableEnvironment(): void
+    {
+        if (app()->environment(['local', 'testing'])) {
+            return;
+        }
+
+        throw new RuntimeException(
+            'Les comptes de démonstration ne tournent qu’en `local` ou en `testing` ; APP_ENV vaut ['
+            .app()->environment().']. Leur mot de passe est publié dans le dépôt.',
+        );
     }
 
     /**
@@ -103,27 +114,13 @@ class DemoAccountsSeeder extends Seeder
         $user->password = Hash::make(self::PASSWORD);
         $user->role = $role;
         $user->locale = $locale;
-        $user->terms_accepted_at = $now;
-        $user->terms_version = self::TERMS_VERSION;
-        $user->age_confirmed_at = $now;
         $user->last_login_at = $now;
         $user->save();
 
-        foreach ([ConsentKind::Terms, ConsentKind::Age] as $kind) {
-            $exists = UserConsent::query()
-                ->where('user_id', $user->id)
-                ->where('kind', $kind)
-                ->exists();
-
-            if ($exists) {
-                continue;
-            }
-
-            UserConsent::factory()
-                ->for($user)
-                ->state(['kind' => $kind, 'version' => self::TERMS_VERSION, 'accepted_at' => $now])
-                ->create();
-        }
+        // Les CGU à la version COURANTE, par l'écrivain unique des
+        // consentements (spec 40 § 13.1) : une version figée ici renverrait
+        // les trois comptes vers l'interstitiel de ré-acceptation.
+        app(RecordConsents::class)->handle($user, [ConsentKind::Terms, ConsentKind::Age]);
 
         return $user;
     }
