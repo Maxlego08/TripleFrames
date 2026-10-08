@@ -17,6 +17,7 @@ import {
     ShieldAlert,
     ShieldCheck,
     ShieldOff,
+    Siren,
     Sparkles,
     Tags,
     UserRound,
@@ -63,6 +64,7 @@ import { index as importIndex } from '@/routes/admin/import';
 import { index as journalIndex } from '@/routes/admin/journal';
 import { index as moderationIndex } from '@/routes/admin/moderation';
 import { index as contentReportsIndex } from '@/routes/admin/content-reports';
+import { index as incidentsIndex } from '@/routes/admin/incidents';
 import { index as nearMissesIndex } from '@/routes/admin/near_misses';
 import { index as performanceIndex } from '@/routes/admin/performance';
 import { index as playersIndex } from '@/routes/admin/players';
@@ -154,6 +156,13 @@ export function AdminSidebar() {
             title: t('admin.nav.near_misses'),
             href: nearMissesIndex(),
             icon: Sparkles,
+        },
+        // Films jamais trouvés et incidents (spec 20 § 12.1, L20-29),
+        // curateur et au-delà.
+        {
+            title: t('admin.nav.incidents'),
+            href: incidentsIndex(),
+            icon: Siren,
         },
         // La file des signalements de contenu par les joueurs (spec 20
         // § 11.6, D63 du 07/10), curateur et au-delà.

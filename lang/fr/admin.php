@@ -43,6 +43,8 @@ return [
         'curation' => 'File de curation',
         'catalog' => 'Catalogue',
         'near_misses' => 'Suggestions d’alias',
+        // Films jamais trouvés et incidents (ligne 29, L20-29).
+        'incidents' => 'Incidents',
         // Les signalements de contenu par les joueurs (ligne 48, D63 du 07/10).
         'content_reports' => 'Signalements',
         // L'écran des thèmes (spec 20 § 9.6, D43 du 01/10).
@@ -824,6 +826,28 @@ return [
             'frame_unpublished' => 'Image dépubliée. Signalements clos : :count.',
             'dismissed' => 'Signalements ignorés : :count.',
         ],
+    ],
+
+    /*
+    | Films jamais trouvés et incidents (spec 20 § 12.1, ligne 29, L20-29) :
+    | agrégat par film, sans aucune identité de joueur.
+    */
+    'incidents' => [
+        'title' => 'Incidents',
+        'heading' => 'Films jamais trouvés et incidents',
+        'description' => 'Sur les :days derniers jours : les manches que personne n’a trouvées, les manches annulées et les images remplacées en cours de manche, film par film. Aucun joueur n’y est nommé.',
+        'empty' => 'Aucun incident sur cette période.',
+        'list' => 'Films concernés',
+        'reaction' => 'Une réaction est un geste de curation ordinaire : une autre variante, un niveau revu, un alias.',
+        'column' => [
+            'movie' => 'Film',
+            'never_found' => 'Jamais trouvé',
+            'cancelled' => 'Manches annulées',
+            'substituted' => 'Images remplacées',
+        ],
+        'never_found' => ':never sur :completed manches terminées',
+        'reason_count' => ':reason : :count',
+        'none' => '—',
     ],
 
     'near_misses' => [

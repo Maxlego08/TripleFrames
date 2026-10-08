@@ -2048,3 +2048,21 @@ export type AdminBlocklistForm = {
     nickname: string;
     form: string;
 };
+
+/**
+ * Une ligne de l’écran « Films jamais trouvés et incidents » (spec 20
+ * § 12.1, L20-29) : agrégat par film, aucune identité de joueur. Les deux
+ * dictionnaires sont indexés par motif d’incident.
+ */
+export type AdminIncidentRow = {
+    movie: {
+        id: number;
+        title_original: string;
+        release_year: number | null;
+        availability: string;
+    };
+    completed: number;
+    never_found: number;
+    cancelled: Partial<Record<InspectionIncidentReason, number>>;
+    substituted: Partial<Record<InspectionIncidentReason, number>>;
+};

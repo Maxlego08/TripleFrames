@@ -203,6 +203,8 @@ return [
     | - `poll_seconds` : cadence du rechargement partiel de l'éditeur tant
     |   qu'une image du film est en traitement (§ 6.1) : le curateur n'attend
     |   jamais le job. Au moins 1.
+    | - `incidents_window_days` (§ 12.1, J2) : fenêtre glissante, en jours, de
+    |   l'écran « Films jamais trouvés et incidents ». Au moins 1.
     | - `stale_pending_minutes` : au-delà, une image encore en traitement
     |   fait afficher « le traitement d'arrière-plan ne répond pas »
     |   (§ 13.5) — plus long qu'un import qui tient la file `default`, pour
@@ -282,6 +284,7 @@ return [
         'images_cache_minutes' => 1_440,
         'poll_seconds' => 3,
         'stale_pending_minutes' => 10,
+        'incidents_window_days' => 30,
 
         'idle_seconds' => 60,
         'heartbeat_seconds' => 15,

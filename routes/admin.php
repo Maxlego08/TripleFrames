@@ -30,6 +30,7 @@ use App\Http\Controllers\Admin\ImportPreviewController;
 use App\Http\Controllers\Admin\ImportResumeController;
 use App\Http\Controllers\Admin\ImportSearchController;
 use App\Http\Controllers\Admin\ImportSeedListController;
+use App\Http\Controllers\Admin\IncidentsController;
 use App\Http\Controllers\Admin\JournalController;
 use App\Http\Controllers\Admin\ModerationController;
 use App\Http\Controllers\Admin\ModerationNicknameController;
@@ -468,6 +469,12 @@ Route::middleware(['auth', 'verified', 'role:curator', 'admin.2fa', 'admin.local
         Route::post('import/seed-list', [ImportSeedListController::class, 'store'])
             ->middleware(['can:create,'.ImportRun::class, 'throttle:admin-import'])
             ->name('import.seed_list');
+
+        // Films jamais trouvés et incidents (spec 20 § 12.1, ligne 29, L20-29) :
+        // agrégat par film, sans aucune identité de joueur.
+        Route::get('incidents', [IncidentsController::class, 'index'])
+            ->middleware('can:viewAny,'.Movie::class)
+            ->name('incidents.index');
 
         // Les formulations fausses récurrentes, agrégées sans aucun lien vers
         // un joueur : lecture, reconstruction, promotion en alias et rejet.
