@@ -130,8 +130,8 @@ function firstError(errors: Record<string, string>): string | null {
  *
  * **État de lobby**, composé ici :
  * - pour tous : le code et le lien de partage, « Votre avatar » — le sélecteur
- *   du siège, au lobby seulement (D55 du 02/10) —, les réglages de l'onglet
- *   Simple (L50-5) — éditables par l'hôte seul, en lecture seule pour les
+ *   du siège, au lobby seulement (D55 du 02/10) —, les réglages des onglets
+ *   Simple (L50-5) et Avancé (L50-10) — éditables par l'hôte seul, en lecture seule pour les
  *   autres —, leurs avertissements, le nombre de joueurs et la liste des
  *   sièges, le compteur de vivier et le blocage, qui nomme le réglage fautif —
  *   non-répétition comprise (D28 du 23/09) —, l'aide ;
@@ -435,8 +435,10 @@ export default function Lobby({
                 roomCode={room.code}
                 state={settings}
                 bounds={bounds}
+                limits={limits}
                 headcount={headcount}
                 editable={isHost}
+                advancedAvailable={editor.advancedAvailable}
                 lateJoinAvailable={editor.lateJoinAvailable}
                 disabled={!canWrite}
                 onHttpException={onHttpException}

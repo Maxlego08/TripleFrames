@@ -65,11 +65,16 @@ export type RoomSettingsView = {
     advanced: boolean;
 };
 
-/** Avertissement non bloquant (bornes croisées 4 et 5). */
+/**
+ * Avertissement non bloquant (bornes croisées 4 et 5) ; `waiting_pays` est
+ * l'avertissement « attendre paie » de l'onglet Avancé (L50-10, spec 80
+ * § 3.4).
+ */
 export type RoomSettingsWarningCode =
     | 'short_reveal'
     | 'long_round'
     | 'non_decreasing_points'
+    | 'waiting_pays'
     | 'all_tiers_zero';
 
 /** Motif d'un changement rapporté à l'auteur d'une écriture de réglages. */
@@ -137,6 +142,12 @@ export type PlatformLimitsPayload = {
 export type RoomSettingsState = {
     settings: RoomSettingsView;
     warnings: RoomSettingsWarningCode[];
+    /**
+     * Réglages propres à l'onglet Avancé qui s'écartent de leur défaut dérivé,
+     * dans l'ordre des champs (`RoomSettingsEditor::customizedAdvancedFields()`) :
+     * le bandeau `room.settings.advanced_active` de l'onglet Simple (L50-10).
+     */
+    advancedActive: RoomSettingsFieldKey[];
     pool: PoolReport;
 };
 

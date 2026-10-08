@@ -218,6 +218,7 @@ function settingsState(maxAnswerLength: number): RoomSettingsState {
             advanced: false,
         },
         warnings: [],
+        advancedActive: [],
         pool: {
             count: 40,
             framesPerRound: 3,
@@ -747,6 +748,82 @@ describe('store', () => {
         await advanceTo(20_000 + HEARTBEAT_MS * 2 - 1);
 
         expect(locked.resyncs).toEqual([]);
+    });
+
+    it('masque la valeur du palier quand leaderboard.scoreless est vrai', () => {
+        const at = (ms: number): number => ORIGIN_MS + ms;
+        const running = (scoreless: boolean): GameStatePacket =>
+            packet(0, {
+                round: round(1, 5_000, 'running', {
+                    images: [image(5_000, 1)],
+                }),
+                leaderboard: { scoreless, roundNumber: null, rows: [] },
+            });
+
+        // Même manche, même instant : la valeur n'est masquée que par le
+        // mode sans score (80 § 2.5).
+        const scored = harness(running(false));
+
+        expect(
+            visibleTierValue(scored.store.getState(), at(6_000)),
+        ).not.toBeNull();
+        scored.stop();
+
+        const scoreless = harness(running(true));
+
+        expect(
+            visibleTierValue(scoreless.store.getState(), at(6_000)),
+        ).toBeNull();
+        scoreless.stop();
+
+        // À `game.launched`, qui ne porte pas le classement, le drapeau est
+        // lu dans les réglages du lobby au lancement (barème à zéro).
+        const zero = settingsState(64);
+        const lobby = harness(lobbyPacket(1000), {
+            ...zero,
+            settings: {
+                ...zero.settings,
+                tierPoints: zero.settings.tierPoints.map(() => 0),
+            },
+        });
+
+        lobby.store.receive(
+            'game.launched',
+            event<'game.launched'>(1105, {
+                mode: 'multiplayer',
+                roundsCount: 10,
+                framesPerRound: 3,
+                inputDifficulty: 'normal',
+                revealDurationMs: 8000,
+                speedBonus: true,
+                seats: [
+                    seat(SELF, { firstRoundNumber: 1 }),
+                    seat(RIVAL, { firstRoundNumber: 1, isHost: false }),
+                ],
+            }),
+        );
+
+        expect(lobby.store.getState().leaderboard.scoreless).toBe(true);
+        lobby.stop();
+
+        // Barème ordinaire : le classement vide n'est pas sans score.
+        const ordinary = harness(lobbyPacket(1000), settingsState(64));
+
+        ordinary.store.receive(
+            'game.launched',
+            event<'game.launched'>(1105, {
+                mode: 'multiplayer',
+                roundsCount: 10,
+                framesPerRound: 3,
+                inputDifficulty: 'normal',
+                revealDurationMs: 8000,
+                speedBonus: true,
+                seats: [seat(SELF, { firstRoundNumber: 1 }), seat(RIVAL)],
+            }),
+        );
+
+        expect(ordinary.store.getState().leaderboard.scoreless).toBe(false);
+        ordinary.stop();
     });
 
     it('masque la valeur du palier hors de la phase running', () => {

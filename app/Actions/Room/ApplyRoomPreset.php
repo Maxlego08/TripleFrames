@@ -7,8 +7,10 @@ use App\Enums\RoomStatus;
 use App\Enums\SettingPresetKey;
 use App\Models\Player;
 use App\Models\Room;
+use App\Settings\RoomSettingsEditor;
 use App\Settings\SettingPresetCatalog;
 use App\Support\Room\RoomCapacityGuard;
+use App\Support\Room\RoomSettingsPresenter;
 use App\ValueObjects\Room\SettingsWriteOutcome;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
@@ -24,9 +26,11 @@ use Illuminate\Validation\ValidationException;
  * {@see SettingPresetCatalog::settingsFor()}, qui passe par `fromInput()` : les
  * thèmes reviennent à `[]` et la capacité à `roomSeats()`, plafond que la garde
  * de capacité ne refuse jamais. Les champs de l'onglet Simple que le preset
- * change sont visibles à l'écran et ne sont pas rapportés ; au J2 seulement,
- * chaque réglage avancé personnalisé qu'il écrase est rapporté `overwritten`
- * (lot L50-10). Au J1, le rapport est donc toujours vide.
+ * change sont visibles à l'écran et ne sont pas rapportés ; chaque réglage
+ * propre à l'onglet Avancé, personnalisé et changé par le preset, est
+ * rapporté `overwritten` ({@see RoomSettingsEditor::overwritten()}, lot
+ * L50-10) : sans ce rapport, l'écrasement d'un réglage invisible serait
+ * silencieux.
  *
  * Le serveur n'interdit pas d'appliquer un preset grisé : le lobby montre alors
  * le blocage du vivier et ses remèdes, et seule la garde de lancement fait
@@ -59,14 +63,17 @@ final readonly class ApplyRoomPreset
                 return SettingsWriteOutcome::refused(RoomRefusal::NotInLobby);
             }
 
+            $current = $locked->settings;
             $settings = SettingPresetCatalog::settingsFor($preset);
 
-            RoomCapacityGuard::assertAllowed($locked, $locked->settings, $settings);
+            RoomCapacityGuard::assertAllowed($locked, $current, $settings);
+
+            $changes = RoomSettingsEditor::overwritten($current, $settings);
 
             $this->writer->handle($locked, $settings, $now);
             UpdateRoomSettings::dispatchLobbyBroadcast($locked, $now);
 
-            return SettingsWriteOutcome::written([]);
+            return SettingsWriteOutcome::written(RoomSettingsPresenter::changes($changes));
         });
     }
 }

@@ -119,3 +119,17 @@ test('isScoreless ne vaut vrai que si tous les paliers valent 0', function (): v
         ->and(ScoringRules::isScoreless(RoomSettings::fromInput(['tierPoints' => $oneScoring])))->toBeFalse()
         ->and(ScoringRules::isScoreless(RoomSettings::defaults()))->toBeFalse();
 });
+
+// L80-8 (fonction) pour l'avertissement `waiting_pays` de l'onglet Avancé
+// (spec 50, L50-10 ; spec 80 § 3.4). Littéraux de la spec : 250 + 125 > 300.
+test('waitingPays est faux pour tout barème par défaut et vrai pour 300, 250, 100 à N = 3', function (): void {
+    for ($framesPerRound = RoomSettingsBounds::MIN_FRAMES_PER_ROUND; $framesPerRound <= RoomSettingsBounds::MAX_FRAMES_PER_ROUND; $framesPerRound++) {
+        expect(ScoringRules::waitingPays(RoomSettingsBounds::defaultTierPoints($framesPerRound), $framesPerRound))
+            ->toBeFalse("N = {$framesPerRound}");
+    }
+
+    expect(ScoringRules::waitingPays([300, 250, 100], 3))->toBeTrue()
+        // Égalité exacte à la frontière : 300 contre 200 + 100, l'attente ne paie pas.
+        ->and(ScoringRules::waitingPays([300, 200, 100], 3))->toBeFalse()
+        ->and(ScoringRules::waitingPays([0, 0, 0], 3))->toBeFalse();
+});

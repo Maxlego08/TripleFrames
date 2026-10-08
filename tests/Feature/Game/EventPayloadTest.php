@@ -36,6 +36,7 @@ use App\Events\Game\SettingsChanged;
 use App\Events\Game\TierOpened;
 use App\Http\Middleware\EnsureActiveSeat;
 use App\Jobs\Game\AdvanceRound;
+use App\Jobs\Game\BroadcastLobbyState;
 use App\Jobs\Game\InterruptPausedGame;
 use App\Models\Alias;
 use App\Models\AnswerKey;
@@ -145,8 +146,8 @@ function eventPayloadClosedList(): array
         'seat.joined' => [SeatJoined::class, 'room', ['seat']],
         'seat.updated' => [SeatUpdated::class, 'room', ['seat']],
         'host.changed' => [HostChanged::class, 'room', ['hostPublicId', 'previousHostPublicId']],
-        'settings.changed' => [SettingsChanged::class, 'room', ['settings', 'warnings', 'pool']],
-        'room.replayed' => [RoomReplayed::class, 'room', ['settings', 'warnings', 'pool']],
+        'settings.changed' => [SettingsChanged::class, 'room', ['settings', 'warnings', 'advancedActive', 'pool']],
+        'room.replayed' => [RoomReplayed::class, 'room', ['settings', 'warnings', 'advancedActive', 'pool']],
         'game.launched' => [GameLaunched::class, 'room', ['mode', 'roundsCount', 'framesPerRound', 'inputDifficulty', 'revealDurationMs', 'speedBonus', 'seats']],
         'room.archived' => [RoomArchived::class, 'room', []],
         'round.scheduled' => [RoundScheduled::class, 'room', ['round', 'image']],
@@ -2054,4 +2055,42 @@ it('un pseudo masqué part à nul dans toute vue de siège, lobby comme partie, 
     // La partie en cours garde son affichage gelé en base, jamais sur le fil.
     expect(GamePlayer::query()->whereBelongsTo($game)->where('player_id', $target->id)->sole()->display_nickname)
         ->toBe('Pseudo Vilain');
+});
+
+// Volet Avancé de L60-17 (spec 60 § 11.3, spec 50 § 2.6) : `settings.changed`
+// porte, sur le même transport, le contenu de l'onglet Avancé — les seize
+// champs, `advanced` compris, et `advancedActive`, la liste des réglages
+// avancés hors de leur défaut —, identique pour tous les sièges.
+it('settings.changed porte le contenu de l’onglet Avancé, identique pour tous', function (): void {
+    PoolFixtures::fakeFramesDisk();
+    $frames = RoomSettingsBounds::DEFAULT_FRAMES_PER_ROUND;
+    $points = array_fill(0, $frames, RoomSettingsBounds::MAX_TIER_POINTS);
+    $room = Room::factory()->withSettings(RoomSettings::fromInput([
+        'advanced' => true,
+        'tierPoints' => $points,
+        'speedBonus' => false,
+        'maxAnswerLength' => RoomSettingsBounds::MIN_ANSWER_LENGTH,
+    ]))->create();
+    $payloads = [];
+
+    foreach (['fr', 'en'] as $locale) {
+        $recorder = RecordingBroadcaster::install();
+        app()->setLocale($locale);
+        (new BroadcastLobbyState($room->id))->handle();
+
+        expect($recorder->sent)->toHaveCount(1)
+            ->and($recorder->sent[0]['event'])->toBe('settings.changed');
+
+        $payloads[$locale] = array_diff_key($recorder->sent[0]['payload'], array_flip(['v', 'serverNow']));
+    }
+
+    $payload = $payloads['fr'];
+
+    expect($payloads['en'])->toBe($payload)
+        ->and($payload['settings']['advanced'])->toBeTrue()
+        ->and($payload['settings']['tierPoints'])->toBe($points)
+        ->and($payload['settings']['speedBonus'])->toBeFalse()
+        ->and($payload['settings']['maxAnswerLength'])->toBe(RoomSettingsBounds::MIN_ANSWER_LENGTH)
+        ->and($payload['advancedActive'])->toBe(['tierPoints', 'speedBonus', 'maxAnswerLength'])
+        ->and($payload['warnings'])->toContain(RoomSettings::WARNING_NON_DECREASING_POINTS);
 });

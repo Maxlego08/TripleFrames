@@ -3192,6 +3192,9 @@ export type TranslationKey =
     | 'room.seat.claimed'
     | 'room.settings.advanced.help'
     | 'room.settings.advanced.label'
+    | 'room.settings.advanced_active'
+    | 'room.settings.advanced_sheet.description'
+    | 'room.settings.advanced_sheet.title'
     | 'room.settings.allowLateJoin.help'
     | 'room.settings.allowLateJoin.label'
     | 'room.settings.attemptsPerRound.help'
@@ -3233,12 +3236,15 @@ export type TranslationKey =
     | 'room.settings.roundsCount.label'
     | 'room.settings.speedBonus.help'
     | 'room.settings.speedBonus.label'
+    | 'room.settings.tabs.advanced'
+    | 'room.settings.tabs.simple'
     | 'room.settings.themeKeys.help'
     | 'room.settings.themeKeys.label'
     | 'room.settings.tierDurations.help'
     | 'room.settings.tierDurations.label'
     | 'room.settings.tierPoints.help'
     | 'room.settings.tierPoints.label'
+    | 'room.settings.tier_label'
     | 'room.solo.choose_preset'
     | 'room.solo.intro'
     | 'room.solo.nickname_hint'
@@ -3247,7 +3253,8 @@ export type TranslationKey =
     | 'room.warnings.all_tiers_zero'
     | 'room.warnings.long_round'
     | 'room.warnings.non_decreasing_points'
-    | 'room.warnings.short_reveal';
+    | 'room.warnings.short_reveal'
+    | 'room.warnings.waiting_pays';
 
 export type TranslationKeyFor<D extends TranslationDomain> = Extract<
     TranslationKey,

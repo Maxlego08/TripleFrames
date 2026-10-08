@@ -128,6 +128,38 @@ final class ScoringRules
     }
 
     /**
+     * « Attendre paie » (§ 3.4, jalon 2 ; son avertissement est adopté par
+     * l'onglet Avancé, spec 50, lot L50-10) : vrai si, pour un `i < N`,
+     * `P_i + 0 < P_{i+1} + intdiv(P_{i+1} × B_max(N), 100)` — la fin du
+     * palier `i` rapporte moins que l'ouverture du palier suivant, bonus
+     * compris.
+     *
+     * Le terme `P_i + 0` est exact : le bonus est nul à la dernière
+     * milliseconde de tout palier légal (§ 3.2). Fausse pour tout barème par
+     * défaut (§ 3.3), elle n'est pas couverte par `non_decreasing_points` : à
+     * `N = 3`, 300 / 250 / 100 est strictement décroissant et pourtant
+     * 250 + 125 = 375 > 300. Elle suppose le bonus actif : l'appelant qui en
+     * fait un avertissement ne la lit que si `speedBonus` est vrai.
+     *
+     * @param  list<int>  $tierPoints
+     */
+    public static function waitingPays(array $tierPoints, int $framesPerRound): bool
+    {
+        $percent = self::speedBonusMaxPercent($framesPerRound);
+        $count = count($tierPoints);
+
+        for ($index = 0; $index < $count - 1; $index++) {
+            $next = $tierPoints[$index + 1];
+
+            if ($tierPoints[$index] < $next + intdiv($next * $percent, PlatformLimits::FULL_PERCENT)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * Branche de la version 1 de {@see self::floorTierIndex()}.
      */
     private static function floorTierIndexV1(GuessSource $source, InputDifficulty $difficulty, int $framesPerRound): int

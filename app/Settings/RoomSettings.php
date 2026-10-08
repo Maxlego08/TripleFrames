@@ -4,6 +4,7 @@ namespace App\Settings;
 
 use App\Casts\RoomSettingsCast;
 use App\Enums\InputDifficulty;
+use App\Support\Scoring\ScoringRules;
 use Illuminate\Validation\ValidationException;
 use UnexpectedValueException;
 
@@ -129,6 +130,13 @@ final readonly class RoomSettings
     public const string WARNING_LONG_ROUND = 'long_round';
 
     public const string WARNING_NON_DECREASING_POINTS = 'non_decreasing_points';
+
+    /**
+     * Barème strictement décroissant où, bonus de rapidité compris, l'ouverture
+     * d'un palier rapporte plus que la fin du précédent
+     * ({@see ScoringRules::waitingPays()}, spec 80 § 3.4 ; n° 44, lot L50-10).
+     */
+    public const string WARNING_WAITING_PAYS = 'waiting_pays';
 
     public const string WARNING_ALL_TIERS_ZERO = 'all_tiers_zero';
 
@@ -507,7 +515,10 @@ final readonly class RoomSettings
     }
 
     /**
-     * Avertissements non bloquants, cumulables — bornes croisées 4 et 5.
+     * Avertissements non bloquants, cumulables — bornes croisées 4 et 5, dans
+     * cet ordre : révélation courte, manche longue, barème non strictement
+     * décroissant, « attendre paie » (bonus actif seulement, et jamais en plus
+     * de `non_decreasing_points`), barème entièrement à zéro.
      *
      * Rendus en codes, jamais en phrases : la mise en mots appartient au client.
      *
@@ -526,15 +537,30 @@ final readonly class RoomSettings
         }
 
         $previous = null;
+        $nonDecreasing = false;
 
         foreach ($this->tierPoints as $points) {
             if ($previous !== null && $points >= $previous) {
-                $warnings[] = self::WARNING_NON_DECREASING_POINTS;
+                $nonDecreasing = true;
 
                 break;
             }
 
             $previous = $points;
+        }
+
+        if ($nonDecreasing) {
+            $warnings[] = self::WARNING_NON_DECREASING_POINTS;
+        }
+
+        // « Attendre paie » (spec 80 § 3.4) : seulement bonus actif, et
+        // seulement quand `non_decreasing_points` ne le dit pas déjà — un
+        // barème non décroissant fait toujours payer l'attente, et deux
+        // avertissements pour un même fait n'apprendraient rien à l'hôte.
+        if (! $nonDecreasing
+            && $this->speedBonus
+            && ScoringRules::waitingPays($this->tierPoints, $this->framesPerRound)) {
+            $warnings[] = self::WARNING_WAITING_PAYS;
         }
 
         if (array_sum($this->tierPoints) === 0) {

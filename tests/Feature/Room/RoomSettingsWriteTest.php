@@ -411,14 +411,15 @@ it('ramène une capacité devenue supérieure à roomSeats sans refuser l\'écri
         ->and(Room::query()->findOrFail($room->id)->capacity)->toBe($lowered);
 });
 
-it('ne laisse au J1 aucune ligne room avec advanced vrai ni un champ avancé hors de son défaut', function (): void {
+it('depuis l\'onglet Simple, refuse tout champ avancé sans rien écrire, et un preset ramène chaque champ avancé à son défaut', function (): void {
     [$room, $host] = writeRoomWithHost();
 
-    // Une ligne périmée qui porterait `advanced = true` : la première écriture
-    // de l'onglet Simple la ramène à false.
-    [$stale, $staleHost] = writeRoomWithHost(RoomSettings::fromInput(['advanced' => true]));
+    // Une ligne à l'onglet Avancé : `advanced: false` la ramène à l'onglet
+    // Simple (bascule Avancé → Simple, spec 50 § 3.3).
+    [$advanced, $advancedHost] = writeRoomWithHost(RoomSettings::fromInput(['advanced' => true]));
 
-    expect(writeUpdate($stale, $staleHost, ['roundsCount' => Bounds::MIN_ROUNDS_COUNT])->isWritten())->toBeTrue();
+    expect(writeUpdate($advanced, $advancedHost, ['advanced' => false, 'roundsCount' => Bounds::MIN_ROUNDS_COUNT])->isWritten())->toBeTrue()
+        ->and(Room::query()->findOrFail($advanced->id)->settings->advanced)->toBeFalse();
 
     $accepted = [
         ['framesPerRound' => Bounds::MIN_FRAMES_PER_ROUND],
@@ -430,8 +431,9 @@ it('ne laisse au J1 aucune ligne room avec advanced vrai ni un champ avancé hor
         ['themeKeys' => []],
     ];
 
+    // Sans `advanced: true`, l'onglet courant (Simple) refuse chaque champ
+    // propre à l'onglet Avancé.
     $refused = [
-        ['advanced' => true],
         ['tierPoints' => array_fill(0, Bounds::MAX_FRAMES_PER_ROUND, Bounds::MAX_TIER_POINTS)],
         ['tierDurations' => [Bounds::MIN_TIER_DURATION, Bounds::MIN_TIER_DURATION]],
         ['speedBonus' => false],
@@ -440,7 +442,7 @@ it('ne laisse au J1 aucune ligne room avec advanced vrai ni un champ avancé hor
         ['attemptsPerRound' => Bounds::MAX_ATTEMPTS_PER_ROUND],
         ['maxAnswerLength' => Bounds::MAX_ANSWER_LENGTH],
         ['disconnectGraceSeconds' => Bounds::MAX_DISCONNECT_GRACE_SECONDS],
-        ['advanced' => true, 'speedBonus' => false, 'roundsCount' => Bounds::MIN_ROUNDS_COUNT],
+        ['advanced' => false, 'speedBonus' => false, 'roundsCount' => Bounds::MIN_ROUNDS_COUNT],
     ];
 
     foreach ($accepted as $posted) {
@@ -455,26 +457,32 @@ it('ne laisse au J1 aucune ligne room avec advanced vrai ni un champ avancé hor
         expect(writeRawRow($room))->toBe($before);
     }
 
+    // L'onglet Avancé, puis chaque preset : tout champ avancé revient à son défaut.
+    expect(writeUpdate($room, $host, [
+        'advanced' => true,
+        'speedBonus' => false,
+        'noRepeatMovies' => false,
+        'attemptsPerSecond' => Bounds::MAX_ATTEMPTS_PER_SECOND,
+        'maxAnswerLength' => Bounds::MAX_ANSWER_LENGTH,
+        'disconnectGraceSeconds' => Bounds::MAX_DISCONNECT_GRACE_SECONDS,
+    ])->isWritten())->toBeTrue();
+
     foreach (SettingPresetKey::cases() as $preset) {
         expect(writePreset($room, $host, $preset)->isWritten())->toBeTrue();
     }
 
-    expect(Room::query()->count())->toBeGreaterThanOrEqual(2);
+    $settings = Room::query()->findOrFail($room->id)->settings;
+    $duration = $settings->roundDuration();
 
-    foreach (Room::query()->get() as $row) {
-        $settings = $row->settings;
-        $duration = $settings->roundDuration();
-
-        expect($settings->advanced)->toBeFalse()
-            ->and($settings->speedBonus)->toBe(Bounds::DEFAULT_SPEED_BONUS)
-            ->and($settings->noRepeatMovies)->toBe(Bounds::DEFAULT_NO_REPEAT_MOVIES)
-            ->and($settings->attemptsPerSecond)->toBe(Bounds::DEFAULT_ATTEMPTS_PER_SECOND)
-            ->and($settings->maxAnswerLength)->toBe(Bounds::DEFAULT_ANSWER_LENGTH)
-            ->and($settings->disconnectGraceSeconds)->toBe(Bounds::DEFAULT_DISCONNECT_GRACE_SECONDS)
-            ->and($settings->tierDurations)->toBe(Bounds::defaultTierDurations($settings->framesPerRound, $duration))
-            ->and($settings->tierPoints)->toBe(Bounds::defaultTierPoints($settings->framesPerRound))
-            ->and($settings->attemptsPerRound)->toBe(Bounds::defaultAttemptsPerRound($duration));
-    }
+    expect($settings->advanced)->toBeFalse()
+        ->and($settings->speedBonus)->toBe(Bounds::DEFAULT_SPEED_BONUS)
+        ->and($settings->noRepeatMovies)->toBe(Bounds::DEFAULT_NO_REPEAT_MOVIES)
+        ->and($settings->attemptsPerSecond)->toBe(Bounds::DEFAULT_ATTEMPTS_PER_SECOND)
+        ->and($settings->maxAnswerLength)->toBe(Bounds::DEFAULT_ANSWER_LENGTH)
+        ->and($settings->disconnectGraceSeconds)->toBe(Bounds::DEFAULT_DISCONNECT_GRACE_SECONDS)
+        ->and($settings->tierDurations)->toBe(Bounds::defaultTierDurations($settings->framesPerRound, $duration))
+        ->and($settings->tierPoints)->toBe(Bounds::defaultTierPoints($settings->framesPerRound))
+        ->and($settings->attemptsPerRound)->toBe(Bounds::defaultAttemptsPerRound($duration));
 });
 
 it('diffuse l\'état des réglages en données, sans identifiant interne ni chaîne traduite', function (): void {
@@ -525,7 +533,7 @@ it('diffuse l\'état des réglages en données, sans identifiant interne ni cha�
     $client = RoomSettings::FIELDS;
     $client[array_search('themeIds', $client, true)] = RoomSettingsEditor::THEME_KEYS;
 
-    expect(array_keys($payload))->toBe(['settings', 'warnings', 'pool'])
+    expect(array_keys($payload))->toBe(['settings', 'warnings', 'advancedActive', 'pool'])
         ->and(array_keys($payload['settings']))->toBe($client)
         // Clés de thème seulement, dépublié omis, jamais un identifiant.
         ->and($payload['settings']['themeKeys'])->toBe([$theme->key])
@@ -543,7 +551,8 @@ it('diffuse l\'état des réglages en données, sans identifiant interne ni cha�
         $theme->key,
         ...array_map(static fn (InputDifficulty $case): string => $case->value, InputDifficulty::cases()),
         RoomSettings::WARNING_SHORT_REVEAL, RoomSettings::WARNING_LONG_ROUND,
-        RoomSettings::WARNING_NON_DECREASING_POINTS, RoomSettings::WARNING_ALL_TIERS_ZERO,
+        RoomSettings::WARNING_NON_DECREASING_POINTS, RoomSettings::WARNING_WAITING_PAYS, RoomSettings::WARNING_ALL_TIERS_ZERO,
+        ...array_values(array_diff(RoomSettingsEditor::ADVANCED_KEYS, RoomSettingsEditor::SIMPLE_KEYS)),
         ...array_map(static fn (PoolFault $case): string => $case->value, PoolFault::cases()),
         ...array_map(static fn (PoolRemedyKind $case): string => $case->value, PoolRemedyKind::cases()),
     ];
@@ -554,14 +563,14 @@ it('diffuse l\'état des réglages en données, sans identifiant interne ni cha�
         }
     });
 
-    // Au J1, le remède `disable_no_repeat` est retiré ; le nouveau salon reste proposé.
+    // Depuis L50-10, le remède `disable_no_repeat` est rendu, après le nouveau salon.
     [$replayed] = writeRoomWithHost(RoomSettings::fromInput(['roundsCount' => $roundsCount]));
     PoolFixtures::round(PoolFixtures::game($replayed), $movies[1], $this->now->subDay());
 
     $state = RoomSettingsPresenter::state($replayed, $this->now);
 
     expect($state['pool']['causes'])->toBe([PoolFault::NoRepeatMovies->value])
-        ->and(array_column($state['pool']['remedies'], 'kind'))->toBe([PoolRemedyKind::OpenNewRoom->value]);
+        ->and(array_column($state['pool']['remedies'], 'kind'))->toBe([PoolRemedyKind::OpenNewRoom->value, PoolRemedyKind::DisableNoRepeat->value]);
 
     new SettingsChanged($replayed, null, $state);
 });
@@ -799,7 +808,8 @@ it('rend le rapport de changements à l\'auteur seul, jamais au salon', function
         expect($sent['json'])->not->toContain('"'.$code.'"');
     }
 
-    // Un preset : rapport vide au J1, rendu quand même à l'auteur, qui sait
+    // Un preset sans réglage avancé personnalisé à écraser : rapport vide,
+    // rendu quand même à l'auteur, qui sait
     // ainsi que rien d'invisible n'a changé.
     LobbyWrites::send($this, 'POST', route('room.settings.preset', $room), $room, [
         'preset' => SettingPresetKey::Hardcore->value,

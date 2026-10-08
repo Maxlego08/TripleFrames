@@ -11,7 +11,8 @@ namespace App\Events\Game;
  * close, relue au moment d'émettre.
  *
  * Charge, hors enveloppe : `RoomSettingsState` (contrat C0 § 3.4) : `{
- * settings: RoomSettingsView, warnings: RoomSettingsWarningCode[], pool:
+ * settings: RoomSettingsView, warnings: RoomSettingsWarningCode[],
+ * advancedActive: RoomSettingsFieldKey[], pool:
  * PoolReport }` — `themeKeys` et jamais `themeIds`, aucune chaîne
  * traduite.
  */
@@ -21,6 +22,7 @@ final class SettingsChanged extends RoomBroadcast
     public const array FIELDS = [
         'settings' => 'object',
         'warnings' => 'list',
+        'advancedActive' => 'list',
         'pool' => 'object',
     ];
 
