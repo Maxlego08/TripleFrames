@@ -218,6 +218,7 @@ function settingsState(maxAnswerLength: number): RoomSettingsState {
             advanced: false,
         },
         warnings: [],
+        advancedActive: [],
         pool: {
             count: 40,
             framesPerRound: 3,

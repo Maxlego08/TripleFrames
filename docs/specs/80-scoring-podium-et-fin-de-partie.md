@@ -193,7 +193,7 @@ C'est la forme linéaire arbitrée, `B_max × (1 − t/d)`, écrite en entiers :
 public static function waitingPays(array $tierPoints, int $framesPerRound): bool;
 ```
 
-Le terme `P_i + 0` est exact, pas une approximation : le bonus est nul à la dernière milliseconde de tout palier légal (§ 3.2). La fonction est fausse pour tout barème par défaut (test). Elle **n'est pas** couverte par le code `non_decreasing_points` : à `N = 3`, le barème 300 / 250 / 100 est strictement décroissant, donc non averti aujourd'hui, et pourtant 250 + 125 = 375 > 300. L'adoption d'un avertissement fondé sur `waitingPays()` revient à 50, avec l'onglet Avancé (J2).
+Le terme `P_i + 0` est exact, pas une approximation : le bonus est nul à la dernière milliseconde de tout palier légal (§ 3.2). La fonction est fausse pour tout barème par défaut (test). Elle **n'est pas** couverte par le code `non_decreasing_points` : à `N = 3`, le barème 300 / 250 / 100 est strictement décroissant, donc non averti aujourd'hui, et pourtant 250 + 125 = 375 > 300. L'adoption d'un avertissement fondé sur `waitingPays()` revient à 50, avec l'onglet Avancé (J2). **Adopté le 08/10** (`50` § 3.3, L50-10) : `room.warnings.waiting_pays`, bonus actif seulement et jamais en plus de `non_decreasing_points` ; test « waitingPays est faux pour tout barème par défaut et vrai pour 300, 250, 100 à N = 3 » livré dans `ScoringRulesTest`.
 
 ### 3.5 Constantes d'instance, jamais résolues par compte
 
@@ -283,7 +283,7 @@ Objets valeur, espace `App\ValueObjects\Scoring` (répertoire nouveau), tous `fi
 **Gardes et lectures livrées** — amendé le 28/09 (E79-1), ajouts purs, aucun nom ni signature de C13 changé :
 - `TierSchedule` refuse en plus un calendrier **vide** et une valeur de palier hors de `[RoomSettingsBounds::MIN_TIER_POINTS, MAX_TIER_POINTS]` : la borne `points_total ≤ 1 500` du § 3.2 repose sur `P ≤ MAX_TIER_POINTS`. `fromRound()` relit `round_tier` en base à chaque appel (quatre colonnes figées, `orderBy('tier_index')`), jamais une relation chargée ; une manche sans palier lève. `fromSettings()` cumule les décalages depuis les durées, par une constante privée de conversion seconde → milliseconde.
 - `TierWindow` n'a **aucune** garde, pour que `RoundTier::containsOffsetMs()`, qui lui délègue, garde son comportement ; `TierScore` non plus (`pointsTotal = pointsTier + pointsBonus` n'est pas imposé), pour que `fromGuess()` lise tel quel un journal altéré que `mismatches()` (J2) doit nommer, pas faire lever.
-- Versions : `ScoringRules` porte une liste privée `SUPPORTED_VERSIONS` ; `speedBonusMaxPercent()` et `floorTierIndex()` branchent par `match` sur `$version` ; `score()` appelle `assertSupported()` en tête puis branche sur sa propre étiquette v1. Ordre des gardes de `score()` : version, grâce, B_max, plancher, instant. `isScoreless()` est livré avec la classe (J1) ; `waitingPays()` reste à L80-8 (J2).
+- Versions : `ScoringRules` porte une liste privée `SUPPORTED_VERSIONS` ; `speedBonusMaxPercent()` et `floorTierIndex()` branchent par `match` sur `$version` ; `score()` appelle `assertSupported()` en tête puis branche sur sa propre étiquette v1. Ordre des gardes de `score()` : version, grâce, B_max, plancher, instant. `isScoreless()` est livré avec la classe (J1) ; `waitingPays()` reste à L80-8 (J2) — **livré le 08/10 avec l'onglet Avancé** (`50`, L50-10), qui en avait besoin pour son avertissement ; le reste de L80-8 (affichage sans score) demeure dû.
 
 ### 4.2 Algorithme, version 1
 

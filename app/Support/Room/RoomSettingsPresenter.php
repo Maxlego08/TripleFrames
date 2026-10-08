@@ -36,7 +36,7 @@ use Carbon\CarbonImmutable;
  *
  * @phpstan-type RoomSettingsViewPayload array<string, list<string>|list<int>|int|string|bool>
  * @phpstan-type PoolReportPayload array{count: int, framesPerRound: int, roundsCount: int, blocked: bool, causes: list<string>, remedies: list<array{kind: string, value: int|null, count: int}>, nearestPlayableFramesPerRound: int|null, themesPruned: bool}
- * @phpstan-type RoomSettingsStatePayload array{settings: RoomSettingsViewPayload, warnings: list<string>, pool: PoolReportPayload}
+ * @phpstan-type RoomSettingsStatePayload array{settings: RoomSettingsViewPayload, warnings: list<string>, advancedActive: list<string>, pool: PoolReportPayload}
  * @phpstan-type PresetOptionPayload array{key: string, grayed: bool, nearestPlayableFramesPerRound: int|null}
  */
 final readonly class RoomSettingsPresenter
@@ -75,11 +75,16 @@ final readonly class RoomSettingsPresenter
      * `RoomSettingsState` du salon à l'instant `$now`, sur ses réglages tels que
      * relus par le cast.
      *
-     * `pool` est exactement `PoolReport::toArray()` (contrat C2, R-11), à une
-     * exception près : tant que l'onglet Avancé n'est pas livré, le remède
-     * `disable_no_repeat` en est retiré (D28 du 23/09) — l'interrupteur qu'il
-     * propose n'existe pas encore à l'écran, et un nouveau salon
-     * (`open_new_room`) reste proposé.
+     * `pool` est exactement `PoolReport::toArray()` (contrat C2, R-11). Le
+     * remède `disable_no_repeat` n'en était retiré que tant que l'onglet Avancé
+     * n'était pas livré (D28 du 23/09) : depuis L50-10, l'interrupteur qu'il
+     * propose existe à l'écran, et le remède est rendu.
+     *
+     * `advancedActive` liste, dans l'ordre de `FIELDS`, les réglages propres à
+     * l'onglet Avancé qui s'écartent de leur défaut dérivé
+     * ({@see RoomSettingsEditor::customizedAdvancedFields()}) : l'onglet Simple
+     * en fait le bandeau `room.settings.advanced_active` (§ 3.3). Des noms de
+     * champs, jamais un texte : chaque client les met en mots dans sa langue.
      *
      * @return RoomSettingsStatePayload
      */
@@ -100,6 +105,7 @@ final readonly class RoomSettingsPresenter
         return [
             'settings' => self::view($settings),
             'warnings' => $settings->warnings(),
+            'advancedActive' => RoomSettingsEditor::customizedAdvancedFields($settings),
             'pool' => $pool,
         ];
     }
@@ -187,8 +193,8 @@ final readonly class RoomSettingsPresenter
 
     /**
      * Lecture de `RoomSettingsEditor::ADVANCED_TAB_AVAILABLE` derrière un type
-     * `bool` : la constante vaut `false` au J1, et une condition écrite sur elle
-     * seule serait lue comme toujours vraie par l'analyse statique.
+     * `bool` : une condition écrite sur la constante seule serait lue comme
+     * toujours vraie par l'analyse statique.
      */
     private static function advancedTabAvailable(): bool
     {

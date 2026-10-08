@@ -225,7 +225,8 @@ Le constructeur prend ses quinze arguments dans l'ordre du tableau ci-dessus, `s
   { settings: RoomSettingsView, warnings: RoomSettingsWarningCode[], pool: PoolReport }
   ```
   - `pool` est exactement `PoolReporter::report(PoolScope::forRoom($room, $room->settings, $now), M)->toArray()` (contrat C2).
-  - Tant que l'onglet Avancé n'est pas livré (constante `RoomSettingsEditor::ADVANCED_TAB_AVAILABLE = false` au J1, `true` au lot L50-10), le remède `disable_no_repeat` en est retiré (D28 du 23/09).
+  - Tant que l'onglet Avancé n'est pas livré (constante `RoomSettingsEditor::ADVANCED_TAB_AVAILABLE = false` au J1, `true` au lot L50-10), le remède `disable_no_repeat` en est retiré (D28 du 23/09). **Livré le 08/10 (L50-10)** : la constante vaut `true`, le remède est rendu.
+  - **`advancedActive`** [ajout de L50-10, forme livrée — amendé le 08/10] : `RoomSettingsEditor::customizedAdvancedFields($settings)`, la liste ordonnée (ordre de `FIELDS`) des champs propres à l'onglet Avancé (`ADVANCED_KEYS` hors `SIMPLE_KEYS`) qui s'écartent de leur défaut — dérivé de `(N, D)` pour `tierDurations`, `tierPoints`, `attemptsPerRound`, constant pour les autres. Elle nourrit le bandeau `room.settings.advanced_active` (§ 3.3) ; elle est calculée au serveur, seul détenteur des défauts constants, que `bounds` ne porte pas. Clé insérée entre `warnings` et `pool` ; même charge pour `settings.changed` et `room.replayed` (60, volet Avancé de L60-17).
   - Cette charge est **diffusée au salon**, identique pour tous, **sans aucune chaîne traduite**.
 
 **Rapport de changements.**
@@ -256,7 +257,7 @@ export type RoomSettingsView = { themeKeys: string[]; roundsCount: number; frame
   capacity: number; allowLateJoin: boolean; speedBonus: boolean; noRepeatMovies: boolean;
   attemptsPerSecond: number; attemptsPerRound: number; maxAnswerLength: number;
   disconnectGraceSeconds: number; advanced: boolean };
-export type RoomSettingsWarningCode = 'short_reveal' | 'long_round' | 'non_decreasing_points' | 'all_tiers_zero';
+export type RoomSettingsWarningCode = 'short_reveal' | 'long_round' | 'non_decreasing_points' | 'waiting_pays' | 'all_tiers_zero';
 export type RoomSettingsChangeCode = 'defaulted' | 'dropped' | 'clamped' | 'resized' | 'pruned' | 'coerced'
   | 'equalized' | 'reset' | 'raised' | 'overwritten';
 export type Bound = { min: number; max: number };
@@ -268,7 +269,8 @@ export type RoomSettingsBoundsPayload = { byFramesPerRound: Record<string, RoomS
   warningThresholds: { recommendedMinRevealDuration: number; longRoundWarningDuration: number } };
 export type PlatformLimitsPayload = { savedConfigsPerUser: number; roomSeats: number; avatarPresets: number;
   historyWindowMonths: number; successRateMinRounds: number; speedBonusMaxPercent: Record<string, number> };
-export type RoomSettingsState = { settings: RoomSettingsView; warnings: RoomSettingsWarningCode[]; pool: PoolReport };
+export type RoomSettingsState = { settings: RoomSettingsView; warnings: RoomSettingsWarningCode[];
+  advancedActive: RoomSettingsFieldKey[]; pool: PoolReport };            // advancedActive : L50-10
 export type RoomRefusalCode = 'not_host' | 'room_archived' | 'not_in_lobby' | 'settings_outdated'
   | 'not_enough_players' | 'draining' | 'pool_insufficient' | 'game_not_ended';
 ```
@@ -306,7 +308,7 @@ public const array ADVANCED_KEYS = ['themeKeys', 'roundsCount', 'framesPerRound'
     'tierPoints', 'revealDuration', 'inputDifficulty', 'capacity', 'allowLateJoin', 'speedBonus',
     'noRepeatMovies', 'attemptsPerSecond', 'attemptsPerRound', 'maxAnswerLength',
     'disconnectGraceSeconds', 'advanced'];                            // [J2] : pas de roundDuration
-public const bool ADVANCED_TAB_AVAILABLE = false;                   // true au lot L50-10 [J2]
+public const bool ADVANCED_TAB_AVAILABLE = true;                    // false au J1, true depuis L50-10 [J2]
 /** @param array<string, int> $publishedThemeIdsByKey  PoolQuery::publishedThemeIdsByKey() (contrat C2) */
 public static function simple(RoomSettings $current, array $posted, array $publishedThemeIdsByKey): array;
 public static function advanced(RoomSettings $current, array $posted, array $publishedThemeIdsByKey): array; // [J2]
@@ -365,6 +367,12 @@ changes:
   - Pourquoi : l'hôte ne perd pas un barème réglé à la main (00 § Vocabulaire du projet : « deux vues du même objet de réglages » ; 00 § Réglages du salon : seules les durées sont réégalisées).
 - **Présentation.** L'onglet est intégré sur desktop, et s'ouvre en feuille plein écran sur mobile (`Sheet` à `SheetTitle` et `SheetDescription` traduits, contrat C16 § 2.9). Aucune règle de jeu ne dépend de l'appareil. Onglets au motif ARIA tabs (principe 8), composant `tabs` [existant]. Leurs textes sont au § 20.6.
 
+**Forme livrée (L50-10) — amendé le 08/10.**
+- **Aiguillage.** `edit()` route `advanced: true` (ou, clé absente, l'onglet courant Avancé) vers `advanced()`, et `advanced: false` vers `simple()`. Appelé directement, `advanced()` refuse `advanced: false` par `not_editable`, symétrique du refus de `advanced: true` par `simple()`. Le rattrapage de capacité de l'onglet Simple (§ 3.2 : capacité non postée au-dessus de `roomSeats()` → `clamped`) s'applique aussi à l'onglet Avancé, sans quoi toute écriture avancée échouerait après un plafond abaissé.
+- **Écran.** Les champs communs aux deux onglets (manches, images, révélation, difficulté, places, retardataires) restent au-dessus des onglets ; le panneau Simple porte `D` et le bandeau `advanced_active` ; le panneau Avancé porte paliers, barème, bonus (aide `game.help.scoring.speed_bonus` avec `B_max(N)`), non-répétition et limites de saisie. L'onglet affiché est celui du serveur (`advanced`) : en changer est une écriture de l'hôte. Activation **manuelle** des onglets (flèches = focus, Entrée ou Espace = écriture), pour qu'un parcours au clavier n'écrive pas à chaque flèche. Sur mobile, le geste de l'hôte vers l'Avancé ouvre la feuille ; un bouton (`room.settings.advanced_sheet.title`) la rouvre, en lecture seule pour les autres sièges. Un changement de `N` en Avancé poste `{ framesPerRound, tierDurations, tierPoints }` (paliers égaux sur `max(D₀, minRoundDuration(N₁))`, barème par défaut), `D` remonté annoncé comme en Simple (`advancedFramesPerRoundChange()` de `lib/room-settings.ts`).
+- **Fichiers.** `components/room/{advanced-settings-form, advanced-active-banner, setting-fields}.tsx` : curseur, groupe radio, interrupteur et message d'erreur sont sortis de `room-settings-form.tsx` vers `setting-fields.tsx`, partagé par les deux onglets sans import circulaire (le lot prévoyait de les exporter du formulaire).
+- **Avertissement « attendre paie »** (n° 44, exigence de `90` § 11.9) : code `waiting_pays`, levé par `RoomSettings::warnings()` quand `speedBonus` est vrai, que `ScoringRules::waitingPays()` (`80` § 3.4) est vrai et que `non_decreasing_points` n'est pas déjà levé — un barème non décroissant fait toujours payer l'attente, et deux avertissements pour un même fait n'apprendraient rien. Bonus coupé, l'attente ne paie jamais strictement plus : pas d'avertissement. Le client le redit depuis `limits.speedBonusMaxPercent` (`warnings(bounds, limits, view)`).
+
 ---
 
 ## 4. Bornes croisées
@@ -377,7 +385,7 @@ changes:
 | 2 | chaque `dᵢ ∈ [MIN_TIER_DURATION, maxTierDuration(N)]`, `Σ dᵢ` dans les bornes de `D`, `N` entrées | **bloquante** | oui [J2] | refus sous `tierDurations` et `tierDurations.{i}` | — | `tier_duration` (`:tier`, `:min`, `:max`), `sum_between`, `duration_mismatch`, `list_size` [existants] |
 | 3 | `vivier(thèmes, N) ≥ M`, compté en œuvres | **bloquante au lancement seulement** | compteur et message (§ 9) | jamais : une écriture qui fait tomber le vivier sous `M` est **acceptée** et affichée | garde rejouée dans la transaction, **seule à faire autorité** (§ 12.3, O3) | `room.pool.*`, refus `room.refusal.pool_insufficient` (`:playable`, `:required`) |
 | 4 | `R < RECOMMENDED_MIN_REVEAL_DURATION` | avertissement | oui | `warnings()` → `short_reveal` | non bloquant | `room.warnings.short_reveal` (`:seconds`) |
-| 5 | `D > LONG_ROUND_WARNING_DURATION` ; barème non strictement décroissant ; barème entièrement à 0 | avertissements cumulables | oui | `warnings()` → `long_round`, `non_decreasing_points`, `all_tiers_zero` | non bloquants | `room.warnings.{long_round (:seconds), non_decreasing_points, all_tiers_zero}` |
+| 5 | `D > LONG_ROUND_WARNING_DURATION` ; barème non strictement décroissant ; « attendre paie » (bonus actif, barème strictement décroissant, `ScoringRules::waitingPays()`, L50-10) ; barème entièrement à 0 | avertissements cumulables | oui | `warnings()` → `long_round`, `non_decreasing_points`, `waiting_pays`, `all_tiers_zero` | non bloquants | `room.warnings.{long_round (:seconds), non_decreasing_points, waiting_pays, all_tiers_zero}` |
 
 Trois raisons fondent ce partage.
 - **Bornes 1 et 2 dans le value object** : sans elles, 10 s × 5 images donnent 2 s par palier, et le palier attribué devient du hasard réseau (principe 4). Un FormRequest champ par champ les laisserait passer.
@@ -419,6 +427,8 @@ Le serveur reste seul juge.
   - `warningCases`, une liste `{ revealDuration, tierDurations, tierPoints, warnings }` passée par `fromInput()` : barèmes non décroissants ou à zéro, paliers inégaux. L'onglet Simple ne les atteint pas au J1, mais `warnings()` du client doit les rendre comme le serveur.
 
   Il est produit par `php artisan room:derivations-fixture` (`App\Console\Commands\RoomDerivationsFixtureCommand` [nouveau], désactivée en `production` par `isEnabled()`). La commande n'est lancée qu'à la main, après un changement voulu de `RoomSettingsBounds`, et son diff est relu dans la PR. Son option `--check` compare le rendu au fichier versionné sans rien écrire : c'est elle que le test Pest emploie — amendé le 28/09 (E120-1). Un test Pest vérifie que le serveur rend exactement ces valeurs ; un test Vitest vérifie que `lib/room-settings.ts` les rend aussi. Une divergence casse l'un des deux. **Aucun test n'écrit le fichier** : un test qui le régénérerait avant de le comparer serait tautologique.
+
+  **Forme livrée par L50-10 — amendé le 08/10** : le fichier porte en plus `speedBonusMaxPercent` (`PlatformLimits::toArray()`, entre `bounds` et `cases`), et chaque cas de `warningCases` porte `speedBonus` ; les cas d'avertissement ajoutent, pour chaque `N` éprouvé, un barème strictement décroissant qui fait payer l'attente (deuxième palier juste sous le premier), bonus actif puis coupé.
 
 ### 4.4 Découpage du temps
 
@@ -477,7 +487,7 @@ Cette promesse de 00 s'entend **des bornes du value object** (A-12) : `PresetVal
 
 `POST /r/{room}/settings/preset` (`room.settings.preset`), corps `{ preset: SettingPresetKey }`, suit l'action `ApplyRoomPreset` (§ 2.5).
 - L'action pré-remplit **les seize champs** avec `SettingPresetCatalog::settingsFor($key)` : les thèmes reviennent à `[]`, et la capacité à `roomSeats()`, plafond que la garde de capacité ne refuse jamais (§ 10).
-- [J2] Chaque champ de `ADVANCED_KEYS` qui n'est pas dans `SIMPLE_KEYS`, personnalisé dans l'état courant et changé par le preset, est rapporté `overwritten`. « Personnalisé » veut dire différent de son défaut dérivé de `(N₀, D₀)` pour les champs dérivés, et de son défaut constant pour les autres.
+- [J2] Chaque champ de `ADVANCED_KEYS` qui n'est pas dans `SIMPLE_KEYS`, personnalisé dans l'état courant et changé par le preset, est rapporté `overwritten`. « Personnalisé » veut dire différent de son défaut dérivé de `(N₀, D₀)` pour les champs dérivés, et de son défaut constant pour les autres. Livré par L50-10 : `RoomSettingsEditor::overwritten($current, $next)`, réutilisable par `LoadSavedConfig` (L50-13) — amendé le 08/10.
 - Les champs de l'onglet Simple que le preset change (thèmes, capacité, retardataires) sont visibles à l'écran et ne sont pas rapportés. Seuls les réglages invisibles le sont : sans ce rapport, l'écrasement serait silencieux.
 - Le serveur **n'interdit pas** d'appliquer un preset grisé : le lobby montre alors le blocage du vivier et ses remèdes (§ 9). Le grisage est une aide, et c'est la garde de lancement qui fait autorité.
 
@@ -841,7 +851,7 @@ Le rapport est recalculé :
 | `PoolRemedyKind` | Clé | Geste proposé |
 |---|---|---|
 | `open_new_room` | `room.pool.remedy.open_new_room` | lien vers `room.create` : un nouveau salon a une mémoire vide. Il naît aux réglages par défaut (§ 6.1) ; `:count` est le vivier **aux réglages courants** sans la non-répétition (30 § 4.3), que l'hôte réapplique dans le nouveau salon, et le texte le dit (§ 20.3) |
-| `disable_no_repeat` | `room.pool.remedy.disable_no_repeat` | [J2] `PATCH` `{ advanced: true, noRepeatMovies: false }` ; **retiré au J1** par le présentateur (D28 du 23/09) |
+| `disable_no_repeat` | `room.pool.remedy.disable_no_repeat` | [J2] `PATCH` `{ advanced: true, noRepeatMovies: false }` ; **retiré au J1** par le présentateur (D28 du 23/09), **rendu depuis L50-10** (08/10) : le geste bascule le salon à l'onglet Avancé |
 | `clear_themes` | `room.pool.remedy.clear_themes` | `PATCH` `{ themeKeys: [] }` ; **rendu dès le J1** : le serveur accepte `themeKeys` au J1, et une clé de thème postée produit la cause `themeKeys` et ce remède (30 § 1.4) |
 | `lower_frames_per_round` | `room.pool.remedy.lower_frames_per_round` | `PATCH` `{ framesPerRound: value }`, `D` restant valide puisque `minRoundDuration` décroît avec `N` |
 | `reduce_rounds_count` | `room.pool.remedy.reduce_rounds_count` | `PATCH` `{ roundsCount: value }` ; réduire `M` est aussi légitime qu'élargir les thèmes (00 § Réglages du salon) |
@@ -1375,6 +1385,7 @@ Domaine `room` (05 § Dictionnaires serveur), rédigé par `50` (contrat C15 § 
 | `room.warnings.short_reveal` | `:seconds` | Révélation courte : :seconds s sont recommandées pour laisser le temps de lire la réponse. | Short reveal: :seconds s are recommended to leave time to read the answer. |
 | `room.warnings.long_round` | `:seconds` | Manche de plus de :seconds s : un joueur qui trouve tôt attendra longtemps. | Round longer than :seconds s: a player who finds early will wait a long time. |
 | `room.warnings.non_decreasing_points` | — | Un palier tardif rapporte autant ou plus qu'un palier précédent : attendre peut payer. | A later tier is worth as much as or more than an earlier one: waiting may pay off. |
+| `room.warnings.waiting_pays` [L50-10] | — | Avec le bonus de rapidité, répondre au début d'un palier rapporte plus qu'à la fin du précédent : attendre peut payer. | With the speed bonus, answering at the start of a tier earns more than at the end of the previous one: waiting may pay off. |
 | `room.warnings.all_tiers_zero` | — | Aucun palier ne rapporte de point : partie sans score, le classement suivra le départage. | No tier is worth any points: a scoreless game, the ranking follows the tie-breakers. |
 
 Dans `room.settings.change.*`, `:attribute` reçoit côté client le libellé traduit du champ (`room.settings.<champ>.label`). Dans `room.warnings.short_reveal` et `room.warnings.long_round`, `:seconds` reçoit le seuil lu dans `bounds.warningThresholds` ; `non_decreasing_points` et `all_tiers_zero` n'ont pas de seuil, donc pas de placeholder. Les placeholders sont ainsi définis clé par clé, écart de forme à C0 § 2 (qui donne `:seconds` à toute la famille) signalé au porteur (points restés ouverts, n° 10).
@@ -1479,6 +1490,9 @@ Textes du § 3.3 (onglets au motif ARIA tabs, feuille plein écran sur mobile), 
 | `room.settings.tabs.advanced` | — | Avancé | Advanced |
 | `room.settings.advanced_sheet.title` | — | Réglages avancés | Advanced settings |
 | `room.settings.advanced_sheet.description` | — | Paliers, barème et limites de saisie. | Tiers, scoring and answer limits. |
+| `room.settings.tier_label` [ajout de L50-10] | `:index` | Image :index | Frame :index |
+
+`room.settings.tier_label` nomme chaque curseur de palier (une image par palier) ; `advanced_sheet.title` sert aussi de libellé au bouton qui rouvre la feuille sur mobile, et `advanced_sheet.description` d'introduction au panneau Avancé sur desktop — amendé le 08/10.
 
 Ces textes sont normatifs sur leur **sens** et leurs **placeholders**. Leur formulation peut être relue par le porteur sans amender cette spec, tant que la symétrie tient.
 
@@ -1979,7 +1993,9 @@ D17 du 23/09 est sans effet depuis D35 du 23/09 : ces fichiers et ces tests sont
 
 **Vérifié à la main** : carte « Rejoindre » de l'accueil (code + pseudo, mention des CGU), sélecteur du lobby (avatars pris marqués par texte, refus annoncés, absent pendant une partie et sur le podium, de retour après « Rejouer »).
 
-### L50-10 — Onglet Avancé (J2, 7–8 h)
+### L50-10 — Onglet Avancé (J2, 7–8 h) — **livré le 08/10**
+
+Forme livrée : § 2.6 (`advancedActive`), § 3.3 (« Forme livrée »), § 4.3 (jeu partagé), § 20.2 et § 20.6 (`waiting_pays`, `tier_label`). Tests : `RoomSettingsAdvancedTest` (les six intitulés ci-dessous, plus « avertit waiting_pays… ») ; `ScoringRulesTest` (`waitingPays`, intitulé de `80`) ; Vitest `room-settings.test.ts` (changement de `N` en Avancé, `waitingPays`) ; tests du J1 réécrits pour le J2 (`RoomSettingsWriteTest`, `RoomSettingsEditorTest`, `ReplayRoomTest`, `LobbyPageTest`, `RoomSettingsPayloadTest`). Non vérifié à la main (aucun navigateur joué ici) : onglets, feuille mobile à 360 px et bandeau, à relire sur la préproduction.
 
 **Fichiers :**
 - `RoomSettingsEditor::advanced()` et `ADVANCED_TAB_AVAILABLE = true` ;

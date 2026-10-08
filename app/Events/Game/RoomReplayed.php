@@ -18,6 +18,7 @@ final class RoomReplayed extends RoomBroadcast
     public const array FIELDS = [
         'settings' => 'object',
         'warnings' => 'list',
+        'advancedActive' => 'list',
         'pool' => 'object',
     ];
 

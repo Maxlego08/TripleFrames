@@ -64,6 +64,12 @@
             "longRoundWarningDuration": 60
         }
     },
+    "speedBonusMaxPercent": {
+        "2": 50,
+        "3": 50,
+        "4": 33,
+        "5": 25
+    },
     "cases": [
         {
             "n": 2,
@@ -618,126 +624,189 @@
     "warningCases": [
         {
             "revealDuration": 8,
+            "speedBonus": true,
             "tierDurations": [15, 15],
             "tierPoints": [200, 100],
             "warnings": []
         },
         {
             "revealDuration": 8,
+            "speedBonus": true,
             "tierDurations": [15, 15],
             "tierPoints": [1000, 1000],
             "warnings": ["non_decreasing_points"]
         },
         {
             "revealDuration": 8,
+            "speedBonus": true,
             "tierDurations": [15, 15],
             "tierPoints": [100, 200],
             "warnings": ["non_decreasing_points"]
         },
         {
             "revealDuration": 8,
+            "speedBonus": true,
             "tierDurations": [15, 15],
             "tierPoints": [200, 200],
             "warnings": ["non_decreasing_points"]
         },
         {
             "revealDuration": 8,
+            "speedBonus": true,
             "tierDurations": [15, 15],
             "tierPoints": [200, 0],
             "warnings": []
         },
         {
             "revealDuration": 8,
+            "speedBonus": true,
             "tierDurations": [15, 15],
             "tierPoints": [0, 0],
             "warnings": ["non_decreasing_points", "all_tiers_zero"]
         },
         {
             "revealDuration": 8,
+            "speedBonus": true,
+            "tierDurations": [15, 15],
+            "tierPoints": [200, 199],
+            "warnings": ["waiting_pays"]
+        },
+        {
+            "revealDuration": 8,
+            "speedBonus": false,
+            "tierDurations": [15, 15],
+            "tierPoints": [200, 199],
+            "warnings": []
+        },
+        {
+            "revealDuration": 8,
+            "speedBonus": true,
             "tierDurations": [10, 10, 10],
             "tierPoints": [300, 200, 100],
             "warnings": []
         },
         {
             "revealDuration": 8,
+            "speedBonus": true,
             "tierDurations": [10, 10, 10],
             "tierPoints": [1000, 1000, 1000],
             "warnings": ["non_decreasing_points"]
         },
         {
             "revealDuration": 8,
+            "speedBonus": true,
             "tierDurations": [10, 10, 10],
             "tierPoints": [100, 200, 300],
             "warnings": ["non_decreasing_points"]
         },
         {
             "revealDuration": 8,
+            "speedBonus": true,
             "tierDurations": [10, 10, 10],
             "tierPoints": [300, 200, 200],
             "warnings": ["non_decreasing_points"]
         },
         {
             "revealDuration": 8,
+            "speedBonus": true,
             "tierDurations": [10, 10, 10],
             "tierPoints": [300, 200, 0],
             "warnings": []
         },
         {
             "revealDuration": 8,
+            "speedBonus": true,
             "tierDurations": [10, 10, 10],
             "tierPoints": [0, 0, 0],
             "warnings": ["non_decreasing_points", "all_tiers_zero"]
         },
         {
             "revealDuration": 8,
+            "speedBonus": true,
+            "tierDurations": [10, 10, 10],
+            "tierPoints": [300, 299, 100],
+            "warnings": ["waiting_pays"]
+        },
+        {
+            "revealDuration": 8,
+            "speedBonus": false,
+            "tierDurations": [10, 10, 10],
+            "tierPoints": [300, 299, 100],
+            "warnings": []
+        },
+        {
+            "revealDuration": 8,
+            "speedBonus": true,
             "tierDurations": [6, 6, 6, 6, 6],
             "tierPoints": [500, 400, 300, 200, 100],
             "warnings": []
         },
         {
             "revealDuration": 8,
+            "speedBonus": true,
             "tierDurations": [6, 6, 6, 6, 6],
             "tierPoints": [1000, 1000, 1000, 1000, 1000],
             "warnings": ["non_decreasing_points"]
         },
         {
             "revealDuration": 8,
+            "speedBonus": true,
             "tierDurations": [6, 6, 6, 6, 6],
             "tierPoints": [100, 200, 300, 400, 500],
             "warnings": ["non_decreasing_points"]
         },
         {
             "revealDuration": 8,
+            "speedBonus": true,
             "tierDurations": [6, 6, 6, 6, 6],
             "tierPoints": [500, 400, 300, 200, 200],
             "warnings": ["non_decreasing_points"]
         },
         {
             "revealDuration": 8,
+            "speedBonus": true,
             "tierDurations": [6, 6, 6, 6, 6],
             "tierPoints": [500, 400, 300, 200, 0],
             "warnings": []
         },
         {
             "revealDuration": 8,
+            "speedBonus": true,
             "tierDurations": [6, 6, 6, 6, 6],
             "tierPoints": [0, 0, 0, 0, 0],
             "warnings": ["non_decreasing_points", "all_tiers_zero"]
         },
         {
             "revealDuration": 8,
+            "speedBonus": true,
+            "tierDurations": [6, 6, 6, 6, 6],
+            "tierPoints": [500, 499, 300, 200, 100],
+            "warnings": ["waiting_pays"]
+        },
+        {
+            "revealDuration": 8,
+            "speedBonus": false,
+            "tierDurations": [6, 6, 6, 6, 6],
+            "tierPoints": [500, 499, 300, 200, 100],
+            "warnings": []
+        },
+        {
+            "revealDuration": 8,
+            "speedBonus": true,
             "tierDurations": [5, 5, 51],
             "tierPoints": [300, 200, 100],
             "warnings": ["long_round"]
         },
         {
             "revealDuration": 8,
+            "speedBonus": true,
             "tierDurations": [5, 5, 50],
             "tierPoints": [300, 200, 100],
             "warnings": []
         },
         {
             "revealDuration": 3,
+            "speedBonus": true,
             "tierDurations": [40, 40, 40],
             "tierPoints": [0, 0, 0],
             "warnings": [

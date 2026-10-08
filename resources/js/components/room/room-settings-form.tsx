@@ -3,19 +3,40 @@ import type {
     HttpExceptionResponse,
 } from '@inertiajs/core';
 import { router } from '@inertiajs/react';
-import { CircleAlert } from 'lucide-react';
-import { useId, useLayoutEffect, useRef, useState } from 'react';
-import type { KeyboardEvent } from 'react';
+import { CircleAlert, SlidersHorizontal } from 'lucide-react';
+import { useId, useRef, useState } from 'react';
+import { AdvancedActiveBanner } from '@/components/room/advanced-active-banner';
+import { AdvancedSettingsForm } from '@/components/room/advanced-settings-form';
+import type {
+    AdvancedSliderField,
+    AdvancedToggle,
+    TierList,
+} from '@/components/room/advanced-settings-form';
+import {
+    SettingRadioGroup,
+    SettingSlider,
+    SettingSwitch,
+} from '@/components/room/setting-fields';
+import type { FieldIds } from '@/components/room/setting-fields';
 import { SettingsWarnings } from '@/components/room/settings-warnings';
 import { ReadOnlyNotice } from '@/components/state/read-only-notice';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Label } from '@/components/ui/label';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Slider } from '@/components/ui/slider';
-import { Switch } from '@/components/ui/switch';
+import { Button } from '@/components/ui/button';
+import {
+    Sheet,
+    SheetClose,
+    SheetContent,
+    SheetDescription,
+    SheetFooter,
+    SheetHeader,
+    SheetTitle,
+} from '@/components/ui/sheet';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { useTranslations } from '@/hooks/use-translations';
 import { announce } from '@/lib/game/announcer';
 import {
+    advancedFramesPerRoundChange,
     boundsFor,
     choicesAtPercent,
     defaultTierDurations,
@@ -28,13 +49,14 @@ import {
 import { update } from '@/routes/room/settings';
 import type {
     InputDifficulty,
+    PlatformLimitsPayload,
     RoomSettingsBoundsPayload,
     RoomSettingsState,
     RoomSettingsView,
 } from '@/types/room-settings';
 import type { TranslationKey } from '@/types/translations';
 
-/** Les champs de l'onglet Simple rendus au J1 (`SIMPLE_KEYS`, § 3.1). */
+/** Les champs communs aux deux onglets et `roundDuration` (Simple seul). */
 type SimpleField =
     | 'roundsCount'
     | 'framesPerRound'
@@ -44,18 +66,25 @@ type SimpleField =
     | 'capacity'
     | 'allowLateJoin';
 
-/** Les champs réglés au curseur (§ 8.1). */
+/** Les champs de l'onglet Simple réglés au curseur (§ 8.1). */
 type SliderField =
     | 'roundsCount'
     | 'roundDuration'
     | 'revealDuration'
     | 'capacity';
 
-/** Valeurs en cours de geste, affichées avant la réponse du serveur. */
-type Drafts = Partial<Record<SliderField, number>>;
+/** Tout champ entier réglé au curseur, des deux onglets. */
+type NumberField = SliderField | AdvancedSliderField;
 
-/** Corps d'une écriture Simple : les seuls champs changés. */
-type WriteBody = Partial<Record<SimpleField, FormDataConvertible>>;
+/** Valeurs en cours de geste, affichées avant la réponse du serveur. */
+type Drafts = Partial<Record<NumberField, number>> &
+    Partial<Record<TierList, number[]>>;
+
+/** Corps d'une écriture : les seuls champs changés. */
+type WriteBody = Record<string, FormDataConvertible>;
+
+/** L'onglet retenu : la valeur de `advanced` en données d'onglet. */
+type Tab = 'simple' | 'advanced';
 
 /**
  * Libellé et aide de chaque champ (§ 20.1) : une table de clés littérales,
@@ -96,6 +125,21 @@ const FIELD_KEYS: Record<
 };
 
 /**
+ * Champs dont l'erreur se rend sous le champ lui-même quand l'onglet Avancé
+ * est affiché ; toute autre erreur se rend sous la section.
+ */
+const ADVANCED_FIELDS: ReadonlySet<string> = new Set([
+    'tierDurations',
+    'tierPoints',
+    'speedBonus',
+    'noRepeatMovies',
+    'attemptsPerSecond',
+    'attemptsPerRound',
+    'maxAnswerLength',
+    'disconnectGraceSeconds',
+]);
+
+/**
  * Les cas de `App\Enums\InputDifficulty`, dans l'ordre de présentation : le
  * domaine d'un enum, pas une valeur de jeu.
  */
@@ -109,20 +153,16 @@ function isDifficulty(value: string): value is InputDifficulty {
     return Object.hasOwn(DIFFICULTY_OPTIONS, value);
 }
 
-/**
- * Touches qui déplacent un curseur (motif ARIA « slider ») : au clavier, le
- * geste est validé au relâchement de la touche, jamais à chaque pas.
- */
-const SLIDER_KEYS: ReadonlySet<string> = new Set([
-    'ArrowLeft',
-    'ArrowRight',
-    'ArrowUp',
-    'ArrowDown',
-    'PageUp',
-    'PageDown',
-    'Home',
-    'End',
-]);
+function isTab(value: string): value is Tab {
+    return value === 'simple' || value === 'advanced';
+}
+
+function sameList(left: number[], right: number[]): boolean {
+    return (
+        left.length === right.length &&
+        left.every((value, index) => value === right[index])
+    );
+}
 
 /** Premier message d'une écriture refusée, déjà traduit. */
 function firstError(errors: Partial<Record<string, string>>): string | null {
@@ -139,12 +179,14 @@ type RoomSettingsFormProps = {
     roomCode: string;
     /**
      * L'état des réglages du salon — prop `settings`, puis chaque
-     * `settings.changed` —, tel que le serveur le rend : valeurs et
-     * avertissements.
+     * `settings.changed` —, tel que le serveur le rend : valeurs,
+     * avertissements et réglages avancés actifs.
      */
     state: RoomSettingsState;
     /** Prop `bounds` : bornes de chaque `N`, dérivations et seuils. */
     bounds: RoomSettingsBoundsPayload;
+    /** Prop `limits` : `B_max(N)` pour l'aide du bonus et `waiting_pays`. */
+    limits: Pick<PlatformLimitsPayload, 'speedBonusMaxPercent'>;
     /**
      * Effectif présent : sièges ni partis ni expulsés (`state.seats`). La
      * capacité n'est jamais abaissée en dessous (§ 10).
@@ -155,6 +197,12 @@ type RoomSettingsFormProps = {
      * mêmes réglages en lecture seule (`room.lobby.read_only`).
      */
     editable: boolean;
+    /**
+     * L'onglet Avancé est-il livré ? Prop `editor.advancedAvailable`
+     * (`RoomSettingsEditor::ADVANCED_TAB_AVAILABLE`, vrai depuis L50-10) : le
+     * serveur décide de sa présence.
+     */
+    advancedAvailable: boolean;
     /**
      * L'interrupteur `allowLateJoin` est-il proposé ? Prop
      * `editor.lateJoinAvailable` — `true` au J1 comme au J2 (D35 du 23/09,
@@ -177,25 +225,37 @@ type RoomSettingsFormProps = {
 };
 
 /**
- * Le formulaire des réglages du salon, onglet Simple (spec 50 § 3, § 4 et
- * § 8.1) — lot L50-5, sur l'interrupteur des retardataires livré par L50-9.
+ * Le formulaire des réglages du salon (spec 50 § 3, § 4 et § 8.1) — onglet
+ * Simple du lot L50-5, interrupteur des retardataires de L50-9, onglet
+ * Avancé de L50-10.
  *
- * Champs du J1, dans l'ordre du § 20.1 : nombre de manches, images par
- * manche, durée d'une manche, durée de la révélation, difficulté de saisie,
- * places, retardataires. Le sélecteur de thèmes (J2, § 9.5) et l'onglet
- * Avancé (J2, § 3.3) n'y sont pas : le serveur accepte `themeKeys` sans que
- * l'écran le propose, et refuse tout champ avancé (`not_editable`).
+ * **Deux vues du même objet** (§ 3.3). Les champs communs — nombre de
+ * manches, images par manche, révélation, difficulté, places, retardataires —
+ * sont rendus au-dessus des onglets ; l'onglet Simple porte la durée d'une
+ * manche, découpée à parts égales, et le bandeau des réglages avancés restés
+ * actifs (`room.settings.advanced_active`) ; l'onglet Avancé porte la durée
+ * et les points de chaque palier, le bonus de rapidité, la non-répétition et
+ * les limites de saisie (`AdvancedSettingsForm`). L'onglet affiché est celui
+ * du serveur (`advanced`) : en changer est une écriture de l'hôte
+ * (`{ advanced: true|false }`), et le retour en Simple réégalise les paliers
+ * (`equalized`, rapporté par le serveur). Onglets au motif ARIA tabs,
+ * activation manuelle — les flèches déplacent le focus, Entrée ou Espace
+ * écrit —, pour qu'un parcours au clavier n'écrive jamais à chaque flèche.
+ * Sur mobile, l'onglet Avancé s'ouvre en **feuille plein écran** (`Sheet`,
+ * titre et description traduits), ouverte au geste de l'hôte et rouvrable
+ * par un bouton ; aucune règle de jeu ne dépend de l'appareil.
  *
  * **L'écriture est immédiate et part au geste** (§ 8.3), par
  * `router.patch()` sur `room.settings.update` (`preserveState`,
  * `preserveScroll`, en-tête `X-Seat-Token` posé par le magasin) : le corps
- * ne porte que le champ changé, et le serveur compose le reste avec l'état
- * courant (règle D34 du 23/09). Un curseur envoie **à la validation du
- * geste** (`onValueCommit`) — au relâchement du pointeur, ou de la touche au
- * clavier —, jamais à chaque pas. Une seule écriture à la fois : un geste
- * fait pendant l'envoi attend la réponse, fusionné avec les suivants, puis
- * part seul ; un refus l'abandonne. La valeur affichée reste celle du
- * serveur, relue à la réponse puis diffusée aux autres sièges
+ * ne porte que le champ changé, sans `advanced` — le serveur l'applique à
+ * l'onglet courant et compose le reste avec l'état courant (règle D34 du
+ * 23/09 en Simple ; rien n'est dérivé en Avancé). Un curseur envoie **à la
+ * validation du geste** (`onValueCommit`) — au relâchement du pointeur, ou de
+ * la touche au clavier —, jamais à chaque pas. Une seule écriture à la fois :
+ * un geste fait pendant l'envoi attend la réponse, fusionné avec les
+ * suivants, puis part seul ; un refus l'abandonne. La valeur affichée reste
+ * celle du serveur, relue à la réponse puis diffusée aux autres sièges
  * (`settings.changed`) — seul le curseur tenu montre sa position.
  *
  * **Retour immédiat, le serveur restant seul juge** (§ 4.3,
@@ -204,7 +264,8 @@ type RoomSettingsFormProps = {
  *   courant (`D ≥ 5 s × N`) ;
  * - quand l'hôte augmente `N` et que `D` tombe sous le nouveau minimum, `D`
  *   est remonté **dans le même envoi** et annoncé
- *   (`room.settings.roundDuration.raised`) ;
+ *   (`room.settings.roundDuration.raised`) ; en Avancé, le même envoi porte
+ *   les deux listes redimensionnées (paliers égaux, barème par défaut) ;
  * - pendant un geste, les avertissements et l'instant des propositions du
  *   mode Normal suivent la valeur tenue ; sinon, ceux du serveur ;
  * - la borne basse des places ne descend jamais sous l'effectif présent
@@ -216,26 +277,28 @@ type RoomSettingsFormProps = {
  * sous le champ fautif, lié par `aria-describedby`, ou sous la section en
  * `Alert` au rôle `note` s'il ne vise aucun champ affiché ; annoncé par la
  * page) ; déconnexion et onglet supplanté (`disabled` : un geste en cours
- * est abandonné, sans envoi ni position tenue). Clavier : curseurs
- * au motif ARIA « slider » (valeur, bornes et pas exposés), `N` et la
- * difficulté en groupes radio (un arrêt de tabulation, flèches),
- * interrupteur natif ; cibles d'au moins 44 px. Aucune couleur en dur.
+ * est abandonné, sans envoi ni position tenue). Cibles d'au moins 44 px.
+ * Aucune couleur en dur.
  */
 export function RoomSettingsForm({
     roomCode,
     state,
     bounds,
+    limits,
     headcount,
     editable,
+    advancedAvailable,
     lateJoinAvailable,
     disabled,
     onHttpException,
     onRefused,
 }: RoomSettingsFormProps) {
     const { t, locale } = useTranslations();
+    const isMobile = useIsMobile();
     const [pending, setPending] = useState(false);
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [drafts, setDrafts] = useState<Drafts>({});
+    const [sheetOpen, setSheetOpen] = useState(false);
     // `D` remonté par le client au dernier changement de `N` : la note reste
     // sous le curseur tant que le serveur porte ce couple (N, D).
     const [raised, setRaised] = useState<{
@@ -246,6 +309,7 @@ export function RoomSettingsForm({
     const queued = useRef<WriteBody | null>(null);
     const baseId = useId();
     const titleId = `${baseId}-title`;
+    const tabsLabelId = `${baseId}-tabs`;
     const generalErrorId = `${baseId}-error`;
     const readOnly = !editable || disabled;
 
@@ -264,6 +328,21 @@ export function RoomSettingsForm({
     }
 
     const server = state.settings;
+    const tab: Tab =
+        advancedAvailable && server.advanced ? 'advanced' : 'simple';
+
+    // La feuille ne survit pas à l'onglet Avancé : un retour en Simple (geste
+    // de l'hôte, preset, autre siège) la referme, pour qu'un passage ultérieur
+    // à l'Avancé par un remède ne la rouvre pas d'office.
+    const [previousTab, setPreviousTab] = useState(tab);
+
+    if (tab !== previousTab) {
+        setPreviousTab(tab);
+
+        if (tab === 'simple') {
+            setSheetOpen(false);
+        }
+    }
     const frames = server.framesPerRound;
     const forFrames = boundsFor(bounds, frames);
     const serverDuration = roundDuration(server);
@@ -273,16 +352,25 @@ export function RoomSettingsForm({
         roundsCount: drafts.roundsCount ?? server.roundsCount,
         revealDuration: drafts.revealDuration ?? server.revealDuration,
         capacity: drafts.capacity ?? server.capacity,
+        attemptsPerSecond: drafts.attemptsPerSecond ?? server.attemptsPerSecond,
+        attemptsPerRound: drafts.attemptsPerRound ?? server.attemptsPerRound,
+        maxAnswerLength: drafts.maxAnswerLength ?? server.maxAnswerLength,
+        disconnectGraceSeconds:
+            drafts.disconnectGraceSeconds ?? server.disconnectGraceSeconds,
         tierDurations:
-            drafts.roundDuration === undefined
+            drafts.tierDurations ??
+            (drafts.roundDuration === undefined
                 ? server.tierDurations
-                : defaultTierDurations(bounds, frames, duration),
+                : defaultTierDurations(bounds, frames, duration)),
+        tierPoints: drafts.tierPoints ?? server.tierPoints,
     };
     const shownWarnings =
         Object.keys(drafts).length > 0
-            ? warnings(bounds, shown)
+            ? warnings(bounds, limits, shown)
             : state.warnings;
     const choicesAt = choicesAtPercent(shown);
+    const speedBonusMaxPercent =
+        limits.speedBonusMaxPercent[String(frames)] ?? null;
 
     const count = new Intl.NumberFormat(locale);
     const secondsUnit = new Intl.NumberFormat(locale, {
@@ -293,7 +381,7 @@ export function RoomSettingsForm({
     const formatCount = (value: number): string => count.format(value);
     const formatSeconds = (value: number): string => secondsUnit.format(value);
 
-    const fieldIds = (field: SimpleField) => ({
+    const fieldIds = (field: SimpleField): FieldIds => ({
         label: `${baseId}-${field}-label`,
         help: `${baseId}-${field}-help`,
         error: `${baseId}-${field}-error`,
@@ -371,7 +459,7 @@ export function RoomSettingsForm({
      * chemin (preset, remède). Pendant un envoi, elle reste tenue : la
      * réponse déplacera le serveur, et la fin de l'envoi efface tout.
      */
-    const hold = (field: SliderField, value: number, current: number): void => {
+    const hold = (field: NumberField, value: number, current: number): void => {
         const settled = value === current && !inFlight.current;
 
         setDrafts((held) => {
@@ -392,7 +480,7 @@ export function RoomSettingsForm({
      * si le formulaire est passé en lecture seule pendant le geste.
      */
     const commit = (
-        field: SliderField,
+        field: NumberField,
         value: number,
         current: number,
     ): void => {
@@ -415,6 +503,66 @@ export function RoomSettingsForm({
         send({ [field]: value });
     };
 
+    /** La liste d'un palier, la position `index` remplacée par `value`. */
+    const tierListWith = (
+        list: TierList,
+        index: number,
+        value: number,
+    ): number[] =>
+        (drafts[list] ?? server[list]).map((current, position) =>
+            position === index ? value : current,
+        );
+
+    /** Position tenue d'un palier : la liste entière, comme elle partira. */
+    const holdTier = (list: TierList, index: number, value: number): void => {
+        const next = tierListWith(list, index, value);
+        const settled = sameList(next, server[list]) && !inFlight.current;
+
+        setDrafts((held) => {
+            const updated = { ...held };
+
+            if (settled) {
+                delete updated[list];
+            } else {
+                updated[list] = next;
+            }
+
+            return updated;
+        });
+    };
+
+    /**
+     * Validation d'un geste de palier : l'onglet Avancé poste la liste
+     * entière (`N` entrées), jamais une entrée isolée — `D` devient sa somme.
+     */
+    const commitTier = (list: TierList, index: number, value: number): void => {
+        if (readOnly) {
+            return;
+        }
+
+        const next = tierListWith(list, index, value);
+
+        if (sameList(next, server[list]) && !inFlight.current) {
+            setDrafts((held) => {
+                const updated = { ...held };
+
+                delete updated[list];
+
+                return updated;
+            });
+
+            return;
+        }
+
+        send({ [list]: next });
+    };
+
+    const toggle = (field: AdvancedToggle, value: boolean): void => {
+        if (!readOnly && value !== server[field]) {
+            send({ [field]: value });
+        }
+    };
+
     const changeFrames = (value: string): void => {
         const next = Number(value);
 
@@ -422,7 +570,12 @@ export function RoomSettingsForm({
             return;
         }
 
-        const change = framesPerRoundChange(bounds, shown, next);
+        // En Avancé, le client poste les deux listes redimensionnées : le
+        // serveur ne dérive rien et refuserait une liste de mauvaise taille.
+        const change =
+            tab === 'advanced'
+                ? advancedFramesPerRoundChange(bounds, shown, next)
+                : framesPerRoundChange(bounds, shown, next);
 
         send(change.body);
 
@@ -436,11 +589,36 @@ export function RoomSettingsForm({
         }
     };
 
-    // Erreurs sans champ affiché (`tierDurations`, `tierPoints`,
-    // `themeKeys`…) : rendues sous la section.
-    const shownFields = new Set<string>(Object.keys(FIELD_KEYS));
+    /**
+     * Changement d'onglet : une écriture de l'hôte (`advanced`). Sur mobile,
+     * l'onglet Avancé s'ouvre aussitôt en feuille plein écran.
+     */
+    const changeTab = (value: string): void => {
+        if (!isTab(value) || readOnly) {
+            return;
+        }
+
+        if (value === 'advanced' && isMobile) {
+            setSheetOpen(true);
+        }
+
+        if (value !== tab) {
+            send({ advanced: value === 'advanced' });
+        }
+    };
+
+    // Erreurs sans champ affiché (`themeKeys`, une clé avancée hors de
+    // l'onglet Avancé…) : rendues sous la section.
     const otherErrors = Object.entries(errors)
-        .filter(([field]) => !shownFields.has(field))
+        .filter(([field]) => {
+            if (Object.hasOwn(FIELD_KEYS, field)) {
+                return false;
+            }
+
+            const root = field.split('.')[0] ?? field;
+
+            return !(tab === 'advanced' && ADVANCED_FIELDS.has(root));
+        })
         .map(([, message]) => message);
 
     const errorFor = (field: SimpleField): string | null =>
@@ -490,8 +668,98 @@ export function RoomSettingsForm({
 
     const framesIds = fieldIds('framesPerRound');
     const difficultyIds = fieldIds('inputDifficulty');
-    const lateJoinIds = fieldIds('allowLateJoin');
-    const lateJoinError = errorFor('allowLateJoin');
+
+    const roundDurationSlider = renderSlider({
+        field: 'roundDuration',
+        value: duration,
+        current: serverDuration,
+        min: minRoundDuration(bounds, frames),
+        max: forFrames.roundDuration.max,
+        format: formatSeconds,
+        note:
+            raised !== null &&
+            raised.frames === frames &&
+            raised.seconds === serverDuration
+                ? t('room.settings.roundDuration.raised', {
+                      seconds: count.format(raised.seconds),
+                  })
+                : undefined,
+    });
+
+    const settingsWarnings = (
+        <SettingsWarnings
+            warnings={shownWarnings}
+            thresholds={bounds.warningThresholds}
+        />
+    );
+
+    const advancedForm = (
+        <AdvancedSettingsForm
+            shown={shown}
+            server={server}
+            bounds={forFrames}
+            speedBonusMaxPercent={speedBonusMaxPercent}
+            readOnly={readOnly}
+            errors={errors}
+            onHold={hold}
+            onCommit={commit}
+            onHoldTier={holdTier}
+            onCommitTier={commitTier}
+            onToggle={toggle}
+        />
+    );
+
+    // Sur mobile, l'onglet Avancé vit dans une feuille plein écran (§ 3.3,
+    // C16 § 2.9) : le bouton de fermeture anglais de `SheetContent` est
+    // masqué et remplacé par une fermeture traduite ; `Échap` ferme aussi.
+    const advancedSheet = (
+        <>
+            <Button
+                type="button"
+                variant="outline"
+                className="min-h-11 self-start"
+                onClick={() => setSheetOpen(true)}
+            >
+                <SlidersHorizontal aria-hidden="true" />
+                {t('room.settings.advanced_sheet.title')}
+            </Button>
+
+            <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+                <SheetContent
+                    side="bottom"
+                    className="h-dvh max-h-dvh motion-reduce:animate-none! [&>button:last-child]:hidden"
+                >
+                    <SheetHeader className="mx-auto w-full max-w-2xl">
+                        <SheetTitle>
+                            {t('room.settings.advanced_sheet.title')}
+                        </SheetTitle>
+                        <SheetDescription>
+                            {t('room.settings.advanced_sheet.description')}
+                        </SheetDescription>
+                    </SheetHeader>
+
+                    <div
+                        role="region"
+                        aria-label={t('room.settings.advanced_sheet.title')}
+                        aria-busy={pending}
+                        tabIndex={0}
+                        className="mx-auto flex min-h-0 w-full max-w-2xl flex-1 flex-col gap-5 overflow-y-auto px-4 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                    >
+                        {advancedForm}
+                        {settingsWarnings}
+                    </div>
+
+                    <SheetFooter className="mx-auto w-full max-w-2xl">
+                        <SheetClose asChild>
+                            <Button variant="outline" className="min-h-11">
+                                {t('common.action.close')}
+                            </Button>
+                        </SheetClose>
+                    </SheetFooter>
+                </SheetContent>
+            </Sheet>
+        </>
+    );
 
     return (
         <section
@@ -531,23 +799,6 @@ export function RoomSettingsForm({
                     description: null,
                 }))}
             />
-
-            {renderSlider({
-                field: 'roundDuration',
-                value: duration,
-                current: serverDuration,
-                min: minRoundDuration(bounds, frames),
-                max: forFrames.roundDuration.max,
-                format: formatSeconds,
-                note:
-                    raised !== null &&
-                    raised.frames === frames &&
-                    raised.seconds === serverDuration
-                        ? t('room.settings.roundDuration.raised', {
-                              seconds: count.format(raised.seconds),
-                          })
-                        : undefined,
-            })}
 
             {renderSlider({
                 field: 'revealDuration',
@@ -604,54 +855,67 @@ export function RoomSettingsForm({
             })}
 
             {lateJoinAvailable && (
-                <div className="flex flex-col gap-1">
-                    <div className="flex items-start justify-between gap-4">
-                        <div className="flex flex-col gap-1">
-                            <Label
-                                htmlFor={lateJoinIds.label}
-                                className="flex min-h-11 cursor-pointer items-center text-base"
-                            >
-                                {t(FIELD_KEYS.allowLateJoin.label)}
-                            </Label>
-                            <p
-                                id={lateJoinIds.help}
-                                className="text-sm text-muted-foreground"
-                            >
-                                {t(FIELD_KEYS.allowLateJoin.help)}
-                            </p>
-                        </div>
-
-                        <div className="flex min-h-11 items-center">
-                            <Switch
-                                id={lateJoinIds.label}
-                                checked={server.allowLateJoin}
-                                onCheckedChange={(allowLateJoin) =>
-                                    send({ allowLateJoin })
-                                }
-                                disabled={readOnly}
-                                aria-invalid={
-                                    lateJoinError === null ? undefined : true
-                                }
-                                aria-describedby={
-                                    lateJoinError === null
-                                        ? lateJoinIds.help
-                                        : `${lateJoinIds.help} ${lateJoinIds.error}`
-                                }
-                            />
-                        </div>
-                    </div>
-
-                    <FieldError
-                        id={lateJoinIds.error}
-                        message={lateJoinError}
-                    />
-                </div>
+                <SettingSwitch
+                    ids={fieldIds('allowLateJoin')}
+                    label={t(FIELD_KEYS.allowLateJoin.label)}
+                    help={t(FIELD_KEYS.allowLateJoin.help)}
+                    error={errorFor('allowLateJoin')}
+                    checked={server.allowLateJoin}
+                    disabled={readOnly}
+                    onCheckedChange={(allowLateJoin) => send({ allowLateJoin })}
+                />
             )}
 
-            <SettingsWarnings
-                warnings={shownWarnings}
-                thresholds={bounds.warningThresholds}
-            />
+            {advancedAvailable ? (
+                <Tabs
+                    value={tab}
+                    onValueChange={changeTab}
+                    activationMode="manual"
+                    className="gap-4"
+                >
+                    <span id={tabsLabelId} className="text-base font-medium">
+                        {t('room.settings.advanced.label')}
+                    </span>
+                    <TabsList
+                        aria-labelledby={tabsLabelId}
+                        className="h-auto! min-h-11"
+                    >
+                        <TabsTrigger
+                            value="simple"
+                            disabled={readOnly}
+                            className="min-h-10 px-4"
+                        >
+                            {t('room.settings.tabs.simple')}
+                        </TabsTrigger>
+                        <TabsTrigger
+                            value="advanced"
+                            disabled={readOnly}
+                            className="min-h-10 px-4"
+                        >
+                            {t('room.settings.tabs.advanced')}
+                        </TabsTrigger>
+                    </TabsList>
+
+                    <TabsContent value="simple" className="flex flex-col gap-5">
+                        {roundDurationSlider}
+                        <AdvancedActiveBanner fields={state.advancedActive} />
+                    </TabsContent>
+
+                    <TabsContent
+                        value="advanced"
+                        className="flex flex-col gap-5"
+                    >
+                        <p className="text-sm text-muted-foreground">
+                            {t('room.settings.advanced_sheet.description')}
+                        </p>
+                        {isMobile ? advancedSheet : advancedForm}
+                    </TabsContent>
+                </Tabs>
+            ) : (
+                roundDurationSlider
+            )}
+
+            {settingsWarnings}
 
             {otherErrors.length > 0 && (
                 <Alert role="note" id={generalErrorId}>
@@ -666,279 +930,5 @@ export function RoomSettingsForm({
                 </Alert>
             )}
         </section>
-    );
-}
-
-type FieldIds = { label: string; help: string; error: string };
-
-/** Message d'erreur d'un champ : icône et texte, jamais la seule couleur. */
-function FieldError({ id, message }: { id: string; message: string | null }) {
-    if (message === null) {
-        return null;
-    }
-
-    return (
-        <p id={id} className="flex items-start gap-1 text-sm text-destructive">
-            <CircleAlert
-                aria-hidden="true"
-                className="mt-0.5 size-4 shrink-0"
-            />
-            {message}
-        </p>
-    );
-}
-
-type SettingSliderProps = {
-    ids: FieldIds;
-    label: string;
-    help: string;
-    /** Ajustement fait par le client lui-même (`D` remonté), déjà traduit. */
-    note: string | null;
-    error: string | null;
-    value: number;
-    min: number;
-    max: number;
-    /** Valeur mise en mots, avec son unité (`aria-valuetext`). */
-    format: (value: number) => string;
-    disabled: boolean;
-    /** Position tenue pendant le geste. */
-    onDraft: (value: number) => void;
-    /** Geste validé : relâchement du pointeur ou de la touche. */
-    onCommit: (value: number) => void;
-};
-
-/**
- * Un curseur de réglage (primitive `slider` de shadcn, Radix), au pas de 1.
- *
- * Le geste est validé **au relâchement** : `onValueCommit` au pointeur ;
- * au clavier, Radix valide à chaque touche, et le relâchement de la touche
- * (`keyup`) — ou la perte du focus — fait seul partir la valeur, pour qu'une
- * touche tenue n'écrive pas à chaque pas (§ 8.3, limiteur `game-write`).
- *
- * La primitive ne transmet aucune prop à sa poignée (`role="slider"`) : son
- * nom, sa description et sa valeur en mots y sont posés après chaque rendu,
- * sans quoi le curseur serait anonyme pour un lecteur d'écran. La racine
- * fait au moins 44 px de haut : toute sa surface déplace la poignée.
- */
-function SettingSlider({
-    ids,
-    label,
-    help,
-    note,
-    error,
-    value,
-    min,
-    max,
-    format,
-    disabled,
-    onDraft,
-    onCommit,
-}: SettingSliderProps) {
-    const rootRef = useRef<HTMLSpanElement>(null);
-    const keyboard = useRef<{ active: boolean; value: number | null }>({
-        active: false,
-        value: null,
-    });
-    const noteId = `${ids.label}-note`;
-    const describedBy = [
-        ids.help,
-        note === null ? null : noteId,
-        error === null ? null : ids.error,
-    ]
-        .filter((id) => id !== null)
-        .join(' ');
-    const valueText = format(value);
-
-    useLayoutEffect(() => {
-        const thumb = rootRef.current?.querySelector('[role="slider"]');
-
-        if (!(thumb instanceof HTMLElement)) {
-            return;
-        }
-
-        thumb.setAttribute('aria-labelledby', ids.label);
-        thumb.setAttribute('aria-describedby', describedBy);
-        thumb.setAttribute('aria-valuetext', valueText);
-
-        if (error === null) {
-            thumb.removeAttribute('aria-invalid');
-        } else {
-            thumb.setAttribute('aria-invalid', 'true');
-        }
-    });
-
-    const flushKeyboard = (): void => {
-        const pendingValue = keyboard.current.value;
-
-        keyboard.current = { active: false, value: null };
-
-        if (pendingValue !== null) {
-            onCommit(pendingValue);
-        }
-    };
-
-    return (
-        <div className="flex flex-col gap-1">
-            <div className="flex items-baseline justify-between gap-4">
-                <span id={ids.label} className="text-base font-medium">
-                    {label}
-                </span>
-                <span aria-hidden="true" className="font-medium tabular-nums">
-                    {valueText}
-                </span>
-            </div>
-            <p id={ids.help} className="text-sm text-muted-foreground">
-                {help}
-            </p>
-            <Slider
-                ref={rootRef}
-                value={[Math.max(min, Math.min(max, value))]}
-                min={min}
-                max={max}
-                step={1}
-                disabled={disabled}
-                onKeyDown={(event: KeyboardEvent<HTMLSpanElement>) => {
-                    if (SLIDER_KEYS.has(event.key)) {
-                        keyboard.current.active = true;
-                    }
-                }}
-                onKeyUp={(event: KeyboardEvent<HTMLSpanElement>) => {
-                    if (keyboard.current.active && SLIDER_KEYS.has(event.key)) {
-                        flushKeyboard();
-                    }
-                }}
-                onBlur={() => {
-                    if (keyboard.current.active) {
-                        flushKeyboard();
-                    }
-                }}
-                onValueChange={([next]) => {
-                    if (next === undefined) {
-                        return;
-                    }
-
-                    if (keyboard.current.active) {
-                        keyboard.current.value = next;
-                    }
-
-                    onDraft(next);
-                }}
-                onValueCommit={([next]) => {
-                    if (next !== undefined && !keyboard.current.active) {
-                        onCommit(next);
-                    }
-                }}
-                className="min-h-11"
-            />
-            <div
-                aria-hidden="true"
-                className="flex justify-between text-xs text-muted-foreground tabular-nums"
-            >
-                <span>{format(min)}</span>
-                <span>{format(max)}</span>
-            </div>
-            {note !== null && (
-                <p id={noteId} className="text-sm text-muted-foreground">
-                    {note}
-                </p>
-            )}
-            <FieldError id={ids.error} message={error} />
-        </div>
-    );
-}
-
-type SettingRadioGroupProps = {
-    ids: FieldIds;
-    label: string;
-    help: string;
-    error: string | null;
-    value: string;
-    disabled: boolean;
-    onValueChange: (value: string) => void;
-    orientation: 'horizontal' | 'vertical';
-    options: { value: string; label: string; description: string | null }[];
-};
-
-/**
- * Un groupe radio de réglage (primitive `radio-group` de shadcn, Radix) : un
- * seul arrêt de tabulation, les flèches changent la valeur — qui part au
- * geste, comme un clic. La valeur cochée reste celle du serveur.
- */
-function SettingRadioGroup({
-    ids,
-    label,
-    help,
-    error,
-    value,
-    disabled,
-    onValueChange,
-    orientation,
-    options,
-}: SettingRadioGroupProps) {
-    return (
-        <div className="flex flex-col gap-1">
-            <span id={ids.label} className="text-base font-medium">
-                {label}
-            </span>
-            <p id={ids.help} className="text-sm text-muted-foreground">
-                {help}
-            </p>
-            <RadioGroup
-                value={value}
-                onValueChange={onValueChange}
-                disabled={disabled}
-                aria-labelledby={ids.label}
-                aria-describedby={
-                    error === null ? ids.help : `${ids.help} ${ids.error}`
-                }
-                aria-invalid={error === null ? undefined : true}
-                orientation={orientation}
-                className={
-                    orientation === 'horizontal'
-                        ? 'flex flex-wrap gap-x-4 gap-y-1'
-                        : 'flex flex-col gap-1'
-                }
-            >
-                {options.map((option) => {
-                    const itemId = `${ids.label}-${option.value}`;
-                    const descriptionId = `${itemId}-description`;
-
-                    return (
-                        <div
-                            key={option.value}
-                            className="flex items-start gap-3"
-                        >
-                            <RadioGroupItem
-                                id={itemId}
-                                value={option.value}
-                                aria-describedby={
-                                    option.description === null
-                                        ? undefined
-                                        : descriptionId
-                                }
-                                className="mt-3.5"
-                            />
-                            <div className="flex flex-col">
-                                <Label
-                                    htmlFor={itemId}
-                                    className="flex min-h-11 min-w-11 cursor-pointer items-center text-base font-normal"
-                                >
-                                    {option.label}
-                                </Label>
-                                {option.description !== null && (
-                                    <p
-                                        id={descriptionId}
-                                        className="pb-1 text-sm text-muted-foreground"
-                                    >
-                                        {option.description}
-                                    </p>
-                                )}
-                            </div>
-                        </div>
-                    );
-                })}
-            </RadioGroup>
-            <FieldError id={ids.error} message={error} />
-        </div>
     );
 }

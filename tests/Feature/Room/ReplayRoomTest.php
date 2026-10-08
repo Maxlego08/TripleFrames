@@ -483,15 +483,16 @@ it('diffuse le vivier réduit par la non-répétition', function (): void {
     $pool = $second[1]['payload']['pool'];
 
     // Le vivier est tombé sous `M` : bloqué pour tous, la non-répétition
-    // nommée seule cause, « nouveau salon » proposé ; l'interrupteur de
-    // l'onglet Avancé, absent au J1, n'est pas proposé (D28 du 23/09).
+    // nommée seule cause, « nouveau salon » proposé, puis l'interrupteur de
+    // l'onglet Avancé, livré par L50-10 (D28 du 23/09).
     expect($second)->toHaveCount(2)
         ->and($pool)->toBe(replayJson(RoomSettingsPresenter::state($room->refresh(), $secondAt)['pool']))
         ->and($pool['count'])->toBe($works - 2 * $roundsCount)
         ->and($pool['blocked'])->toBeTrue()
         ->and($pool['causes'])->toBe([PoolFault::NoRepeatMovies->value])
-        ->and(array_column($pool['remedies'], 'kind'))->toBe([PoolRemedyKind::OpenNewRoom->value])
-        ->and($pool['remedies'][0]['count'])->toBe($works);
+        ->and(array_column($pool['remedies'], 'kind'))->toBe([PoolRemedyKind::OpenNewRoom->value, PoolRemedyKind::DisableNoRepeat->value])
+        ->and($pool['remedies'][0]['count'])->toBe($works)
+        ->and($pool['remedies'][1]['count'])->toBe($works);
 
     WirePayload::assertSafe($second[1]['payload'], 'room.replayed');
 

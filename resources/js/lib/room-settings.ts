@@ -1,11 +1,13 @@
 /**
- * Dérivations des réglages de salon côté client, pour le retour immédiat de
- * l'onglet Simple (spec 50 § 4.3, contrat C0).
+ * Dérivations des réglages de salon côté client, pour le retour immédiat des
+ * onglets Simple et Avancé (spec 50 § 3.3 et § 4.3, contrat C0).
  *
  * Tout est calculé **uniquement** depuis `RoomSettingsBoundsPayload`
- * (`RoomSettingsBounds::toClient()`, prop `bounds` du lobby), sans aucun
- * littéral de jeu : aucune durée, aucun nombre d'images, aucun barème ni
- * aucun seuil n'est écrit ici. Le serveur reste **seul juge** : il redérive,
+ * (`RoomSettingsBounds::toClient()`, prop `bounds` du lobby) et, pour le seul
+ * avertissement `waiting_pays`, depuis `B_max(N)` de la prop `limits`
+ * (`PlatformLimits::toArray().speedBonusMaxPercent`), sans aucun littéral de
+ * jeu : aucune durée, aucun nombre d'images, aucun barème ni aucun seuil
+ * n'est écrit ici. Le serveur reste **seul juge** : il redérive,
  * revalide et refuse sous le verrou du salon ; ces fonctions ne font que
  * montrer à l'hôte, avant l'envoi, ce que le serveur rendra.
  *
@@ -17,6 +19,7 @@
  */
 import type {
     Bound,
+    PlatformLimitsPayload,
     RoomSettingsBoundsForN,
     RoomSettingsBoundsPayload,
     RoomSettingsChangeCode,
@@ -278,16 +281,42 @@ export function crossBoundErrors(
     return errors;
 }
 
+/** Unité des pourcentages de `B_max` (`PlatformLimits::FULL_PERCENT`). */
+const FULL_PERCENT = 100;
+
+/**
+ * « Attendre paie » (`ScoringRules::waitingPays()`, spec 80 § 3.4) : vrai si,
+ * pour un palier `i < N`, `P_i < P_{i+1} + ⌊P_{i+1} × B_max(N) / 100⌋` — la
+ * fin d'un palier rapporte moins que l'ouverture du suivant, bonus compris.
+ * `percent` est `B_max(N)` en pourcentage entier, lu dans la prop `limits`.
+ */
+export function waitingPays(tierPoints: number[], percent: number): boolean {
+    return tierPoints.some((points, index) => {
+        const next = tierPoints[index + 1];
+
+        return (
+            next !== undefined &&
+            points < next + Math.floor((next * percent) / FULL_PERCENT)
+        );
+    });
+}
+
 /**
  * Avertissements non bloquants, cumulables — bornes croisées 4 et 5, dans
  * l'ordre de `RoomSettings::warnings()` : révélation courte, manche longue,
- * barème non strictement décroissant, barème entièrement à zéro.
+ * barème non strictement décroissant, « attendre paie » (bonus actif
+ * seulement, jamais en plus du précédent), barème entièrement à zéro.
+ *
+ * `N` est la taille du barème, et `B_max(N)` est lu dans
+ * `limits.speedBonusMaxPercent` : une table sans ce `N` ne lève jamais
+ * `waiting_pays` (le serveur reste seul juge).
  */
 export function warnings(
     bounds: RoomSettingsBoundsPayload,
+    limits: Pick<PlatformLimitsPayload, 'speedBonusMaxPercent'>,
     view: Pick<
         RoomSettingsView,
-        'revealDuration' | 'tierDurations' | 'tierPoints'
+        'revealDuration' | 'tierDurations' | 'tierPoints' | 'speedBonus'
     >,
 ): RoomSettingsWarningCode[] {
     const { recommendedMinRevealDuration, longRoundWarningDuration } =
@@ -309,6 +338,17 @@ export function warnings(
         )
     ) {
         codes.push('non_decreasing_points');
+    }
+
+    const percent = limits.speedBonusMaxPercent[String(view.tierPoints.length)];
+
+    if (
+        !codes.includes('non_decreasing_points') &&
+        view.speedBonus &&
+        percent !== undefined &&
+        waitingPays(view.tierPoints, percent)
+    ) {
+        codes.push('waiting_pays');
     }
 
     if (view.tierPoints.reduce((sum, points) => sum + points, 0) === 0) {
@@ -384,6 +424,63 @@ export function framesPerRoundChange(
             seconds: violation.min,
         },
     };
+}
+
+/** Écriture de l'onglet Avancé composée par le client pour un changement de `N`. */
+export type AdvancedFramesPerRoundChange = {
+    body: {
+        framesPerRound: number;
+        tierDurations: number[];
+        tierPoints: number[];
+    };
+    /** `D` remonté au minimum du nouveau `N`, à annoncer ; `null` sinon. */
+    announcement: SettingsAnnouncement | null;
+    /** Le barème personnalisé est remplacé par le défaut du nouveau `N`. */
+    pointsReset: boolean;
+};
+
+/**
+ * Changement de `N` dans l'onglet Avancé (§ 3.3) : l'éditeur Avancé ne
+ * dérive rien, c'est le client qui poste les **deux listes redimensionnées**
+ * — paliers égaux sur `max(D₀, minRoundDuration(N₁))` et barème par défaut
+ * du nouveau `N` —, et qui annonce `D` remonté. Le serveur rapporte `reset`
+ * quand le barème remplacé était personnalisé ; `pointsReset` le dit
+ * d'avance, pour l'écran.
+ */
+export function advancedFramesPerRoundChange(
+    bounds: RoomSettingsBoundsPayload,
+    view: Pick<RoomSettingsView, 'tierDurations' | 'tierPoints'>,
+    framesPerRound: number,
+): AdvancedFramesPerRoundChange {
+    const duration = roundDuration(view);
+    const minimum = minRoundDuration(bounds, framesPerRound);
+    const target = Math.max(duration, minimum);
+    const current = view.tierPoints.length;
+
+    return {
+        body: {
+            framesPerRound,
+            tierDurations: defaultTierDurations(bounds, framesPerRound, target),
+            tierPoints: defaultTierPoints(bounds, framesPerRound),
+        },
+        announcement:
+            target === duration
+                ? null
+                : {
+                      key: 'room.settings.roundDuration.raised',
+                      seconds: target,
+                  },
+        pointsReset:
+            framesPerRound !== current &&
+            !sameList(view.tierPoints, defaultTierPoints(bounds, current)),
+    };
+}
+
+function sameList(left: number[], right: number[]): boolean {
+    return (
+        left.length === right.length &&
+        left.every((value, index) => value === right[index])
+    );
 }
 
 /** Rapport de changements rendu à l'auteur d'une écriture (§ 2.6). */

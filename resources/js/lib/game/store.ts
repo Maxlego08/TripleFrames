@@ -945,6 +945,7 @@ export function createGameStore(options: GameStoreOptions): GameStore {
                     settings: {
                         settings: changed.settings,
                         warnings: changed.warnings,
+                        advancedActive: changed.advancedActive,
                         pool: changed.pool,
                     },
                 });
@@ -1046,6 +1047,7 @@ export function createGameStore(options: GameStoreOptions): GameStore {
             const settings: RoomSettingsState = {
                 settings: event.settings,
                 warnings: event.warnings,
+                advancedActive: event.advancedActive,
                 pool: event.pool,
             };
 

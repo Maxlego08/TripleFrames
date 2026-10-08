@@ -2,6 +2,7 @@
 
 use App\Console\Commands\RoomDerivationsFixtureCommand;
 use App\Enums\SettingPresetKey;
+use App\Settings\PlatformLimits;
 use App\Settings\RoomSettings;
 use App\Settings\RoomSettingsBounds;
 use App\Settings\RoomSettingsEditor;
@@ -80,19 +81,21 @@ function roomDerivationsWarnings(mixed $value, string $where): array
  *
  * @return array{
  *     bounds: array<mixed>,
+ *     speedBonusMaxPercent: array<mixed>,
  *     cases: list<array{n: int, d: int, r: int, tierDurations: list<int>, tierPoints: list<int>, attemptsPerRound: int, warnings: list<string>}>,
- *     warningCases: list<array{revealDuration: int, tierDurations: list<int>, tierPoints: list<int>, warnings: list<string>}>,
+ *     warningCases: list<array{revealDuration: int, speedBonus: bool, tierDurations: list<int>, tierPoints: list<int>, warnings: list<string>}>,
  * }
  */
 function roomDerivations(): array
 {
     $decoded = json_decode((string) file_get_contents(base_path(roomDerivationsPath())), true, flags: JSON_THROW_ON_ERROR);
 
-    if (! is_array($decoded) || array_keys($decoded) !== ['bounds', 'cases', 'warningCases']) {
-        throw new RuntimeException(roomDerivationsPath().' : { bounds, cases, warningCases } est attendu.');
+    if (! is_array($decoded) || array_keys($decoded) !== ['bounds', 'speedBonusMaxPercent', 'cases', 'warningCases']) {
+        throw new RuntimeException(roomDerivationsPath().' : { bounds, speedBonusMaxPercent, cases, warningCases } est attendu.');
     }
 
-    if (! is_array($decoded['bounds']) || ! is_array($decoded['cases']) || ! is_array($decoded['warningCases'])) {
+    if (! is_array($decoded['bounds']) || ! is_array($decoded['speedBonusMaxPercent'])
+        || ! is_array($decoded['cases']) || ! is_array($decoded['warningCases'])) {
         throw new RuntimeException(roomDerivationsPath().' : forme inattendue.');
     }
 
@@ -125,13 +128,14 @@ function roomDerivations(): array
         $where = roomDerivationsPath()." : cas d'avertissement n° {$index}";
 
         if (! is_array($case)
-            || array_keys($case) !== ['revealDuration', 'tierDurations', 'tierPoints', 'warnings']
-            || ! is_int($case['revealDuration'])) {
+            || array_keys($case) !== ['revealDuration', 'speedBonus', 'tierDurations', 'tierPoints', 'warnings']
+            || ! is_int($case['revealDuration']) || ! is_bool($case['speedBonus'])) {
             throw new RuntimeException("{$where} mal formé.");
         }
 
         $warningCases[] = [
             'revealDuration' => $case['revealDuration'],
+            'speedBonus' => $case['speedBonus'],
             'tierDurations' => roomDerivationsIntList($case['tierDurations'], $where),
             'tierPoints' => roomDerivationsIntList($case['tierPoints'], $where),
             'warnings' => roomDerivationsWarnings($case['warnings'], $where),
@@ -142,7 +146,12 @@ function roomDerivations(): array
         throw new RuntimeException(roomDerivationsPath().' : des cas sont attendus.');
     }
 
-    return ['bounds' => $decoded['bounds'], 'cases' => $cases, 'warningCases' => $warningCases];
+    return [
+        'bounds' => $decoded['bounds'],
+        'speedBonusMaxPercent' => $decoded['speedBonusMaxPercent'],
+        'cases' => $cases,
+        'warningCases' => $warningCases,
+    ];
 }
 
 it('le jeu de dérivations partagé avec le client correspond au serveur', function (): void {
@@ -150,7 +159,9 @@ it('le jeu de dérivations partagé avec le client correspond au serveur', funct
 
     // Les bornes que le client reçoit en prop, à l'identique : c'est d'elles
     // seules qu'il dérive.
-    expect($fixture['bounds'])->toBe(RoomSettingsBounds::toClient());
+    expect($fixture['bounds'])->toBe(RoomSettingsBounds::toClient())
+        // `B_max(N)` de la prop `limits`, seul lu par `waiting_pays` (L50-10).
+        ->and($fixture['speedBonusMaxPercent'])->toBe(PlatformLimits::current()->toArray()['speedBonusMaxPercent']);
 
     foreach ($fixture['cases'] as $case) {
         $label = "N = {$case['n']}, D = {$case['d']}, R = {$case['r']}";
@@ -188,6 +199,7 @@ it('le jeu de dérivations partagé avec le client correspond au serveur', funct
             'tierDurations' => $case['tierDurations'],
             'tierPoints' => $case['tierPoints'],
             'revealDuration' => $case['revealDuration'],
+            'speedBonus' => $case['speedBonus'],
         ]);
 
         expect($settings->tierDurations)->toBe($case['tierDurations'], $label)
@@ -236,8 +248,9 @@ it('couvre chaque N des bornes, chaque reste de D et les deux côtés de chaque 
         ->toContain(RoomSettingsBounds::RECOMMENDED_MIN_REVEAL_DURATION)
         ->toContain(RoomSettingsBounds::RECOMMENDED_MIN_REVEAL_DURATION - 1);
 
-    // Les quatre avertissements, chacun levé et chacun absent, et un cas qui
-    // les lève tous, dans l'ordre du serveur.
+    // Les cinq avertissements, chacun levé et chacun absent, et un cas qui
+    // lève les quatre premiers ensemble, dans l'ordre du serveur
+    // (`waiting_pays` ne s'ajoute jamais à `non_decreasing_points`).
     $all = [
         RoomSettings::WARNING_SHORT_REVEAL,
         RoomSettings::WARNING_LONG_ROUND,
@@ -246,7 +259,7 @@ it('couvre chaque N des bornes, chaque reste de D et les deux côtés de chaque 
     ];
     $raised = collect([...$fixture['cases'], ...$fixture['warningCases']])->pluck('warnings');
 
-    foreach ($all as $code) {
+    foreach ([...$all, RoomSettings::WARNING_WAITING_PAYS] as $code) {
         expect($raised->contains(static fn (array $codes): bool => in_array($code, $codes, true)))->toBeTrue($code)
             ->and($raised->contains(static fn (array $codes): bool => ! in_array($code, $codes, true)))->toBeTrue($code);
     }

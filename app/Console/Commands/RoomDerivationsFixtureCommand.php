@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Enums\SettingPresetKey;
+use App\Settings\PlatformLimits;
 use App\Settings\RoomSettings;
 use App\Settings\RoomSettingsBounds;
 use App\Settings\RoomSettingsEditor;
@@ -34,9 +35,14 @@ use Illuminate\Support\Facades\File;
  *
  * ```
  * { bounds: RoomSettingsBounds::toClient(),
+ *   speedBonusMaxPercent: PlatformLimits::toArray()['speedBonusMaxPercent'],
  *   cases: [{ n, d, r, tierDurations, tierPoints, attemptsPerRound, warnings }],
- *   warningCases: [{ revealDuration, tierDurations, tierPoints, warnings }] }
+ *   warningCases: [{ revealDuration, speedBonus, tierDurations, tierPoints, warnings }] }
  * ```
+ *
+ * `speedBonusMaxPercent` (prop `limits` du lobby, jamais dans les bornes)
+ * sert au seul avertissement `waiting_pays` (L50-10), qui dépend de `B_max(N)`
+ * et de l'interrupteur `speedBonus`.
  *
  * - `cases` : une entrée Simple `(N, D, R)` passée par le chemin de l'hôte
  *   ({@see RoomSettingsEditor::simple()} depuis les défauts, puis
@@ -46,8 +52,9 @@ use Illuminate\Support\Facades\File;
  *   les bornes de `D`, les durées des presets ; puis les révélations autour du
  *   seuil recommandé.
  * - `warningCases` : des barèmes et des paliers inégaux que l'onglet Simple
- *   ne pose pas (onglet Avancé, J2), passés par {@see RoomSettings::fromInput()},
- *   pour que les quatre avertissements soient éprouvés des deux côtés.
+ *   ne pose pas (onglet Avancé), passés par {@see RoomSettings::fromInput()},
+ *   bonus actif ou coupé, pour que les cinq avertissements soient éprouvés
+ *   des deux côtés.
  *
  * Mis en forme comme oxfmt le rendrait (quatre espaces, 80 colonnes) : un
  * fichier qu'oxfmt réécrirait ferait échouer `vp check`.
@@ -122,12 +129,13 @@ class RoomDerivationsFixtureCommand extends Command
     }
 
     /**
-     * @return array{bounds: array<string, mixed>, cases: list<array<string, mixed>>, warningCases: list<array<string, mixed>>}
+     * @return array{bounds: array<string, mixed>, speedBonusMaxPercent: array<int, int>, cases: list<array<string, mixed>>, warningCases: list<array<string, mixed>>}
      */
     public static function document(): array
     {
         return [
             'bounds' => RoomSettingsBounds::toClient(),
+            'speedBonusMaxPercent' => PlatformLimits::current()->toArray()['speedBonusMaxPercent'],
             'cases' => self::cases(),
             'warningCases' => self::warningCases(),
         ];
@@ -255,9 +263,10 @@ class RoomDerivationsFixtureCommand extends Command
     /**
      * Barèmes et paliers de l'onglet Avancé : pour les `N` extrêmes et par
      * défaut, un barème par défaut, plat au maximum, croissant, à égalité en
-     * fin, à zéro en fin seulement, entièrement à zéro ; puis des paliers
-     * inégaux qui dépassent la manche longue, et un cas qui lève les quatre
-     * avertissements.
+     * fin, à zéro en fin seulement, entièrement à zéro, strictement
+     * décroissant mais qui fait payer l'attente — bonus actif, puis le même
+     * bonus coupé — ; puis des paliers inégaux qui dépassent la manche longue,
+     * et un cas qui lève quatre avertissements.
      *
      * @return list<array<string, mixed>>
      */
@@ -276,6 +285,13 @@ class RoomDerivationsFixtureCommand extends Command
             foreach (self::pointPatterns($frames) as $points) {
                 $cases[] = self::warningCase(RoomSettingsBounds::DEFAULT_REVEAL_DURATION, $durations, $points);
             }
+
+            $cases[] = self::warningCase(
+                RoomSettingsBounds::DEFAULT_REVEAL_DURATION,
+                $durations,
+                self::waitingPaysPoints($frames),
+                speedBonus: false,
+            );
         }
 
         $frames = RoomSettingsBounds::DEFAULT_FRAMES_PER_ROUND;
@@ -316,7 +332,23 @@ class RoomDerivationsFixtureCommand extends Command
             [...$allButLast, $allButLast[count($allButLast) - 1]],
             [...$allButLast, RoomSettingsBounds::MIN_TIER_POINTS],
             array_fill(0, $framesPerRound, RoomSettingsBounds::MIN_TIER_POINTS),
+            self::waitingPaysPoints($framesPerRound),
         ];
+    }
+
+    /**
+     * Le barème par défaut, son deuxième palier ramené juste sous le premier :
+     * strictement décroissant, donc sans `non_decreasing_points`, mais le
+     * bonus du deuxième palier fait payer l'attente (`waiting_pays`, spec 80
+     * § 3.4).
+     *
+     * @return list<int>
+     */
+    private static function waitingPaysPoints(int $framesPerRound): array
+    {
+        $points = RoomSettingsBounds::defaultTierPoints($framesPerRound);
+
+        return [$points[0], $points[0] - 1, ...array_slice($points, 2)];
     }
 
     /**
@@ -324,17 +356,19 @@ class RoomDerivationsFixtureCommand extends Command
      * @param  list<int>  $tierPoints
      * @return array<string, mixed>
      */
-    private static function warningCase(int $revealDuration, array $tierDurations, array $tierPoints): array
+    private static function warningCase(int $revealDuration, array $tierDurations, array $tierPoints, bool $speedBonus = RoomSettingsBounds::DEFAULT_SPEED_BONUS): array
     {
         $settings = RoomSettings::fromInput([
             'framesPerRound' => count($tierPoints),
             'tierDurations' => $tierDurations,
             'tierPoints' => $tierPoints,
             'revealDuration' => $revealDuration,
+            'speedBonus' => $speedBonus,
         ]);
 
         return [
             'revealDuration' => $revealDuration,
+            'speedBonus' => $settings->speedBonus,
             'tierDurations' => $settings->tierDurations,
             'tierPoints' => $settings->tierPoints,
             'warnings' => $settings->warnings(),
