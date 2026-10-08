@@ -40,6 +40,46 @@ enum Locale: string
         };
     }
 
+    /**
+     * Séparateur décimal des textes que le serveur met en forme lui-même —
+     * e-mails et export de données, jamais un écran (spec 05 § Nombres, dates
+     * et durées, point 2) ; seul lecteur : `App\Support\Format`.
+     */
+    public function decimalSeparator(): string
+    {
+        return match ($this) {
+            self::English => '.',
+            self::French => ',',
+        };
+    }
+
+    /** Séparateur des milliers, même périmètre : espace insécable (U+00A0) en français. */
+    public function thousandsSeparator(): string
+    {
+        return match ($this) {
+            self::English => ',',
+            self::French => "\u{00A0}",
+        };
+    }
+
+    /** Motif `translatedFormat()` d'une date seule : « 7 octobre 2026 », « October 7, 2026 ». */
+    public function datePattern(): string
+    {
+        return match ($this) {
+            self::English => 'F j, Y',
+            self::French => 'j F Y',
+        };
+    }
+
+    /** Motif `translatedFormat()` d'un instant, fuseau affiché : « 7 octobre 2026 à 14:05 UTC ». */
+    public function dateTimePattern(): string
+    {
+        return match ($this) {
+            self::English => 'F j, Y, H:i T',
+            self::French => 'j F Y \à H:i T',
+        };
+    }
+
     /** Rang de repli d'affichage déclaré par l'instance : `en` puis `fr`. Sans effet sur la négociation. */
     public function fallbackRank(): int
     {
