@@ -172,7 +172,18 @@ class FrameBankController extends Controller
         $rows = [];
 
         foreach ($bank->frames() as $frame) {
-            $rows[] = AdminCatalogPresenter::bankFrame($frame, $bank->stateOf($frame), $bank->reviewRejected($frame));
+            $frame->setRelation('movie', $bank->movie);
+
+            $rows[] = [
+                ...AdminCatalogPresenter::bankFrame($frame, $bank->stateOf($frame), $bank->reviewRejected($frame)),
+                // Suspendre une image publiée, lever sa suspension (§ 11.2,
+                // ligne 30) : administrateur seul. Ne sert qu'à montrer un
+                // bouton ; chaque route rejoue sa policy à l'écriture.
+                'abilities' => [
+                    'suspend' => Gate::allows('suspend', $frame),
+                    'unsuspend' => Gate::allows('unsuspend', $frame),
+                ],
+            ];
         }
 
         return $rows;

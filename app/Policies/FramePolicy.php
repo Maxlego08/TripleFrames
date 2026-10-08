@@ -17,7 +17,8 @@ use Illuminate\Support\Facades\Config;
  * Même règle que partout : **aucun `Gate::before`**, chaque seuil est posé ici
  * par {@see UserRole::atLeast()}. Les gestes réservés à l'admin — suspendre,
  * lever, retirer, geste rétroactif de grille — sont des méthodes du jalon 2 et
- * arrivent avec les lots qui livrent leurs routes (L20-20, L20-21, L20-25).
+ * arrivent avec les lots qui livrent leurs routes (L20-20, L20-21, L20-25 ;
+ * `suspend` et `unsuspend` livrées le 08/10).
  *
  * **La garde d'ajout nomme la classe en premier argument** :
  * `can:create,App\Models\Frame,movie`. Le middleware `can` résout la policy
@@ -137,6 +138,34 @@ class FramePolicy
     {
         return $user->role->atLeast(UserRole::Curator)
             && in_array($frame->availability, [ContentAvailability::Draft, ContentAvailability::Published], true);
+    }
+
+    /**
+     * Suspendre une image (spec 20 § 11.2, ligne 30, L20-20) :
+     * **administrateur seul**, et une image **publiée** seulement — la seule
+     * qu'un joueur puisse voir, et la seule dont la levée sait restaurer
+     * l'état par la règle de la revue (spec 10 § 4.2) : une image dépubliée
+     * dont la revue tient encore reviendrait sinon en jeu à la levée. Forme
+     * livrée — amendé le 08/10.
+     */
+    public function suspend(User $user, Frame $frame): bool
+    {
+        return $user->role->atLeast(UserRole::Admin)
+            && $frame->availability === ContentAvailability::Published;
+    }
+
+    /**
+     * Lever la suspension d'une image (§ 11.2) : administrateur seul, image
+     * `suspended`, et **jamais tant que son film est lui-même suspendu** —
+     * la levée du film restaure les images de sa cascade, et une image
+     * suspendue individuellement ne se lève que par ce geste-ci, une fois le
+     * film rendu.
+     */
+    public function unsuspend(User $user, Frame $frame): bool
+    {
+        return $user->role->atLeast(UserRole::Admin)
+            && $frame->availability === ContentAvailability::Suspended
+            && ! in_array($frame->movie->availability, [ContentAvailability::Suspended, ContentAvailability::Withdrawn], true);
     }
 
     /**

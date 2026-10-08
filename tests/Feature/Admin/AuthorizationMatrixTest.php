@@ -406,3 +406,49 @@ test('les méthodes J1 des policies suivent la table du § 2.9, seuil et état c
         ->and(Gate::forUser($admin)->allows('updateRealName', $targets['curateur anonymisé']))->toBeFalse()
         ->and(Gate::forUser($admin)->allows('delete', $targets['joueur']))->toBeFalse();
 });
+
+test('les méthodes de suspension sont réservées à l\'administrateur, état compris', function (): void {
+    $player = User::factory()->player()->create();
+    $curator = User::factory()->curator()->create();
+    $admin = User::factory()->admin()->create();
+
+    // État par état, ce que la suspension et sa levée ouvrent à un
+    // administrateur (spec 20 § 11.2, ligne 30) ; un curateur et un joueur
+    // sont refusés partout.
+    $movieAbilities = [
+        'suspend' => ['draft', 'published', 'unpublished'],
+        'unsuspend' => ['suspended'],
+    ];
+    $frameAbilities = [
+        'suspend' => ['published'],
+        'unsuspend' => ['suspended'],
+    ];
+
+    foreach (ContentAvailability::cases() as $availability) {
+        $movie = Movie::factory()->create(['availability' => $availability]);
+        $frame = Frame::factory()->for(Movie::factory()->published())->create(['availability' => $availability]);
+
+        foreach ($movieAbilities as $ability => $states) {
+            expect(Gate::forUser($admin)->allows($ability, $movie))
+                ->toBe(in_array($availability->value, $states, true), "admin : Movie::{$ability} sur {$availability->value}");
+
+            foreach ([$curator, $player] as $user) {
+                expect(Gate::forUser($user)->allows($ability, $movie))->toBeFalse("{$user->role->value} : Movie::{$ability}");
+            }
+        }
+
+        foreach ($frameAbilities as $ability => $states) {
+            expect(Gate::forUser($admin)->allows($ability, $frame))
+                ->toBe(in_array($availability->value, $states, true), "admin : Frame::{$ability} sur {$availability->value}");
+
+            foreach ([$curator, $player] as $user) {
+                expect(Gate::forUser($user)->allows($ability, $frame))->toBeFalse("{$user->role->value} : Frame::{$ability}");
+            }
+        }
+    }
+
+    // Une image suspendue ne se lève pas tant que son film l'est.
+    $suspendedFrame = Frame::factory()->for(Movie::factory()->suspended())->create(['availability' => ContentAvailability::Suspended]);
+
+    expect(Gate::forUser($admin)->allows('unsuspend', $suspendedFrame))->toBeFalse();
+});

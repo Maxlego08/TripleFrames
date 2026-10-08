@@ -7,6 +7,8 @@ import {
     HistoryIcon,
     ImageOffIcon,
     ImagesIcon,
+    PauseCircleIcon,
+    PlayCircleIcon,
     RefreshCwIcon,
     ShieldCheckIcon,
 } from 'lucide-react';
@@ -15,7 +17,9 @@ import type { RefObject } from 'react';
 import { toast } from 'sonner';
 import MovieContentVerifiedController from '@/actions/App/Http/Controllers/Admin/MovieContentVerifiedController';
 import MovieResyncController from '@/actions/App/Http/Controllers/Admin/MovieResyncController';
+import MovieSuspendController from '@/actions/App/Http/Controllers/Admin/MovieSuspendController';
 import MovieUnpublishController from '@/actions/App/Http/Controllers/Admin/MovieUnpublishController';
+import MovieUnsuspendController from '@/actions/App/Http/Controllers/Admin/MovieUnsuspendController';
 import {
     AvailabilityBadge,
     ContentFlagBadge,
@@ -36,10 +40,12 @@ import {
     MovieTitlesCard,
 } from '@/components/admin/movie-naming-panels';
 import {
+    AmbiguitySection,
     PublishButton,
     PublishDialog,
     usePublicationPreview,
 } from '@/components/admin/publish-dialog';
+import { OptionalReasonDialog } from '@/components/admin/optional-reason-dialog';
 import { ReasonDialog } from '@/components/admin/reason-dialog';
 import { ReviewBatchButton } from '@/components/admin/review-batch-button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -98,6 +104,7 @@ import type {
     AdminMovieGroup,
     AdminMovieProjection,
     AdminMovieTag,
+    AdminUnsuspension,
     AdminMovieTheme,
     AdminAvailableTheme,
     AdminMovieCollection,
@@ -162,13 +169,35 @@ type Props = {
      * un alias saisi ; `null` quand la demande est incomplète.
      */
     text_preview?: AdminTextPreview | null;
+    /**
+     * L'état que rendrait la levée de la suspension, lu dans le journal
+     * (spec 20 § 11.2) ; `null` hors suspension ou pour qui ne peut pas
+     * lever.
+     */
+    unsuspension: AdminUnsuspension | null;
     abilities: AdminMovieAbilities;
     /** Cadence du battement de débit (`catalog.curation.heartbeat_seconds`). */
     heartbeat_seconds: number;
 };
 
 /** Les gestes de la fiche qui passent par une confirmation (spec 20 § 4.3). */
-type MovieGesture = 'publish' | 'unpublish' | 'set_aside' | 'content_verified';
+type MovieGesture =
+    | 'publish'
+    | 'unpublish'
+    | 'set_aside'
+    | 'content_verified'
+    | 'suspend'
+    | 'unsuspend';
+
+/** L'état que la levée rendra, et la phrase qui l'annonce. */
+const UNSUSPEND_RESTORES_KEYS: Record<
+    NonNullable<AdminUnsuspension['restores']>,
+    TranslationKey
+> = {
+    published: 'admin.movie.unsuspend.restores.published',
+    unpublished: 'admin.movie.unsuspend.restores.unpublished',
+    draft: 'admin.movie.unsuspend.restores.draft',
+};
 
 /** Identifiant du toast de déconnexion : un seul à l'écran, jamais une pile. */
 const OFFLINE_TOAST_ID = 'admin-movie-offline';
@@ -236,6 +265,7 @@ export default function AdminCatalogShow({
     publication,
     publication_preview,
     text_preview,
+    unsuspension,
     abilities,
     heartbeat_seconds,
 }: Props) {
@@ -276,6 +306,9 @@ export default function AdminCatalogShow({
     const triggerRef = useRef<HTMLElement | null>(null);
     const gesturesRef = useRef<HTMLElement>(null);
     const preview = usePublicationPreview();
+    const restoresPublished = unsuspension?.restores === 'published';
+    const unsuspendPreviewReady =
+        preview.status === 'ready' && publication_preview !== undefined;
 
     // Déconnexion ou erreur réseau d'une visite : rien n'est parti, la saisie
     // reste telle quelle, et le curateur l'apprend (spec 20 § 13.5).
@@ -292,8 +325,9 @@ export default function AdminCatalogShow({
                 : null;
         setGesture(next);
 
-        // L'avertissement d'ambiguïté précède toute confirmation (§ 8.2).
-        if (next === 'publish') {
+        // L'avertissement d'ambiguïté précède toute confirmation (§ 8.2),
+        // levée d'une suspension qui rend le film publié comprise (§ 11.2).
+        if (next === 'publish' || (next === 'unsuspend' && restoresPublished)) {
             preview.request();
         }
     }
@@ -1048,6 +1082,55 @@ export default function AdminCatalogShow({
                 onReturnFocus={returnFocus}
             />
 
+            <OptionalReasonDialog
+                open={gesture === 'suspend'}
+                form={MovieSuspendController.store.form(movie.id)}
+                title={t('admin.movie.suspend.title')}
+                description={t('admin.movie.suspend.description')}
+                reasonLabel={t('admin.movie.suspend.reason')}
+                submitLabel={t('admin.movie.suspend.submit')}
+                onClose={closeGesture}
+                onReturnFocus={returnFocus}
+            />
+
+            <OptionalReasonDialog
+                open={gesture === 'unsuspend'}
+                form={MovieUnsuspendController.store.form(movie.id)}
+                title={t('admin.movie.unsuspend.title')}
+                description={t('admin.movie.unsuspend.description')}
+                notice={
+                    unsuspension?.restores === null ||
+                    unsuspension?.restores === undefined
+                        ? undefined
+                        : t(UNSUSPEND_RESTORES_KEYS[unsuspension.restores])
+                }
+                reasonLabel={t('admin.movie.unsuspend.reason')}
+                submitLabel={t('admin.movie.unsuspend.submit')}
+                errorFields={['ambiguity_digest', 'movie']}
+                extra={
+                    restoresPublished ? (
+                        <>
+                            <AmbiguitySection
+                                status={preview.status}
+                                preview={publication_preview}
+                                onRetry={preview.request}
+                            />
+                            {unsuspendPreviewReady && (
+                                <input
+                                    type="hidden"
+                                    name="ambiguity_digest"
+                                    value={publication_preview.digest}
+                                />
+                            )}
+                        </>
+                    ) : undefined
+                }
+                blocked={restoresPublished && !unsuspendPreviewReady}
+                onError={restoresPublished ? preview.request : undefined}
+                onClose={closeGesture}
+                onReturnFocus={returnFocus}
+            />
+
             <ReasonDialog
                 open={gesture === 'content_verified'}
                 form={MovieContentVerifiedController.store.form(movie.id)}
@@ -1105,6 +1188,8 @@ function MovieGestures({
         canUnpublish ||
         canSetAside ||
         abilities.verifyContent ||
+        abilities.suspend ||
+        abilities.unsuspend ||
         contentFlag === 'blocked';
 
     return (
@@ -1189,6 +1274,34 @@ function MovieGestures({
                         >
                             <ArchiveIcon aria-hidden />
                             {t('admin.movie.set_aside.action')}
+                        </Button>
+                    )}
+
+                    {/*
+                     * Suspension conservatoire et levée (§ 11.2) :
+                     * administrateur seul.
+                     */}
+                    {abilities.suspend && (
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => onOpen('suspend')}
+                            className="min-h-11"
+                        >
+                            <PauseCircleIcon aria-hidden />
+                            {t('admin.movie.suspend.action')}
+                        </Button>
+                    )}
+
+                    {abilities.unsuspend && (
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => onOpen('unsuspend')}
+                            className="min-h-11"
+                        >
+                            <PlayCircleIcon aria-hidden />
+                            {t('admin.movie.unsuspend.action')}
                         </Button>
                     )}
                 </div>

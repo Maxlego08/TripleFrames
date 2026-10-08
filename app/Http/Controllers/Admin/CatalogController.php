@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Actions\Curation\PublishMovie;
 use App\Actions\Curation\SetMovieGroup;
+use App\Actions\Curation\UnsuspendMovie;
 use App\Enums\AnswerKeyKind;
 use App\Enums\ContentAvailability;
 use App\Enums\ContentFlag;
@@ -206,6 +207,13 @@ class CatalogController extends Controller
             'publication_preview' => Inertia::optional(
                 fn (): array => $ambiguity->forPublication($movie)->toArray(),
             ),
+            // L'état que rendrait la levée d'une suspension (§ 11.2), lu dans
+            // le journal : la confirmation montre l'aperçu d'ambiguïté et en
+            // poste l'empreinte quand le film revient publié. `null` hors
+            // suspension, et pour qui ne peut pas lever.
+            'unsuspension' => Gate::allows('unsuspend', $movie)
+                ? ['restores' => UnsuspendMovie::restores($movie)?->value]
+                : null,
             // Ne sert qu'à afficher un bouton (spec 20 § 4.3) : chaque geste
             // garde sa policy à l'écriture. `curate` ouvre l'éditeur de la
             // banque, les titres, les alias et le regroupement ; les gestes
@@ -215,6 +223,9 @@ class CatalogController extends Controller
                 'publish' => Gate::allows('publish', $movie),
                 'unpublish' => Gate::allows('unpublish', $movie),
                 'verifyContent' => Gate::allows('verifyContent', $movie),
+                // Suspendre, lever (§ 11.2, ligne 30) : administrateur seul.
+                'suspend' => Gate::allows('suspend', $movie),
+                'unsuspend' => Gate::allows('unsuspend', $movie),
                 // Le lien « Historique » vers le journal filtré sur ce film
                 // (ligne 41, D41 du 30/09) : administrateur seul.
                 'viewJournal' => Gate::allows('viewAny', AdminAction::class),

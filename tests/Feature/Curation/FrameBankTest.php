@@ -727,6 +727,7 @@ test('aucune prop de l\'éditeur ne porte un chemin disque ni une empreinte', fu
                 'review_outdated',
                 'curation_state',
                 'review_rejected',
+                'abilities',
             ],
         ))
         ->where('frames', fn ($rows): bool => collect($rows)->firstWhere('id', $published->id)['game_url'] === frameBankGameUrl($published)));

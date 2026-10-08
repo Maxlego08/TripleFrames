@@ -1,5 +1,12 @@
 import { Form, usePage } from '@inertiajs/react';
-import { CropIcon, LayersIcon, RotateCwIcon, EyeOffIcon } from 'lucide-react';
+import {
+    CropIcon,
+    LayersIcon,
+    RotateCwIcon,
+    EyeOffIcon,
+    PauseCircleIcon,
+    PlayCircleIcon,
+} from 'lucide-react';
 import { useId } from 'react';
 import FrameRetryController from '@/actions/App/Http/Controllers/Admin/FrameRetryController';
 import { AdminEmptyState } from '@/components/admin/admin-empty-state';
@@ -21,7 +28,12 @@ import type {
 import type { TranslationKey } from '@/types/translations';
 
 /** Les gestes d'une image qui passent par une confirmation. */
-export type FrameGestureKind = 'recrop' | 'level' | 'unpublish';
+export type FrameGestureKind =
+    | 'recrop'
+    | 'level'
+    | 'unpublish'
+    | 'suspend'
+    | 'unsuspend';
 
 /** Une image désignée à l'écran : l'image, et son rang dans son niveau. */
 export type FrameGestureTarget = {
@@ -358,6 +370,36 @@ function FrameCard({
                             {unpublish === 'unpublish'
                                 ? t('admin.bank.list.unpublish')
                                 : t('admin.bank.list.set_aside')}
+                        </Button>
+                    )}
+
+                    {/*
+                     * Suspension conservatoire et levée (§ 11.2) :
+                     * administrateur seul, offertes par le serveur.
+                     */}
+                    {frame.abilities.suspend && (
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="min-h-11"
+                            onClick={() => onGesture('suspend', target)}
+                        >
+                            <PauseCircleIcon aria-hidden />
+                            {t('admin.frame.suspend.action')}
+                        </Button>
+                    )}
+
+                    {frame.abilities.unsuspend && (
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="min-h-11"
+                            onClick={() => onGesture('unsuspend', target)}
+                        >
+                            <PlayCircleIcon aria-hidden />
+                            {t('admin.frame.unsuspend.action')}
                         </Button>
                     )}
                 </div>

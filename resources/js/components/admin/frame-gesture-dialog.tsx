@@ -3,7 +3,9 @@ import { TriangleAlertIcon, XIcon } from 'lucide-react';
 import { useId, useState } from 'react';
 import FrameCropController from '@/actions/App/Http/Controllers/Admin/FrameCropController';
 import FrameLevelController from '@/actions/App/Http/Controllers/Admin/FrameLevelController';
+import FrameSuspendController from '@/actions/App/Http/Controllers/Admin/FrameSuspendController';
 import FrameUnpublishController from '@/actions/App/Http/Controllers/Admin/FrameUnpublishController';
+import FrameUnsuspendController from '@/actions/App/Http/Controllers/Admin/FrameUnsuspendController';
 import { AdminErrorState } from '@/components/admin/admin-error-state';
 import { AdminInputError } from '@/components/admin/admin-input-error';
 import { unpublishKind } from '@/components/admin/frame-bank-list';
@@ -173,6 +175,9 @@ function GestureBody(props: BodyProps) {
             return <LevelForm {...props} />;
         case 'unpublish':
             return <UnpublishForm {...props} />;
+        case 'suspend':
+        case 'unsuspend':
+            return <SuspensionForm {...props} />;
     }
 }
 
@@ -631,6 +636,90 @@ function UnpublishForm({
                             setAside
                                 ? t('admin.bank.gesture.set_aside.submit')
                                 : t('admin.bank.gesture.unpublish.submit')
+                        }
+                        blocked={isWarningPending(inPlay, warning)}
+                        processing={processing}
+                    />
+                </>
+            )}
+        </Form>
+    );
+}
+
+/**
+ * Suspendre une image publiée, ou lever sa suspension (spec 20 § 11.2) :
+ * administrateur seul, motif facultatif. Suspendre une image en jeu peut
+ * casser la couverture 1-3-5 d'un film publié : l'avertissement précède
+ * l'envoi, comme pour une dépublication.
+ */
+function SuspensionForm({
+    gesture,
+    movieId,
+    warning,
+    onRetryWarning,
+    onDone,
+}: BodyProps) {
+    const { t } = useTranslations();
+    const reasonId = useId();
+    const { frame } = gesture.target;
+    const suspend = gesture.kind === 'suspend';
+    const inPlay = suspend && frame.curation_state === 'in_play';
+    const parameters = { movie: movieId, frame: frame.id };
+
+    return (
+        <Form
+            {...(suspend
+                ? FrameSuspendController.store.form(parameters)
+                : FrameUnsuspendController.store.form(parameters))}
+            noValidate
+            options={{
+                preserveScroll: true,
+                preserveState: true,
+                only: BANK_WRITE_PROPS,
+            }}
+            onSuccess={onDone}
+            className="flex flex-col gap-4"
+        >
+            {({ processing, errors }) => (
+                <>
+                    <DialogHeader className="pr-12">
+                        <DialogTitle>
+                            {suspend
+                                ? t('admin.frame.suspend.title')
+                                : t('admin.frame.unsuspend.title')}
+                        </DialogTitle>
+                        <DialogDescription>
+                            {suspend
+                                ? t('admin.frame.suspend.description')
+                                : t('admin.frame.unsuspend.description')}
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <CoverageNotice
+                        inPlay={inPlay}
+                        warning={warning}
+                        onRetry={onRetryWarning}
+                    />
+
+                    <div className="flex flex-col gap-1.5">
+                        <Label htmlFor={reasonId}>
+                            {t('admin.bank.gesture.reason_optional')}
+                        </Label>
+                        <Textarea
+                            id={reasonId}
+                            name="reason"
+                            aria-invalid={errors.reason ? true : undefined}
+                        />
+                        <AdminInputError message={errors.reason} />
+                    </div>
+
+                    <AdminInputError message={errors.frame} />
+
+                    <GestureFooter
+                        submitLabel={
+                            suspend
+                                ? t('admin.frame.suspend.submit')
+                                : t('admin.frame.unsuspend.submit')
                         }
                         blocked={isWarningPending(inPlay, warning)}
                         processing={processing}

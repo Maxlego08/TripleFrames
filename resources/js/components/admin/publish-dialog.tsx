@@ -324,8 +324,12 @@ export function PublishDialog({
     );
 }
 
-/** L'aperçu d'ambiguïté et ses états : calcul, échec, liste ou liste vide. */
-function AmbiguitySection({
+/**
+ * L'aperçu d'ambiguïté et ses états : calcul, échec, liste ou liste vide —
+ * ici, et dans la levée d'une suspension qui rend un film publié (spec 20
+ * § 11.2).
+ */
+export function AmbiguitySection({
     status,
     preview,
     onRetry,
