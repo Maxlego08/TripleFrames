@@ -1,0 +1,171 @@
+@use 'auth/tokens' as *;
+@use 'auth/mixins' as mix;
+
+// Pages d'erreur joueur — intégration de `design-test/html/error-*.html` et
+// de sa feuille `design-test/css/errors.scss` (design final du 08/10). La
+// coquille est `PublicLayout` (variante `public-shell--error`) : en-tête et
+// pied de page du site, la carte `error-card` au centre, sur le fond rayé.
+.public-shell--error {
+    min-width: 20rem;
+    background: repeating-linear-gradient(
+        90deg,
+        $violet 0 5.5rem,
+        oklch(0.44 0.15 295) 5.5rem 9rem,
+        oklch(0.34 0.14 295) 9rem 13rem
+    );
+    color: $ink;
+    font-family: $body;
+    line-height: 1.5;
+
+    > .site-footer {
+        @include mix.public-site-footer;
+    }
+
+    a:focus-visible,
+    button:focus-visible {
+        @include mix.focus-ring;
+    }
+}
+
+.error-stage {
+    display: grid;
+    flex: 1;
+    padding: 1.25rem 1rem 2.5rem;
+    place-items: center;
+}
+
+.error-card {
+    @include mix.hard-shadow(0.625rem);
+    width: min(100%, 34rem);
+    border: $line solid $ink;
+    border-radius: 2rem;
+    padding: clamp(2.25rem, 5vw, 4rem);
+    background: $paper;
+    color: $ink;
+    text-align: center;
+
+    &__code,
+    &__title {
+        @include mix.display-type;
+        margin: 0;
+    }
+
+    &__code {
+        font-size: clamp(5.5rem, 12vw, 8rem);
+        line-height: 0.82;
+        letter-spacing: -0.08em;
+    }
+
+    &__title {
+        margin-top: 1.35rem;
+        font-size: clamp(1.8rem, 4vw, 2.55rem);
+        line-height: 1.05;
+    }
+
+    &__message {
+        max-width: 34ch;
+        margin: 1rem auto 2.25rem;
+        font-size: clamp(1rem, 2vw, 1.15rem);
+    }
+
+    &__actions {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 1.25rem;
+    }
+
+    &__action {
+        @include mix.display-type;
+        @include mix.hard-shadow;
+        display: inline-flex;
+        width: 100%;
+        min-height: 3.6rem;
+        align-items: center;
+        justify-content: center;
+        border: $line solid $ink;
+        border-radius: $radius-medium;
+        padding: 0.8rem 1.25rem;
+        background: $yellow;
+        color: $ink;
+        font-size: 1rem;
+        letter-spacing: normal;
+        text-decoration: none;
+        cursor: pointer;
+        transition:
+            box-shadow 120ms ease,
+            transform 120ms ease;
+
+        &:hover {
+            box-shadow: 0.4375rem 0.4375rem 0 $ink;
+            transform: translate(-0.125rem, -0.125rem);
+        }
+
+        &:active {
+            box-shadow: 0.0625rem 0.0625rem 0 $ink;
+            transform: translate(0.125rem, 0.125rem);
+        }
+    }
+
+    &__secondary {
+        min-height: 2.75rem;
+        border: 0;
+        padding: 0.5rem;
+        background: none;
+        color: $ink;
+        font: inherit;
+        font-weight: 900;
+        text-decoration: underline;
+        text-underline-offset: 0.25rem;
+        cursor: pointer;
+    }
+}
+
+@media (max-width: $mobile) {
+    .error-stage {
+        padding: 1rem 0.75rem 2rem;
+    }
+
+    .error-card {
+        border-radius: 1.5rem;
+        padding: 2rem 1.25rem 2.25rem;
+        box-shadow: 0.4375rem 0.4375rem 0 $ink;
+
+        &__message {
+            margin-bottom: 1.75rem;
+        }
+    }
+}
+
+@media (max-height: 43rem) and (min-width: 35.0625rem) {
+    .error-stage {
+        padding-block: 0.75rem 1.25rem;
+    }
+
+    .error-card {
+        padding-block: 1.75rem;
+
+        &__code {
+            font-size: 5rem;
+        }
+
+        &__title {
+            margin-top: 0.8rem;
+        }
+
+        &__message {
+            margin-bottom: 1.35rem;
+        }
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .error-card__action {
+        transition: none;
+
+        &:hover,
+        &:active {
+            transform: none;
+        }
+    }
+}

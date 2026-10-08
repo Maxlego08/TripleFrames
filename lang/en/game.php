@@ -22,6 +22,8 @@ return [
 
     'frame' => [
         'alt' => 'Frame :index of :total in the current round',
+        // Round screen status pill (`game.html` mockup).
+        'status' => 'Frame :index / :total',
         'loading' => 'Loading frame…',
         'unavailable' => 'Frame unavailable.',
     ],
@@ -66,7 +68,7 @@ return [
     // quite ».
     'answer' => [
         'label' => 'Your answer',
-        'placeholder' => 'Film title',
+        'placeholder' => 'Type the movie title…',
         'submit' => 'Submit',
         'rejected' => 'That’s not it.',
         'attempts_left' => '{0} No attempts left|{1} :count attempt left|[2,*] :count attempts left',
@@ -106,6 +108,10 @@ return [
     'round' => [
         'tier_value' => ':points point at stake|:points points at stake',
         'number' => 'Round :number of :total',
+        // Round screen (`game.html` mockup): status pill and timer bar.
+        'screen' => 'Game screen',
+        'status_number' => 'Round :number',
+        'question' => 'What’s this movie?',
         'starts_in' => 'The round starts in :seconds second|The round starts in :seconds seconds',
         'time_left' => 'Time left: :time',
         'time_up' => 'Round over: the answer is coming.',
@@ -184,6 +190,8 @@ return [
 
     'score' => [
         'points' => ':count point|:count points',
+        // Short form for the player strip (`game.html` mockup).
+        'points_short' => ':count pt|:count pts',
         'bonus' => 'including :points speed bonus',
         'gained' => 'Earned: :points',
         'total' => 'Total: :points',

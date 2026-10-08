@@ -50,6 +50,10 @@ const SECONDS_PER_MINUTE = 60;
  * **Focus** : l'écran précédent (révélation) démonté emporte le focus ; le
  * titre (`tabIndex={-1}`) le reprend, seulement s'il est perdu.
  *
+ * Présentation : la carte `pause-overlay` de la maquette
+ * `design-test/html/game.html`, posée sur l'écran de manche ; « Reprendre »
+ * (`action`) y prend la forme du bouton corail de la maquette.
+ *
  * Composant de présentation : ni Echo, ni horloge, des props seulement.
  */
 export function GamePaused({
@@ -96,43 +100,42 @@ export function GamePaused({
     }
 
     return (
-        <section
-            aria-labelledby={headingId}
-            className="flex flex-col gap-2 rounded-md border border-border p-4"
-        >
-            <h2
-                id={headingId}
-                ref={headingRef}
-                tabIndex={-1}
-                className="flex items-center gap-2 text-lg font-semibold outline-none"
+        <div className="pause-overlay">
+            <section
+                aria-labelledby={headingId}
+                className="pause-overlay__card"
             >
-                <CirclePause aria-hidden="true" className="size-5 shrink-0" />
-                {t('game.pause.title')}
-            </h2>
-            <p>
-                {manual
-                    ? t(
-                          solo
-                              ? 'game.pause.manual_description_solo'
-                              : 'game.pause.manual_description',
-                      )
-                    : t('game.pause.description')}
-            </p>
-            {hostAbsent && <p>{t('game.pause.host_absent')}</p>}
-            <p className="text-muted-foreground">
-                {t(
-                    manual
-                        ? 'game.pause.manual_interrupts_at'
-                        : 'game.pause.interrupts_at',
-                    { time },
-                )}
-            </p>
-            {remaining !== null && (
-                <p className="text-muted-foreground tabular-nums">
-                    {remaining}
+                <span className="pause-overlay__icon" aria-hidden="true">
+                    <CirclePause />
+                </span>
+                <h2 id={headingId} ref={headingRef} tabIndex={-1}>
+                    {t('game.pause.title')}
+                </h2>
+                <p>
+                    {manual
+                        ? t(
+                              solo
+                                  ? 'game.pause.manual_description_solo'
+                                  : 'game.pause.manual_description',
+                          )
+                        : t('game.pause.description')}
                 </p>
-            )}
-            {action}
-        </section>
+                {hostAbsent && <p>{t('game.pause.host_absent')}</p>}
+                <p>
+                    {t(
+                        manual
+                            ? 'game.pause.manual_interrupts_at'
+                            : 'game.pause.interrupts_at',
+                        { time },
+                    )}
+                </p>
+                {remaining !== null && (
+                    <p className="pause-overlay__remaining">{remaining}</p>
+                )}
+                {action !== null && (
+                    <div className="pause-overlay__action">{action}</div>
+                )}
+            </section>
+        </div>
     );
 }

@@ -7,6 +7,7 @@ import { PublicHeader } from '@/components/public/public-header';
 import { SiteFooter } from '@/components/public/site-footer';
 import { Toaster } from '@/components/ui/sonner';
 import { useTranslations } from '@/hooks/use-translations';
+import type { DesignPreviewLayoutProps } from '@/lib/design/sandbox';
 
 const MAIN_ID = 'public-main';
 
@@ -30,11 +31,20 @@ const MAIN_ID = 'public-main';
  * l'annonceur et la section du `Toaster` coexistent : l'invariant d'une seule
  * région vivante ne vise que les pages de jeu (C16 § 4).
  */
-export default function PublicLayout({ children }: { children: ReactNode }) {
+export default function PublicLayout({
+    children,
+    previewComponent,
+}: DesignPreviewLayoutProps & { children: ReactNode }) {
     const { t } = useTranslations();
-    const component = usePage().component;
+    // Le banc d'essai du design rend la page sous le nom de son hôte
+    // (`legal/design-preview`) : il nomme la page montée, pour que la
+    // variante de la coquille soit la sienne.
+    const pageComponent = usePage().component;
+    const component = previewComponent ?? pageComponent;
     const isHomePage = component === 'welcome';
     const isLegalPage = component.startsWith('legal/');
+    // Les pages d'erreur joueur (design final du 08/10, `error.scss`).
+    const isErrorPage = component === 'error';
     // Créer, rejoindre un salon, jouer en solo et signaler un film ou une
     // image (D63 du 07/10, `report.scss` en plus) partagent le gabarit des
     // pages d'entrée (`room-entry.scss`).
@@ -49,7 +59,9 @@ export default function PublicLayout({ children }: { children: ReactNode }) {
           ? 'public-shell--legal'
           : isRoomEntryPage
             ? 'public-shell--room-entry'
-            : '';
+            : isErrorPage
+              ? 'public-shell--error'
+              : '';
 
     return (
         <div

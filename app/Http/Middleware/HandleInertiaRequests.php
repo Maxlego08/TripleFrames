@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Enums\Locale;
+use App\Models\User;
 use App\Support\Deploy\DeployDrain;
 use App\Support\Frames\FrameGeometry;
 use App\Support\I18n\LangVersion;
@@ -14,6 +15,7 @@ use App\Support\Realtime\RealtimeClientConfig;
 use App\Support\Visitor\ConsentCookie;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\App;
+use Illuminate\Support\Facades\Route;
 use Inertia\Middleware;
 
 class HandleInertiaRequests extends Middleware
@@ -121,6 +123,15 @@ class HandleInertiaRequests extends Middleware
             'locale' => fn (): string => $this->locale()->value,
             'locales' => fn (): array => $this->locales(),
             'translations' => fn (): array => $this->translations($request),
+
+            // Le banc d'essai du design (spec 20, ligne 50, demande du porteur
+            // du 08/10) : l'entrée de menu du back-office ne s'affiche que si
+            // la route existe ET s'ouvre à ce compte — jamais en production.
+            // Sur les seules pages `admin.*` : aucune page joueur ne la reçoit.
+            ...($request->routeIs('admin.*') ? [
+                'designPreview' => static fn (): bool => Route::has('admin.design.index')
+                    && $request->user()?->can('previewDesign', User::class) === true,
+            ] : []),
         ];
     }
 

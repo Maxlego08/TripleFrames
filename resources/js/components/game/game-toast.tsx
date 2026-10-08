@@ -1,6 +1,5 @@
 import { CircleAlert, X } from 'lucide-react';
 import { useEffect } from 'react';
-import { Button } from '@/components/ui/button';
 import { useTranslations } from '@/hooks/use-translations';
 
 /** Un toast du jeu : son texte déjà traduit, et une clé qui le distingue d'un même texte répété. */
@@ -23,7 +22,9 @@ type GameToastProps = {
  * sonner n'y est pas monté, et ce toast n'ouvre aucune région ; l'appelant
  * annonce le même texte par `announce()`. Se ferme seul, ou par sa croix.
  *
- * Composant de présentation : props seulement, tokens seulement.
+ * Présentation : la pastille `toast` de la maquette `game.html`, en haut
+ * de l'écran (`game-toast`, `game.scss`). Composant de présentation : props
+ * seulement.
  */
 export function GameToast({ toast, onDismiss }: GameToastProps) {
     const { t } = useTranslations();
@@ -43,24 +44,17 @@ export function GameToast({ toast, onDismiss }: GameToastProps) {
     }
 
     return (
-        <div className="pointer-events-none fixed inset-x-0 bottom-16 z-50 flex justify-center px-4">
-            <div className="pointer-events-auto flex max-w-md items-start gap-3 rounded-md border border-destructive bg-card px-4 py-3 text-sm text-card-foreground shadow-lg">
-                <CircleAlert
-                    aria-hidden="true"
-                    className="mt-0.5 size-4 shrink-0 text-destructive"
-                />
-                <p className="flex-1">{toast.message}</p>
-                <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="-my-1 size-7"
-                    aria-label={t('common.action.close')}
-                    onClick={onDismiss}
-                >
-                    <X aria-hidden="true" />
-                </Button>
-            </div>
+        <div className="game-toast">
+            <CircleAlert aria-hidden="true" />
+            <p>{toast.message}</p>
+            <button
+                type="button"
+                className="game-toast__close"
+                aria-label={t('common.action.close')}
+                onClick={onDismiss}
+            >
+                <X aria-hidden="true" />
+            </button>
         </div>
     );
 }

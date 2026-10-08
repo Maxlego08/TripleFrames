@@ -1,3 +1,4 @@
+import { CircleCheck, Clock3 } from 'lucide-react';
 import { useEffect, useId, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { GameFrame } from '@/components/game/game-frame';
@@ -35,6 +36,8 @@ export type RoundRevealProps = {
     seats: readonly SeatView[];
     /** Le classement intermédiaire, gelé à cette manche révélée. */
     leaderboard: Leaderboard;
+    /** `state.self.publicId` : sa ligne de trouveur est mise en avant. */
+    selfPublicId: string;
     /**
      * Les images des paliers **ouverts**, par `tierIndex` croissant (D14 du
      * 23/09), depuis les blobs gardés par `frame-loader` ; nulles : le siège
@@ -75,7 +78,14 @@ const MS_PER_SECOND = 1000;
  *   combien de points, puis le **classement intermédiaire** avec avatars ;
  * - l'**attribution TMDB** (principe 12, 00 § Ouverture).
  *
- * Défile dans la `ScrollArea` de la page. **Focus** au titre de révélation
+ * **Présentation** (design du 08/10, aucune maquette dédiée : composée avec
+ * les pièces de `design-test/html/game.html` et `game-results.html`) : carte
+ * « papier » du titre et de ses liens, vignettes des images servies sous la
+ * carte, panneaux sombres « Ont trouvé » (lignes `ranking` de
+ * `game-results.html`) et classement à côté (dessous en portrait), puis le
+ * décompte de la manche suivante et son geste. Styles : `game.scss`.
+ *
+ * Défile dans `main` (écran `game--reveal`). **Focus** au titre de révélation
  * (`tabIndex={-1}`) au montage — la page monte une révélation neuve par
  * manche ; sur mobile, le clavier se ferme, ce qui est voulu : la saisie est
  * close (90 § 7.5).
@@ -91,6 +101,7 @@ export function RoundReveal({
     finders,
     seats,
     leaderboard,
+    selfPublicId,
     images,
     tierCount,
     frameFormat,
@@ -119,204 +130,246 @@ export function RoundReveal({
     useEffect(() => headingRef.current?.focus(), []);
 
     return (
-        <section aria-labelledby={headingId} className="flex flex-col gap-5">
-            <div className="flex flex-col gap-1">
-                <p className="text-sm text-muted-foreground">
-                    {t('game.round.number', {
-                        number: number.format(roundNumber),
-                        total: number.format(roundsCount),
-                    })}
-                </p>
+        <section aria-labelledby={headingId} className="reveal">
+            <div className="reveal__main">
+                <div className="reveal-card">
+                    <p className="reveal-card__round">
+                        {t('game.round.number', {
+                            number: number.format(roundNumber),
+                            total: number.format(roundsCount),
+                        })}
+                    </p>
 
-                <h2
-                    id={headingId}
-                    ref={headingRef}
-                    tabIndex={-1}
-                    className="flex flex-col gap-1 outline-none"
-                >
-                    <span className="text-sm font-normal text-muted-foreground">
-                        {t('game.reveal.heading')}
-                    </span>
-                    <span
-                        lang={title.lang}
-                        className="text-2xl font-semibold text-balance"
+                    <h2
+                        id={headingId}
+                        ref={headingRef}
+                        tabIndex={-1}
+                        className="reveal-card__heading"
                     >
-                        {title.text}
-                    </span>
-                </h2>
+                        <span className="reveal-card__label">
+                            {t('game.reveal.heading')}
+                        </span>
+                        <span lang={title.lang} className="reveal-card__title">
+                            {title.text}
+                        </span>
+                    </h2>
 
-                {original !== null && (
-                    <p className="text-sm text-muted-foreground">
-                        {titleSegments(
-                            t('game.reveal.original_title'),
-                            original,
-                        ).map((segment, index) =>
-                            segment.kind === 'title' ? (
-                                <span key={index} lang={segment.lang}>
-                                    {segment.text}
-                                </span>
-                            ) : (
-                                <span key={index}>{segment.text}</span>
-                            ),
-                        )}
-                    </p>
-                )}
-
-                {year !== null && (
-                    <p className="text-sm text-muted-foreground">
-                        {t('game.reveal.year', { year: String(year) })}
-                    </p>
-                )}
-
-                <div className="flex flex-wrap gap-2">
-                    <LetterboxdLink
-                        url={movie.letterboxdUrl}
-                        title={title.text}
-                    />
-                    <ReportLink
-                        kind="movie"
-                        tmdb={movie.tmdb}
-                        title={title.text}
-                    />
-                </div>
-            </div>
-
-            {images !== null && images.length > 0 && (
-                <ul
-                    aria-label={t('game.reveal.images')}
-                    className="grid grid-cols-2 gap-2 sm:grid-cols-3"
-                >
-                    {images.map((image) => {
-                        const framePublicId = framePublicIdOf.get(
-                            image.tierIndex,
-                        );
-
-                        return (
-                            <li
-                                key={image.tierIndex}
-                                className="flex flex-col gap-1"
-                            >
-                                <GameFrame
-                                    src={image.view.src}
-                                    pending={image.view.pending}
-                                    alt={t('game.frame.alt', {
-                                        index: number.format(image.tierIndex),
-                                        total: number.format(tierCount),
-                                    })}
-                                    loadingLabel={t('game.frame.loading')}
-                                    unavailableLabel={t(
-                                        'game.frame.unavailable',
+                    {(original !== null || year !== null) && (
+                        <p className="reveal-card__meta">
+                            {original !== null && (
+                                <span>
+                                    {titleSegments(
+                                        t('game.reveal.original_title'),
+                                        original,
+                                    ).map((segment, index) =>
+                                        segment.kind === 'title' ? (
+                                            <span
+                                                key={index}
+                                                lang={segment.lang}
+                                            >
+                                                {segment.text}
+                                            </span>
+                                        ) : (
+                                            <span key={index}>
+                                                {segment.text}
+                                            </span>
+                                        ),
                                     )}
-                                    format={frameFormat}
-                                    className="rounded-md"
-                                />
-                                {framePublicId !== undefined && (
-                                    <ReportLink
-                                        kind="frame"
-                                        tmdb={movie.tmdb}
-                                        framePublicId={framePublicId}
-                                        index={number.format(image.tierIndex)}
-                                    />
-                                )}
-                            </li>
-                        );
-                    })}
-                </ul>
-            )}
+                                </span>
+                            )}
+                            {year !== null && (
+                                <span>
+                                    {t('game.reveal.year', {
+                                        year: String(year),
+                                    })}
+                                </span>
+                            )}
+                        </p>
+                    )}
 
-            <section
-                aria-labelledby={findersId}
-                className="flex flex-col gap-2"
-            >
-                <h3 id={findersId} className="font-semibold">
-                    {t('game.reveal.finders')}
-                </h3>
+                    <div className="reveal-card__links">
+                        <LetterboxdLink
+                            url={movie.letterboxdUrl}
+                            title={title.text}
+                        />
+                        <ReportLink
+                            kind="movie"
+                            tmdb={movie.tmdb}
+                            title={title.text}
+                        />
+                    </div>
+                </div>
 
-                {finders.length === 0 ? (
-                    <p className="text-muted-foreground">
-                        {t('game.recap.nobody')}
-                    </p>
-                ) : (
-                    <ol className="flex flex-col gap-2">
-                        {finders.map((finder) => {
-                            const seat = seatOf.get(finder.publicId);
+                {images !== null && images.length > 0 && (
+                    <ul
+                        aria-label={t('game.reveal.images')}
+                        className="reveal-frames"
+                    >
+                        {images.map((image) => {
+                            const framePublicId = framePublicIdOf.get(
+                                image.tierIndex,
+                            );
 
                             return (
                                 <li
-                                    key={finder.publicId}
-                                    className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-border px-3 py-2 text-sm"
+                                    key={image.tierIndex}
+                                    className="reveal-frames__item"
                                 >
-                                    <span className="font-semibold tabular-nums">
-                                        {t(
-                                            ordinalKey(finder.lockRank, locale),
-                                            {
-                                                rank: number.format(
-                                                    finder.lockRank,
+                                    <div className="reveal-frames__frame">
+                                        <span
+                                            className="reveal-frames__index"
+                                            aria-hidden="true"
+                                        >
+                                            {t('game.frame.status', {
+                                                index: number.format(
+                                                    image.tierIndex,
                                                 ),
-                                            },
-                                        )}
-                                    </span>
-
-                                    {seat !== undefined && (
-                                        <PlayerAvatar
-                                            avatar={seat.avatar}
-                                            alt=""
-                                            className="size-8 text-xs"
+                                                total: number.format(tierCount),
+                                            })}
+                                        </span>
+                                        <GameFrame
+                                            src={image.view.src}
+                                            pending={image.view.pending}
+                                            alt={t('game.frame.alt', {
+                                                index: number.format(
+                                                    image.tierIndex,
+                                                ),
+                                                total: number.format(tierCount),
+                                            })}
+                                            loadingLabel={t(
+                                                'game.frame.loading',
+                                            )}
+                                            unavailableLabel={t(
+                                                'game.frame.unavailable',
+                                            )}
+                                            format={frameFormat}
+                                        />
+                                    </div>
+                                    {framePublicId !== undefined && (
+                                        <ReportLink
+                                            kind="frame"
+                                            tmdb={movie.tmdb}
+                                            framePublicId={framePublicId}
+                                            index={number.format(
+                                                image.tierIndex,
+                                            )}
                                         />
                                     )}
-
-                                    {/* Pseudo abrégé sans élargir la ligne
-                                        (`contain-inline-size`, E118-7). */}
-                                    <span className="min-w-0 flex-1 truncate font-medium contain-inline-size">
-                                        {seat === undefined ? '' : label(seat)}
-                                    </span>
-
-                                    <span className="tabular-nums">
-                                        {tChoice(
-                                            'game.score.points',
-                                            finder.pointsTotal,
-                                            {
-                                                count: number.format(
-                                                    finder.pointsTotal,
-                                                ),
-                                            },
-                                        )}
-                                    </span>
-
-                                    <span className="text-muted-foreground">
-                                        {t('game.reveal.finder_tier', {
-                                            index: number.format(
-                                                finder.tierIndex,
-                                            ),
-                                        })}
-                                    </span>
-
-                                    <span className="text-muted-foreground tabular-nums">
-                                        {formatDuration(
-                                            finder.answeredAtMs,
-                                            locale,
-                                        )}
-                                    </span>
                                 </li>
                             );
                         })}
-                    </ol>
+                    </ul>
                 )}
-            </section>
+            </div>
 
-            <StandingsTable leaderboard={leaderboard} seats={seats} />
+            <div className="reveal__side">
+                <section aria-labelledby={findersId} className="reveal-panel">
+                    <div className="reveal-panel__heading">
+                        <CircleCheck aria-hidden="true" />
+                        <h3 id={findersId}>{t('game.reveal.finders')}</h3>
+                    </div>
 
-            {nextSeconds !== null && (
-                <p className="text-muted-foreground">
-                    {tChoice('game.round.starts_in', nextSeconds, {
-                        seconds: number.format(nextSeconds),
-                    })}
-                </p>
-            )}
+                    {finders.length === 0 ? (
+                        <p className="reveal-panel__empty">
+                            {t('game.recap.nobody')}
+                        </p>
+                    ) : (
+                        <ol className="ranking">
+                            {finders.map((finder) => {
+                                const seat = seatOf.get(finder.publicId);
 
-            {action}
+                                return (
+                                    <li
+                                        key={finder.publicId}
+                                        className={
+                                            finder.publicId === selfPublicId
+                                                ? 'ranking__item ranking__item--current'
+                                                : 'ranking__item'
+                                        }
+                                    >
+                                        <span className="ranking__position">
+                                            {t(
+                                                ordinalKey(
+                                                    finder.lockRank,
+                                                    locale,
+                                                ),
+                                                {
+                                                    rank: number.format(
+                                                        finder.lockRank,
+                                                    ),
+                                                },
+                                            )}
+                                        </span>
 
-            <TmdbAttribution />
+                                        {seat !== undefined ? (
+                                            <PlayerAvatar
+                                                avatar={seat.avatar}
+                                                alt=""
+                                                className="player-avatar"
+                                            />
+                                        ) : (
+                                            <span aria-hidden="true" />
+                                        )}
+
+                                        {/* Pseudo abrégé sans élargir la
+                                            ligne (E118-7). */}
+                                        <span className="ranking__identity">
+                                            <span className="ranking__name">
+                                                {seat === undefined
+                                                    ? ''
+                                                    : label(seat)}
+                                            </span>
+                                            <span className="ranking__detail">
+                                                {t('game.reveal.finder_tier', {
+                                                    index: number.format(
+                                                        finder.tierIndex,
+                                                    ),
+                                                })}
+                                                {' · '}
+                                                {formatDuration(
+                                                    finder.answeredAtMs,
+                                                    locale,
+                                                )}
+                                            </span>
+                                        </span>
+
+                                        <span className="ranking__score">
+                                            {tChoice(
+                                                'game.score.points_short',
+                                                finder.pointsTotal,
+                                                {
+                                                    count: number.format(
+                                                        finder.pointsTotal,
+                                                    ),
+                                                },
+                                            )}
+                                        </span>
+                                    </li>
+                                );
+                            })}
+                        </ol>
+                    )}
+                </section>
+
+                <section className="reveal-panel reveal-standings">
+                    <StandingsTable leaderboard={leaderboard} seats={seats} />
+                </section>
+            </div>
+
+            <div className="reveal__footer">
+                {nextSeconds !== null && (
+                    <p className="reveal__next">
+                        <Clock3 aria-hidden="true" />
+                        {tChoice('game.round.starts_in', nextSeconds, {
+                            seconds: number.format(nextSeconds),
+                        })}
+                    </p>
+                )}
+
+                {action}
+
+                <TmdbAttribution />
+            </div>
         </section>
     );
 }

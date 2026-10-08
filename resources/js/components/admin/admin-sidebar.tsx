@@ -10,6 +10,7 @@ import {
     Gamepad2,
     Gauge,
     Images,
+    MonitorSmartphone,
     LayoutDashboard,
     ListChecks,
     ListOrdered,
@@ -57,6 +58,7 @@ import { index as audienceIndex } from '@/routes/admin/audience';
 import { index as avatarsIndex } from '@/routes/admin/avatars';
 import { index as catalogIndex } from '@/routes/admin/catalog';
 import { index as curationIndex } from '@/routes/admin/curation';
+import { index as designIndex } from '@/routes/admin/design';
 import { show as exclusionGridRetroactiveShow } from '@/routes/admin/exclusion_grid/retroactive';
 import { index as frameBatchIndex } from '@/routes/admin/frame_batch';
 import { index as gamesIndex } from '@/routes/admin/games';
@@ -105,7 +107,7 @@ import type { AdminNavItem } from '@/types/navigation';
  */
 export function AdminSidebar() {
     const { t } = useTranslations();
-    const { auth } = usePage().props;
+    const { auth, designPreview } = usePage().props;
     const { isMobile, openMobile, setOpenMobile } = useSidebar();
 
     // L'élément qui avait le focus à l'ouverture de la feuille : le bouton de
@@ -291,6 +293,20 @@ export function AdminSidebar() {
             minRole: 'admin',
             prefetch: false,
         },
+        // Le banc d'essai du design (ligne 50, demande du porteur du 08/10) :
+        // seulement quand la route existe et s'ouvre à ce compte — jamais en
+        // production, où elle n'est pas enregistrée.
+        ...(designPreview === true
+            ? [
+                  {
+                      title: t('admin.nav.design'),
+                      href: designIndex(),
+                      icon: MonitorSmartphone,
+                      minRole: 'admin' as const,
+                      prefetch: false,
+                  },
+              ]
+            : []),
     ];
 
     const body = (

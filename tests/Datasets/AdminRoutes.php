@@ -1150,6 +1150,18 @@ function adminRoutesMatrix(): array
             payload: fn (): array => ['reason' => 'Bannissement matrice'],
             redirect: fn (array $parameters): string => route('admin.moderation.index'),
         ),
+
+        // Ligne 50 — le banc d'essai du design (demande du porteur du
+        // 08/10) : administrateur seul, jamais en production (route absente).
+        // Sa page fictive `design.frame` vit hors du groupe `admin.*` :
+        // `DesignPreviewTest` la garde.
+        'admin.design.index' => adminRoutesRow(
+            row: 50,
+            method: 'GET',
+            guards: ['can:previewDesign,'.User::class],
+            curator: 403,
+            admin: 200,
+        ),
     ];
 }
 

@@ -91,6 +91,13 @@ type LobbyPageProps = {
      * autres sièges, choix courant, image du compte. Rechargeable seule.
      */
     avatars: LobbyAvatars;
+    /**
+     * Aperçu du banc d'essai du design (spec 20 § 13.8, demande du porteur du
+     * 08/10), posé par l'hôte `game/design-preview` seul : paquet fictif,
+     * aucune requête de jeu (voir `useLobbyState`). Absent de toute réponse
+     * de `room.show`.
+     */
+    designPreview?: boolean;
 };
 
 /**
@@ -181,6 +188,7 @@ export default function Lobby({
     launch,
     editor,
     avatars,
+    designPreview = false,
 }: LobbyPageProps) {
     const { t, locale } = useTranslations();
     const { errors, maintenance } = usePage().props;
@@ -189,6 +197,7 @@ export default function Lobby({
         state: packet,
         seatToken,
         settings: settingsProp,
+        designPreview,
     });
     const {
         state,

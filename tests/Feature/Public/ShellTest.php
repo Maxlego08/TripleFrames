@@ -625,7 +625,10 @@ it('rend le solo et le salon expiré en sombre, dans la coquille de jeu', functi
         shellFrontFiles(['pages/game']),
     );
 
-    expect($pages)->toBe(['game/lobby', 'game/room-expired', 'game/solo']);
+    // `game/design-preview` : l'hôte des scénarios de jeu du banc d'essai du
+    // design (spec 20 § 13.8, demande du porteur du 08/10), servi par
+    // `design.frame` hors production seulement.
+    expect($pages)->toBe(['game/design-preview', 'game/lobby', 'game/room-expired', 'game/solo']);
 
     // Chaque page `game/*` est servie par au moins une route du groupe `web`,
     // et le rendu de chacune de ces routes est vérifiable.

@@ -2,6 +2,8 @@ import { createInertiaApp } from '@inertiajs/react';
 import '../scss/auth.scss';
 import '../scss/home.scss';
 import '../scss/legal.scss';
+import '../scss/error.scss';
+import '../scss/game.scss';
 import '../scss/lobby.scss';
 import '../scss/report.scss';
 import '../scss/room-entry.scss';

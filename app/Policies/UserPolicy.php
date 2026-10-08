@@ -87,4 +87,16 @@ class UserPolicy
     {
         return $actor->role->atLeast(UserRole::Admin);
     }
+
+    /**
+     * Le banc d'essai du design (ligne 50, demande du porteur du 08/10) :
+     * administrateur seul, et **jamais en production**. Les routes n'y sont
+     * même pas enregistrées (`routes/admin.php`) ; la garde le redit pour
+     * qu'une route enregistrée par erreur ne s'ouvre pas pour autant.
+     */
+    public function previewDesign(User $actor): bool
+    {
+        return $actor->role->atLeast(UserRole::Admin)
+            && ! app()->environment('production');
+    }
 }

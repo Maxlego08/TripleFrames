@@ -14,6 +14,7 @@ import { useTranslations } from '@/hooks/use-translations';
 import { announce } from '@/lib/game/announcer';
 import { playerLabel, seatOrdinals } from '@/lib/game/player-label';
 import { fetchGameState } from '@/lib/game/store';
+import type { ResyncOutcome } from '@/lib/game/store';
 import { settingsChangeLines, settingsChangesFrom } from '@/lib/room-settings';
 import type { SettingsChangeReport } from '@/lib/room-settings';
 import { heartbeat, leave, show, state as roomState } from '@/routes/room';
@@ -88,6 +89,13 @@ export type UseLobbyStateOptions = {
     seatToken: string;
     /** Prop `settings`, recalculée par le serveur à chaque rendu. */
     settings: RoomSettingsState;
+    /**
+     * Aperçu du banc d'essai du design (spec 20 § 13.8, demande du porteur du
+     * 08/10) : paquet fictif. Aucun battement, aucune relecture de
+     * `room.state` (la relecture rend le paquet reçu, sans requête), aucun
+     * rechargement partiel, aucune sortie vers `room.show`.
+     */
+    designPreview?: boolean;
 };
 
 export type LobbyPhase = 'lobby' | 'game';
@@ -263,14 +271,22 @@ function useLeaveInFlight(code: string): boolean {
 
 export function useLobbyState(options: UseLobbyStateOptions): LobbyStateView {
     const { code } = options;
+    const preview = options.designPreview === true;
     const { t } = useTranslations();
 
     const view = useGameState({
         state: options.state,
         seatToken: options.seatToken,
         settings: options.settings,
-        resync: () => fetchGameState(roomState.url({ room: code })),
+        resync: preview
+            ? () =>
+                  Promise.resolve<ResyncOutcome>({
+                      kind: 'packet',
+                      packet: options.state,
+                  })
+            : () => fetchGameState(roomState.url({ room: code })),
         onExit: () => router.visit(show({ room: code })),
+        designPreview: preview,
     });
     const { state, store, connection } = view;
 
@@ -307,7 +323,7 @@ export function useLobbyState(options: UseLobbyStateOptions): LobbyStateView {
     // dont le 403 pose `exit` et fait quitter le salon.
     const leaving = useLeaveInFlight(code);
     const heartbeatStatus = useHeartbeat(
-        active && !leaving ? heartbeat.url({ room: code }) : null,
+        active && !leaving && !preview ? heartbeat.url({ room: code }) : null,
     );
 
     useEffect(() => {
@@ -321,7 +337,7 @@ export function useLobbyState(options: UseLobbyStateOptions): LobbyStateView {
     const reloadSettings = useEffectEvent((): void => {
         router.reload({ only: RELOADED_PROPS, onHttpException });
     });
-    const reloadable = phase === 'lobby' && active;
+    const reloadable = phase === 'lobby' && active && !preview;
     const seen = useRef({
         resyncCount: state.resyncCount,
         gameRef: state.gameRef,

@@ -1,7 +1,6 @@
-import { Head, Link } from '@inertiajs/react';
-import { Button } from '@/components/ui/button';
+import { Head } from '@inertiajs/react';
 import { useTranslations } from '@/hooks/use-translations';
-import { home } from '@/routes';
+import { home, login } from '@/routes';
 import type { TranslationKey } from '@/types/translations';
 
 /**
@@ -62,48 +61,104 @@ const ERROR_COPY: Record<ErrorStatus, ErrorCopy> = {
  * gestionnaire lui-même. Elle n'appelle que des clés `common.*`.
  *
  * Aucun message d'erreur brut : le statut choisit un titre et une explication
- * traduits, et une sortie, l'accueil. Le code numérique est affiché pour qui
- * voudrait le signaler, et masqué aux lecteurs d'écran, pour qui le titre dit
- * déjà tout. Un statut hors table, qui ne devrait jamais arriver, retombe sur
- * l'erreur de serveur plutôt que sur une clé brute.
+ * traduits, une action principale et une sortie secondaire (table
+ * `ERROR_ACTIONS`). Le code numérique est affiché pour qui voudrait le
+ * signaler, et masqué aux lecteurs d'écran, pour qui le titre dit déjà tout.
+ * Un statut hors table, qui ne devrait jamais arriver, retombe sur l'erreur
+ * de serveur plutôt que sur une clé brute.
+ *
+ * **Présentation** (design final du 08/10) : la carte `error-card` de la
+ * maquette `design-test/html/error-*.html`, dans la coquille publique
+ * (`public-shell--error`, `resources/scss/error.scss`) ; en-tête et pied de
+ * page sont ceux du site.
  */
+/** Où mènent les deux sorties d'une page d'erreur. */
+type ErrorExit = 'home' | 'join' | 'login' | 'retry' | 'reload';
+
+/**
+ * Action principale et sortie secondaire de chaque statut, d'après la
+ * maquette `design-test/html/error-*.html` (08/10) : réessayer quand la
+ * panne est passagère, l'accueil sinon.
+ */
+const ERROR_ACTIONS: Record<ErrorStatus, [ErrorExit, ErrorExit]> = {
+    403: ['home', 'login'],
+    404: ['home', 'join'],
+    419: ['reload', 'home'],
+    429: ['retry', 'home'],
+    500: ['retry', 'home'],
+    503: ['retry', 'home'],
+};
+
+const EXIT_LABELS: Record<ErrorExit, TranslationKey> = {
+    home: 'common.error.back_home',
+    join: 'common.error.join_game',
+    login: 'common.error.other_account',
+    retry: 'common.error.retry',
+    reload: 'common.error.reload',
+};
+
+/** Ancre du contenu de l'accueil, où vit le formulaire « rejoindre ». */
+const HOME_CONTENT_ANCHOR = '#public-main';
+
 export default function ErrorPage({ status }: Props) {
     const { t } = useTranslations();
     const copy = ERROR_COPY[status] ?? ERROR_COPY[500];
+    const actions = ERROR_ACTIONS[status] ?? ERROR_ACTIONS[500];
     const title = t(copy.title);
+
+    const exit = (kind: ErrorExit, className: string) => {
+        const label = t(EXIT_LABELS[kind]);
+
+        if (kind === 'retry' || kind === 'reload') {
+            return (
+                <button
+                    type="button"
+                    className={className}
+                    onClick={() => window.location.reload()}
+                >
+                    {label}
+                </button>
+            );
+        }
+
+        // Liens ordinaires et non visites Inertia : une page d'erreur peut
+        // naître d'une panne qu'une visite partielle ne réparerait pas.
+        const href =
+            kind === 'login'
+                ? login.url()
+                : kind === 'join'
+                  ? `${home.url()}${HOME_CONTENT_ANCHOR}`
+                  : home.url();
+
+        return (
+            <a href={href} className={className}>
+                {label}
+            </a>
+        );
+    };
 
     return (
         <>
             <Head title={title} />
 
-            <section
-                aria-labelledby="error-title"
-                className="mx-auto flex w-full max-w-3xl flex-col gap-4 px-4 py-12"
-            >
-                <p
-                    aria-hidden="true"
-                    className="font-mono text-sm text-muted-foreground"
-                >
-                    {status}
-                </p>
+            <div className="error-stage">
+                <section aria-labelledby="error-title" className="error-card">
+                    <p aria-hidden="true" className="error-card__code">
+                        {status}
+                    </p>
 
-                <h1
-                    id="error-title"
-                    className="text-2xl font-semibold tracking-tight"
-                >
-                    {title}
-                </h1>
+                    <h1 id="error-title" className="error-card__title">
+                        {title}
+                    </h1>
 
-                <p className="max-w-prose text-muted-foreground">
-                    {t(copy.description)}
-                </p>
+                    <p className="error-card__message">{t(copy.description)}</p>
 
-                <div>
-                    <Button asChild className="min-h-11">
-                        <Link href={home()}>{t('common.error.back_home')}</Link>
-                    </Button>
-                </div>
-            </section>
+                    <div className="error-card__actions">
+                        {exit(actions[0], 'error-card__action')}
+                        {exit(actions[1], 'error-card__secondary')}
+                    </div>
+                </section>
+            </div>
         </>
     );
 }

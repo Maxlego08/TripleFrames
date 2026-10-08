@@ -155,7 +155,7 @@ class RoomController extends Controller
             'limits' => PlatformLimits::current()->toArray(),
             'presets' => static fn (): array => RoomSettingsPresenter::presets($room, $now),
             'launch' => ['minConnected' => RoomSettingsBounds::MIN_CONNECTED_PLAYERS_TO_LAUNCH],
-            'editor' => $this->editorProps(),
+            'editor' => self::editorProps(),
             'themes' => null,
             'configs' => null,
             'avatars' => static fn (): array => LobbyAvatars::of($room, $seat, $request->user() instanceof User ? $request->user() : null),
@@ -193,11 +193,13 @@ class RoomController extends Controller
      * sélecteur de thèmes non livrés, interrupteur des retardataires livré
      * (D35 du 23/09, § 15.4). Le sélecteur de thèmes suivra
      * `PoolReporter::themeSelectorVisible()` au J2 (§ 9.5, L50-11) : c'est un
-     * état de jalon, jamais une règle de jeu.
+     * état de jalon, jamais une règle de jeu. Publique : le banc d'essai du
+     * design (`DesignPreviewController`) rend la vraie page du lobby avec la
+     * même valeur.
      *
      * @return array{advancedAvailable: bool, themeSelectorVisible: bool, lateJoinAvailable: bool}
      */
-    private function editorProps(): array
+    public static function editorProps(): array
     {
         return [
             'advancedAvailable' => RoomSettingsEditor::ADVANCED_TAB_AVAILABLE,
