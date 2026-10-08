@@ -18,6 +18,14 @@ $screen-surface: oklch(0.2 0.07 293);
 $input-surface: oklch(0.95 0.035 295);
 $found: oklch(0.76 0.17 145);
 
+// Pendant une manche (et sur l'écran de pause), la ligne basse de la
+// coquille de jeu — langue, liens légaux — disparaît, comme au lobby : l'écran
+// appartient à l'image et à la saisie (demande du porteur du 08/10). Elle
+// revient à la révélation (`game--reveal`), entre deux manches.
+#game-main:has(.game:not(.game--reveal)) + div {
+    display: none;
+}
+
 // Portrait étroit : l'écran, la bande et la saisie s'empilent ; si le
 // clavier ou un QCM les dépasse, c'est `main` qui défile, jamais la page.
 #game-main:has(.game) {
@@ -781,6 +789,14 @@ $found: oklch(0.76 0.17 145);
     display: grid;
     gap: 0.35rem;
 
+    // Ordinateur : les quatre propositions sur une seule ligne, pour que leur
+    // arrivée réduise l'écran le moins possible (demande du porteur du 08/10).
+    @media (min-width: 55.01rem) {
+        .choice-grid__choices {
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+        }
+    }
+
     &__choices {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1000,6 +1016,449 @@ $found: oklch(0.76 0.17 145);
     }
 }
 
+// ---------------------------------------------------------------------------
+// Révélation, entre deux manches (design du 08/10). Aucune maquette dédiée :
+// composée avec les pièces de `game.html` (écran sombre, pastilles, carte
+// « papier ») et de `game-results.html` (panneau sombre, lignes `ranking`).
+// ---------------------------------------------------------------------------
+
+.game--reveal {
+    height: auto;
+    min-height: 100%;
+}
+
+.reveal {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(18rem, 26rem);
+    grid-template-areas:
+        'main side'
+        'footer footer';
+    gap: 1.1rem 1.25rem;
+    align-items: start;
+    padding-bottom: 0.5rem;
+
+    &__main {
+        display: grid;
+        min-width: 0;
+        grid-area: main;
+        gap: 1rem;
+    }
+
+    &__side {
+        display: grid;
+        min-width: 0;
+        grid-area: side;
+        gap: 1rem;
+    }
+
+    &__footer {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: center;
+        grid-area: footer;
+        gap: 0.75rem 1rem;
+
+        // Attribution TMDB : sur fond violet, en clair.
+        > p {
+            flex-basis: 100%;
+            justify-content: center;
+            color: $paper;
+            opacity: 0.85;
+
+            a {
+                color: inherit;
+            }
+        }
+
+        // « Manche suivante » (hôte, solo) : le bouton corail de la maquette.
+        [data-slot='button'] {
+            @include mix.hard-shadow(0.22rem, $ink);
+            min-height: 3.1rem;
+            border: 0.125rem solid $ink;
+            border-radius: 0.75rem;
+            padding-inline: 1.15rem;
+            background: $coral;
+            color: $ink;
+            font-family: $display;
+            font-weight: 900;
+
+            &:hover:not([aria-disabled='true'], :disabled) {
+                background: $coral;
+                translate: 0 -0.08rem;
+            }
+        }
+
+        .text-destructive {
+            border-radius: 999px;
+            padding: 0.1rem 0.6rem;
+            background: $paper;
+            color: $error;
+            font-weight: 800;
+        }
+    }
+
+    &__next {
+        @include mix.hard-shadow(0.18rem, $night);
+        display: inline-flex;
+        min-height: 2.75rem;
+        align-items: center;
+        margin: 0;
+        border: 0.125rem solid $ink;
+        border-radius: 999px;
+        padding: 0.35rem 0.9rem;
+        background: $yellow;
+        font-weight: 900;
+        font-variant-numeric: tabular-nums;
+        gap: 0.45rem;
+
+        svg {
+            width: 1rem;
+            height: 1rem;
+        }
+    }
+}
+
+.reveal-card {
+    position: relative;
+    display: grid;
+    border: $line solid $ink;
+    border-radius: 1.6rem;
+    padding: clamp(1.1rem, 2vw, 1.6rem);
+    background: $paper;
+    box-shadow:
+        0.45rem 0.45rem 0 $night,
+        -0.32rem -0.28rem 0 $yellow;
+    color: $ink;
+    gap: 0.55rem;
+
+    &__round {
+        justify-self: start;
+        margin: 0;
+        border: 0.125rem solid $ink;
+        border-radius: 999px;
+        padding: 0.3rem 0.7rem;
+        background: $lavender;
+        font-size: 0.78rem;
+        font-weight: 900;
+    }
+
+    &__heading {
+        display: grid;
+        margin: 0;
+        gap: 0.2rem;
+        outline: none;
+    }
+
+    &__label {
+        color: $muted;
+        font-size: 0.9rem;
+        font-weight: 800;
+    }
+
+    &__title {
+        @include mix.display-type;
+        font-size: clamp(1.8rem, 3.6vw, 3rem);
+        line-height: 1.05;
+        text-wrap: balance;
+    }
+
+    &__meta {
+        display: flex;
+        flex-wrap: wrap;
+        margin: 0;
+        color: $muted;
+        font-size: 0.9rem;
+        font-weight: 700;
+        gap: 0.2rem 1rem;
+    }
+
+    // Letterboxd et « Signaler » : pastilles de la maquette.
+    &__links {
+        display: flex;
+        flex-wrap: wrap;
+        margin-top: 0.35rem;
+        gap: 0.5rem;
+
+        [data-slot='button'] {
+            min-height: 2.6rem;
+            border: 0.125rem solid $ink;
+            border-radius: 999px;
+            padding-inline: 0.9rem;
+            background: $white;
+            box-shadow: 0.14rem 0.14rem 0 $ink;
+            color: $ink;
+            font-weight: 900;
+
+            &:first-child {
+                background: $cyan;
+            }
+
+            &:hover {
+                background: $yellow;
+                color: $ink;
+            }
+        }
+    }
+}
+
+// Les images servies, en vignettes encadrées comme l'écran de la manche.
+// `auto-fill` : une seule image servie (réponse vue tôt en solo) garde la
+// taille d'une vignette au lieu de prendre toute la largeur.
+.reveal-frames {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+    margin: 0;
+    padding: 0;
+    gap: 0.9rem;
+    list-style: none;
+
+    &__item {
+        display: grid;
+        min-width: 0;
+        gap: 0.35rem;
+        justify-items: start;
+
+        [data-slot='button'] {
+            min-height: 2.2rem;
+            border-radius: 999px;
+            padding-inline: 0.65rem;
+            color: $paper;
+            font-size: 0.75rem;
+            font-weight: 800;
+
+            &:hover {
+                background: oklch(0.16 0.04 290 / 0.6);
+                color: $paper;
+            }
+        }
+    }
+
+    &__frame {
+        position: relative;
+        width: 100%;
+        overflow: hidden;
+        aspect-ratio: var(--aspect-frame);
+        border: 0.26rem solid $ink;
+        border-radius: 0.85rem;
+        background: $night;
+        box-shadow:
+            0 0 0 0.22rem $frame-glow,
+            0 0.42rem 0 $night;
+
+        // `GameFrame` remplit la vignette.
+        > div {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            aspect-ratio: auto;
+            background: $night;
+            color: $paper;
+        }
+
+        img {
+            object-fit: cover;
+        }
+    }
+
+    &__index {
+        position: absolute;
+        z-index: 3;
+        top: 0.45rem;
+        left: 0.45rem;
+        border: 0.125rem solid $ink;
+        border-radius: 999px;
+        padding: 0.18rem 0.5rem;
+        background: oklch(0.98 0.03 91 / 0.92);
+        font-size: 0.68rem;
+        font-weight: 900;
+    }
+}
+
+// Panneaux sombres de `game-results.html` (« Générique de fin »).
+.reveal-panel {
+    display: grid;
+    min-width: 0;
+    border: $line solid $ink;
+    border-radius: 1.6rem;
+    padding: clamp(0.9rem, 1.6vw, 1.25rem);
+    background: oklch(0.16 0.04 290 / 0.78);
+    box-shadow: 0.45rem 0.45rem 0 $night;
+    color: $paper;
+    gap: 0.75rem;
+
+    &__heading {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+
+        svg {
+            width: 1.4rem;
+            height: 1.4rem;
+            color: $yellow;
+        }
+
+        h3 {
+            @include mix.display-type;
+            margin: 0;
+            font-size: clamp(1.3rem, 1.8vw, 1.7rem);
+        }
+    }
+
+    &__empty {
+        margin: 0;
+        font-weight: 700;
+        opacity: 0.85;
+    }
+}
+
+.ranking {
+    display: grid;
+    margin: 0;
+    padding: 0;
+    gap: 0.5rem;
+    list-style: none;
+
+    &__item {
+        display: grid;
+        min-width: 0;
+        min-height: 3.4rem;
+        align-items: center;
+        grid-template-columns: 2.4rem 2.6rem minmax(0, 1fr) auto;
+        border: 0.15rem solid $ink;
+        border-radius: 0.85rem;
+        padding: 0.32rem 0.65rem 0.32rem 0.45rem;
+        background: $paper;
+        box-shadow: 0.18rem 0.18rem 0 $night;
+        color: $ink;
+        gap: 0.6rem;
+
+        &--current {
+            border-left-width: 0.45rem;
+            border-left-color: $cyan;
+            background: $yellow;
+        }
+
+        .player-avatar {
+            width: 2.45rem;
+            height: 2.45rem;
+            border-width: 0.125rem;
+            box-shadow: none;
+            font-size: 0.75rem;
+            scale: 1;
+        }
+    }
+
+    &__position {
+        color: $muted;
+        font-family: $display;
+        font-size: 1rem;
+        font-weight: 900;
+        text-align: center;
+    }
+
+    &__item--current &__position {
+        color: $ink;
+    }
+
+    &__identity {
+        display: grid;
+        min-width: 0;
+        contain: inline-size;
+    }
+
+    &__name {
+        overflow: hidden;
+        font-family: $display;
+        font-weight: 900;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    &__detail {
+        color: $muted;
+        font-size: 0.72rem;
+        font-weight: 800;
+    }
+
+    &__score {
+        border: 0.125rem solid $ink;
+        border-radius: 999px;
+        padding: 0.22rem 0.65rem;
+        background: oklch(0.9 0.045 220);
+        font-size: 0.85rem;
+        font-weight: 900;
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+    }
+
+    &__item--current &__score {
+        background: $paper;
+    }
+}
+
+// Le classement intermédiaire (`StandingsTable`, tableau de données gardé
+// pour les lecteurs d'écran) habillé en lignes `ranking`. Dans ce panneau
+// étroit, le tableau est en disposition « ligne flexible » (requête de
+// conteneur du composant) ; ses en-têtes de colonnes restent lus, masqués.
+.reveal-standings {
+    [data-slot='table-container'] {
+        overflow: visible;
+    }
+
+    table {
+        color: $ink;
+    }
+
+    caption {
+        @include mix.display-type;
+        margin: 0 0 0.75rem;
+        color: $paper;
+        font-size: clamp(1.3rem, 1.8vw, 1.7rem);
+    }
+
+    thead {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+    }
+
+    tbody {
+        display: grid;
+        gap: 0.5rem;
+    }
+
+    tbody tr {
+        align-items: center;
+        border: 0.15rem solid $ink;
+        border-radius: 0.85rem;
+        background: $paper;
+        box-shadow: 0.18rem 0.18rem 0 $night;
+
+        &:hover {
+            background: $paper;
+        }
+    }
+
+    tbody th,
+    tbody td {
+        border: 0;
+        color: $ink;
+    }
+
+    .text-muted-foreground {
+        color: $muted;
+    }
+
+    [data-slot='avatar'] {
+        border: 0.125rem solid $ink;
+    }
+}
+
 @media (max-width: 55rem) {
     .game {
         width: min(100% - 1.25rem, 42rem);
@@ -1022,6 +1481,14 @@ $found: oklch(0.76 0.17 145);
         &__frame {
             width: 100%;
         }
+    }
+
+    .reveal {
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-areas:
+            'main'
+            'side'
+            'footer';
     }
 
     // Portrait : la bande des joueurs reste à l'écran (règle 10), plus

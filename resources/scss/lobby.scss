@@ -11,7 +11,8 @@
 }
 
 // `waiting-room.html` occupe tout l'écran : la barre basse repliée de la
-// coquille de jeu disparaît uniquement au lobby, jamais pendant la partie.
+// coquille de jeu disparaît au lobby (et, depuis le 08/10, pendant une
+// manche : `game.scss`).
 #game-main:has(.waiting-room) + div {
     display: none;
 }

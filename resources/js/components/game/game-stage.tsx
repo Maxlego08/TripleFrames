@@ -367,36 +367,41 @@ export function GameStage({
         ) ?? null;
 
     if (round.phase === 'revealing' && round.reveal !== null) {
-        return scrolling(
-            <RoundReveal
-                key={key}
-                roundNumber={round.roundNumber}
-                roundsCount={round.roundsCount}
-                movie={round.reveal.movie}
-                frames={round.reveal.frames}
-                finders={round.reveal.finders}
-                seats={state.seats}
-                leaderboard={state.leaderboard}
-                images={
-                    member
-                        ? round.images.map((image) => ({
-                              tierIndex: image.tierIndex,
-                              view: frames.view(
-                                  gameRef,
-                                  round.sequenceIndex,
-                                  image.tierIndex,
-                              ),
-                          }))
-                        : null
-                }
-                tierCount={round.tiers.length}
-                frameFormat={frameFormat}
-                nextStartsInMs={
-                    next === null ? null : parseIsoMs(next.startsAt) - nowMs
-                }
-                action={revealAction}
-            />,
-            waiting,
+        return (
+            <div className="game game--reveal">
+                <h1 className="sr-only">{title}</h1>
+                {topbar(true)}
+                {notices(waiting)}
+                <RoundReveal
+                    key={key}
+                    roundNumber={round.roundNumber}
+                    roundsCount={round.roundsCount}
+                    movie={round.reveal.movie}
+                    frames={round.reveal.frames}
+                    finders={round.reveal.finders}
+                    seats={state.seats}
+                    leaderboard={state.leaderboard}
+                    selfPublicId={state.self.publicId}
+                    images={
+                        member
+                            ? round.images.map((image) => ({
+                                  tierIndex: image.tierIndex,
+                                  view: frames.view(
+                                      gameRef,
+                                      round.sequenceIndex,
+                                      image.tierIndex,
+                                  ),
+                              }))
+                            : null
+                    }
+                    tierCount={round.tiers.length}
+                    frameFormat={frameFormat}
+                    nextStartsInMs={
+                        next === null ? null : parseIsoMs(next.startsAt) - nowMs
+                    }
+                    action={revealAction}
+                />
+            </div>
         );
     }
 
