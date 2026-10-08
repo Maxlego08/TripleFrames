@@ -2011,11 +2011,21 @@ export type AudienceDay = {
     visitors: number;
     visits: number;
     pageviews: number;
+    /** Robots déclarés (amendé le 08/10). */
+    bots: number;
+    /** Chargements jamais confirmés par leur JavaScript (amendé le 08/10). */
+    unconfirmed: number;
 };
 
 export type AudienceReport = {
     since: string;
-    totals: { visitors: number; visits: number; pageviews: number };
+    totals: {
+        visitors: number;
+        visits: number;
+        pageviews: number;
+        bots: number;
+        unconfirmed: number;
+    };
     daily: AudienceDay[];
     pages: AudienceRanked[];
     entries: AudienceRanked[];
@@ -2023,6 +2033,8 @@ export type AudienceReport = {
     referrers: AudienceRanked[];
     locales: AudienceRanked[];
     devices: AudienceRanked[];
+    /** Robots déclarés, par famille. */
+    bots: AudienceRanked[];
     live: {
         visitors: number;
         pages: AudienceRanked[];
@@ -2040,6 +2052,66 @@ export type AudienceReport = {
 };
 
 export type AudienceWindow = '7d' | '30d' | '90d';
+
+/*
+ * --- Statistiques de jeu (spec 20 § 12.6, demande du porteur du 08/10) ---
+ *
+ * Miroir de `App\Support\Admin\GameStatsReport` : des agrégats, jamais un
+ * siège ni un pseudo ; les films ne viennent que des manches terminées.
+ */
+
+export type GameStatsMovie = {
+    id: number;
+    title: string;
+    year: number | null;
+    rounds: number;
+    participations: number;
+    finds: number;
+    /** Part des participations qui ont trouvé, sur l'échelle 0-1. */
+    find_rate: number | null;
+};
+
+export type GameStatsReport = {
+    since: string;
+    totals: {
+        games: number;
+        multiplayer: number;
+        solo: number;
+        completed: number;
+        interrupted: number;
+        running: number;
+        players_per_game: number | null;
+        average_duration_ms: number | null;
+        rounds: number;
+        participations: number;
+        finds: number;
+        /** Échelle 0-1. */
+        find_rate: number | null;
+        average_find_ms: number | null;
+        wrong_per_participation: number | null;
+    };
+    daily: {
+        day: string;
+        multiplayer: number;
+        solo: number;
+        completed: number;
+        interrupted: number;
+    }[];
+    /** Les 24 heures UTC, dans l'ordre. */
+    hours: { hour: number; games: number }[];
+    difficulty: AudienceRanked[];
+    frames: AudienceRanked[];
+    rounds_count: AudienceRanked[];
+    tiers: { tier: number; finds: number }[];
+    sources: AudienceRanked[];
+    movies: {
+        played: GameStatsMovie[];
+        hardest: GameStatsMovie[];
+        easiest: GameStatsMovie[];
+    };
+    /** Participations exigées d'un film pour « durs » et « faciles ». */
+    rated_min_participations: number;
+};
 
 /**
  * Une ligne de l'écran « Avatars » (ligne 45, spec 20 § 12.5, D49 du 01/10),

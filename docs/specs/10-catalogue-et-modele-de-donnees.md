@@ -1108,7 +1108,7 @@ Ajoutées le 01/10 par D47 du 01/10. Aucune donnée personnelle de joueur hors `
 
 Ajoutées le 01/10 par D48 du 01/10. **Aucune adresse, aucun cookie, aucun identifiant durable.**
 
-**`audience_daily`** : `id` · `day` date · `metric` string(20) (`pageviews`, `visitors`, `visits`, `entries`, `exits`, `referrers`, `locales`, `devices`) · `dimension` string(150) défaut `''` (nom de route, domaine référent, langue, type d'appareil ; vide pour un total) · `total` unsignedInteger défaut 0. UNIQUE `audience_daily_key_uq (day, metric, dimension)` ; index `audience_daily_day_idx (day)`. Écrite par incréments (`upsert`), jamais une ligne par visite. Sans horodatage, `$timestamps = false`.
+**`audience_daily`** : `id` · `day` date · `metric` string(20) (`pageviews`, `visitors`, `visits`, `entries`, `exits`, `referrers`, `locales`, `devices` ; `bots` et `unconfirmed` ajoutées le 08/10, sans migration : robots déclarés par famille et chargements jamais confirmés par leur JavaScript, `100` § 10.12) · `dimension` string(150) défaut `''` (nom de route, domaine référent, langue, type d'appareil, famille de robot ; vide pour un total) · `total` unsignedInteger défaut 0. UNIQUE `audience_daily_key_uq (day, metric, dimension)` ; index `audience_daily_day_idx (day)`. Écrite par incréments (`upsert`), jamais une ligne par visite. Sans horodatage, `$timestamps = false`.
 
 **`audience_presence`** : `visitor_hash` char(16) clé primaire (empreinte du jour, sel en cache seulement) · `route` string(150) · `last_seen_at` timestamp(3), index. Une ligne par visiteur vu dans les 10 dernières minutes, effacée au-delà par l'enregistreur lui-même : un état technique transitoire, jamais relié à un autre jour.
 

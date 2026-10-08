@@ -52,8 +52,11 @@ test('l\'écran additionne les compteurs de la fenêtre et classe les pages', fu
             ->where('report.totals.visitors', 8)
             ->where('report.totals.visits', 10)
             ->where('report.totals.pageviews', 46)
-            ->has('report.daily', 2)
-            ->where('report.daily.1.day', '2026-10-01')
+            ->has('report.daily', 7)
+            ->where('report.daily.0.visitors', 0)
+            ->where('report.daily.5.day', '2026-09-30')
+            ->where('report.daily.5.visitors', 3)
+            ->where('report.daily.6.day', '2026-10-01')
             ->where('report.pages.0.name', 'legal.notice')
             ->where('report.pages.0.total', 30)
             ->where('report.pages.1.name', 'home')
@@ -91,4 +94,22 @@ test('l\'entonnoir de jeu compte salons, parties et joueurs par partie', functio
             ->where('report.funnel.games_completed', 1)
             ->where('report.funnel.players_per_game', 1)
             ->where('report.funnel.rooms_created', Room::query()->count()));
+});
+
+test('l\'écran sépare robots déclarés et chargements sans JavaScript du trafic humain', function (): void {
+    AudienceDaily::factory()->counter('2026-10-01', AudienceRecorder::METRIC_PAGEVIEWS, 'home', 4)->create();
+    AudienceDaily::factory()->counter('2026-10-01', AudienceRecorder::METRIC_BOTS, 'googlebot', 7)->create();
+    AudienceDaily::factory()->counter('2026-10-01', AudienceRecorder::METRIC_BOTS, 'gptbot', 2)->create();
+    AudienceDaily::factory()->counter('2026-09-30', AudienceRecorder::METRIC_UNCONFIRMED, '', 5)->create();
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get(route('admin.audience.index', ['window' => '7d']))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('report.totals.pageviews', 4)
+            ->where('report.totals.bots', 9)
+            ->where('report.totals.unconfirmed', 5)
+            ->where('report.daily.6.bots', 9)
+            ->where('report.daily.5.unconfirmed', 5)
+            ->where('report.bots.0.name', 'googlebot')
+            ->where('report.bots.1.name', 'gptbot'));
 });

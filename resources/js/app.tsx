@@ -15,6 +15,7 @@ import AuthLayout from '@/layouts/auth-layout';
 import GameLayout from '@/layouts/game/game-layout';
 import PublicLayout from '@/layouts/public/public-layout';
 import SettingsLayout from '@/layouts/settings/layout';
+import { sendAudienceSeen } from '@/lib/audience-seen';
 
 const appName = import.meta.env.VITE_APP_NAME || 'TripleFrames';
 
@@ -72,3 +73,7 @@ void createInertiaApp({
         color: 'var(--primary)',
     },
 });
+
+// La preuve JavaScript de l'audience (spec 100 § 10.12, amendé le 08/10) :
+// une fois par chargement complet, jamais à une visite Inertia.
+sendAudienceSeen();

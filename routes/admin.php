@@ -24,6 +24,7 @@ use App\Http\Controllers\Admin\FrameTmdbController;
 use App\Http\Controllers\Admin\FrameUnpublishController;
 use App\Http\Controllers\Admin\FrameUnsuspendController;
 use App\Http\Controllers\Admin\GameInspectionController;
+use App\Http\Controllers\Admin\GameStatsController;
 use App\Http\Controllers\Admin\GuideController;
 use App\Http\Controllers\Admin\ImportAbandonController;
 use App\Http\Controllers\Admin\ImportController;
@@ -633,6 +634,12 @@ Route::middleware(['auth', 'verified', 'role:curator', 'admin.2fa', 'admin.local
             Route::get('audience', [AudienceController::class, 'index'])
                 ->middleware('can:viewAny,'.AudienceDaily::class)
                 ->name('audience.index');
+
+            // Les statistiques de jeu (ligne 51, demande du porteur du 08/10) :
+            // parties, réglages, réponses et films en agrégats.
+            Route::get('game-stats', [GameStatsController::class, 'index'])
+                ->middleware('can:viewStats,'.Game::class)
+                ->name('game-stats.index');
 
             // Les avatars téléversés (ligne 45, D49 du 01/10) : la liste,
             // l'image même masquée, et deux gestes consignés — lever, retirer

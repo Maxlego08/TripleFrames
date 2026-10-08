@@ -22,6 +22,14 @@ use Throwable;
  * cours, le compteur de sortie passe de la page précédente à la nouvelle, au
  * jour où la visite a commencé.
  *
+ * **Preuve JavaScript** (amendé le 08/10) : un chargement complet n'est
+ * qu'**en attente** ({@see self::pending()}) — compté `unconfirmed`, gardé en
+ * cache sous l'empreinte du jour — jusqu'à ce que la page, exécutée et
+ * visible, envoie son signal ({@see self::confirm()}) : alors seulement il
+ * devient une page vue. Une visite Inertia, qui ne part que d'une page dont
+ * le JavaScript tourne déjà, est comptée tout de suite. Un robot déclaré
+ * n'est compté qu'en `bots`, par famille ({@see self::bot()}).
+ *
  * **Jamais bloquant** : tout échec est avalé ; appelé après la réponse.
  */
 final class AudienceRecorder
@@ -50,6 +58,15 @@ final class AudienceRecorder
     public const string METRIC_LOCALES = 'locales';
 
     public const string METRIC_DEVICES = 'devices';
+
+    /** Robots déclarés, par famille (amendé le 08/10). */
+    public const string METRIC_BOTS = 'bots';
+
+    /** Chargements complets jamais confirmés par leur JavaScript (amendé le 08/10). */
+    public const string METRIC_UNCONFIRMED = 'unconfirmed';
+
+    /** Au plus autant de chargements en attente par empreinte. */
+    public const int PENDING_MAX = 20;
 
     public function __construct(private readonly Cache $cache) {}
 
@@ -91,6 +108,110 @@ final class AudienceRecorder
 
             $this->trackVisit($visitor, $route, $day, $referrerHost, $now);
             $this->touchPresence($visitor, $route, $now);
+        } catch (Throwable) {
+            // Mesurer l'audience ne casse jamais une page (§ 10.12).
+        }
+    }
+
+    /**
+     * Un chargement complet, en attente de sa preuve JavaScript : compté
+     * `unconfirmed` et gardé en cache, sous l'empreinte du jour, le temps
+     * d'une visite.
+     *
+     * @param  string  $route  Nom de la route, jamais l'URL.
+     * @param  string|null  $referrerHost  Domaine du référent externe, ou `null`.
+     */
+    public function pending(
+        string $ip,
+        string $userAgent,
+        string $route,
+        ?string $referrerHost,
+        string $locale,
+        string $device,
+    ): void {
+        if (! $this->enabled()) {
+            return;
+        }
+
+        try {
+            $now = Date::now()->toImmutable();
+            $day = $now->toDateString();
+            $key = 'audience:pending:'.$this->fingerprint($ip, $userAgent, $day);
+            $pending = $this->cache->get($key);
+            $pending = is_array($pending) ? array_values($pending) : [];
+
+            if (count($pending) >= self::PENDING_MAX) {
+                return;
+            }
+
+            $pending[] = ['route' => $route, 'referrer' => $referrerHost, 'locale' => $locale, 'device' => $device, 'day' => $day];
+
+            $this->increment($day, self::METRIC_UNCONFIRMED);
+            $this->cache->put($key, $pending, $now->addMinutes(self::VISIT_IDLE_MINUTES));
+        } catch (Throwable) {
+            // Mesurer l'audience ne casse jamais une page (§ 10.12).
+        }
+    }
+
+    /**
+     * Le signal d'une page exécutée et visible : chaque chargement en attente
+     * de la même empreinte devient une page vue. Rend le nombre confirmé ;
+     * sans attente, n'écrit rien.
+     */
+    public function confirm(string $ip, string $userAgent): int
+    {
+        if (! $this->enabled()) {
+            return 0;
+        }
+
+        try {
+            $day = Date::now()->toImmutable()->toDateString();
+            $pending = $this->cache->pull('audience:pending:'.$this->fingerprint($ip, $userAgent, $day));
+        } catch (Throwable) {
+            return 0;
+        }
+
+        if (! is_array($pending)) {
+            return 0;
+        }
+
+        $confirmed = 0;
+
+        foreach ($pending as $view) {
+            if (! is_array($view) || ! is_string($view['route'] ?? null) || ! is_string($view['day'] ?? null)) {
+                continue;
+            }
+
+            try {
+                $this->decrement($view['day'], self::METRIC_UNCONFIRMED, '');
+            } catch (Throwable) {
+                // Le compteur d'attente est indicatif.
+            }
+
+            $this->pageView(
+                $ip,
+                $userAgent,
+                $view['route'],
+                is_string($view['referrer'] ?? null) ? $view['referrer'] : null,
+                is_string($view['locale'] ?? null) ? $view['locale'] : '',
+                is_string($view['device'] ?? null) ? $view['device'] : '',
+            );
+
+            $confirmed++;
+        }
+
+        return $confirmed;
+    }
+
+    /** Un robot déclaré : un compteur par famille, rien d'autre. */
+    public function bot(string $family): void
+    {
+        if (! $this->enabled()) {
+            return;
+        }
+
+        try {
+            $this->increment(Date::now()->toImmutable()->toDateString(), self::METRIC_BOTS, $family);
         } catch (Throwable) {
             // Mesurer l'audience ne casse jamais une page (§ 10.12).
         }

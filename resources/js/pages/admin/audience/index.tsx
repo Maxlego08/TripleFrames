@@ -1,5 +1,9 @@
 import { Head, Link } from '@inertiajs/react';
 import { AdminCardTitle } from '@/components/admin/admin-card-title';
+import {
+    AdminDistributionChart,
+    AdminSeriesChart,
+} from '@/components/admin/admin-charts';
 import { AdminPageHeading } from '@/components/admin/admin-page-heading';
 import { AdminStatTile } from '@/components/admin/admin-stat-tile';
 import { Badge } from '@/components/ui/badge';
@@ -59,6 +63,10 @@ const DEVICE_KEYS: Partial<Record<string, TranslationKey>> = {
  * des compteurs quotidiens sans cookie, le temps réel et l'entonnoir de jeu.
  * Aucune visite ni aucun visiteur n'est montré un à un : il n'en existe pas
  * en base.
+ *
+ * Graphiques (demande du porteur du 08/10) : fréquentation jour par jour,
+ * humains face aux robots, appareils et langues ; chaque graphique garde son
+ * tableau de données à côté.
  */
 export default function AdminAudienceIndex({
     report,
@@ -67,6 +75,8 @@ export default function AdminAudienceIndex({
     enabled,
 }: Props) {
     const { t, locale } = useTranslations();
+    const formatShortDay = (day: string): string =>
+        formatDay(day, locale) ?? day;
     const perVisit =
         report.totals.visits === 0
             ? null
@@ -190,6 +200,96 @@ export default function AdminAudienceIndex({
                 <Card>
                     <CardHeader>
                         <AdminCardTitle>
+                            {t('admin.audience.charts.traffic.heading')}
+                        </AdminCardTitle>
+                        <CardDescription>
+                            {t('admin.audience.charts.traffic.description')}
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <AdminSeriesChart
+                            label={t('admin.audience.charts.traffic.heading')}
+                            data={report.daily}
+                            xKey="day"
+                            kind="area"
+                            formatX={formatShortDay}
+                            series={[
+                                {
+                                    key: 'pageviews',
+                                    label: t('admin.audience.totals.pageviews'),
+                                    color: 3,
+                                },
+                                {
+                                    key: 'visits',
+                                    label: t('admin.audience.totals.visits'),
+                                    color: 2,
+                                },
+                                {
+                                    key: 'visitors',
+                                    label: t('admin.audience.totals.visitors'),
+                                    color: 1,
+                                },
+                            ]}
+                        />
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader>
+                        <AdminCardTitle>
+                            {t('admin.audience.charts.quality.heading')}
+                        </AdminCardTitle>
+                        <CardDescription>
+                            {t('admin.audience.totals.filtered_note')}
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div className="grid gap-3 sm:grid-cols-3">
+                            <AdminStatTile
+                                label={t('admin.audience.charts.humans')}
+                                value={report.totals.pageviews}
+                            />
+                            <AdminStatTile
+                                label={t('admin.audience.totals.bots')}
+                                value={report.totals.bots}
+                            />
+                            <AdminStatTile
+                                label={t('admin.audience.totals.unconfirmed')}
+                                value={report.totals.unconfirmed}
+                            />
+                        </div>
+                        <AdminSeriesChart
+                            label={t('admin.audience.charts.quality.heading')}
+                            data={report.daily}
+                            xKey="day"
+                            kind="stacked"
+                            formatX={formatShortDay}
+                            series={[
+                                {
+                                    key: 'pageviews',
+                                    label: t('admin.audience.charts.humans'),
+                                    color: 2,
+                                },
+                                {
+                                    key: 'unconfirmed',
+                                    label: t(
+                                        'admin.audience.charts.unconfirmed',
+                                    ),
+                                    color: 3,
+                                },
+                                {
+                                    key: 'bots',
+                                    label: t('admin.audience.charts.bots'),
+                                    color: 5,
+                                },
+                            ]}
+                        />
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader>
+                        <AdminCardTitle>
                             {t('admin.audience.funnel.heading')}
                         </AdminCardTitle>
                         <CardDescription>
@@ -282,6 +382,14 @@ export default function AdminAudienceIndex({
                                                 'admin.audience.column.pageviews',
                                             )}
                                         </TableHead>
+                                        <TableHead>
+                                            {t('admin.audience.column.bots')}
+                                        </TableHead>
+                                        <TableHead>
+                                            {t(
+                                                'admin.audience.column.unconfirmed',
+                                            )}
+                                        </TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
@@ -305,6 +413,18 @@ export default function AdminAudienceIndex({
                                             <TableCell>
                                                 {formatInteger(
                                                     day.pageviews,
+                                                    locale,
+                                                )}
+                                            </TableCell>
+                                            <TableCell>
+                                                {formatInteger(
+                                                    day.bots,
+                                                    locale,
+                                                )}
+                                            </TableCell>
+                                            <TableCell>
+                                                {formatInteger(
+                                                    day.unconfirmed,
                                                     locale,
                                                 )}
                                             </TableCell>
@@ -346,6 +466,7 @@ export default function AdminAudienceIndex({
                         rows={report.locales}
                         nameLabel={t('admin.audience.column.locale')}
                         totalLabel={t('admin.audience.column.visitors')}
+                        chart
                     />
                     <RankedCard
                         title={t('admin.audience.devices.heading')}
@@ -359,6 +480,14 @@ export default function AdminAudienceIndex({
                         })}
                         nameLabel={t('admin.audience.column.device')}
                         totalLabel={t('admin.audience.column.visitors')}
+                        chart
+                    />
+                    <RankedCard
+                        title={t('admin.audience.bots.heading')}
+                        description={t('admin.audience.bots.description')}
+                        rows={report.bots}
+                        nameLabel={t('admin.audience.column.bot')}
+                        totalLabel={t('admin.audience.column.pageviews')}
                     />
                 </div>
             </div>
@@ -368,24 +497,41 @@ export default function AdminAudienceIndex({
 
 AdminAudienceIndex.layout = { breadcrumbs };
 
-/** Une carte de classement : un nom et un total par ligne. */
+/**
+ * Une carte de classement : un nom et un total par ligne, précédés de leur
+ * graphique en barres quand `chart` est posé.
+ */
 function RankedCard({
     title,
+    description,
     rows,
     nameLabel,
     totalLabel,
+    chart = false,
 }: {
     title: string;
+    description?: string;
     rows: AudienceRanked[];
     nameLabel: string;
     totalLabel: string;
+    chart?: boolean;
 }) {
     return (
         <Card>
             <CardHeader>
                 <AdminCardTitle>{title}</AdminCardTitle>
+                {description !== undefined && (
+                    <CardDescription>{description}</CardDescription>
+                )}
             </CardHeader>
-            <CardContent className="overflow-x-auto">
+            <CardContent className="space-y-4 overflow-x-auto">
+                {chart && rows.length > 0 && (
+                    <AdminDistributionChart
+                        label={title}
+                        rows={rows}
+                        valueLabel={totalLabel}
+                    />
+                )}
                 <RankedTable
                     rows={rows}
                     nameLabel={nameLabel}

@@ -41,6 +41,12 @@ return Application::configure(basePath: dirname(__DIR__))
         then: static function (): void {
             Route::middleware(['throttle:ops-probe', EnsureProbeToken::class])
                 ->group(__DIR__.'/../routes/ops.php');
+
+            // La preuve JavaScript de la mesure d'audience (spec 100 § 10.12,
+            // amendé le 08/10), hors du groupe `web` elle aussi : le signal
+            // ne porte rien et ne confirme que ce que le serveur a vu.
+            Route::middleware('throttle:audience-seen')
+                ->group(__DIR__.'/../routes/audience.php');
         },
     )
     // Canaux de diffusion du moteur (spec 60 § 10.4, contrat C7 § 2.2) :

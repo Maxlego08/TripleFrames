@@ -43,6 +43,17 @@ function componentListFirstMilestone(): array
 }
 
 /**
+ * Primitives du back-office seul (spec 90 § 9.2, amendé le 08/10) : `chart`
+ * (recharts), pour les écrans « Audience » et « Statistiques de jeu ».
+ *
+ * @return list<string>
+ */
+function componentListBackOffice(): array
+{
+    return ['chart'];
+}
+
+/**
  * Bibliothèques d'interface ou d'animation courantes, refusées par la liste
  * close (« toute autre bibliothèque d'interface ou d'animation »). Relevé
  * non exhaustif des concurrents directs de shadcn et de Radix : il attrape
@@ -96,7 +107,7 @@ it("n'installe que la liste close des composants de présentation", function () 
     $installed = array_map(static fn (string $entry): string => basename($entry, '.tsx'), $entries);
     sort($installed);
 
-    $expected = [...componentListInstalled(), ...componentListFirstMilestone()];
+    $expected = [...componentListInstalled(), ...componentListFirstMilestone(), ...componentListBackOffice()];
     sort($expected);
 
     expect($installed)->toBe($expected);
@@ -144,4 +155,27 @@ it("n'installe jamais l'enveloppe react-hook-form", function () {
         expect(preg_match('/[\'"](?:react-hook-form|@hookform\/[^\'"]+)[\'"]/', $source))
             ->toBe(0, "{$file->getPathname()} importe react-hook-form");
     }
+});
+
+it("ne sert les graphiques qu'au back-office", function () {
+    $offenders = [];
+    $root = base_path('resources/js');
+    $files = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS));
+
+    foreach ($files as $file) {
+        $path = str_replace(DIRECTORY_SEPARATOR, '/', substr((string) $file, strlen($root) + 1));
+
+        if (! preg_match('/\.tsx?$/', $path) || str_starts_with($path, 'components/ui/')
+            || str_starts_with($path, 'components/admin/') || str_starts_with($path, 'pages/admin/')) {
+            continue;
+        }
+
+        $source = (string) file_get_contents((string) $file);
+
+        if (str_contains($source, "from 'recharts'") || str_contains($source, "from '@/components/ui/chart'")) {
+            $offenders[] = $path;
+        }
+    }
+
+    expect($offenders)->toBe([]);
 });

@@ -20,6 +20,11 @@ use Illuminate\Support\Facades\DB;
  * l'entonnoir : aucune donnée personnelle n'en sort. « Visiteurs » sur une
  * fenêtre est la **somme des visiteurs de chaque jour** : sans identifiant
  * durable, un visiteur revenu deux jours compte deux fois, et l'écran le dit.
+ *
+ * La série quotidienne porte **chaque jour** de la fenêtre, à zéro s'il n'a
+ * rien compté (les graphiques ne sautent aucun jour), avec le trafic écarté
+ * à côté du trafic humain : robots déclarés et chargements jamais confirmés
+ * par leur JavaScript (amendé le 08/10).
  */
 final class AudienceReport
 {
@@ -30,35 +35,43 @@ final class AudienceReport
     public const int LIVE_MINUTES = 5;
 
     /**
-     * @return array{since: string, totals: array{visitors: int, visits: int, pageviews: int}, daily: list<array{day: string, visitors: int, visits: int, pageviews: int}>, pages: list<array{name: string, total: int}>, entries: list<array{name: string, total: int}>, exits: list<array{name: string, total: int}>, referrers: list<array{name: string, total: int}>, locales: list<array{name: string, total: int}>, devices: list<array{name: string, total: int}>, live: array{visitors: int, pages: list<array{name: string, total: int}>, open_rooms: int, running_games: int, running_solo: int}, funnel: array{rooms_created: int, games_multiplayer: int, games_solo: int, games_completed: int, players_per_game: float|null}}
+     * @return array{since: string, totals: array{visitors: int, visits: int, pageviews: int, bots: int, unconfirmed: int}, daily: list<array{day: string, visitors: int, visits: int, pageviews: int, bots: int, unconfirmed: int}>, pages: list<array{name: string, total: int}>, entries: list<array{name: string, total: int}>, exits: list<array{name: string, total: int}>, referrers: list<array{name: string, total: int}>, locales: list<array{name: string, total: int}>, devices: list<array{name: string, total: int}>, bots: list<array{name: string, total: int}>, live: array{visitors: int, pages: list<array{name: string, total: int}>, open_rooms: int, running_games: int, running_solo: int}, funnel: array{rooms_created: int, games_multiplayer: int, games_solo: int, games_completed: int, players_per_game: float|null}}
      */
     public static function build(CarbonImmutable $since, CarbonImmutable $now): array
     {
         $sinceDay = $since->toDateString();
 
+        $metrics = [
+            AudienceRecorder::METRIC_VISITORS => 'visitors',
+            AudienceRecorder::METRIC_VISITS => 'visits',
+            AudienceRecorder::METRIC_PAGEVIEWS => 'pageviews',
+            AudienceRecorder::METRIC_BOTS => 'bots',
+            AudienceRecorder::METRIC_UNCONFIRMED => 'unconfirmed',
+        ];
+
         $daily = [];
+
+        for ($cursor = $since->startOfDay(); $cursor->lessThanOrEqualTo($now); $cursor = $cursor->addDay()) {
+            $daily[$cursor->toDateString()] = ['day' => $cursor->toDateString(), 'visitors' => 0, 'visits' => 0, 'pageviews' => 0, 'bots' => 0, 'unconfirmed' => 0];
+        }
 
         $rows = DB::table('audience_daily')
             ->where('day', '>=', $sinceDay)
-            ->whereIn('metric', [AudienceRecorder::METRIC_VISITORS, AudienceRecorder::METRIC_VISITS, AudienceRecorder::METRIC_PAGEVIEWS])
+            ->whereIn('metric', array_keys($metrics))
             ->groupBy('day', 'metric')
-            ->orderBy('day')
             ->select(['day', 'metric'])
             ->selectRaw('sum(total) as total')
             ->get();
 
         foreach ($rows as $row) {
             $day = substr((string) $row->day, 0, 10);
-            $line = $daily[$day] ?? ['day' => $day, 'visitors' => 0, 'visits' => 0, 'pageviews' => 0];
-            $total = (int) $row->total;
+            $field = $metrics[(string) $row->metric] ?? null;
 
-            match ((string) $row->metric) {
-                AudienceRecorder::METRIC_VISITORS => $line['visitors'] = $total,
-                AudienceRecorder::METRIC_VISITS => $line['visits'] = $total,
-                default => $line['pageviews'] = $total,
-            };
+            if ($field === null || ! isset($daily[$day])) {
+                continue;
+            }
 
-            $daily[$day] = $line;
+            $daily[$day][$field] = max(0, (int) $row->total);
         }
 
         $daily = array_values($daily);
@@ -69,6 +82,8 @@ final class AudienceReport
                 'visitors' => array_sum(array_column($daily, 'visitors')),
                 'visits' => array_sum(array_column($daily, 'visits')),
                 'pageviews' => array_sum(array_column($daily, 'pageviews')),
+                'bots' => array_sum(array_column($daily, 'bots')),
+                'unconfirmed' => array_sum(array_column($daily, 'unconfirmed')),
             ],
             'daily' => $daily,
             'pages' => self::top($sinceDay, AudienceRecorder::METRIC_PAGEVIEWS),
@@ -77,6 +92,7 @@ final class AudienceReport
             'referrers' => self::top($sinceDay, AudienceRecorder::METRIC_REFERRERS),
             'locales' => self::top($sinceDay, AudienceRecorder::METRIC_LOCALES),
             'devices' => self::top($sinceDay, AudienceRecorder::METRIC_DEVICES),
+            'bots' => self::top($sinceDay, AudienceRecorder::METRIC_BOTS),
             'live' => self::live($now),
             'funnel' => self::funnel($since),
         ];

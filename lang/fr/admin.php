@@ -69,6 +69,8 @@ return [
         'performance' => 'Performances',
         // L'audience (ligne 44, D48 du 01/10).
         'audience' => 'Audience',
+        // Les statistiques de jeu (ligne 51, demande du porteur du 08/10).
+        'game_stats' => 'Statistiques de jeu',
         // Les avatars téléversés (ligne 45, D49 du 01/10).
         'avatars' => 'Avatars',
         // La modération des pseudos (ligne 35, D66 du 07/10).
@@ -3387,6 +3389,22 @@ return [
             'pageviews' => 'Pages vues',
             'per_visit' => 'Pages par visite',
             'note' => 'Visiteurs = somme des visiteurs de chaque jour : sans identifiant durable, un visiteur revenu deux jours compte deux fois.',
+            'bots' => 'Robots déclarés',
+            'unconfirmed' => 'Chargements sans JavaScript',
+            'filtered_note' => 'Une page vue n’est comptée que si son JavaScript s’exécute et qu’elle est affichée. Les robots déclarés et les chargements jamais confirmés (robots probables) sont comptés à part, jamais dans les visiteurs.',
+        ],
+        'charts' => [
+            'traffic' => [
+                'heading' => 'Fréquentation',
+                'description' => 'Visiteurs, visites et pages vues, jour par jour.',
+            ],
+            'quality' => [
+                'heading' => 'Humains et robots',
+                'description' => 'Pages vues confirmées, robots déclarés et chargements sans JavaScript, jour par jour.',
+            ],
+            'humans' => 'Pages vues',
+            'bots' => 'Robots déclarés',
+            'unconfirmed' => 'Sans JavaScript',
         ],
         'funnel' => [
             'heading' => 'Entonnoir de jeu',
@@ -3407,6 +3425,10 @@ return [
         'referrers' => ['heading' => 'Provenance'],
         'locales' => ['heading' => 'Langues'],
         'devices' => ['heading' => 'Appareils'],
+        'bots' => [
+            'heading' => 'Robots déclarés par famille',
+            'description' => 'Lu dans l’en-tête du navigateur ; un robot n’entre jamais dans les visiteurs.',
+        ],
         'device' => [
             'mobile' => 'Mobile',
             'tablet' => 'Tablette',
@@ -3421,6 +3443,87 @@ return [
             'referrer' => 'Site d’origine',
             'locale' => 'Langue',
             'device' => 'Appareil',
+            'bot' => 'Robot',
+            'bots' => 'Robots',
+            'unconfirmed' => 'Sans JavaScript',
+        ],
+    ],
+
+    /*
+    | Statistiques de jeu (spec 20 § 12.6, ligne 51, demande du porteur du
+    | 08/10) : administrateur seul, agrégats des tables du jeu. La fenêtre
+    | reprend les libellés de l'audience (`audience.window.*`).
+    */
+    'game_stats' => [
+        'title' => 'Statistiques de jeu',
+        'heading' => 'Statistiques de jeu',
+        'description' => 'Parties lancées sur la fenêtre : rythme, issue, réglages choisis, réponses trouvées et films.',
+        'empty' => 'Aucune partie sur cette fenêtre.',
+        'totals' => [
+            'games' => 'Parties lancées',
+            'multiplayer' => 'En salon',
+            'solo' => 'En solo',
+            'completion_rate' => 'Parties terminées',
+            'players_per_game' => 'Joueurs par partie en salon',
+            'average_duration' => 'Durée moyenne d’une partie terminée',
+            'find_rate' => 'Films trouvés',
+            'find_rate_hint' => ':finds trouvés sur :participations participations',
+            'average_find' => 'Temps moyen pour trouver',
+            'wrong_hint' => ':count tentatives fausses par participation',
+            'running' => ':count en cours',
+        ],
+        'daily' => [
+            'heading' => 'Parties par jour',
+            'description' => 'Parties lancées, en salon et en solo.',
+        ],
+        'outcome' => [
+            'heading' => 'Issue des parties',
+            'description' => 'Parties terminées et interrompues, au jour de leur lancement.',
+        ],
+        'hours' => [
+            'heading' => 'Heure de lancement',
+            'local' => 'Heure locale de votre navigateur.',
+            'utc' => 'Heure UTC.',
+            'hour' => ':hour h',
+        ],
+        'tiers' => [
+            'heading' => 'Réponses trouvées par palier',
+            'description' => 'Palier 1 = l’image la plus cryptique.',
+            'tier' => 'Palier :index',
+        ],
+        'sources' => [
+            'heading' => 'Saisie ou QCM',
+            'text' => 'Texte libre',
+            'choice' => 'QCM',
+        ],
+        'settings' => [
+            'heading' => 'Réglages des parties lancées',
+            'difficulty' => 'Difficulté de saisie',
+            'frames' => 'Images par manche',
+            'rounds' => 'Manches par partie',
+        ],
+        'difficulty' => [
+            'easy' => 'Facile',
+            'normal' => 'Normal',
+            'expert' => 'Expert',
+        ],
+        'series' => [
+            'multiplayer' => 'En salon',
+            'solo' => 'Solo',
+            'completed' => 'Terminées',
+            'interrupted' => 'Interrompues',
+            'games' => 'Parties',
+            'finds' => 'Réponses trouvées',
+        ],
+        'movies' => [
+            'played' => 'Films les plus joués',
+            'hardest' => 'Films les plus durs à trouver',
+            'easiest' => 'Films les plus faciles à trouver',
+            'note' => 'Manches terminées seulement. « Durs » et « faciles » : au moins :count participations.',
+            'movie' => 'Film',
+            'rounds' => 'Manches',
+            'participations' => 'Participations',
+            'find_rate' => 'Trouvé',
         ],
     ],
 

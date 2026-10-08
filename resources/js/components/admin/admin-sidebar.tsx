@@ -6,6 +6,7 @@ import {
     Flag,
     Activity,
     BarChart3,
+    ChartPie,
     CircleUserRound,
     Gamepad2,
     Gauge,
@@ -61,6 +62,7 @@ import { index as curationIndex } from '@/routes/admin/curation';
 import { index as designIndex } from '@/routes/admin/design';
 import { show as exclusionGridRetroactiveShow } from '@/routes/admin/exclusion_grid/retroactive';
 import { index as frameBatchIndex } from '@/routes/admin/frame_batch';
+import { index as gameStatsIndex } from '@/routes/admin/game-stats';
 import { index as gamesIndex } from '@/routes/admin/games';
 import { index as importIndex } from '@/routes/admin/import';
 import { index as journalIndex } from '@/routes/admin/journal';
@@ -265,6 +267,14 @@ export function AdminSidebar() {
             title: t('admin.nav.audience'),
             href: audienceIndex(),
             icon: BarChart3,
+            minRole: 'admin',
+            prefetch: false,
+        },
+        // Les statistiques de jeu (ligne 51, demande du porteur du 08/10).
+        {
+            title: t('admin.nav.game_stats'),
+            href: gameStatsIndex(),
+            icon: ChartPie,
             minRole: 'admin',
             prefetch: false,
         },

@@ -669,6 +669,7 @@ Règles transversales : cibles ≥ 44 px (`min-h-11 min-w-11`) ; contrastes suff
 
 - **Installés** (`components/ui/*`) : alert, avatar, badge, breadcrumb, button, card, checkbox, collapsible, dialog, dropdown-menu, icon, input-otp, input, label, navigation-menu, placeholder-pattern, select, separator, sheet, sidebar, skeleton, sonner, spinner, table, tabs, textarea, toggle-group, toggle, tooltip.
 - **À installer au J1**, par la CLI shadcn en style *new-york*, **jamais édités ensuite** : `slider` (réglages du lobby), `switch` (interrupteurs du lobby), `progress` (chrono), `scroll-area` (bande des joueurs, révélation, podium), `radio-group` (avatars, presets, difficulté de saisie).
+- **Installé le 08/10 pour le back-office seul** : `chart` (recharts), graphiques des écrans « Audience » et « Statistiques de jeu » (`20` § 12.4 et § 12.6) ; aucun composant joueur ne l'importe. La CLI shadcn choisit pnpm à cause du `pnpm-workspace.yaml` qui traîne : `recharts` s'installe par npm, puis la CLI ; l'import `cn` généré se corrige vers `@/lib/utils` comme les autres composants.
 - **À installer au J2** : `popover`, `command` (sélecteur de thèmes, masqué au J1 sous son seuil, `00` § Jalons et budget-temps).
 - **Refusés** : `form`, enveloppe de react-hook-form qui doublerait `<Form>` d'Inertia (n° 42, `CLAUDE.md` §5, principe 11) ; toute autre bibliothèque d'interface ou d'animation.
 - Les composants de `components/{game,room,public,state}` ne composent que :

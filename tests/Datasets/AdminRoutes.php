@@ -1012,6 +1012,16 @@ function adminRoutesMatrix(): array
             admin: 200,
         ),
 
+        // Ligne 51 — les statistiques de jeu (demande du porteur du 08/10) :
+        // administrateur seul, agrégats sans donnée personnelle.
+        'admin.game-stats.index' => adminRoutesRow(
+            row: 51,
+            method: 'GET',
+            guards: ['can:viewStats,'.Game::class],
+            curator: 403,
+            admin: 200,
+        ),
+
         // Ligne 45 — les avatars téléversés (D49 du 01/10) : administrateur
         // seul, l'image servie même masquée, deux gestes consignés.
         'admin.avatars.index' => adminRoutesRow(

@@ -159,6 +159,8 @@ const WATCHED = [
     // écrans d'authentification (`pages/game` et `pages/legal` le sont déjà).
     'resources/js/lib/design',
     'resources/js/pages/auth/design-preview.tsx',
+    // La preuve JavaScript de l'audience (spec 100 § 10.12, amendé le 08/10).
+    'resources/js/lib/audience-seen.ts',
 
     // Fichiers hérités PROPRES que retouche un lot (spec 90 § 9.3, règle
     // d'entrée n° 2) : ils entrent dans le commit qui les modifie.

@@ -300,6 +300,14 @@ class FortifyServiceProvider extends ServiceProvider
             return Limit::perMinute(30)->by((string) $request->ip());
         });
 
+        // La preuve JavaScript de l'audience (spec 100 § 10.12, amendé le
+        // 08/10) : un signal par chargement complet de page joueur. Soixante
+        // par minute et par adresse couvrent un foyer derrière une même
+        // sortie ; au-delà, le signal perdu laisse la page en attente.
+        RateLimiter::for('audience-seen', function (Request $request) {
+            return Limit::perMinute(60)->by((string) $request->ip());
+        });
+
         $this->configureGameRateLimiting();
     }
 

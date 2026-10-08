@@ -35,6 +35,16 @@ class GamePolicy
     }
 
     /**
+     * L'écran « Statistiques de jeu » (spec 20 § 12.6, ligne 51) : des
+     * agrégats sans aucune donnée personnelle, administrateur seul comme
+     * l'audience.
+     */
+    public function viewStats(User $actor): bool
+    {
+        return $actor->role->atLeast(UserRole::Admin);
+    }
+
+    /**
      * La fiche d'une partie — sans rien d'une manche non révélée d'une partie
      * en cours (règle 3), tenu par le presenter et non par la policy.
      */
