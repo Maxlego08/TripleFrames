@@ -853,7 +853,7 @@ final class SyncThemeMembership implements ShouldQueueAfterCommit, ShouldBeUniqu
 {
     public function __construct(public readonly int $themeId) {}            // uniqueId() = l'id du thème ; handle() relit le thème en tête ; thème introuvable (garde défensive : `20` n'offre aucune suppression) : ne fait rien
 }
-final class DeriveMovieDifficulty implements ShouldQueue, ShouldBeUnique {}  // App\Jobs\Catalog ; file par défaut ; sans argument, unique par classe
+final class DeriveMovieDifficulty implements ShouldQueueAfterCommit, ShouldBeUniqueUntilProcessing {}  // App\Jobs\Catalog ; file par défaut ; sans argument, unique par classe jusqu'au début de son traitement (forme livrée, amendé le 08/10)
 ```
 
 **Unicité jusqu'au traitement, et non jusqu'à la fin** — amendé le 01/10 (D43 du 01/10). `ShouldBeUnique` tiendrait le verrou d'unicité pendant tout `syncTheme()` : une règle corrigée pendant le passage enverrait un second job, **jeté en silence**, et l'appartenance resterait calculée sur l'ancienne règle. Avec `ShouldBeUniqueUntilProcessing`, le verrou tombe au début du traitement ; deux corrections rapprochées n'empilent au plus qu'un job en attente, et `handle()` relit le thème au début, donc évalue la règle en vigueur à son démarrage.
@@ -926,6 +926,14 @@ Job `App\Jobs\Catalog\DeriveMovieDifficulty`, **file par défaut**, unique, sans
 - après toute transition d'`availability` **vers ou depuis `withdrawn`** (geste de `20`), qui change la population `P` et donc les déciles des autres films de la même langue.
 
 `catalog:themes` joue la dérivation en tête, juste après l'instantané (§ 13.2). Jamais de déclenchement périodique (E10-N2). La correction manuelle (`20`) ne relance pas la dérivation : elle réécrit la valeur effective et appelle `syncMovie($movie, ThemeKind::Difficulty)`, dans sa transaction.
+
+**Forme livrée — amendé le 08/10 (L30-10, D66 du 07/10)** :
+- `App\Support\Catalog\MovieDifficultyDeriver::derive(): int`, conforme au § 14.1 ; fonctions pures publiques `classify()`, `decile()`, `classFor()` ; bornes relues par `minLanguageSample()` et `sagaDecileBonus()`, qui lèvent `InvalidArgumentException` (valeur non entière comprise) avant toute lecture du catalogue. Chaque film qui change est écrit dans sa propre transaction courte : ligne verrouillée, `movie_difficulty_derived` comparé sous verrou (une dérivation concurrente qui l'a déjà écrit ne compte pas), la dérivée écrite, puis `movie_difficulty = COALESCE(movie_difficulty_override, movie_difficulty_derived)` par une seconde instruction qui relit les deux colonnes en base (l'ordre d'évaluation d'un `SET` multiple diffère entre SQLite et MySQL, comme pour `CorrectMovieDifficulty`), valeur effective relue, `syncMovie($movie, ThemeKind::Difficulty)` si elle a changé. `updated_at` n'est pas touché : une valeur dérivée n'est pas une édition.
+- **Job unique jusqu'au début de son traitement** (`ShouldBeUniqueUntilProcessing`, `uniqueFor` 3 600 s, `ShouldQueueAfterCommit`), et non `ShouldBeUnique` : un balayage clos pendant une dérivation enverrait sinon un second job jeté en silence, et ses films resteraient sans difficulté jusqu'au déclencheur suivant — même raison que `SyncThemeMembership` (§ 13.1). Les appelants qui tiennent une transaction l'envoient par `DB::afterCommit()`.
+- **Fin de balayage** : le dispatch vit dans `CatalogImportCommand::closeRun()`, et non dans `RunCatalogImport` — il couvre ainsi les trois voies (balayage, collage, resynchronisation), qu'elles partent du back-office ou de la console, à toute clôture `completed` ou `failed` ; jamais à une suspension (`running`), ni en simulation.
+- **Gestes de saga** : `CreateTheme` (nature `saga`) et `UpdateTheme` (saga dont la règle change) ; `PlatformDataSeeder` en envoie **un seul** par passage qui insère au moins une saga.
+- **Transition vers ou depuis `withdrawn`** : aucun geste ne l'écrit encore ; son dispatch revient au lot du retrait juridique (`20` L20-21).
+- `catalog:themes` dérive après l'instantané, puis évalue tous les thèmes ; la ligne `admin.console.themes.derived` dit le nombre de films changés.
 
 ---
 
@@ -1158,6 +1166,8 @@ La barre « terminé » est incluse dans chaque fourchette (facteur 1,5 à 2, S3
 - **Estimation** : 5 à 6 h (amendé le 01/10, D43 du 01/10 : DC, deux sagas, sociétés nommées ; 4 à 5 h avant).
 
 ### L30-10 — Difficulté dérivée [J2]
+
+**Livré le 08/10 (D66 du 07/10, BO-A)** : § 14.2, forme livrée ; `tests/Feature/Draw/DifficultyDerivationTest.php` (les treize intitulés du lot, plus « catalog:themes dérive avant d'évaluer les thèmes de difficulté » et « le job dérive tout le catalogue sur la file par défaut ») ; `ThemeAdminTest` — « changer la collection d’une saga dispatche SyncThemeMembership et DeriveMovieDifficulty après commit » ; `CatalogImportCommandTest` — « un balayage clos relance la dérivation de la difficulté », « un balayage suspendu ne relance pas la dérivation ». Reste au lot du retrait juridique : le dispatch sur une transition d'`availability` vers ou depuis `withdrawn`. **Geste humain** : `catalog:themes` à rejouer une fois après le déploiement.
 
 - **État au 07/10** (D66 du 07/10) : la correction manuelle de `20` (L20-28b) est livrée **avant** ce lot — elle n'en dépend que pour la valeur dérivée, qu'elle relit en base, et appelle déjà `syncMovie($movie, ThemeKind::Difficulty)` ; la resynchronisation à l'écran (L20-24b) aussi. Le dispatch de `DeriveMovieDifficulty` en fin de resynchronisation et par les gestes de saga reste à brancher par ce lot.
 - **Dépendances** : L30-8. Le geste de correction manuelle de `20` consomme ce lot (`syncMovie($movie, ThemeKind::Difficulty)`, § 13.1) ; les gestes de saga et de retrait de `20` y ajoutent le dispatch de `DeriveMovieDifficulty` (§ 14.2).

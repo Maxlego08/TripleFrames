@@ -2,6 +2,7 @@
 
 use App\Enums\Locale;
 use App\Enums\ThemeKind;
+use App\Jobs\Catalog\DeriveMovieDifficulty;
 use App\Jobs\Catalog\SyncThemeMembership;
 use App\Models\AdminAction;
 use App\Models\Collection;
@@ -421,6 +422,40 @@ test('corriger la règle relance la synchronisation après commit', function ():
 
     Queue::assertPushed(SyncThemeMembership::class, fn (SyncThemeMembership $job): bool => $job->themeId === $negated->id);
     Queue::assertPushed(SyncThemeMembership::class, fn (SyncThemeMembership $job): bool => $job->themeId === $manual->id);
+});
+
+test('changer la collection d’une saga dispatche SyncThemeMembership et DeriveMovieDifficulty après commit', function (): void {
+    Queue::fake();
+
+    $first = Collection::factory()->create();
+    $second = Collection::factory()->create();
+
+    themeAdminStore(['theme_kind' => 'saga', 'collection_id' => $first->id], 'Iron Man', 'Iron Man')
+        ->assertSessionHasNoErrors();
+
+    $saga = Theme::query()->where('theme_kind', ThemeKind::Saga)->sole();
+
+    // La création d'une saga relance la dérivation : sa collection gagne son bonus.
+    Queue::assertPushed(SyncThemeMembership::class, fn (SyncThemeMembership $job): bool => $job->themeId === $saga->id);
+    Queue::assertPushed(DeriveMovieDifficulty::class, 1);
+
+    Queue::fake();
+
+    themeAdminUpdate($saga, ['collection_id' => $second->id])->assertSessionHasNoErrors();
+
+    expect($saga->refresh()->rule_value)->toBe((string) $second->id);
+    Queue::assertPushed(SyncThemeMembership::class, fn (SyncThemeMembership $job): bool => $job->themeId === $saga->id);
+    Queue::assertPushed(DeriveMovieDifficulty::class, 1);
+
+    // Une règle d'une autre nature ne relance jamais la dérivation.
+    Queue::fake();
+    $genre = Theme::factory()->genre(12)->create();
+
+    themeAdminUpdate($genre, ['rule_value' => 14])->assertSessionHasNoErrors();
+    themeAdminStore(['theme_kind' => 'decade', 'rule_value' => 1990], 'Nineties', 'Années 90')->assertSessionHasNoErrors();
+
+    Queue::assertPushed(SyncThemeMembership::class, 2);
+    Queue::assertNotPushed(DeriveMovieDifficulty::class);
 });
 
 test('modifier un libellé ou l’ordre seuls ne relance aucune synchronisation', function (): void {

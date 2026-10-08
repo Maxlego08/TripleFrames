@@ -3908,7 +3908,8 @@ return [
         | l'instantané précède toute écriture.
         */
         'themes' => [
-            'snapshot_failed' => 'Instantané refusé : aucune appartenance n’a été réévaluée. Corrigez la cause signalée par backup:snapshot, puis relancez catalog:themes.',
+            'snapshot_failed' => 'Instantané refusé : aucune difficulté ni aucune appartenance n’a été réévaluée. Corrigez la cause signalée par backup:snapshot, puis relancez catalog:themes.',
+            'derived' => 'Difficulté dérivée : :changed films changés.',
             'theme' => 'lignes changées : :changed',
             'done' => 'Réévaluation terminée. Thèmes : :themes ; lignes d’appartenance changées : :changed.',
         ],

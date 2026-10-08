@@ -122,6 +122,32 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Difficulté dérivée (spec 30 § 14, lot L30-10)
+    |--------------------------------------------------------------------------
+    |
+    | Lues par `App\Support\Catalog\MovieDifficultyDeriver` SEUL, qui lève
+    | `InvalidArgumentException` hors bornes au démarrage de la dérivation —
+    | jamais d'écrêtage silencieux (règle 2) : une difficulté faussée en
+    | silence ne se verrait qu'à l'écran des thèmes.
+    |
+    | - `min_language_sample` (borne ≥ 1) : une langue originale qui compte
+    |   moins de films dans la population rejoint le seau commun ; un décile
+    |   calculé sur deux films coréens ne veut rien dire.
+    | - `saga_decile_bonus` (bornes [0, 9]) : déciles ajoutés à un film dont la
+    |   collection est désignée par un thème de saga ; 2 = une classe. Négatif,
+    |   il donnerait un décile ≤ 0 ; au-delà de 9, toute saga serait very_easy.
+    |
+    | Aucune ne touche une partie jouée : le tirage est matérialisé.
+    |
+    */
+
+    'difficulty' => [
+        'min_language_sample' => 20,
+        'saga_decile_bonus' => 2,
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Curation — chaîne d'image et bornes du back-office (spec 20 § 13.7)
     |--------------------------------------------------------------------------
     |

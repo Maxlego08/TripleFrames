@@ -4,6 +4,8 @@ namespace App\Actions\Curation;
 
 use App\Enums\AdminActionType;
 use App\Enums\Locale;
+use App\Enums\ThemeKind;
+use App\Jobs\Catalog\DeriveMovieDifficulty;
 use App\Jobs\Catalog\SyncThemeMembership;
 use App\Models\Theme;
 use App\Models\ThemeLabel;
@@ -32,7 +34,8 @@ use Throwable;
  * - Journal `theme.updated` avec l'avant et l'après des **seuls** champs
  *   changés ; rien si rien ne change.
  * - **Après commit**, `SyncThemeMembership` **seulement si la règle ou la
- *   négation change** : un libellé ou un ordre seuls ne relancent rien.
+ *   négation change** : un libellé ou un ordre seuls ne relancent rien ;
+ *   plus `DeriveMovieDifficulty` pour une saga (spec 30 § 14.2, L30-10).
  */
 final class UpdateTheme
 {
@@ -121,8 +124,16 @@ final class UpdateTheme
                     // Pris dans la transaction, il jetterait cet envoi si un
                     // job déjà en attente démarrait avant le commit — et ce
                     // job lirait l'ancienne règle : correction perdue (C3).
-                    DB::afterCommit(static function () use ($themeId): void {
+                    // Une saga qui change de collection déplace son bonus de
+                    // déciles (spec 30 § 14.2, L30-10).
+                    $isSaga = $locked->theme_kind === ThemeKind::Saga;
+
+                    DB::afterCommit(static function () use ($themeId, $isSaga): void {
                         SyncThemeMembership::dispatch($themeId);
+
+                        if ($isSaga) {
+                            DeriveMovieDifficulty::dispatch();
+                        }
                     });
                 }
 

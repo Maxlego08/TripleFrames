@@ -806,6 +806,7 @@ export type TranslationKey =
     | 'admin.console.purge.resumed'
     | 'admin.console.purge.suspended'
     | 'admin.console.reproject.done'
+    | 'admin.console.themes.derived'
     | 'admin.console.themes.done'
     | 'admin.console.themes.snapshot_failed'
     | 'admin.console.themes.theme'
