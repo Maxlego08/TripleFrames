@@ -20,3 +20,10 @@ it('ne compose aucun lien pour un film sans identifiant TMDB', function (): void
 
     expect(RevealMovieBuilder::build($movie)['letterboxdUrl'])->toBeNull();
 });
+
+it('porte l\'identifiant TMDB nu sous la clé tmdb, adresse du lien Signaler (D63 du 07/10)', function (): void {
+    $movie = Movie::factory()->create(['tmdb_id' => 129]);
+
+    expect(RevealMovieBuilder::build($movie)['tmdb'])->toBe(129)
+        ->and(RevealMovieBuilder::build(Movie::factory()->demo()->create())['tmdb'])->toBeNull();
+});

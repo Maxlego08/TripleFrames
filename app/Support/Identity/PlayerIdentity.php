@@ -33,9 +33,11 @@ use LogicException;
  * et `avatar.initials = AvatarRef::FALLBACK_INITIAL`, pour que les initiales ne
  * trahissent pas le pseudo ; son avatar prédéfini, contenu du site et non
  * signalable (§ 6.6), reste affiché. Le masquage est lu sur le siège VIVANT,
- * y compris pour l'affichage gelé d'une partie. Au J1, aucun geste ne pose
- * `nickname_masked_at` : `masked` vaut toujours `false` et `nickname` n'est
- * jamais `null` — sauf après l'archivage, qui efface le pseudo (10 § 11.1).
+ * y compris pour l'affichage gelé d'une partie. Depuis le J2, deux gestes
+ * posent `nickname_masked_at` : le seuil de signalements
+ * (`ReportSeatNickname`) et le bannissement (`BanNickname`), spec 40 § 13.3 ;
+ * le client rend alors « Joueur n » (`common.player.masked`). Un `nickname`
+ * nul avec `masked: false` est un pseudo effacé (10 § 11.1).
  *
  * **Lecture stricte de la colonne de masquage.** Un siège lu par une requête
  * qui n'aurait pas sélectionné `nickname_masked_at` le croirait non masqué et

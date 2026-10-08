@@ -231,8 +231,8 @@ describe('echo', () => {
         expect(echoOptions({ ...CONFIG, key: '' }, HTTPS_PAGE)).toBeNull();
     });
 
-    it('sépare les seize événements du salon des trois du siège', () => {
-        expect(ROOM_EVENTS).toHaveLength(16);
+    it('sépare les dix-huit événements du salon des trois du siège', () => {
+        expect(ROOM_EVENTS).toHaveLength(18);
         expect(SEAT_EVENTS).toEqual([
             'seat.choices',
             'seat.superseded',
@@ -362,6 +362,7 @@ function packetAt(
         maxAnswerLength: 60,
         seats: [seat(HOST), seat(SELF)],
         pause: null,
+        pauseRequested: false,
         round: runningRound(currentTierIndex),
         self: {
             publicId: SELF,

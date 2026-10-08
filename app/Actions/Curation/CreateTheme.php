@@ -5,6 +5,7 @@ namespace App\Actions\Curation;
 use App\Enums\AdminActionType;
 use App\Enums\Locale;
 use App\Enums\ThemeKind;
+use App\Jobs\Catalog\DeriveMovieDifficulty;
 use App\Jobs\Catalog\SyncThemeMembership;
 use App\Models\Theme;
 use App\Models\User;
@@ -36,9 +37,9 @@ use Throwable;
  *   ({@see self::endOfBlock()}, spec 30 § 12.5).
  * - Journal `theme.created` dans la transaction ; **après commit**,
  *   `SyncThemeMembership`, envoyé par `DB::afterCommit()` pour que son verrou
- *   d'unicité ne se prenne qu'une fois l'état visible. La
- *   difficulté dérivée d'une saga (`DeriveMovieDifficulty`) n'arrive qu'avec
- *   L30-10 (J2).
+ *   d'unicité ne se prenne qu'une fois l'état visible ; pour une saga,
+ *   `DeriveMovieDifficulty` aussi (spec 30 § 14.2, L30-10) : la collection
+ *   désignée gagne son bonus de déciles.
  *
  * Un thème ne touche jamais `answer_key` ni l'ambiguïté d'un préfixe (spec 30
  * § 13.3) : rien n'est reprojeté.
@@ -120,8 +121,14 @@ final class CreateTheme
                     // le verrou d'unicité du job se prend à l'envoi ; pris
                     // dans la transaction, il pourrait jeter cet envoi pendant
                     // qu'un job déjà en cours lit encore l'état d'avant.
-                    DB::afterCommit(static function () use ($themeId): void {
+                    $isSaga = $kind === ThemeKind::Saga;
+
+                    DB::afterCommit(static function () use ($themeId, $isSaga): void {
                         SyncThemeMembership::dispatch($themeId);
+
+                        if ($isSaga) {
+                            DeriveMovieDifficulty::dispatch();
+                        }
                     });
 
                     return $theme;

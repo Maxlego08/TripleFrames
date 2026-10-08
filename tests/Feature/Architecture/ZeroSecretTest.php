@@ -15,7 +15,7 @@ use Symfony\Component\Yaml\Yaml;
 |
 | Quatre portes, chacune fermée ici par une lecture des fichiers du dépôt :
 | les workflows ne lisent aucun secret ; aucun job ne garde d'identifiant
-| après son `checkout`, sauf `artifacts` ; `.env.example` ne livre aucune
+| après son `checkout`, sauf `artifacts` et `promote` ; `.env.example` ne livre aucune
 | valeur d'identifiant ; `phpunit.xml` vide de force chaque identifiant
 | externe, pour qu'une clé exportée dans le shell du développeur ne parte
 | jamais avec la suite.
@@ -193,7 +193,20 @@ it('ne référence aucun secret dans aucun workflow, hors jeton automatique', fu
         ->and(zeroSecretReads("a: 1\nb: \${{ toJSON(secrets) }}")[0]['line'] ?? null)->toBe(2);
 });
 
-it('ne persiste aucun identifiant hors du job artifacts', function () {
+/**
+ * Les seuls jobs qui gardent l'identifiant de leur `checkout` : [workflow, job].
+ *
+ * @return list<array{string, string}>
+ */
+function zeroSecretWritingJobs(): array
+{
+    return [
+        ['.github/workflows/tests.yml', 'artifacts'],
+        ['.github/workflows/promote.yml', 'promote'],
+    ];
+}
+
+it('ne persiste aucun identifiant hors des jobs artifacts et promote', function () {
     $checked = 0;
     $violations = [];
 
@@ -215,9 +228,11 @@ it('ne persiste aucun identifiant hors du job artifacts', function () {
                     continue;
                 }
 
-                // Seul le job `artifacts` pousse la branche `deploy` avec le
-                // jeton automatique : c'est le seul `checkout` qui le garde.
-                if ($job === 'artifacts') {
+                // Deux jobs poussent une branche d'artefacts avec le jeton
+                // automatique, et eux seuls gardent l'identifiant : `artifacts`
+                // (`deploy-preprod`, tests.yml) et `promote` (`deploy`,
+                // promote.yml, spec 100 § 18).
+                if (in_array([$workflow, $job], zeroSecretWritingJobs(), true)) {
                     continue;
                 }
 

@@ -36,6 +36,7 @@ return [
         'heading' => 'Settings',
         'nav' => [
             'avatar' => 'Avatar',
+            'history' => 'My games',
             'linked' => 'Linked accounts',
             'profile' => 'Profile',
             'security' => 'Security',
@@ -61,6 +62,29 @@ return [
         'sign_in' => 'Log in',
         'submit' => 'Create account',
         'title' => 'Register',
+    ],
+
+    // The two consent boxes of an account creation and of the re-acceptance
+    // (spec 40 § 13.1): distinct, never pre-ticked.
+    'consent' => [
+        'terms' => 'I accept the terms of use',
+        'terms_link' => 'Read the terms of use',
+        'age' => 'I declare that I am at least 15 years old',
+        'errors' => [
+            'terms_required' => 'You must accept the terms of use to continue.',
+            'age_required' => 'You must be at least 15 years old to have an account.',
+        ],
+    ],
+
+    // The terms re-acceptance interstitial (spec 40 § 13.1).
+    'terms_update' => [
+        'title' => 'Terms of use',
+        'description' => 'The terms of use have changed. Accept the new version to get your account features back.',
+        'description_first' => 'Accept the terms of use to access your account features.',
+        'play_note' => 'You can keep playing without accepting them: only your account features are suspended.',
+        'submit' => 'Accept and continue',
+        'play' => 'Back to home',
+        'logout' => 'Log out',
     ],
 
     'forgot_password' => [
@@ -120,6 +144,8 @@ return [
         'errors' => [
             'qr_code' => 'The QR code could not be loaded.',
             'recovery_codes' => 'The recovery codes could not be loaded.',
+            'privileged_required' => 'Two-factor authentication is required for curator and administrator accounts: it cannot be disabled.',
+            'privileged_rotate' => 'A curator or administrator account cannot replace its confirmed authenticator on its own: another administrator must withdraw the role first.',
             'setup_key' => 'The setup key could not be loaded.',
         ],
         'manage' => [
@@ -129,17 +155,23 @@ return [
             'enable' => 'Enable 2FA',
             'enabled_hint' => 'You will be prompted for a secure, random pin during login, which you can retrieve from the TOTP-supported application on your phone.',
             'heading' => 'Two-factor authentication',
+            'privileged_hint' => 'Your role requires two-factor authentication: it stays on. A passkey spares you the code at sign-in, never its enrolment.',
             'setup' => 'Continue setup',
         ],
         'setup' => [
+            'code_label' => 'Authentication code',
             'code_placeholder' => 'Enter the 6-digit code',
             'confirm' => 'Confirm',
+            'copy_key' => 'Copy setup key',
             'done' => [
                 'description' => 'Two-factor authentication is now enabled. Scan the QR code or enter the setup key in your authenticator app.',
                 'heading' => 'Two-factor authentication enabled',
                 'submit' => 'Close',
             ],
+            'key_label' => 'Setup key',
+            'key_copied' => 'Setup key copied',
             'manual_entry' => 'or enter the setup key manually',
+            'qr_label' => 'QR code to scan with your authenticator app',
             'scan' => [
                 'description' => 'To finish enabling two-factor authentication, scan the QR code or enter the setup key in your authenticator app',
                 'heading' => 'Enable two-factor authentication',
@@ -168,6 +200,9 @@ return [
         'description' => 'Manage your passkeys for passwordless sign-in',
         'empty' => 'No passkeys yet',
         'empty_hint' => 'Add a passkey to sign in without a password',
+        'errors' => [
+            'last_method' => 'This passkey is your last way to sign in: set a password, link a provider or add another passkey first.',
+        ],
         'heading' => 'Passkeys',
         'last_used' => 'Last used :date',
         'name' => 'Passkey name',
@@ -178,6 +213,7 @@ return [
         'registering' => 'Registering…',
         'remove' => 'Remove passkey',
         'remove_confirm' => 'Are you sure you want to remove the passkey “:name”?',
+        'remove_named' => 'Remove the passkey “:name”',
         'removing' => 'Removing…',
         'submit' => 'Register passkey',
         'unsupported' => 'Passkeys are not supported in this browser.',
@@ -243,12 +279,7 @@ return [
             'email' => 'Address received from :provider: :email',
             'no_email' => ':provider did not share an email address: you can add one in your profile.',
             'name' => 'Account name',
-            'terms' => 'I accept the terms of use',
-            'terms_link' => 'Read the terms of use',
-            'age' => 'I declare that I am at least 15 years old',
             'submit' => 'Create my account',
-            'terms_required' => 'You must accept the terms of use to create an account.',
-            'age_required' => 'You must be at least 15 years old to create an account.',
         ],
         'errors' => [
             'failed' => 'Signing in with this provider did not work. Please try again.',
@@ -314,6 +345,60 @@ return [
         'submit' => 'Delete account',
         'warning' => 'Warning',
         'warning_hint' => 'Please proceed with caution, this cannot be undone.',
+    ],
+
+    'history' => [
+        'title' => 'My games',
+        'description' => 'Your games from the last :months months. Older games are erased.',
+        'oldest' => 'Oldest game kept: :date.',
+        'export' => 'Export my data',
+        'empty_value' => '—',
+        'counters' => [
+            'heading' => 'Your counters',
+            'scope' => 'Only multiplayer games count; solo games are listed but not counted.',
+            'games_played' => 'Games played (:months months)',
+            'correct_answers' => 'Correct answers (:months months)',
+            'best_score' => 'Best score (:months months)',
+            'best_score_detail' => 'On :date, :rounds rounds of :frames images',
+            'best_score_link' => 'View this game',
+            'best_score_none' => 'No game with points yet.',
+            'success_rate' => 'Success rate (:months months)',
+            'success_rate_below' => 'The rate appears from :min rounds played (:played so far).',
+            'success_rate_detail' => ':correct correct answers out of :played rounds played',
+        ],
+        'list' => [
+            'heading' => 'Games',
+            'empty' => 'No games played in the last :months months.',
+            'solo' => 'Solo',
+            'room' => 'Room :code',
+            'rounds' => ':completed rounds out of :total',
+            'interrupted' => 'Interrupted at round :completed of :total',
+            'frames' => ':count images per round',
+            'score' => 'Score',
+            'rank' => 'Rank',
+            'correct' => 'Correct answers',
+            'details' => 'View details',
+            'details_label' => 'View details of the game of :date',
+        ],
+        'pagination' => [
+            'label' => 'Pages of my games',
+            'previous' => 'More recent games',
+            'next' => 'Older games',
+            'status' => 'Page :page of :last',
+        ],
+        'show' => [
+            'title' => 'Game of :date',
+            'back' => 'Back to my games',
+            'rounds_heading' => 'The films of this game',
+            'round' => 'Round :number',
+            'found' => 'Found',
+            'missed' => 'Not found',
+            'absent' => 'Round not played',
+            'points' => ':count point|:count points',
+            'original_title' => 'Original title',
+            'scoreless' => 'Scoreless game: no points were at stake.',
+            'empty' => 'No closed round in this game.',
+        ],
     ],
 
 ];

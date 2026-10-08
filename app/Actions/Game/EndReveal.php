@@ -2,15 +2,13 @@
 
 namespace App\Actions\Game;
 
-use App\Enums\GamePlayerStatus;
+use App\Enums\GamePauseKind;
 use App\Enums\GameStatus;
-use App\Enums\PlayerConnectionState;
 use App\Enums\RoundStatus;
 use App\Models\Game;
-use App\Models\GamePlayer;
-use App\Models\Player;
 use App\Models\Round;
 use App\Support\Game\GameJournal;
+use App\Support\Game\SeatPresence;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 
@@ -27,8 +25,13 @@ use Illuminate\Support\Facades\DB;
  * 2. **aucune manche à jouer** : `FinalizeGame::handle($game,
  *    GameStatus::Completed, reveal_ends_at(k))` (contrat C13) — fin normale
  *    (§ 14.5), ou gel laissé par une annulation sans manche restante décidée
- *    pendant cette révélation (§ 15.2, étape 3) ;
- * 3. une manche reste et **aucun siège présent** (§ 1.2 : ligne
+ *    pendant cette révélation (§ 15.2, étape 3) — une demande de pause en
+ *    attente y est effacée sans effet ;
+ * 3. une manche reste et une **pause manuelle est demandée**
+ *    (`pause_requested_at`, D64 du 07/10) : {@see PauseGame} `manual`, à
+ *    l'instant théorique `reveal_ends_at(k)` — prioritaire sur la pause
+ *    `empty`, même sans siège présent ; sinon, une manche reste et **aucun
+ *    siège présent** (§ 1.2 : ligne
  *    `game_player` non expulsée dont le siège est `connected`) :
  *    {@see PauseGame}, à l'instant théorique `reveal_ends_at(k)`. Critère du
  *    siège présent, et non du participant (écart (b) du § 22 bis) : entre
@@ -97,6 +100,10 @@ final readonly class EndReveal
             $next = Round::query()->where('game_id', $lockedGame->id)->toPlay()->first();
 
             if (! $next instanceof Round) {
+                if ($lockedGame->pause_requested_at !== null) {
+                    $lockedGame->forceFill(['pause_requested_at' => null])->save();
+                }
+
                 if ($this->finalize->handle($lockedGame, GameStatus::Completed, $revealEndsAt)) {
                     GameJournal::gameFinalized($lockedGame, GameStatus::Completed, $revealEndsAt);
                 }
@@ -104,32 +111,20 @@ final readonly class EndReveal
                 return;
             }
 
-            // 3. Personne pour jouer la suivante : la partie se met en pause.
+            // 3. Pause demandée, ou personne pour jouer la suivante : la
+            // partie se met en pause.
             Round::query()->whereKey($next->id)->lockForUpdate()->firstOrFail();
 
-            if (! self::anySeatPresent($lockedGame)) {
-                $this->pause->handle($lockedGame, $revealEndsAt);
+            // Le budget a été vérifié à la demande ; il ne change qu'à une
+            // reprise, impossible tant que la partie court.
+            if ($lockedGame->pause_requested_at !== null) {
+                $this->pause->handle($lockedGame, $revealEndsAt, GamePauseKind::Manual);
+            } elseif (! SeatPresence::any($lockedGame)) {
+                $this->pause->handle($lockedGame, $revealEndsAt, GamePauseKind::Empty);
             }
 
             // 4. Sinon, `k+1` est déjà programmée : rien.
         });
-    }
-
-    /**
-     * Un **siège présent** de la partie (§ 1.2) : une ligne `game_player` non
-     * expulsée dont le siège est `connected` — retardataire admis à la manche
-     * suivante compris.
-     */
-    private static function anySeatPresent(Game $lockedGame): bool
-    {
-        return GamePlayer::query()
-            ->where('game_id', $lockedGame->id)
-            ->where('status', '<>', GamePlayerStatus::Kicked->value)
-            ->whereIn('player_id', Player::query()
-                ->where('connection_state', PlayerConnectionState::Connected->value)
-                ->whereNull('kicked_at')
-                ->select('id'))
-            ->exists();
     }
 
     /**

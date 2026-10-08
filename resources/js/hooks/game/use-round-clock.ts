@@ -55,6 +55,21 @@ const MS_PER_SECOND = 1000;
 function nextTickMs(state: GameStoreState, nowMs: number): number | null {
     const round = displayedRound(state, nowMs);
 
+    // Pause manuelle (D64 du 07/10) : le temps restant de l'écran de pause
+    // change à chaque seconde avant l'échéance — affichage seulement.
+    if (
+        round === null &&
+        state.status === 'paused' &&
+        state.pause?.kind === 'manual'
+    ) {
+        const deadline = parseIsoMs(state.pause.interruptsAt);
+        const next =
+            deadline -
+            (Math.ceil((deadline - nowMs) / MS_PER_SECOND) - 1) * MS_PER_SECOND;
+
+        return deadline > nowMs && next > nowMs ? next : null;
+    }
+
     if (round === null) {
         return null;
     }

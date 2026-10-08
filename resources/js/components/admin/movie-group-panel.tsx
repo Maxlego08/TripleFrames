@@ -33,6 +33,8 @@ import type {
     AdminGroupRefusal,
     AdminMovieGroup,
     AdminMovieIdentity,
+    AdminProximityCandidate,
+    AdminProximityReason,
 } from '@/types/admin';
 import type { TranslationKey } from '@/types/translations';
 
@@ -42,6 +44,15 @@ import type { TranslationKey } from '@/types/translations';
  */
 const LABEL_MAX_LENGTH = 120;
 const NOTE_MAX_LENGTH = 500;
+
+/** La prop facultative des candidats par proximité (§ 9.4 [J2]) — miroir de `CatalogController`. */
+const PROXIMITY_PROP = 'group_candidates';
+
+/** Chaque raison d'une proposition par proximité. */
+const PROXIMITY_REASON_KEYS: Record<AdminProximityReason, TranslationKey> = {
+    title_distance: 'admin.movie.group.proximity.reason.title_distance',
+    same_collection: 'admin.movie.group.proximity.reason.same_collection',
+};
 
 /** La prop facultative de la voie manuelle, et son paramètre — miroir de `CatalogController`. */
 const GROUP_LOOKUP_PROP = 'group_manual_candidate';
@@ -286,6 +297,11 @@ export function MovieGroupPanel({
                 </CardContent>
             </Card>
 
+            <ProximityCandidatesCard
+                canCurate={canCurate}
+                onPair={(candidate) => open({ kind: 'pair', candidate })}
+            />
+
             {canCurate && (
                 <ManualGroupCard movieId={movieId} grouped={group !== null} />
             )}
@@ -416,6 +432,164 @@ function PairDialog({
 }
 
 type LookupStatus = 'idle' | 'loading' | 'ready' | 'failed';
+
+/**
+ * Les candidats par proximité (spec 20 § 9.4 [J2], L20-27) : titre proche à
+ * chiffres identiques, ou même saga. Le calcul parcourt tout le catalogue :
+ * il ne part qu'au clic, par rechargement partiel de la prop facultative
+ * `group_candidates`, dont la réponse est gardée ici. Le back-office
+ * suggère ; « Regrouper » ouvre la même confirmation qu'un candidat exact.
+ */
+function ProximityCandidatesCard({
+    canCurate,
+    onPair,
+}: {
+    canCurate: boolean;
+    onPair: (candidate: AdminProximityCandidate) => void;
+}) {
+    const { t } = useTranslations();
+    const statusId = useId();
+    const [status, setStatus] = useState<LookupStatus>('idle');
+    const [candidates, setCandidates] = useState<AdminProximityCandidate[]>([]);
+    const loading = status === 'loading';
+
+    function load(): void {
+        if (loading) {
+            return;
+        }
+
+        setStatus('loading');
+
+        router.reload({
+            only: [PROXIMITY_PROP],
+            preserveUrl: true,
+            onSuccess: (page) => {
+                const result = page.props[PROXIMITY_PROP] as
+                    | AdminProximityCandidate[]
+                    | undefined;
+
+                if (result === undefined) {
+                    setStatus('failed');
+
+                    return;
+                }
+
+                setCandidates(result);
+                setStatus('ready');
+            },
+            onHttpException: () => setStatus('failed'),
+            onNetworkError: () => setStatus('failed'),
+        });
+    }
+
+    return (
+        <Card>
+            <CardHeader>
+                <AdminCardTitle>
+                    {t('admin.movie.group.proximity.heading')}
+                </AdminCardTitle>
+                <CardDescription>
+                    {t('admin.movie.group.proximity.description')}
+                </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+                <Button
+                    type="button"
+                    variant="outline"
+                    aria-disabled={loading || undefined}
+                    aria-busy={loading || undefined}
+                    aria-describedby={statusId}
+                    onClick={load}
+                    className="min-h-11 aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+                >
+                    {status === 'idle'
+                        ? t('admin.movie.group.proximity.load')
+                        : t('admin.movie.group.proximity.reload')}
+                </Button>
+
+                <p
+                    id={statusId}
+                    role="status"
+                    aria-live="polite"
+                    className="text-sm text-muted-foreground"
+                >
+                    {status === 'loading'
+                        ? t('admin.movie.group.proximity.loading')
+                        : status === 'ready' && candidates.length === 0
+                          ? t('admin.movie.group.proximity.empty')
+                          : status === 'failed'
+                            ? t('admin.movie.group.proximity.failed')
+                            : ''}
+                </p>
+
+                {status === 'ready' && candidates.length > 0 && (
+                    <ul className="divide-y divide-border">
+                        {candidates.map((candidate) => (
+                            <li
+                                key={candidate.id}
+                                className="flex flex-wrap items-center justify-between gap-3 py-3"
+                            >
+                                <div className="flex flex-wrap items-center gap-2 text-sm">
+                                    <MovieLink
+                                        movie={candidate}
+                                        current={false}
+                                    />
+                                    <AvailabilityBadge
+                                        value={candidate.availability}
+                                    />
+                                    {candidate.reasons.map((reason) => (
+                                        <Badge key={reason} variant="outline">
+                                            {t(PROXIMITY_REASON_KEYS[reason])}
+                                        </Badge>
+                                    ))}
+                                    {candidate.same_group ? (
+                                        <Badge variant="secondary">
+                                            {t(
+                                                'admin.movie.group.candidates.same_group',
+                                            )}
+                                        </Badge>
+                                    ) : (
+                                        candidate.group_label !== null && (
+                                            <Badge variant="outline">
+                                                {t(
+                                                    'admin.movie.group.candidates.in_group',
+                                                    {
+                                                        label: candidate.group_label,
+                                                    },
+                                                )}
+                                            </Badge>
+                                        )
+                                    )}
+                                </div>
+
+                                {canCurate && !candidate.same_group && (
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        aria-label={t(
+                                            'admin.movie.group.candidates.action_label',
+                                            {
+                                                movie: movieName(candidate, t),
+                                            },
+                                        )}
+                                        onClick={() => onPair(candidate)}
+                                        className="min-h-11"
+                                    >
+                                        <LinkIcon aria-hidden />
+                                        {t(
+                                            'admin.movie.group.candidates.action',
+                                        )}
+                                    </Button>
+                                )}
+                            </li>
+                        ))}
+                    </ul>
+                )}
+            </CardContent>
+        </Card>
+    );
+}
 
 /**
  * La recherche de la voie manuelle, par rechargement partiel de la prop

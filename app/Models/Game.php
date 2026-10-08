@@ -4,9 +4,11 @@ namespace App\Models;
 
 use App\Casts\RoomSettingsCast;
 use App\Enums\GameMode;
+use App\Enums\GamePauseKind;
 use App\Enums\GameStatus;
 use App\Enums\InputDifficulty;
 use App\Settings\RoomSettings;
+use App\Support\Identity\PublicId;
 use Carbon\CarbonImmutable;
 use Database\Factories\GameFactory;
 use Illuminate\Database\Eloquent\Attributes\DateFormat;
@@ -46,6 +48,7 @@ use LogicException;
  * simple lecture de l'instantané ne change rien.
  *
  * @property int $id
+ * @property string $public_id Identité publique (D66 du 07/10, spec 10 § 7.2) : seule adresse du détail d'une partie dans l'historique de son titulaire (`history.show`), frappée par le serveur à la création, jamais dérivée de l'`id`, jamais dans une charge de jeu. `#[Hidden]`, hors `#[Fillable]`.
  * @property int|null $room_id NULL en solo ; `restrictOnDelete` vers `room`. `#[Hidden]` — `room.id` est cachée à la source (§ 6.2).
  * @property GameMode $mode Figé à la création, aucun chemin ne le mute (§ 7.10).
  * @property GameStatus $status Aucun état `pending` : la partie naît au lancement.
@@ -63,7 +66,10 @@ use LogicException;
  * @property int $validation_version
  * @property CarbonImmutable $started_at Lancement, origine du journal.
  * @property CarbonImmutable|null $paused_at
+ * @property GamePauseKind|null $pause_kind Nature de la pause en cours, NULL hors pause (D64 du 07/10).
+ * @property CarbonImmutable|null $pause_requested_at Demande de pause manuelle en attente de la fin de révélation (D64).
  * @property int $total_paused_ms
+ * @property int $manual_paused_ms Budget consommé par les pauses manuelles, décomptes de reprise compris (D64).
  * @property CarbonImmutable|null $ended_at Colonne pilote unique de la fenêtre de 12 mois.
  * @property CarbonImmutable|null $created_at
  * @property CarbonImmutable|null $updated_at
@@ -74,7 +80,7 @@ use LogicException;
 #[Table('game')]
 #[DateFormat('Y-m-d H:i:s.v')]
 #[Fillable([])]
-#[Hidden(['room_id', 'draw_seed', 'draw_pool_size', 'settings_snapshot'])]
+#[Hidden(['public_id', 'room_id', 'draw_seed', 'draw_pool_size', 'settings_snapshot'])]
 class Game extends Model
 {
     /** @use HasFactory<GameFactory> */
@@ -90,8 +96,9 @@ class Game extends Model
      * palier, les mêmes points et le même tirage.
      *
      * Hors de la liste, et donc écrites en cours de partie par leurs seuls
-     * écrivains : `status`, `paused_at`, `total_paused_ms`, `rounds_completed`
-     * et `ended_at` (60, 80).
+     * écrivains : `status`, `paused_at`, `pause_kind`, `pause_requested_at`,
+     * `total_paused_ms`, `manual_paused_ms`, `rounds_completed` et `ended_at`
+     * (60, 80).
      *
      * @var list<string>
      */
@@ -126,6 +133,7 @@ class Game extends Model
         'status' => GameStatus::Running->value,
         'rounds_completed' => 0,
         'total_paused_ms' => 0,
+        'manual_paused_ms' => 0,
     ];
 
     /**
@@ -152,7 +160,10 @@ class Game extends Model
             'validation_version' => 'integer',
             'started_at' => 'datetime',
             'paused_at' => 'datetime',
+            'pause_kind' => GamePauseKind::class,
+            'pause_requested_at' => 'datetime',
             'total_paused_ms' => 'integer',
+            'manual_paused_ms' => 'integer',
             'ended_at' => 'datetime',
         ];
     }
@@ -169,6 +180,15 @@ class Game extends Model
      */
     protected static function booted(): void
     {
+        // `public_id` (D66 du 07/10) est frappé par le serveur à la création,
+        // par `OpenGame` comme par les fabriques : jamais par l'appelant,
+        // jamais dérivé de l'`id` ({@see PublicId}).
+        static::creating(static function (Game $game): void {
+            if ($game->getAttribute('public_id') === null) {
+                $game->public_id = PublicId::generate();
+            }
+        });
+
         static::updating(static function (Game $game): void {
             $changed = $game->changedFrozenColumns();
 

@@ -124,8 +124,9 @@ test('une modification sans changement, un refus ou une bascule déjà faite n�
         'sort_order' => 120,
     ], ['theme' => $theme->id])->assertSessionHasNoErrors();
 
-    // Refus : sous le seuil.
-    themeJournalSend('post', 'admin.themes.publish', ['is_published' => true], ['theme' => $theme->id])
+    // Refus : libellé manquant (le seuil d'œuvres n'est plus un refus, D65 du 07/10).
+    $unlabelled = Theme::factory()->unpublished()->withoutLabels()->create();
+    themeJournalSend('post', 'admin.themes.publish', ['is_published' => true], ['theme' => $unlabelled->id])
         ->assertSessionHasErrors('is_published');
 
     // Déjà dépublié.

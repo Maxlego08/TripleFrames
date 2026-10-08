@@ -503,7 +503,7 @@ class User extends Authenticatable implements HasLocalePreference, MustVerifyEma
 
     /**
      * L'attribut sérialisé, de type `string|null` STRICT : un `Attribute` qui rendrait
-     * l'objet complet produirait `"avatar":{"url":…}`, que `user-info.tsx` poserait en
+     * l'objet complet produirait `"avatar":{"url":…}`, que `admin-user-panel.tsx` poserait en
      * `src="[object Object]"`.
      *
      * @return Attribute<string|null, never>

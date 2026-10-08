@@ -12,6 +12,15 @@ enum RoundIncidentReason: string
     case MovieWithdrawn = 'movie_withdrawn';
 
     /**
+     * Suspension conservatoire du film par un administrateur (J2, E10-08,
+     * spec 20 § 11.2) : annulation ACTIVE de la manche en cours, par
+     * `WithdrawContentFromLiveRounds` (spec 60 § 15.4, L60-17). **Motif
+     * d'annulation seulement, jamais de substitution.** 15 caractères sous
+     * `string(30)` : aucune migration.
+     */
+    case MovieSuspended = 'movie_suspended';
+
+    /**
      * Aucun QCM composable pour la manche (E10-07, spec 70 § 10.7) : moins de
      * trois leurres même en mode dégradé, ou échec technique du calcul de la
      * composition. **Motif d'annulation seulement, jamais de substitution** :

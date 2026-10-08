@@ -4,9 +4,11 @@ use App\Http\Controllers\Admin\AccessController;
 use App\Http\Controllers\Admin\AudienceController;
 use App\Http\Controllers\Admin\AvatarModerationController;
 use App\Http\Controllers\Admin\CatalogController;
+use App\Http\Controllers\Admin\ContentReportController;
 use App\Http\Controllers\Admin\CurationHeartbeatController;
 use App\Http\Controllers\Admin\CurationQueueController;
 use App\Http\Controllers\Admin\DashboardController;
+use App\Http\Controllers\Admin\ExclusionGridRetroactiveController;
 use App\Http\Controllers\Admin\FrameBankController;
 use App\Http\Controllers\Admin\FrameBatchController;
 use App\Http\Controllers\Admin\FrameCaptureController;
@@ -16,10 +18,13 @@ use App\Http\Controllers\Admin\FrameLevelController;
 use App\Http\Controllers\Admin\FrameRetryController;
 use App\Http\Controllers\Admin\FrameReviewController;
 use App\Http\Controllers\Admin\FrameReviewQueueController;
+use App\Http\Controllers\Admin\FrameSuspendController;
 use App\Http\Controllers\Admin\FrameTmdbController;
 use App\Http\Controllers\Admin\FrameUnpublishController;
+use App\Http\Controllers\Admin\FrameUnsuspendController;
 use App\Http\Controllers\Admin\GameInspectionController;
 use App\Http\Controllers\Admin\GuideController;
+use App\Http\Controllers\Admin\ImportAbandonController;
 use App\Http\Controllers\Admin\ImportController;
 use App\Http\Controllers\Admin\ImportDiscoverController;
 use App\Http\Controllers\Admin\ImportIdsController;
@@ -27,16 +32,23 @@ use App\Http\Controllers\Admin\ImportPreviewController;
 use App\Http\Controllers\Admin\ImportResumeController;
 use App\Http\Controllers\Admin\ImportSearchController;
 use App\Http\Controllers\Admin\ImportSeedListController;
+use App\Http\Controllers\Admin\IncidentsController;
 use App\Http\Controllers\Admin\JournalController;
+use App\Http\Controllers\Admin\ModerationController;
+use App\Http\Controllers\Admin\ModerationNicknameController;
 use App\Http\Controllers\Admin\MovieAliasController;
 use App\Http\Controllers\Admin\MovieBatchPublishController;
 use App\Http\Controllers\Admin\MovieContentVerifiedController;
+use App\Http\Controllers\Admin\MovieDifficultyController;
 use App\Http\Controllers\Admin\MovieFramesReviewController;
 use App\Http\Controllers\Admin\MovieGroupController;
 use App\Http\Controllers\Admin\MoviePublishController;
+use App\Http\Controllers\Admin\MovieResyncController;
+use App\Http\Controllers\Admin\MovieSuspendController;
 use App\Http\Controllers\Admin\MovieThemeController;
 use App\Http\Controllers\Admin\MovieTitleController;
 use App\Http\Controllers\Admin\MovieUnpublishController;
+use App\Http\Controllers\Admin\MovieUnsuspendController;
 use App\Http\Controllers\Admin\NearMissController;
 use App\Http\Controllers\Admin\PerformanceController;
 use App\Http\Controllers\Admin\PlayerInspectionController;
@@ -47,6 +59,7 @@ use App\Http\Controllers\Admin\TwoFactorRequiredController;
 use App\Http\Controllers\Admin\UserDirectoryController;
 use App\Models\AdminAction;
 use App\Models\AudienceDaily;
+use App\Models\ContentReport;
 use App\Models\Frame;
 use App\Models\FrameReview;
 use App\Models\Game;
@@ -177,6 +190,19 @@ Route::middleware(['auth', 'verified', 'role:curator', 'admin.2fa', 'admin.local
             ->middleware(['can:publishReady,'.Movie::class, 'throttle:admin-curation'])
             ->name('catalog.ready.publish');
 
+        // Resynchroniser depuis TMDB (§ 3.7, ligne 26, L20-24) : l'écran de
+        // différences d'un film ou la sélection d'un lot, puis le lancement
+        // d'un balayage `resync` mis en file — jamais un appel TMDB dans le
+        // POST. L'écran relit la fiche TMDB d'un film seul : appel interactif,
+        // sous le limiteur de la recherche. Déclarées AVANT `catalog/{movie}`.
+        Route::get('catalog/resync', [MovieResyncController::class, 'show'])
+            ->middleware(['can:resync,'.Movie::class, 'throttle:admin-tmdb-search'])
+            ->name('catalog.resync.show');
+
+        Route::post('catalog/resync', [MovieResyncController::class, 'store'])
+            ->middleware(['can:resync,'.Movie::class, 'throttle:admin-import'])
+            ->name('catalog.resync.store');
+
         Route::get('catalog/{movie}', [CatalogController::class, 'show'])
             ->middleware('can:view,movie')
             ->name('catalog.show');
@@ -244,6 +270,19 @@ Route::middleware(['auth', 'verified', 'role:curator', 'admin.2fa', 'admin.local
             ->middleware(['can:unpublish,movie', 'throttle:admin-curation'])
             ->name('catalog.unpublish');
 
+        // Suspendre un film, lever sa suspension (§ 11.2, ligne 30, L20-20) :
+        // administrateur seul — la policy le dit, et un curateur reçoit 403.
+        // Motif facultatif ; la levée rejoue la garde de publication sous
+        // verrou et poste l'empreinte de l'aperçu d'ambiguïté quand le film
+        // revient publié (refus `preview_stale`, jamais un 403).
+        Route::post('catalog/{movie}/suspend', [MovieSuspendController::class, 'store'])
+            ->middleware(['can:suspend,movie', 'throttle:admin-curation'])
+            ->name('catalog.suspend');
+
+        Route::post('catalog/{movie}/unsuspend', [MovieUnsuspendController::class, 'store'])
+            ->middleware(['can:unsuspend,movie', 'throttle:admin-curation'])
+            ->name('catalog.unsuspend');
+
         // Cocher « contenu vérifié » (§ 4.4, ligne 21) : un film
         // `unrated_pending` seulement, motif obligatoire. Aucune route ne
         // décoche, aucune ne lève `blocked` (décision 12).
@@ -286,6 +325,13 @@ Route::middleware(['auth', 'verified', 'role:curator', 'admin.2fa', 'admin.local
         Route::patch('catalog/{movie}/themes', [MovieThemeController::class, 'update'])
             ->middleware(['can:curate,movie', 'throttle:admin-curation'])
             ->name('catalog.themes.update');
+
+        // Corriger la difficulté d'un film (§ 9.6, ligne 28, L20-28b) : la
+        // correction survit au réimport et resynchronise les thèmes de
+        // difficulté dans la transaction du geste ; jamais de dérivation.
+        Route::patch('catalog/{movie}/difficulty', [MovieDifficultyController::class, 'update'])
+            ->middleware(['can:curate,movie', 'throttle:admin-curation'])
+            ->name('catalog.difficulty.update');
 
         // L'éditeur de la banque d'images (§ 6, ligne 4) : `MoviePolicy::curate`,
         // refusé sur un film retiré. Il n'écrit rien : chaque geste qu'il
@@ -356,6 +402,17 @@ Route::middleware(['auth', 'verified', 'role:curator', 'admin.2fa', 'admin.local
                 ->middleware(['can:unpublish,frame', 'throttle:admin-curation'])
                 ->name('catalog.frames.unpublish');
 
+            // Suspendre une image publiée, lever sa suspension (§ 11.2,
+            // ligne 30, L20-20) : administrateur seul ; la levée est refusée
+            // tant que le film est lui-même suspendu.
+            Route::post('catalog/{movie}/frames/{frame}/suspend', [FrameSuspendController::class, 'store'])
+                ->middleware(['can:suspend,frame', 'throttle:admin-curation'])
+                ->name('catalog.frames.suspend');
+
+            Route::post('catalog/{movie}/frames/{frame}/unsuspend', [FrameUnsuspendController::class, 'store'])
+                ->middleware(['can:unsuspend,frame', 'throttle:admin-curation'])
+                ->name('catalog.frames.unsuspend');
+
             // Passer une revue (§ 7.5, ligne 17) : une revue passante PUBLIE
             // l'image. La garde nomme la CLASSE `FrameReview` — la revue
             // n'existe pas encore. Les refus d'état (image verrouillée,
@@ -424,6 +481,12 @@ Route::middleware(['auth', 'verified', 'role:curator', 'admin.2fa', 'admin.local
             ->middleware(['can:update,importRun', 'throttle:admin-import'])
             ->name('import.resume');
 
+        // Clore un balayage suspendu (§ 3.8, ligne 25, L20-24) : `failed` et
+        // `finished_at`, journalisé `import.abandoned` (D41 du 30/09).
+        Route::post('import/run/{importRun}/abandon', [ImportAbandonController::class, 'store'])
+            ->middleware(['can:update,importRun', 'throttle:admin-import'])
+            ->name('import.abandon');
+
         // L'aperçu à blanc d'un collage et la liste d'amorçage (§ 3.3, § 3.5,
         // ligne 11). L'aperçu n'ouvre aucune ligne `import_run` mais confie un
         // collage entier à TMDB : même limiteur contre le double clic.
@@ -434,6 +497,12 @@ Route::middleware(['auth', 'verified', 'role:curator', 'admin.2fa', 'admin.local
         Route::post('import/seed-list', [ImportSeedListController::class, 'store'])
             ->middleware(['can:create,'.ImportRun::class, 'throttle:admin-import'])
             ->name('import.seed_list');
+
+        // Films jamais trouvés et incidents (spec 20 § 12.1, ligne 29, L20-29) :
+        // agrégat par film, sans aucune identité de joueur.
+        Route::get('incidents', [IncidentsController::class, 'index'])
+            ->middleware('can:viewAny,'.Movie::class)
+            ->name('incidents.index');
 
         // Les formulations fausses récurrentes, agrégées sans aucun lien vers
         // un joueur : lecture, reconstruction, promotion en alias et rejet.
@@ -452,6 +521,38 @@ Route::middleware(['auth', 'verified', 'role:curator', 'admin.2fa', 'admin.local
         Route::post('near-misses/{nearMiss}/dismiss', [NearMissController::class, 'dismiss'])
             ->middleware(['can:dismiss,nearMiss', 'throttle:admin-curation'])
             ->name('near_misses.dismiss');
+
+        // Les signalements de contenu par les joueurs (D63 du 07/10, § 11.6,
+        // ligne 48) : curateur et au-delà, file groupée par cible. Chaque
+        // geste repasse en plus, sous verrou, par la policy de ce qu'il
+        // change (`MoviePolicy::unpublish`, `FramePolicy::unpublish`).
+        Route::get('content-reports', [ContentReportController::class, 'index'])
+            ->middleware('can:viewAny,'.ContentReport::class)
+            ->name('content-reports.index');
+
+        Route::post('content-reports/{contentReport}/unpublish-movie', [ContentReportController::class, 'unpublishMovie'])
+            ->middleware(['can:resolve,contentReport', 'throttle:admin-curation'])
+            ->name('content-reports.unpublish-movie');
+
+        Route::post('content-reports/{contentReport}/unpublish-frame', [ContentReportController::class, 'unpublishFrame'])
+            ->middleware(['can:resolve,contentReport', 'throttle:admin-curation'])
+            ->name('content-reports.unpublish-frame');
+
+        Route::post('content-reports/{contentReport}/dismiss', [ContentReportController::class, 'dismiss'])
+            ->middleware(['can:resolve,contentReport', 'throttle:admin-curation'])
+            ->name('content-reports.dismiss');
+
+        // Suspendre depuis la file (J2, D66 du 07/10, n° 34) : administrateur
+        // seul. `resolve` garde la route ; `MoviePolicy::suspend` et
+        // `FramePolicy::suspend`, repassées sous verrou par l'action, rendent
+        // 403 à un curateur.
+        Route::post('content-reports/{contentReport}/suspend-movie', [ContentReportController::class, 'suspendMovie'])
+            ->middleware(['can:resolve,contentReport', 'throttle:admin-curation'])
+            ->name('content-reports.suspend-movie');
+
+        Route::post('content-reports/{contentReport}/suspend-frame', [ContentReportController::class, 'suspendFrame'])
+            ->middleware(['can:resolve,contentReport', 'throttle:admin-curation'])
+            ->name('content-reports.suspend-frame');
 
         // Les écrans de l'administrateur seul (§ 2.8, lignes 34 et 40) :
         // une seconde porte, `role:admin`, en plus de la garde `can:` de
@@ -549,5 +650,33 @@ Route::middleware(['auth', 'verified', 'role:curator', 'admin.2fa', 'admin.local
             Route::post('avatars/{user}/remove', [AvatarModerationController::class, 'remove'])
                 ->middleware(['can:moderateAvatar,user', 'throttle:admin-curation'])
                 ->name('avatars.remove');
+
+            // La modération des pseudos (ligne 35, spec 20 § 11.5, D66 du
+            // 07/10) : sièges masqués et bannis, deux gestes consignés —
+            // lever (motif facultatif), bannir (motif obligatoire).
+            // `{player}` est lié par `id`, qui ne sort que vers le back-office.
+            Route::get('moderation', [ModerationController::class, 'index'])
+                ->middleware('can:moderateNicknames,'.Player::class)
+                ->name('moderation.index');
+
+            Route::post('moderation/players/{player:id}/unmask', [ModerationNicknameController::class, 'unmask'])
+                ->middleware(['can:moderateNickname,player', 'throttle:admin-curation'])
+                ->name('moderation.nickname.unmask');
+
+            Route::post('moderation/players/{player:id}/ban', [ModerationNicknameController::class, 'ban'])
+                ->middleware(['can:moderateNickname,player', 'throttle:admin-curation'])
+                ->name('moderation.nickname.ban');
+
+            // Le geste rétroactif de grille (§ 7.7, ligne 33, D13 du 23/09,
+            // L20-25) : l'écran de confirmation, puis le geste — une
+            // transaction par film, `frame.grid_unpublished` par image.
+            // Offert seulement sous une version de grille rétroactive.
+            Route::get('exclusion-grid/retroactive', [ExclusionGridRetroactiveController::class, 'show'])
+                ->middleware('can:applyRetroactiveGrid,'.Frame::class)
+                ->name('exclusion_grid.retroactive.show');
+
+            Route::post('exclusion-grid/retroactive', [ExclusionGridRetroactiveController::class, 'store'])
+                ->middleware(['can:applyRetroactiveGrid,'.Frame::class, 'throttle:admin-curation'])
+                ->name('exclusion_grid.retroactive.store');
         });
     });

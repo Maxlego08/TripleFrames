@@ -2,6 +2,7 @@
 
 namespace App\Actions\Game;
 
+use App\Enums\GamePauseKind;
 use App\Enums\GamePlayerStatus;
 use App\Enums\GameStatus;
 use App\Enums\PlayerConnectionState;
@@ -13,6 +14,7 @@ use App\Models\Player;
 use App\Models\Room;
 use App\Settings\EngineConstants;
 use App\Support\Game\CurrentGame;
+use App\Support\Game\PauseDeadline;
 use App\Support\Game\SeatViewPresenter;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Date;
@@ -44,7 +46,8 @@ use Illuminate\Support\Facades\DB;
  *   seulement** (§ 11.2). C'est une
  *   reconnexion, jamais une arrivée tardive : ni `allowLateJoin`, ni place
  *   consommée (§ 13.6) ; l'ancien hôte ne récupère pas le rôle ;
- * - si la partie en cours du siège est en pause et qu'il en est un **siège
+ * - si la partie en cours du siège est en pause **`empty`** (jamais une
+ *   pause `manual`, que seul un geste reprend, D64 du 07/10) et qu'il en est un **siège
  *   présent** (ligne `game_player` non expulsée, § 1.2 — critère inverse de
  *   la pause, retardataire admis compris), appelle {@see ResumeGame} (§ 14.2),
  *   qui vérifie d'abord l'échéance de la pause ;
@@ -179,7 +182,12 @@ final readonly class RecordHeartbeat
 
         $game = CurrentGame::of($lockedSeat);
 
-        if ($game instanceof Game && $game->status === GameStatus::Paused && self::presentIn($game, $lockedSeat)) {
+        // Une pause `manual` n'attend qu'un geste (D64 du 07/10) ; la garde
+        // qui compte est relue sous le verrou par `ResumeGame`.
+        if ($game instanceof Game
+            && $game->status === GameStatus::Paused
+            && $game->pause_kind !== GamePauseKind::Manual
+            && self::presentIn($game, $lockedSeat)) {
             $this->resume->handle($game, $now);
         }
 
@@ -222,14 +230,14 @@ final readonly class RecordHeartbeat
     }
 
     /**
-     * La partie est-elle en pause au-delà de son échéance, `now ≥ paused_at +
-     * pauseTimeoutMs` — la même comparaison que {@see ResumeGame} ?
+     * La partie est-elle en pause au-delà de son échéance ({@see PauseDeadline})
+     * — la même comparaison que {@see ResumeGame} ?
      */
     private static function pauseExpired(Game $game, CarbonImmutable $now): bool
     {
-        return $game->status === GameStatus::Paused
-            && $game->paused_at !== null
-            && $now->greaterThanOrEqualTo($game->paused_at->addMilliseconds(EngineConstants::pauseTimeoutMs()));
+        $deadline = PauseDeadline::of($game);
+
+        return $deadline !== null && $now->greaterThanOrEqualTo($deadline);
     }
 
     /**

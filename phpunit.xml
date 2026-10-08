@@ -68,6 +68,10 @@
         <server name="REVERB_APP_SECRET" value=""/>
         <env name="OPS_PROBE_TOKEN" value="" force="true"/>
         <server name="OPS_PROBE_TOKEN" value=""/>
+        <env name="GOOGLE_CLIENT_SECRET" value="" force="true"/>
+        <server name="GOOGLE_CLIENT_SECRET" value=""/>
+        <env name="DISCORD_CLIENT_SECRET" value="" force="true"/>
+        <server name="DISCORD_CLIENT_SECRET" value=""/>
         <!-- Pas un secret, un relevé de machine (`nproc`) : vidé par la même
              paire pour que la sonde `load` compte les vCPU simulés par les
              tests, quel que soit le `.env` du poste. -->

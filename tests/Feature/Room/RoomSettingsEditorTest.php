@@ -14,11 +14,9 @@ use Illuminate\Validation\ValidationException;
 |
 | L'éditeur est une fonction pure : il compose la charge postée par l'onglet
 | Simple avec l'état courant du salon et rend l'entrée complète de
-| `fromInput()`, avec son rapport. Au J1 les champs dérivés valent toujours
-| leur défaut, donc ils suivent toujours `N` et `D` ; les branches `reset` et
-| `equalized` ne sont atteignables qu'au J2, et sont prouvées ici dès le J1 sur
-| des réglages construits par `fromInput()`, comme les écrirait l'onglet
-| Avancé. Aucune valeur de jeu n'est écrite en littéral : tout vient de
+| `fromInput()`, avec son rapport. Les branches `reset` et `equalized` sont
+| prouvées ici sur des réglages construits par `fromInput()`, comme les écrit
+| l'onglet Avancé (L50-10, `RoomSettingsAdvancedTest`). Aucune valeur de jeu n'est écrite en littéral : tout vient de
 | `RoomSettingsBounds`.
 |
 */
@@ -265,20 +263,25 @@ it('refuse toute clé hors SIMPLE_KEYS et advanced: true avec not_editable', fun
     expect(array_keys(editorErrors(fn () => RoomSettingsEditor::simple($current, ['tierPoints' => [], 'speedBonus' => false], []))))
         ->toBe(['tierPoints', 'speedBonus']);
 
-    // `advanced: true`, sous toutes ses formes postées : refusé tant que
-    // l'onglet Avancé n'est pas livré, par l'aiguillage comme par simple().
-    expect(RoomSettingsEditor::ADVANCED_TAB_AVAILABLE)->toBeFalse();
+    // `advanced: true`, sous toutes ses formes postées : refusé par simple()
+    // appelé directement ; l'aiguillage, lui, le route vers l'onglet Avancé,
+    // livré par L50-10 (RoomSettingsAdvancedTest).
+    expect(RoomSettingsEditor::ADVANCED_TAB_AVAILABLE)->toBeTrue();
 
     foreach ([true, 1, '1', 'true'] as $value) {
-        foreach ([
-            fn () => RoomSettingsEditor::edit($current, ['advanced' => $value], []),
-            fn () => RoomSettingsEditor::simple($current, ['advanced' => $value], []),
-        ] as $attempt) {
-            expect(editorErrors($attempt))->toBe([
-                'advanced' => [__('validation.room_settings.not_editable', ['attribute' => __('validation.attributes.advanced')])],
-            ]);
-        }
+        expect(editorErrors(fn () => RoomSettingsEditor::simple($current, ['advanced' => $value], [])))->toBe([
+            'advanced' => [__('validation.room_settings.not_editable', ['attribute' => __('validation.attributes.advanced')])],
+        ]);
+
+        $routed = RoomSettingsEditor::edit($current, ['advanced' => $value], []);
+
+        expect(RoomSettingsEditor::toSettings($routed['input'])->advanced)->toBeTrue();
     }
+
+    // Symétrique : l'onglet Avancé appelé directement refuse `advanced: false`.
+    expect(editorErrors(fn () => RoomSettingsEditor::advanced($current, ['advanced' => false], [])))->toBe([
+        'advanced' => [__('validation.room_settings.not_editable', ['attribute' => __('validation.attributes.advanced')])],
+    ]);
 
     // `advanced: false` est accepté ; chaque clé de SIMPLE_KEYS aussi.
     $accepted = editorApply($current, [
@@ -297,8 +300,9 @@ it('refuse toute clé hors SIMPLE_KEYS et advanced: true avec not_editable', fun
         ->and($accepted['settings']->allowLateJoin)->toBeTrue()
         ->and($accepted['settings']->capacity)->toBe(Bounds::MIN_CAPACITY);
 
-    // L'appel de l'onglet Avancé avant sa livraison est une erreur de code.
-    expect(fn () => RoomSettingsEditor::advanced($current, [], []))->toThrow(LogicException::class);
+    // L'onglet Avancé, livré par L50-10, accepte une charge vide : il bascule
+    // l'onglet sans rien changer d'autre.
+    expect(RoomSettingsEditor::toSettings(RoomSettingsEditor::advanced($current, [], [])['input'])->advanced)->toBeTrue();
 });
 
 it('traduit themeKeys en themeIds et refuse une clé inconnue ou dépubliée', function (): void {

@@ -6,7 +6,9 @@ use App\Enums\ContentFlag;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\CurationQueueRequest;
 use App\Models\Movie;
+use App\Models\User;
 use App\Support\Admin\AdminCatalogPresenter;
+use App\Support\Curation\CurationClaim;
 use App\Support\Curation\CurationQueue;
 use Illuminate\Http\RedirectResponse;
 use Inertia\Inertia;
@@ -16,10 +18,12 @@ use Inertia\Response;
  * La file de curation et « film suivant » — spec 20 § 4.1, ligne 3 de la
  * matrice des capacités (`can:viewAny,App\Models\Movie`).
  *
- * **Aucune écriture.** La file est une lecture ordonnée de {@see CurationQueue},
- * seul porteur de son périmètre, de son ordre et de ses filtres ; « film
- * suivant » n'est qu'une redirection vers l'éditeur de la banque d'images
- * (`admin.catalog.bank`), qui garde sa propre policy (`curate`).
+ * **Aucune écriture en base.** La file est une lecture ordonnée de
+ * {@see CurationQueue}, seul porteur de son périmètre, de son ordre et de ses
+ * filtres ; « film suivant » est une redirection vers l'éditeur de la banque
+ * d'images (`admin.catalog.bank`), qui garde sa propre policy (`curate`), et
+ * ne pose que la réservation souple du film retenu, en cache
+ * ({@see CurationClaim}, L20-32).
  */
 class CurationQueueController extends Controller
 {
@@ -37,11 +41,18 @@ class CurationQueueController extends Controller
         // tête de la page 2 dit au curateur où il en est.
         $rank = $movies->firstItem() ?? 1;
 
+        $claimedBy = self::claimsByOthers($movies->getCollection()->modelKeys(), $request->user());
+
         return Inertia::render('admin/curation/index', [
             'movies' => AdminCatalogPresenter::paginated(
                 $movies,
-                function (Movie $movie) use (&$rank): array {
-                    return AdminCatalogPresenter::curationQueueRow($movie, CurationQueue::touchedAt($movie), $rank++);
+                function (Movie $movie) use (&$rank, $claimedBy): array {
+                    return AdminCatalogPresenter::curationQueueRow(
+                        $movie,
+                        CurationQueue::touchedAt($movie),
+                        $rank++,
+                        $claimedBy[$movie->id] ?? null,
+                    );
                 },
             ),
             'filters' => $request->filters(),
@@ -60,7 +71,12 @@ class CurationQueueController extends Controller
      */
     public function next(CurationQueueRequest $request): RedirectResponse
     {
-        $movie = $request->queue()->next($request->current());
+        /** @var User $curator */
+        $curator = $request->user();
+
+        // Le premier film que ce curateur peut réserver, réservé dans la
+        // foulée (§ 4.1, L20-32) : un film réservé par un autre est sauté.
+        $movie = $request->queue()->next($request->current(), $curator);
 
         if (! $movie instanceof Movie) {
             $key = $request->filterQuery() === [] ? 'admin.curation.empty' : 'admin.curation.empty_stratum';
@@ -71,6 +87,42 @@ class CurationQueueController extends Controller
         }
 
         return to_route('admin.catalog.bank', ['movie' => $movie->id, ...$request->filterQuery()]);
+    }
+
+    /**
+     * Le nom réel du curateur qui réserve chaque film de la page, quand ce
+     * n'est pas le lecteur (§ 4.1, L20-32). Une lecture du cache, une requête
+     * de comptes au plus.
+     *
+     * @param  array<int, int>  $movieIds
+     * @return array<int, string>
+     */
+    private static function claimsByOthers(array $movieIds, ?User $reader): array
+    {
+        $holders = array_filter(
+            CurationClaim::holders(array_values($movieIds)),
+            static fn (int $holder): bool => $holder !== $reader?->id,
+        );
+
+        if ($holders === []) {
+            return [];
+        }
+
+        $names = User::query()
+            ->whereKey(array_values(array_unique($holders)))
+            ->get(['id', 'name', 'real_name'])
+            ->mapWithKeys(static fn (User $user): array => [$user->id => $user->real_name ?? $user->name])
+            ->all();
+
+        $claimedBy = [];
+
+        foreach ($holders as $movieId => $holder) {
+            if (isset($names[$holder])) {
+                $claimedBy[$movieId] = $names[$holder];
+            }
+        }
+
+        return $claimedBy;
     }
 
     /**

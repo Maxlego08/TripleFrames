@@ -11,6 +11,8 @@ use App\Enums\UserRole;
 use App\Models\AdminAction;
 use App\Models\User;
 use App\Support\Admin\AdminJournal;
+use App\Support\Identity\NicknameNormalizer;
+use App\Support\Preprod\PreprodAuthors;
 use Carbon\CarbonImmutable;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\App;
@@ -118,9 +120,12 @@ class FirstAdminCommand extends Command
             return $this->reconcileIncumbent($target, $email);
         }
 
+        // L'administrateur inouvrable qui signe le catalogue de préproduction
+        // n'est pas un administrateur en place (PreprodAuthors).
         $incumbent = User::query()
             ->where('role', UserRole::Admin)
             ->whereNull('anonymized_at')
+            ->whereNotIn('email', PreprodAuthors::inertAdminEmails())
             ->first();
 
         if ($incumbent !== null) {
@@ -291,6 +296,10 @@ class FirstAdminCommand extends Command
             $answer = $this->ask($this->message('ask_name'));
             $name = is_string($answer) ? trim($answer) : '';
         }
+
+        // La forme canonique du pseudo de jeu : le nom du compte en suit la
+        // règle (spec 40 § 13.1).
+        $name = NicknameNormalizer::canonical($name);
 
         if (! $this->passesOrExplains(['name' => $name], ['name' => $this->nameRules()], 'invalid_name')) {
             return null;

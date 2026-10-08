@@ -139,6 +139,27 @@ return [
         'title' => 'Game paused',
         'description' => 'No player was connected any more: the game resumes as soon as one comes back.',
         'interrupts_at' => 'If nobody comes back, it will end at :time.',
+        // D64 du 07/10 : la pause manuelle. Gestes, bandeau de la pause
+        // demandée, écran de pause et refus (codes 409 des routes de pause).
+        'pause' => 'Pause',
+        'cancel' => 'Cancel pause',
+        'resume' => 'Resume',
+        'requested' => 'Pause requested: it will start at the end of this round.',
+        'requested_announce' => 'Pause requested for the end of this round.',
+        'request_cancelled_announce' => 'Pause cancelled.',
+        'manual_description' => 'The host paused the game.',
+        'manual_description_solo' => 'You paused the game.',
+        'manual_interrupts_at' => 'If nobody resumes it, it will end at :time.',
+        'remaining' => 'Time left: :time',
+        'resumed_announce' => 'The game is resuming.',
+        'host_absent' => 'The host is no longer connected: you can resume the game.',
+        'errors' => [
+            'not_running' => 'No game is in progress.',
+            'no_round_left' => 'This is the last round: there is nothing left to pause.',
+            'budget_exhausted' => 'This game has used up its pause time.',
+            'draining' => 'A site update is being prepared: the game cannot be paused.',
+            'failed' => 'That did not go through. Please try again.',
+        ],
     ],
 
     // Spec 60 § 5.4 (lot L60-14) : le seul pouvoir de l’hôte en partie,
@@ -241,6 +262,51 @@ return [
             'no_penalty' => 'A wrong answer costs no points.',
             'cancelled_round' => 'A round cancelled after an incident does not count: no points, no round played.',
         ],
+    ],
+
+    // D63 of 07/10: report a movie or an image seen in play, from the reveal
+    // and the podium, on the public `/report` page. No automatic effect: the
+    // curation team reviews every report.
+    'report' => [
+        'title' => 'Report a problem',
+        'description' => 'Does an image or a movie entry look wrong? Let the curation team know.',
+        'movie' => ':title (:year)',
+        'movie_without_year' => ':title',
+        // Preview of the reported image, shown only to those who saw it in play.
+        'frame_alt' => 'The reported image, as seen in play',
+        'no_automatic_effect' => 'A report never removes anything automatically: a team member reviews it.',
+        'fields' => [
+            'scope' => 'What is wrong',
+            'reason' => 'Reason',
+            'comment' => 'Details (optional)',
+        ],
+        'scopes' => [
+            'frame' => 'This image',
+            'movie' => 'The whole movie',
+        ],
+        'reasons' => [
+            'wrong_movie' => 'This is not that movie, or the entry is wrong',
+            'title_visible' => 'The title or a giveaway text is readable',
+            'wrong_level' => 'Image too easy or too hard for its place',
+            'poor_quality' => 'Poor quality image',
+            'offensive' => 'Offensive content',
+            'other' => 'Other',
+        ],
+        'comment_hint' => ':max characters at most.',
+        'submit' => 'Send the report',
+        'thanks' => 'Thank you! Your report has been passed on to the curation team.',
+        'already_reported' => 'You have already reported this content. Thank you!',
+        'need_seat' => 'Play a game first: only players can report a movie or an image.',
+        'rights_holder' => 'Do you hold rights to this content?',
+        'rights_holder_link' => 'Request a takedown',
+        'errors' => [
+            'reason_needs_frame' => 'This reason only applies to an image: choose “This image”.',
+        ],
+        // Reveal and podium links, always in a new tab.
+        'report_movie' => 'Report',
+        'report_movie_label' => 'Report a problem with :title (new tab)',
+        'report_frame' => 'Report',
+        'report_frame_label' => 'Report a problem with image :index (new tab)',
     ],
 
 ];

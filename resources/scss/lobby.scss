@@ -148,7 +148,7 @@
             font-weight: 800;
         }
 
-        output {
+        .room-code__value {
             min-width: 8ch;
             font-family: $display;
             font-size: 1.55rem;
@@ -559,6 +559,31 @@
         white-space: nowrap;
     }
 
+    // L'avatar du joueur : un bouton qui ouvre la grille « Votre avatar ».
+    &__avatar-button {
+        display: grid;
+        grid-column: 2;
+        grid-row: 1;
+        border: 0;
+        border-radius: 50%;
+        padding: 0;
+        background: transparent;
+        cursor: pointer;
+        place-items: center;
+
+        &:hover {
+            translate: 0 -0.08rem;
+        }
+
+        &[aria-disabled='true'] {
+            cursor: not-allowed;
+
+            &:hover {
+                translate: none;
+            }
+        }
+    }
+
     &__arrow {
         @include mix.hard-shadow(0.14rem);
         z-index: 7;
@@ -625,6 +650,12 @@
 
         .player-avatar {
             grid-column: 2;
+        }
+
+        // Dans son bouton, l'avatar occupe l'unique cellule : c'est le
+        // bouton qui prend la colonne du milieu.
+        .cinema-seat__avatar-button .player-avatar {
+            grid-column: 1;
         }
 
         .cinema-seat__name {

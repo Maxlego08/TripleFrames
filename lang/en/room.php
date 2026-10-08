@@ -175,6 +175,16 @@ return [
             'label' => 'Time before “left”',
             'help' => 'Time given to a disconnected player to come back.',
         ],
+        'advanced_active' => 'Advanced settings are active:',
+        'tier_label' => 'Frame :index',
+        'tabs' => [
+            'simple' => 'Simple',
+            'advanced' => 'Advanced',
+        ],
+        'advanced_sheet' => [
+            'title' => 'Advanced settings',
+            'description' => 'Tiers, scoring and answer limits.',
+        ],
         'change' => [
             'defaulted' => '“:attribute” was set to its default.',
             'dropped' => '“:attribute” no longer exists and was removed.',
@@ -200,6 +210,7 @@ return [
         'short_reveal' => 'Short reveal: :seconds s are recommended to leave time to read the answer.',
         'long_round' => 'Round longer than :seconds s: a player who finds early will wait a long time.',
         'non_decreasing_points' => 'A later tier is worth as much as or more than an earlier one: waiting may pay off.',
+        'waiting_pays' => 'With the speed bonus, answering at the start of a tier earns more than at the end of the previous one: waiting may pay off.',
         'all_tiers_zero' => 'No tier is worth any points: a scoreless game, the ranking follows the tie-breakers.',
     ],
 
@@ -292,6 +303,8 @@ return [
             'change' => 'Change avatar',
             'done' => 'Done',
             'apply' => 'Use this avatar',
+            'too_fast' => 'You are changing avatars too quickly: try again in a minute.',
+            'open' => 'Choose my avatar',
             'previous' => 'Previous avatar',
             'next' => 'Next avatar',
         ],
@@ -334,6 +347,15 @@ return [
     'replay' => [
         'action' => 'Play again',
         'waiting' => 'Waiting for the host to play again.',
+    ],
+
+    /*
+    | Rattachement automatique d’un siège invité au compte connecté (spec 40
+    | § 13.2, D66 du 07/10) : l’avis rendu une fois dans la page du siège.
+    */
+
+    'seat' => [
+        'claimed' => 'This game is now linked to your account.',
     ],
 
     /*

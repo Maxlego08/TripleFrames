@@ -2,11 +2,14 @@
 
 namespace App\Support\Room;
 
+use App\Support\Identity\PublicId;
+
 /**
  * L'identité publique d'un siège, `player.public_id` — spec 50 § 6.3 ; 10
  * § 1.1 et § 7.1.
  *
- * **Seul générateur de production** de `public_id`, lu par la prise de siège
+ * **Seul générateur de production** du `public_id` d'un siège (le tirage
+ * lui-même est partagé par {@see PublicId}), lu par la prise de siège
  * de `50` et par le siège solo de `60` ; la fabrique en est lectrice. Même
  * motif que {@see RoomCode} : un chiffrage normatif n'habite pas `database/`.
  *
@@ -24,23 +27,17 @@ final class SeatPublicId
     /**
      * Base32 de Crockford : ni `I`, ni `L`, ni `O`, ni `U` (32 signes). Deux
      * initiales faites de ces lettres ne peuvent donc jamais figurer dans un
-     * `public_id`.
+     * `public_id`. Partagé avec `frame.public_id` par {@see PublicId}
+     * (D63 du 07/10).
      */
-    public const string ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+    public const string ALPHABET = PublicId::ALPHABET;
 
     /** Longueur : `player.public_id char(12)` (10 § 7.1). */
-    public const int LENGTH = 12;
+    public const int LENGTH = PublicId::LENGTH;
 
     /** Un `public_id` neuf : {@see self::LENGTH} tirages CSPRNG dans l'alphabet. */
     public static function generate(): string
     {
-        $last = strlen(self::ALPHABET) - 1;
-        $id = '';
-
-        for ($index = 0; $index < self::LENGTH; $index++) {
-            $id .= self::ALPHABET[random_int(0, $last)];
-        }
-
-        return $id;
+        return PublicId::generate();
     }
 }

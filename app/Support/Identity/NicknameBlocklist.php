@@ -13,7 +13,8 @@ use RuntimeException;
  *
  * **Ressource versionnée, aucune table** (10 § A15) : un fichier par cas de
  * {@see Locale} plus {@see self::RESERVED_FILE}, sous
- * `resource_path(self::DIRECTORY)`. Elle applique l'**union** de tous ces
+ * `resource_path(self::DIRECTORY)`, plus {@see self::BANNED_FILE}, les
+ * pseudos bannis au back-office (D66 du 07/10). Elle applique l'**union** de tous ces
  * fichiers, **quelle que soit la langue du joueur** : un pseudo s'affiche à
  * tout le salon, dans toutes ses langues, comme une bonne réponse est acceptée
  * dans toutes les langues activées (I5.6).
@@ -67,6 +68,14 @@ final class NicknameBlocklist
 
     /** Nom (sans extension) de la liste des noms réservés, rédigée pour le projet. */
     public const string RESERVED_FILE = 'reserved';
+
+    /**
+     * Nom (sans extension) de la liste des pseudos bannis au back-office
+     * (`nickname.banned`, spec 40 § 13.3, D66 du 07/10) : formes repliées
+     * recopiées depuis l'écran « Modération » au commit suivant, geste humain
+     * relu. Seule liste qui peut ne porter aucune entrée.
+     */
+    public const string BANNED_FILE = 'banned';
 
     /**
      * Longueur à partir de laquelle une entrée est cherchée **n'importe où**
@@ -135,7 +144,8 @@ final class NicknameBlocklist
 
     /**
      * Les chemins absolus des listes : un par cas de {@see Locale}, dans
-     * l'ordre de déclaration, puis {@see self::RESERVED_FILE}.
+     * l'ordre de déclaration, puis {@see self::RESERVED_FILE}, puis
+     * {@see self::BANNED_FILE}.
      *
      * @return list<string>
      *
@@ -147,6 +157,7 @@ final class NicknameBlocklist
     {
         $names = array_map(static fn (Locale $locale): string => $locale->value, Locale::cases());
         $names[] = self::RESERVED_FILE;
+        $names[] = self::BANNED_FILE;
 
         $paths = [];
 

@@ -7,6 +7,7 @@ use App\Avatars\UploadedAvatars;
 use App\Enums\OAuthProvider;
 use App\Models\LinkedAccount;
 use App\Models\User;
+use App\Support\Identity\LoginMethods;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Laravel\Fortify\Contracts\TwoFactorAuthenticationProvider;
@@ -49,13 +50,8 @@ final class UnlinkProvider
                 throw self::refusal('code', 'account.linked.errors.code');
             }
 
-            $others = LinkedAccount::query()
-                ->where('user_id', $locked->id)
-                ->where('provider', '!=', $provider->value)
-                ->count();
-            $methods = ($locked->password !== null ? 1 : 0) + $others + $locked->passkeys()->count();
-
-            if ($methods === 0) {
+            // Même aide que la suppression d'une passkey (spec 40 § 13.8).
+            if (LoginMethods::wouldRemoveLast($locked, provider: $provider)) {
                 throw self::refusal('provider', 'account.oauth.errors.last_method');
             }
 

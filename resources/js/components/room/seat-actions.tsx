@@ -8,6 +8,7 @@ import AvatarReportController from '@/actions/App/Http/Controllers/Room/AvatarRe
 import HostTransferController from '@/actions/App/Http/Controllers/Room/HostTransferController';
 import KickController from '@/actions/App/Http/Controllers/Room/KickController';
 import LeaveRoomController from '@/actions/App/Http/Controllers/Room/LeaveRoomController';
+import NicknameReportController from '@/actions/App/Http/Controllers/Room/NicknameReportController';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
@@ -372,6 +373,55 @@ export function ReportAvatarAction({
             onRefused={onRefused}
             onDone={() => {
                 announce(t('common.avatar.report.sent'));
+                setSent(true);
+                onDone();
+            }}
+        />
+    );
+}
+
+/**
+ * « Signaler le pseudo » (spec 40 § 13.3, D66 du 07/10) : un geste de TOUT
+ * siège sur un autre siège dont le pseudo est affiché — ni masqué, ni
+ * effacé. Confirmé ; l'envoi est annoncé dans l'unique région vivante
+ * (`common.player.report.sent`), le même message que le seuil soit atteint
+ * ou non. Le bouton disparaît après l'envoi : un second signalement du même
+ * siège ne compterait pas. Au seuil, la diffusion `seat.updated` masque le
+ * pseudo et retire le bouton pour tous.
+ */
+export function ReportNicknameAction({
+    roomCode,
+    seat,
+    nickname,
+    describedBy,
+    disabled,
+    onHttpException,
+    onRefused,
+    onDone,
+}: SeatActionsProps) {
+    const { t } = useTranslations();
+    const [sent, setSent] = useState(false);
+
+    if (sent || seat.kicked || seat.masked || seat.nickname === null) {
+        return null;
+    }
+
+    return (
+        <GestureDialog
+            form={NicknameReportController.store.form({
+                room: roomCode,
+                target: seat.publicId,
+            })}
+            label={t('common.player.report.action')}
+            title={t('common.player.report.confirm_title', { nickname })}
+            description={t('common.player.report.confirm_body')}
+            icon={Flag}
+            describedBy={describedBy}
+            disabled={disabled}
+            onHttpException={onHttpException}
+            onRefused={onRefused}
+            onDone={() => {
+                announce(t('common.player.report.sent'));
                 setSent(true);
                 onDone();
             }}

@@ -142,7 +142,7 @@ class GameRescheduleCommand extends Command
             $pausedAt = $step['game']->paused_at;
 
             if ($pausedAt !== null) {
-                InterruptPausedGame::dispatch($gameId, WireTime::iso($pausedAt));
+                InterruptPausedGame::dispatch($gameId, WireTime::iso($pausedAt), WireTime::iso($step['at']));
             }
 
             return;
@@ -207,14 +207,17 @@ class GameRescheduleCommand extends Command
 
     /**
      * Partie bloquée (§ 14.4) : `now > started_at + maxNaturalDurationMs() +
-     * total_paused_ms + pauseTimeoutMs`. La marge finale `pauseTimeoutMs`
-     * couvre les décomptes de reprise, que `total_paused_ms` ne compte pas
-     * (§ 17.3, point 3 ; garde d'`EngineConstants`).
+     * total_paused_ms + pauseTimeoutMs + manual_paused_ms`. La marge
+     * `pauseTimeoutMs` couvre les décomptes de reprise des pauses `empty`, que
+     * `total_paused_ms` ne compte pas (§ 17.3, point 3 ; garde
+     * d'`EngineConstants`) ; `manual_paused_ms`, qui impute à chaque reprise
+     * manuelle son décompte, couvre ceux des pauses manuelles (D64 du 07/10)
+     * — il recompte leur attente, ce qui ne fait qu'élargir le seuil.
      */
     private static function isBlocked(Game $game, CarbonImmutable $now): bool
     {
         $limit = $game->started_at->addMilliseconds(
-            GamesInProgress::maxNaturalDurationMs() + $game->total_paused_ms + EngineConstants::pauseTimeoutMs(),
+            GamesInProgress::maxNaturalDurationMs() + $game->total_paused_ms + EngineConstants::pauseTimeoutMs() + $game->manual_paused_ms,
         );
 
         return $now->greaterThan($limit);

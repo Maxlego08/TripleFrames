@@ -4,14 +4,13 @@ import {
     isOAuthProvider,
     useProviderName,
 } from '@/components/account/oauth-buttons';
+import { ConsentFields } from '@/components/account/consent-fields';
 import InputError from '@/components/input-error';
 import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
 import { useTranslations } from '@/hooks/use-translations';
-import { terms } from '@/routes/legal';
 import { store } from '@/routes/oauth/finish';
 import type { AuthLayoutKeys } from '@/types';
 
@@ -70,45 +69,7 @@ export default function OAuthFinish({ provider, email, suggestedName }: Props) {
                             <InputError message={errors.name} />
                         </div>
 
-                        <div className="grid gap-2">
-                            <div className="flex items-start gap-3">
-                                <Checkbox
-                                    id={`${id}-terms`}
-                                    name="terms"
-                                    value="1"
-                                />
-                                <Label htmlFor={`${id}-terms`}>
-                                    {t('account.oauth.finish.terms')}
-                                </Label>
-                            </div>
-                            <a
-                                href={terms().url}
-                                target="_blank"
-                                rel="noopener"
-                                className="text-sm underline underline-offset-4"
-                            >
-                                {t('account.oauth.finish.terms_link')}
-                                <span className="sr-only">
-                                    {' '}
-                                    {t('legal.new_tab')}
-                                </span>
-                            </a>
-                            <InputError message={errors.terms} />
-                        </div>
-
-                        <div className="grid gap-2">
-                            <div className="flex items-start gap-3">
-                                <Checkbox
-                                    id={`${id}-age`}
-                                    name="age"
-                                    value="1"
-                                />
-                                <Label htmlFor={`${id}-age`}>
-                                    {t('account.oauth.finish.age')}
-                                </Label>
-                            </div>
-                            <InputError message={errors.age} />
-                        </div>
+                        <ConsentFields errors={errors} />
 
                         <Button
                             type="submit"

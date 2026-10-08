@@ -484,7 +484,8 @@ it('garde noindex le lien d\'un salon, les pages de jeu, signaler un contenu et 
 
     // Aucune route de ces familles ne porte le drapeau, quel que soit le lot
     // qui l'a déclarée : salon, jeu, solo, retrait, back-office, images.
-    $families = ['room.', 'solo.', 'game.', 'takedown.', 'admin.', 'frame.', 'clock.', 'ops.'];
+    // `content-report.` : signaler un film vu en jeu (D63 du 07/10).
+    $families = ['room.', 'solo.', 'game.', 'takedown.', 'content-report.', 'admin.', 'frame.', 'clock.', 'ops.'];
 
     foreach (Route::getRoutes()->getRoutes() as $route) {
         $name = $route->getName() ?? '';
@@ -493,7 +494,7 @@ it('garde noindex le lien d\'un salon, les pages de jeu, signaler un contenu et 
 
         if (Str::startsWith($name, $families)
             || str_contains($uri, '{room}')
-            || in_array($first, ['r', 'solo', 'admin', 'report-content', 'f', 'ops'], true)) {
+            || in_array($first, ['r', 'solo', 'admin', 'report-content', 'report', 'f', 'ops'], true)) {
             expect(array_key_exists(RobotsDirectives::ROUTE_FLAG, $route->defaults))
                 ->toBeFalse("/{$uri} ({$name}) ne doit jamais porter RobotsDirectives::ROUTE_FLAG");
         }
@@ -637,4 +638,181 @@ it("n'écrit jamais un room_code ni un paramètre dans le titre d'une page de sa
     }
 
     expect($violations)->toBe([], "Titre de page de salon hors de la forme t('clé') sans paramètre :\n".implode("\n", $violations));
+});
+
+/**
+ * Les balises `<link rel="canonical">` du HTML rendu, leurs `href`.
+ *
+ * @return list<string>
+ */
+function indexingCanonicals(TestResponse $response): array
+{
+    preg_match_all('/<link\s+rel="canonical"\s+href="([^"]*)"\s*\/?>/', (string) $response->getContent(), $matches);
+
+    return array_map(static fn (string $href): string => html_entity_decode($href, ENT_QUOTES | ENT_HTML5), $matches[1]);
+}
+
+/**
+ * Les balises `<meta>` du HTML rendu, indexées par `name` ou `property`.
+ *
+ * @return array<string, list<string>>
+ */
+function indexingMetaTags(TestResponse $response): array
+{
+    preg_match_all('/<meta\s+(name|property)="([^"]+)"\s+content="([^"]*)"\s*\/?>/', (string) $response->getContent(), $matches, PREG_SET_ORDER);
+
+    $tags = [];
+
+    foreach ($matches as $match) {
+        $tags[$match[2]][] = html_entity_decode($match[3], ENT_QUOTES | ENT_HTML5);
+    }
+
+    return $tags;
+}
+
+/**
+ * Lève le marquage provisoire des trois pages légales indexables, comme le
+ * fera le commit qui dépose leurs textes définitifs (spec 90 § 11.5).
+ */
+function indexingFinalLegalPages(): void
+{
+    foreach (['notice', 'terms', 'privacy'] as $page) {
+        config(["legal.pages.{$page}.provisional" => false]);
+    }
+}
+
+it("la canonique n'existe que sur les quatre routes indexables, sans chaîne de requête, bâtie sur APP_URL", function () {
+    $this->withoutVite();
+
+    config(['app.url' => 'https://tripleframes.example']);
+    indexingFinalLegalPages();
+
+    $room = Room::factory()->create();
+    $code = $room->room_code;
+
+    $elsewhere = [
+        route('login'),
+        '/report-content',
+        '/report',
+        "/r/{$code}",
+        "/r/{$code}/join",
+        '/r/new',
+        '/solo/new',
+        '/solo',
+    ];
+
+    // Variable fausse (tout le jalon 1) : aucune page n'est indexable, donc
+    // aucune canonique, pas même sur l'accueil.
+    indexingSet(false);
+
+    foreach (['/', '/legal/notice', '/legal/terms', '/legal/privacy', ...$elsewhere] as $url) {
+        expect(indexingCanonicals($this->get($url)))->toBe([], "{$url} ne doit porter aucune canonique tant que le site est noindex");
+    }
+
+    indexingSet(true);
+
+    $expected = [
+        '/' => 'https://tripleframes.example/',
+        '/?utm_source=discord&ref=abc' => 'https://tripleframes.example/',
+        '/legal/notice' => 'https://tripleframes.example/legal/notice',
+        '/legal/terms?x=1' => 'https://tripleframes.example/legal/terms',
+        '/legal/privacy' => 'https://tripleframes.example/legal/privacy',
+    ];
+
+    foreach ($expected as $url => $canonical) {
+        $response = $this->get($url)->assertOk();
+
+        expect(indexingCanonicals($response))->toBe([$canonical], "{$url} : une seule canonique, URL nue")
+            ->and(indexingMetaTags($response)['og:url'] ?? [])->toBe([$canonical], "{$url} : og:url suit la canonique");
+    }
+
+    // Bâtie sur APP_URL, jamais sur l'hôte de la requête : un en-tête Host
+    // forgé n'écrit pas la canonique.
+    expect(indexingCanonicals($this->withHeader('Host', 'forged.example')->get('/')))
+        ->toBe(['https://tripleframes.example/']);
+
+    // Variable levée : aucune canonique ni og:url ailleurs, et jamais sur une
+    // URL portant un room_code.
+    foreach ($elsewhere as $url) {
+        $response = $this->get($url);
+
+        expect(indexingCanonicals($response))->toBe([], "{$url} ne doit porter aucune canonique")
+            ->and(indexingMetaTags($response))->not->toHaveKey('og:url')
+            ->and((string) $response->getContent())->not->toContain('rel="canonical"');
+    }
+
+    // Une page légale encore provisoire reste noindex, donc sans canonique.
+    config(['legal.pages.privacy.provisional' => true]);
+
+    expect(indexingCanonicals($this->get('/legal/privacy')))->toBe([]);
+});
+
+it('les balises Open Graph sont génériques et ne portent jamais de room_code ni de titre', function () {
+    $this->withoutVite();
+
+    // Clés fixes, sans aucun paramètre : rien de la page ne peut s'y glisser.
+    foreach (['common.meta.title', 'common.meta.description'] as $key) {
+        foreach (['en', 'fr'] as $locale) {
+            $text = trans($key, [], $locale);
+
+            expect($text)->toBeString()->not->toBe($key)
+                ->and($text)->not->toMatch('/:[A-Za-z_]/');
+        }
+    }
+
+    $room = Room::factory()->create();
+    $code = $room->room_code;
+
+    $documents = 0;
+
+    foreach ([false, true] as $state) {
+        indexingSet($state);
+
+        foreach (['/', '/legal/notice', '/report-content', "/r/{$code}", "/r/{$code}/join", '/r/new', '/solo/new', route('login')] as $url) {
+            $response = $this->get($url);
+
+            // Une redirection (le lien du salon renvoie un visiteur sans siège
+            // vers l'entrée) n'a pas de document : sa cible est visitée aussi.
+            if ($response->getStatusCode() !== 200) {
+                expect($response->isRedirection())->toBeTrue("{$url} : statut {$response->getStatusCode()} inattendu");
+
+                continue;
+            }
+
+            $documents++;
+            $tags = indexingMetaTags($response);
+
+            expect($tags['description'] ?? null)->toBe([trans('common.meta.description', [], 'en')], "{$url} : description")
+                ->and($tags['og:site_name'] ?? null)->toBe([config('app.name')], "{$url} : og:site_name")
+                ->and($tags['og:type'] ?? null)->toBe(['website'], "{$url} : og:type")
+                ->and($tags['og:title'] ?? null)->toBe([trans('common.meta.title', [], 'en')], "{$url} : og:title")
+                ->and($tags['og:description'] ?? null)->toBe([trans('common.meta.description', [], 'en')], "{$url} : og:description")
+                ->and($tags['twitter:card'] ?? null)->toBe(['summary'], "{$url} : twitter:card");
+
+            // Aucune image, et jamais le code du salon dans une balise.
+            expect(array_keys($tags))->not->toContain('og:image')
+                ->and(array_keys($tags))->not->toContain('twitter:image');
+
+            foreach ($tags as $name => $contents) {
+                foreach ($contents as $content) {
+                    expect(str_contains($content, $code))->toBeFalse("{$url} : {$name} contient le room_code");
+                }
+            }
+        }
+    }
+
+    expect($documents)->toBeGreaterThanOrEqual(12);
+
+    // Dans la langue du visiteur : le robot sans Accept-Language reçoit le
+    // repli anglais (ci-dessus), un visiteur francophone le français.
+    $french = indexingMetaTags($this->withHeader('Accept-Language', 'fr-FR,fr;q=0.9')->get('/'));
+
+    expect($french['og:title'] ?? null)->toBe([trans('common.meta.title', [], 'fr')])
+        ->and($french['description'] ?? null)->toBe([trans('common.meta.description', [], 'fr')]);
+
+    // La vue racine ne lit que `PageMeta`, jamais les props de la page : aucun
+    // titre de film ni pseudo ne peut entrer dans une balise.
+    $blade = (string) file_get_contents(resource_path('views/app.blade.php'));
+
+    expect($blade)->not->toContain("\$page['props']");
 });

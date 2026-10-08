@@ -3,6 +3,7 @@
 namespace Tests\Support\Realtime;
 
 use App\Actions\Game\MintTierServeToken;
+use App\Enums\GamePauseKind;
 use App\Enums\GamePlayerStatus;
 use App\Enums\Locale;
 use App\Enums\RoomStatus;
@@ -10,6 +11,8 @@ use App\Enums\RoundStatus;
 use App\Events\Game\GameEnded;
 use App\Events\Game\GameLaunched;
 use App\Events\Game\GamePaused;
+use App\Events\Game\GamePauseRequestCancelled;
+use App\Events\Game\GamePauseRequested;
 use App\Events\Game\GameResumed;
 use App\Events\Game\HostChanged;
 use App\Events\Game\PlayerLocked;
@@ -38,6 +41,7 @@ use App\Models\RoundPlayer;
 use App\Models\RoundTier;
 use App\Settings\EngineConstants;
 use App\Support\Answers\ChoicesPresenter;
+use App\Support\Game\RevealFramesPresenter;
 use App\Support\Game\RevealMovieBuilder;
 use App\Support\Game\RoundTimelinePresenter;
 use App\Support\Game\SeatViewPresenter;
@@ -174,6 +178,10 @@ final class WireFixtures
                     static fn (int $tierIndex): array => self::image($game, $revealed, $tierIndex),
                     range(1, $game->frames_per_round),
                 ),
+                // D63 du 07/10 : l'identité publique des images servies.
+                'frames' => RevealFramesPresenter::frames(
+                    RoundTier::query()->where('round_id', $revealed->id)->whereNotNull('served_at')->with('servedFrame')->get(),
+                ),
                 'finders' => Scoreboard::roundFinders($revealed),
                 'leaderboard' => Scoreboard::leaderboard($game, $revealed),
             ]),
@@ -184,8 +192,11 @@ final class WireFixtures
             GamePaused::class => new GamePaused($room, $game, [
                 'pausedAt' => WireTime::iso($now),
                 'interruptsAt' => WireTime::iso($now->addMilliseconds(EngineConstants::pauseTimeoutMs())),
+                'kind' => GamePauseKind::Manual->value,
             ]),
             GameResumed::class => new GameResumed($room, $game, ['resumedAt' => WireTime::iso($now)]),
+            GamePauseRequested::class => new GamePauseRequested($room, $game, ['requestedAt' => WireTime::iso($now)]),
+            GamePauseRequestCancelled::class => new GamePauseRequestCancelled($room, $game, []),
             GameEnded::class => new GameEnded($room, $game, ['podium' => self::podium($game, $room, $revealed)]),
             SeatChoicesOffered::class => new SeatChoicesOffered($scene->guest, $game, [
                 'sequenceIndex' => $running->sequence_index,

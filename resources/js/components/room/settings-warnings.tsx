@@ -23,13 +23,15 @@ const WARNING_KEYS: Record<RoomSettingsWarningCode, TranslationKey> = {
     short_reveal: 'room.warnings.short_reveal',
     long_round: 'room.warnings.long_round',
     non_decreasing_points: 'room.warnings.non_decreasing_points',
+    waiting_pays: 'room.warnings.waiting_pays',
     all_tiers_zero: 'room.warnings.all_tiers_zero',
 };
 
 /**
  * Avertissements des réglages — bornes croisées 4 et 5 (spec 50 § 4.1 et
  * § 4.5) : révélation courte, manche longue, barème non strictement
- * décroissant, barème entièrement à zéro. **Jamais bloquants** : 3 s de
+ * décroissant, « attendre paie » (onglet Avancé, L50-10), barème entièrement
+ * à zéro. **Jamais bloquants** : 3 s de
  * révélation restent légales, les avertir suffit.
  *
  * Diffusés en DONNÉES au salon (codes), rendus par chaque client dans sa
@@ -66,6 +68,7 @@ export function SettingsWarnings({
                     seconds: number.format(thresholds.longRoundWarningDuration),
                 });
             case 'non_decreasing_points':
+            case 'waiting_pays':
             case 'all_tiers_zero':
                 return t(WARNING_KEYS[code]);
         }

@@ -12,12 +12,14 @@ use App\Models\ImportRun;
 use App\Models\Movie;
 use App\Models\Theme;
 use App\Support\Admin\AdminCatalogPresenter;
+use App\Support\Admin\ImportLauncher;
 use App\Support\Admin\PastePreview;
 use App\Support\Admin\SeedList;
 use App\Support\Tmdb\TmdbClient;
 use App\ValueObjects\Catalog\ImportFilter;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -175,6 +177,11 @@ class ImportController extends Controller
                 fn (Movie $movie): array => AdminCatalogPresenter::movieRow($movie),
             ),
             'can_resume' => AdminCatalogPresenter::isResumable($importRun),
+            // « Clore ce balayage » (§ 3.8, ligne 25) : un balayage en file
+            // ou suspendu, qu'aucun traitement ne tient ; le geste rejoue la
+            // même lecture sous verrou.
+            'can_abandon' => ImportLauncher::isAbandonable($importRun)
+                && Gate::allows('update', $importRun),
             // Sans clé TMDB, la reprise échouera : l'écran d'import le dit
             // déjà pour ses deux voies, la fiche d'un balayage le doit aussi.
             // Deux écrans qui se contredisent sur le même état font douter du

@@ -743,9 +743,10 @@ it("n'émet aucun toast depuis une page, un composant ou un hook de jeu", functi
     }
 
     // Côté serveur : aucun contrôleur de `routes/game.php`, traits compris,
-    // ne pose de flash `toast`. Le seul flash qu'une page de jeu subit est
-    // celui de la page expirée, posé par le gestionnaire d'exceptions (§ 4.8)
-    // et rendu en texte par `GameLayout`.
+    // ne pose de flash `toast`. Une page de jeu ne subit que celui de la page
+    // expirée, posé par le gestionnaire d'exceptions (§ 4.8), et l'avis
+    // `game_notice` du rattachement du siège (spec 40 § 13.2), tous deux
+    // rendus en texte par `GameLayout`.
     $classes = shellGameControllerClasses();
 
     expect(count($classes))->toBeGreaterThanOrEqual(5);
@@ -767,10 +768,11 @@ it('ne monte ni Toaster ni seconde région aria-live sur une page de jeu', funct
     // Une page de jeu n'a qu'UNE région vivante, `GameAnnouncer` (C16 § 4).
     // Balayage de la spec (coquille, pages, composants de jeu, de salon et
     // d'état, hooks de jeu), étendu aux composants hors de ces répertoires
-    // que la coquille monte elle-même (sélecteur de langue, bandeau, pied).
+    // que la coquille ou un composant de jeu monte (sélecteur de langue,
+    // bandeau, pied, attribution TMDB de la révélation).
     $files = shellFrontFiles(['layouts/game', 'pages/game', 'components/game', 'components/room', 'components/state', 'hooks/game']);
 
-    $pending = ['layouts/game/game-layout.tsx'];
+    $pending = $files;
 
     while ($pending !== []) {
         $file = array_shift($pending);
@@ -959,4 +961,13 @@ it('compose la coquille de jeu, de haut en bas, du bandeau, de la page, de la li
     expect(substr_count($public, '<GameAnnouncer />'))->toBe(1)
         ->and(strpos($public, '<SiteFooter variant="full" />') < strpos($public, '<GameAnnouncer />'))->toBeTrue()
         ->and(strpos($public, '<GameAnnouncer />') < strpos($public, '<Toaster />'))->toBeTrue();
+});
+
+it('réserve le raccourci du back-office aux curateurs et administrateurs connectés', function () {
+    $header = shellSource('components/public/public-header.tsx');
+
+    expect($header)
+        ->toContain("hasAtLeastRole(auth.user.role, 'curator')")
+        ->toContain('href={adminDashboard()}')
+        ->toContain("t('common.nav.admin')");
 });

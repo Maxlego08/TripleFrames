@@ -1,9 +1,12 @@
 <?php
 
+use App\Enums\AdminActionSubject;
+use App\Enums\AdminActionType;
 use App\Enums\ImportRunKind;
 use App\Enums\ImportRunStatus;
 use App\Http\Controllers\Admin\ImportController;
 use App\Jobs\Catalog\RunCatalogImport;
+use App\Models\AdminAction;
 use App\Models\ImportRun;
 use App\Models\Movie;
 use App\Models\Theme;
@@ -457,4 +460,72 @@ test('un job perdu ne réécrit jamais un balayage déjà terminé', function ()
 
     expect($run->status)->toBe(ImportRunStatus::Completed)
         ->and($run->finished_at?->toIso8601String())->toBe($finishedAt?->toIso8601String());
+});
+
+/*
+|--------------------------------------------------------------------------
+| Clore un balayage suspendu — spec 20 § 3.8, ligne 25, L20-24
+|--------------------------------------------------------------------------
+|
+| Amendé par D41 du 30/09 : le geste est journalisé (`import.abandoned`),
+| dans sa transaction. Un balayage qu'un traitement tient encore ne se clôt
+| pas : la commande réécrirait son état à la page suivante.
+|
+*/
+
+test('clore un balayage suspendu le passe failed et écrit sa ligne de journal', function (): void {
+    $run = ImportRun::factory()->discover()->running()->create([
+        'started_at' => CarbonImmutable::now()->subHour(),
+        'last_request_at' => CarbonImmutable::now()->subHour(),
+    ]);
+
+    $this->actingAs($this->curator)
+        ->get(route('admin.import.show', $run))
+        ->assertInertia(fn (Assert $page) => $page->where('can_abandon', true));
+
+    $this->actingAs($this->curator)
+        ->post(route('admin.import.abandon', $run))
+        ->assertRedirect(route('admin.import.show', $run));
+
+    $run->refresh();
+
+    expect($run->status)->toBe(ImportRunStatus::Failed)
+        ->and($run->finished_at)->not->toBeNull();
+
+    /** @var AdminAction $line */
+    $line = AdminAction::query()->sole();
+
+    expect($line->action)->toBe(AdminActionType::ImportAbandoned)
+        ->and($line->subject_type)->toBe(AdminActionSubject::ImportRun)
+        ->and($line->subject_id)->toBe($run->id)
+        ->and($line->actor_id)->toBe($this->curator->id)
+        ->and($line->details?->values)->toBe(['status_before' => 'running']);
+});
+
+test('un balayage qu\'un traitement tient encore ne se clôt pas', function (): void {
+    $run = ImportRun::factory()->discover()->running()->create([
+        'started_at' => CarbonImmutable::now()->subMinute(),
+        'last_request_at' => CarbonImmutable::now(),
+    ]);
+
+    $this->actingAs($this->curator)
+        ->get(route('admin.import.show', $run))
+        ->assertInertia(fn (Assert $page) => $page->where('can_abandon', false));
+
+    $this->actingAs($this->curator)
+        ->post(route('admin.import.abandon', $run))
+        ->assertRedirect(route('admin.import.show', $run));
+
+    expect($run->refresh()->status)->toBe(ImportRunStatus::Running)
+        ->and(AdminAction::query()->count())->toBe(0);
+});
+
+test('un balayage terminé ne se clôt jamais', function (): void {
+    $run = ImportRun::factory()->discover()->completed()->create();
+
+    $this->actingAs($this->curator)
+        ->post(route('admin.import.abandon', $run))
+        ->assertForbidden();
+
+    expect($run->refresh()->status)->toBe(ImportRunStatus::Completed);
 });

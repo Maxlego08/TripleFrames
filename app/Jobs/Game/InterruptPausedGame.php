@@ -7,6 +7,7 @@ use App\Enums\GameStatus;
 use App\Models\Game;
 use App\Settings\EngineConstants;
 use App\Support\Game\GameJournal;
+use App\Support\Game\PauseDeadline;
 use App\Support\Realtime\WireTime;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Queue\ShouldQueueAfterCommit;
@@ -20,15 +21,19 @@ use InvalidArgumentException;
  * La clôture d'une partie en pause — spec 60 § 14.3, contrat C7 § 2.5 (job
  * interne, nom donné par le contrat).
  *
- * Construit sur la partie et l'instant `paused_at` qui l'a armé, dispatché par
- * `PauseGame` après commit, sur la file `game`, pour `paused_at +
- * pauseTimeoutMs` — l'échéance « 15 min sans joueur connecté » de 00 § Déroulé
- * d'une partie, « Salon vide ». À l'exécution, sous le verrou `game` :
+ * Construit sur la partie, l'instant `paused_at` qui l'a armé et l'échéance
+ * de cette pause ({@see PauseDeadline} : `paused_at + pauseTimeoutMs` pour
+ * une pause `empty` — l'échéance « 15 min sans joueur connecté » de 00
+ * § Déroulé d'une partie, « Salon vide » —, moins le budget manuel déjà
+ * consommé pour une pause `manual`, D64 du 07/10), dispatché par `PauseGame`
+ * après commit, sur la file `game`, pour cette échéance. À l'exécution, sous
+ * le verrou `game` :
  *
  * - la partie n'est plus en pause, ou `paused_at` a changé (reprise, puis
- *   nouvelle pause armée par son propre job) : **rien** ;
- * - sinon `FinalizeGame::handle($game, GameStatus::Interrupted, paused_at +
- *   pauseTimeoutMs)` (contrat C13 § 4.5) — **l'instant prévu, jamais l'heure
+ *   nouvelle pause armée par son propre job), ou son échéance n'est plus
+ *   celle du job : **rien** ;
+ * - sinon `FinalizeGame::handle($game, GameStatus::Interrupted, échéance)`
+ *   (contrat C13 § 4.5) — **l'instant prévu, jamais l'heure
  *   d'exécution** : l'issue et la date de fin d'une partie ne dépendent
  *   jamais du retard du job en tête de file (§ 4.2, règle 1). Un battement
  *   tardif qui trouve l'échéance dépassée gèle au même instant (§ 14.2) ;
@@ -57,28 +62,35 @@ final class InterruptPausedGame implements ShouldQueueAfterCommit
     /**
      * @param  int  $gameId  Partie en pause.
      * @param  string  $pausedAt  `paused_at` qui a armé ce job, en `IsoMs` ({@see WireTime}).
+     * @param  string|null  $deadline  Échéance de la pause ({@see PauseDeadline}), en `IsoMs` ;
+     *                                 NULL = `paused_at + pauseTimeoutMs` (pause `empty`).
      *
-     * @throws InvalidArgumentException `$pausedAt` hors du format `IsoMs`.
+     * @throws InvalidArgumentException Un instant hors du format `IsoMs`.
      */
     public function __construct(
         public readonly int $gameId,
         public readonly string $pausedAt,
+        public readonly ?string $deadline = null,
     ) {
-        if (preg_match(WireTime::PATTERN, $pausedAt) !== 1) {
-            throw new InvalidArgumentException(sprintf(
-                'InterruptPausedGame : l’instant de pause doit être un IsoMs, reçu [%s].',
-                $pausedAt,
-            ));
+        foreach ([$pausedAt, $deadline] as $instant) {
+            if ($instant !== null && preg_match(WireTime::PATTERN, $instant) !== 1) {
+                throw new InvalidArgumentException(sprintf(
+                    'InterruptPausedGame : un instant de pause doit être un IsoMs, reçu [%s].',
+                    $instant,
+                ));
+            }
         }
 
         $this->onQueue('game');
         $this->delay($this->interruptsAt());
     }
 
-    /** L'échéance de la pause : `paused_at + pauseTimeoutMs`. */
+    /** L'échéance de la pause qui a armé ce job. */
     public function interruptsAt(): CarbonImmutable
     {
-        return CarbonImmutable::parse($this->pausedAt)->addMilliseconds(EngineConstants::pauseTimeoutMs());
+        return $this->deadline !== null
+            ? CarbonImmutable::parse($this->deadline)
+            : CarbonImmutable::parse($this->pausedAt)->addMilliseconds(EngineConstants::pauseTimeoutMs());
     }
 
     public function handle(FinalizeGame $finalize): void
@@ -101,7 +113,8 @@ final class InterruptPausedGame implements ShouldQueueAfterCommit
                 || $lockedGame->ended_at !== null
                 || $lockedGame->status !== GameStatus::Paused
                 || $lockedGame->paused_at === null
-                || WireTime::iso($lockedGame->paused_at) !== $this->pausedAt) {
+                || WireTime::iso($lockedGame->paused_at) !== $this->pausedAt
+                || PauseDeadline::of($lockedGame)?->equalTo($interruptsAt) !== true) {
                 return;
             }
 

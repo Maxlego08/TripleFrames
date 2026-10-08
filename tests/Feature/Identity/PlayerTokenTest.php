@@ -592,6 +592,9 @@ it("laisse le player_token intact à la connexion, à la déconnexion et à l'in
         'email' => 'nouveau@example.test',
         'password' => 'password',
         'password_confirmation' => 'password',
+        // Les deux cases de consentement exigées à l'inscription (L40-10).
+        'terms' => '1',
+        'age' => '1',
     ]);
     $this->assertAuthenticated();
     expect(playerTokenSetCookies($register))->toBe([]);

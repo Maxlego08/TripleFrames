@@ -3,6 +3,7 @@
 namespace App\Actions\Game;
 
 use App\Enums\GameMode;
+use App\Enums\GamePauseKind;
 use App\Enums\GameStatus;
 use App\Enums\RoundIncidentReason;
 use App\Enums\RoundStatus;
@@ -48,6 +49,12 @@ use LogicException;
  *    $now)`, l'instant de l'annulation, dans la même transaction, `game` pris
  *    d'abord — si une manche est en révélation, rien : `EndReveal` gèle à sa
  *    fin ;
+ * 3 bis. **pause demandée** (`pause_requested_at`, D64 du 07/10) pour la
+ *    manche annulée : la suite programmée, la partie est dans un décompte de
+ *    lancement, où la pause manuelle est immédiate — {@see PauseGame}
+ *    `manual` à `$now`, qui déprogramme la suite et consomme la demande ;
+ *    si une autre manche est en révélation, `EndReveal` la consomme à sa
+ *    fin ; sans suite, la demande est effacée avant le gel ;
  * 4. après commit : `round.cancelled` `{ sequenceIndex, roundNumber }` — ni
  *    motif, ni titre — **en multijoueur seulement** (§ 11.2), toujours avant
  *    le `round.scheduled` du remplaçant et le `game.ended` d'un gel
@@ -110,6 +117,15 @@ final readonly class CancelRound
             if ($next instanceof Round) {
                 app(ScheduleRound::class)->handle($next, $startsAt);
 
+                // Pause demandée pour la manche annulée (D64 du 07/10) : la
+                // partie retombe dans un décompte de lancement, où la pause
+                // est immédiate — à l'instant de l'annulation, et la suite
+                // est déprogrammée. Pendant la révélation d'une autre
+                // manche, `EndReveal` reste maître de la demande.
+                if ($game->pause_requested_at !== null && ! self::revealing($game)) {
+                    app(PauseGame::class)->handle($game, $now, GamePauseKind::Manual);
+                }
+
                 return;
             }
 
@@ -122,6 +138,11 @@ final readonly class CancelRound
             // gèle à `reveal_ends_at(k)`.
             if (self::revealing($game)) {
                 return;
+            }
+
+            // Aucune manche ne reste : une demande de pause n'a plus d'objet.
+            if ($game->pause_requested_at !== null) {
+                $game->forceFill(['pause_requested_at' => null])->save();
             }
 
             if ($this->finalize->handle($game, GameStatus::Completed, $now)) {

@@ -154,6 +154,16 @@ return [
             'label' => 'Délai avant « parti »',
             'help' => 'Temps laissé à un joueur déconnecté pour revenir.',
         ],
+        'advanced_active' => 'Des réglages avancés sont actifs :',
+        'tier_label' => 'Image :index',
+        'tabs' => [
+            'simple' => 'Simple',
+            'advanced' => 'Avancé',
+        ],
+        'advanced_sheet' => [
+            'title' => 'Réglages avancés',
+            'description' => 'Paliers, barème et limites de saisie.',
+        ],
         'change' => [
             'defaulted' => '« :attribute » a pris sa valeur par défaut.',
             'dropped' => '« :attribute » n’existe plus et a été retiré.',
@@ -179,6 +189,7 @@ return [
         'short_reveal' => 'Révélation courte : :seconds s sont recommandées pour laisser le temps de lire la réponse.',
         'long_round' => 'Manche de plus de :seconds s : un joueur qui trouve tôt attendra longtemps.',
         'non_decreasing_points' => 'Un palier tardif rapporte autant ou plus qu’un palier précédent : attendre peut payer.',
+        'waiting_pays' => 'Avec le bonus de rapidité, répondre au début d’un palier rapporte plus qu’à la fin du précédent : attendre peut payer.',
         'all_tiers_zero' => 'Aucun palier ne rapporte de point : partie sans score, le classement suivra le départage.',
     ],
 
@@ -271,6 +282,8 @@ return [
             'change' => 'Changer d’avatar',
             'done' => 'Terminé',
             'apply' => 'Choisir cet avatar',
+            'too_fast' => 'Vous changez d’avatar trop vite : réessayez dans une minute.',
+            'open' => 'Choisir mon avatar',
             'previous' => 'Avatar précédent',
             'next' => 'Avatar suivant',
         ],
@@ -313,6 +326,15 @@ return [
     'replay' => [
         'action' => 'Rejouer',
         'waiting' => 'En attente de l’hôte pour rejouer.',
+    ],
+
+    /*
+    | Rattachement automatique d’un siège invité au compte connecté (spec 40
+    | § 13.2, D66 du 07/10) : l’avis rendu une fois dans la page du siège.
+    */
+
+    'seat' => [
+        'claimed' => 'Cette partie est maintenant rattachée à votre compte.',
     ],
 
     /*

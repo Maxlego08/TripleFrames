@@ -330,3 +330,62 @@ done
 
 - **Aucune image curée en production avant l'étape 30** de `docs/REPRISE.md` : le tier chaud de sauvegarde est actif avant la première image curée (`100` § 11.6, § 13.2).
 - **Aucune partie lancée sur le VPS avant l'étape 126** (déploiement du moteur par la transition du drainage) : le hook tourne ici sans drainage, et le drainage précède la première vraie partie, aucun lancement public entre les deux déploiements (`100` § 11, § 11.6 ; I-13). La première vraie partie attend en outre les conditions de l'étape 133 (restauration chronométrée, charge, recette).
+
+## 12. Préproduction `preprod.<DOMAINE>` et promotion (J2, L100-15, spec `100` § 18 et § 19)
+
+Second abonnement sur le **même VPS**, mis en service **une fois**. Les gestes root de cette section ne se répètent jamais : une promotion n'en demande aucun (n° 80, n° 6 de D66 du 07/10). Mêmes conventions que ci-dessus ; « abonnement de préproduction » désigne la session SSH de son utilisateur système, jamais celui de la production.
+
+**Paramètres propres à la préproduction** (relevés comme à la section 1, jamais égaux à ceux de la production) :
+
+| Paramètre                           | Relevé ou génération                                                                                              | Où il va                                                                                |
+| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| `__TF_PREPROD_SUBSCRIPTION_USER__`  | utilisateur système de l'abonnement de préproduction                                                              | unités workers et Reverb de préproduction                                               |
+| `__TF_PREPROD_SUBSCRIPTION_GROUP__` | `id -gn <utilisateur>`, d'ordinaire `psacln`                                                                      | unités workers et Reverb de préproduction                                               |
+| `__TF_PREPROD_DEPLOY_PATH__`        | chemin absolu du déploiement Plesk Git de la préproduction                                                        | unités de préproduction                                                                 |
+| `__TF_PREPROD_REDIS_PORT__`         | `ss -ltnp` : libre, jamais 6379, distinct de `__TF_REDIS_PORT__` et des ports Reverb                              | `tripleframes-preprod-redis.conf`, `REDIS_PORT` de préproduction                        |
+| `__TF_PREPROD_REVERB_PORT__`        | `ss -ltnp` : libre, distinct des trois autres ports                                                               | directives nginx de préproduction, `REVERB_SERVER_PORT`, `REVERB_PORT` de préproduction |
+| `__TF_PREPROD_REDIS_PASSWORD__`     | `openssl rand -hex 32`, sur le serveur, jamais celui de la production                                             | `tripleframes-preprod-redis.conf`, `REDIS_PASSWORD` de préproduction                    |
+| `__TF_PREPROD_HTPASSWD_FILE__`      | chemin absolu d'un fichier `htpasswd -B` **hors** de la racine du document de la préproduction, lisible par nginx | directives nginx de préproduction                                                       |
+
+**a) Plesk** (geste humain) :
+
+- [ ] Abonnement `preprod.<DOMAINE>` : DNS, Let's Encrypt, PHP 8.4 FPM comme la production, racine du document sur `public`, **base MySQL séparée** et son utilisateur propre.
+- [ ] Git en mode **manuel**, dépôt de la forge, **branche `deploy-preprod`**, clé de déploiement en lecture seule, **sans** actions additionnelles jusqu'au point e).
+- [ ] Premier « Déployer ».
+
+**b) `.env` de préproduction**, abonnement de préproduction, `0600`, à partir de `ops/preprod/env.reference` : `APP_ENV=staging`, `SITE_INDEXABLE` vide, base et Redis de préproduction, racines `FRAMES_DISK_ROOT`, `AVATARS_DISK_ROOT` et `BACKUP_SNAPSHOT_DIR` propres et hors du chemin de déploiement (`0700`), `MAIL_MAILER=log`, aucune clé TMDB ni OAuth, puis `key:generate`. **Jamais** une valeur, une clé, une base ni une image de la production (n° 80) ; rien de la préproduction n'est sauvegardé.
+
+**c) Root, une seule fois** (commandes d'installation en tête de chaque gabarit, depuis `__TF_PREPROD_DEPLOY_PATH__`) :
+
+- [ ] Redis : `ops/redis/tripleframes-preprod-redis.conf` et `ops/systemd/tripleframes-preprod-redis.service` (utilisateur `tfredis` de la production), `enable --now`, vérifications de la section 5 a) sur `__TF_PREPROD_REDIS_PORT__`.
+- [ ] Workers : `ops/systemd/tripleframes-preprod-worker@.service`, `preprod-worker-game.env`, `preprod-worker-default.env` et les deux drop-ins `limits.conf` ; Reverb : `ops/systemd/tripleframes-preprod-reverb.service` ; `daemon-reload`, `enable` **sans démarrer** (point d).
+- [ ] Authentification HTTP : `htpasswd -B -c __TF_PREPROD_HTPASSWD_FILE__ <identifiant>`, mot de passe fort rangé avec l'inventaire scellé ; propriétaire root, groupe de nginx, `0640`.
+- [ ] nginx : `ops/nginx/additional-directives.preprod.conf`, paramètres remplacés, collé dans les directives nginx supplémentaires **de l'abonnement de préproduction**.
+- [ ] Pare-feu : aucune règle n'ouvre `__TF_PREPROD_REDIS_PORT__` ni `__TF_PREPROD_REVERB_PORT__`.
+
+**d) Abonnement de préproduction, une seule fois** (`umask 027`) :
+
+```bash
+"$PHP" "$COMPOSER_PHAR" install --no-interaction
+"$PHP" artisan migrate --force
+"$PHP" artisan db:seed --force
+"$PHP" artisan optimize
+"$PHP" artisan lang:hash
+```
+
+`composer install` **avec** les dépendances de développement, cette fois seulement : le catalogue de démonstration est fait de fabriques qui exigent Faker. `db:seed` sans classe joue `DatabaseSeeder`, qui en `staging` pose les deux auteurs inouvrables du catalogue (`PreprodCurationAccountsSeeder`), les données du site et le **catalogue de démonstration**, jamais les comptes de démonstration (spec `100` § 8, règle 2). Le premier déploiement par le hook (point e) réinstalle sans les dépendances de développement. Puis, root : démarrage des trois unités et vérifications de la section 6 (`/up` sous authentification HTTP, `artisan about --only=environment` → `staging`). Administrateur de recette : `"$PHP" artisan admin:first-admin --create`, comme en production, nom réel exigé, **sans `--force`** : l'administrateur inouvrable semé (`App\Support\Preprod\PreprodAuthors`) ne compte jamais comme administrateur en place en `staging`.
+
+- [ ] Sans identifiants, toute URL répond 401 (`curl -sI https://preprod.<DOMAINE>/` puis `/robots.txt`) ; avec eux, l'accueil répond 200 et porte `X-Robots-Tag: noindex`.
+- [ ] Un salon se crée, deux navigateurs s'y retrouvent, une partie se lance (Reverb publié sous l'authentification).
+
+**e) Hook** : actions additionnelles de la préproduction = `bash ops/deploy/hook.sh`, le **même** hook que la production (`~/.config/tripleframes/hook.env` de l'abonnement de préproduction, `COMPOSER_PHAR` seulement). Le drainage s'y joue comme en production (§ 11.4) dès qu'une partie de recette peut y être en cours.
+
+**f) Chaîne de promotion** (spec `100` § 18 et § 19), à chaque mise en production :
+
+1. Un commit vert sur `main` : le job `artifacts` publie `deploy-preprod`.
+2. Plesk de la préproduction : tirer `deploy-preprod`, « Déployer » ; relever le **commit déployé** (40 caractères, affiché par Plesk Git).
+3. Poste : les trois parcours Playwright contre la préproduction (`tests/Browser/README.md`), tous verts.
+4. GitHub › Actions › `promote` › « Run workflow » sur `main` : le commit relevé au point 2, case « parcours joués » cochée. Le workflow avance `deploy` en avance rapide sur **ce** commit, ou refuse.
+5. Production : § 11.4 (tirer `deploy`, drainage, « Déployer »), inchangé.
+
+- [ ] Première promotion jouée de bout en bout, date consignée dans `docs/REPRISE.md`.

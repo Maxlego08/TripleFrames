@@ -22,12 +22,14 @@ use App\Models\Room;
 use App\Models\Round;
 use App\Models\RoundChoiceSet;
 use App\Models\RoundPlayer;
+use App\Models\RoundTier;
 use App\Settings\EngineConstants;
 use App\Settings\RoomSettings;
 use App\Settings\RoomSettingsBounds;
 use App\Support\Answers\ChoicesPresenter;
 use App\Support\Game\GameJournal;
 use App\Support\Game\GameStateBuilder;
+use App\Support\Game\RevealFramesPresenter;
 use App\Support\Game\RevealMovieBuilder;
 use App\Support\Game\SeatViewPresenter;
 use App\Support\Game\ServeGuard;
@@ -329,7 +331,7 @@ it("le paquet d'un lobby porte les canaux du salon et aucune manche", function (
     // L'enveloppe, puis les champs de GameStatePacket dans l'ordre du type.
     expect(array_keys($packet))->toBe([
         'v', 'serverNow', 'gameRef', 'mode', 'channels', 'status', 'roundsCount', 'roundsCompleted',
-        'framesPerRound', 'inputDifficulty', 'maxAnswerLength', 'seats', 'pause', 'round', 'self',
+        'framesPerRound', 'inputDifficulty', 'maxAnswerLength', 'seats', 'pause', 'pauseRequested', 'round', 'self',
         'leaderboard', 'podium', 'nextTransitionAt',
     ])
         ->and($packet['v'])->toBe(1)
@@ -623,6 +625,10 @@ it('pendant la révélation, le paquet porte les URL des seuls paliers ouverts, 
             ])
             ->and($packet['round']['reveal'])->toBe([
                 'movie' => RevealMovieBuilder::build(Movie::query()->findOrFail($last->movie_id)),
+                // D63 du 07/10 : l'identité publique des images servies, paliers ouverts seuls.
+                'frames' => RevealFramesPresenter::frames(
+                    RoundTier::query()->where('round_id', $last->id)->whereNotNull('served_at')->with('servedFrame')->get(),
+                ),
                 'finders' => Scoreboard::roundFinders($last->refresh()),
             ]);
 
@@ -1144,7 +1150,8 @@ it('une partie en pause porte pausedAt et interruptsAt, et aucune manche', funct
     $paused = resyncPacketAt($this, $room, $seat, $token, $pausedAt);
 
     expect($paused['status'])->toBe(GameStatus::Paused->value)
-        ->and($paused['pause'])->toBe(['pausedAt' => WireTime::iso($pausedAt), 'interruptsAt' => WireTime::iso($interruptsAt)])
+        ->and($paused['pause'])->toBe(['pausedAt' => WireTime::iso($pausedAt), 'interruptsAt' => WireTime::iso($interruptsAt), 'kind' => 'empty'])
+        ->and($paused['pauseRequested'])->toBeFalse()
         ->and($paused['round'])->toBeNull()
         ->and($paused['nextTransitionAt'])->toBe(WireTime::iso($interruptsAt))
         // Sans manche portée, l'éligibilité se lit contre la manche suivante à
@@ -1286,6 +1293,6 @@ it('la forme du paquet de partie suit GameStatePacket, RoundState et SelfState d
             ->and(array_keys($packet['round']['images'][0]))->toBe($fields('TierImageRef'));
     }
 
-    expect(array_keys($packets[1]['round']['reveal'] ?? []))->toBe(['movie', 'finders'])
+    expect(array_keys($packets[1]['round']['reveal'] ?? []))->toBe(['movie', 'frames', 'finders'])
         ->and(array_keys($packets[1]['round']['reveal']['movie']))->toBe($fields('RevealMovie'));
 });

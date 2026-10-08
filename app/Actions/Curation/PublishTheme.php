@@ -5,7 +5,6 @@ namespace App\Actions\Curation;
 use App\Enums\AdminActionType;
 use App\Models\Theme;
 use App\Models\User;
-use App\Settings\RoomSettingsBounds;
 use App\Support\Admin\AdminJournal;
 use App\Support\Draw\PoolReporter;
 use App\ValueObjects\Admin\AdminActionDetails;
@@ -20,14 +19,15 @@ use Throwable;
  * (`can:publish,theme`, `throttle:admin-curation` ; D43 du 01/10).
  *
  * Publier est un **basculement de drapeau**, sans recalcul (spec 30 § 13.1),
- * refusé en erreur traduite — jamais un 403 ni un simple avertissement :
+ * refusé en erreur traduite — jamais un 403 — seulement sans libellé dans
+ * chaque locale activée (`admin.themes.labels_missing`).
  *
- * - `admin.themes.labels_missing` sans libellé dans chaque locale activée ;
- * - `admin.themes.too_small` tant que le thème seul compte moins de
- *   `RoomSettingsBounds::DEFAULT_ROUNDS_COUNT` œuvres au `N` par défaut
- *   ({@see PoolReporter::themeWorks()}, spec 30 § 12.3), mesure **relue dans
- *   la transaction du geste**, jamais prise de l'écran. Sous ce seuil, un
- *   salon qui choisirait ce thème seul au réglage par défaut serait bloqué.
+ * **Aucun seuil d'œuvres** (D65 du 07/10, révise D43 du 01/10) : un thème
+ * sous `RoomSettingsBounds::DEFAULT_ROUNDS_COUNT` œuvres se publie ; l'écran
+ * l'avertit seulement. Un salon qui le choisirait seul reste protégé par le
+ * blocage du lancement (`PoolReport::blocked()`, spec 30 § 4.2). Le nombre
+ * d'œuvres ({@see PoolReporter::themeWorks()}) est relu dans la transaction
+ * pour le journal.
  *
  * **Dépublier reste toujours permis**, quel que soit le compte. Journal
  * `theme.published` / `theme.unpublished` avec le nombre d'œuvres ; une
@@ -48,7 +48,7 @@ final class PublishTheme
 
     /**
      * @throws AuthorizationException
-     * @throws ValidationException libellé manquant ou thème sous le seuil de publication
+     * @throws ValidationException libellé manquant
      * @throws Throwable
      */
     public function handle(User $curator, Theme $theme, bool $publish): string
@@ -71,14 +71,6 @@ final class PublishTheme
                     ]);
                 }
 
-                if ($works < RoomSettingsBounds::DEFAULT_ROUNDS_COUNT) {
-                    throw ValidationException::withMessages([
-                        'is_published' => __('admin.themes.too_small', [
-                            'count' => $works,
-                            'min' => RoomSettingsBounds::DEFAULT_ROUNDS_COUNT,
-                        ]),
-                    ]);
-                }
             }
 
             $locked->is_published = $publish;

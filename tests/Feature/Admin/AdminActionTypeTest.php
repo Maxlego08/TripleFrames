@@ -78,8 +78,8 @@ function adminJournalRawLine(AdminActionType $action, array $overrides = []): Ad
     return $line;
 }
 
-test('la liste fermée compte exactement cinquante-deux cas', function (): void {
-    expect(AdminActionType::cases())->toHaveCount(52)
+test('la liste fermée compte exactement cinquante-six cas', function (): void {
+    expect(AdminActionType::cases())->toHaveCount(56)
         ->and(array_map(static fn (AdminActionType $case): string => $case->value, AdminActionType::cases()))
         ->toEqualCanonicalizing([
             'role.changed',
@@ -140,6 +140,12 @@ test('la liste fermée compte exactement cinquante-deux cas', function (): void 
             'theme.published',
             'theme.unpublished',
             'movie.theme_set',
+            // D63 du 07/10 : les signalements de contenu ignorés.
+            'content_report.dismissed',
+            // D66 du 07/10 : resynchronisation, balayage clos, difficulté corrigée.
+            'movie.resynced',
+            'import.abandoned',
+            'movie.difficulty_corrected',
         ]);
 
     // `action` reste un `string(40)` : aucun cas ne dépasse la colonne, et
@@ -148,7 +154,10 @@ test('la liste fermée compte exactement cinquante-deux cas', function (): void 
         expect(strlen($case->value))->toBeLessThanOrEqual(40);
     }
 
-    expect(AdminActionSubject::cases())->toHaveCount(12)
+    expect(AdminActionSubject::cases())->toHaveCount(13)
+        // D63 du 07/10 : un groupe de signalements de contenu, désigné par le plus ancien.
+        ->and(AdminActionSubject::ContentReport->value)->toBe('content_report')
+        ->and(AdminActionSubject::ContentReport->hasIdentifier())->toBeTrue()
         ->and(AdminActionSubject::ImportRun->value)->toBe('import_run')
         ->and(AdminActionSubject::Accounts->value)->toBe('accounts')
         ->and(AdminActionSubject::Theme->value)->toBe('theme')
@@ -350,6 +359,7 @@ test('un motif vide est refusé quand l\'action l\'exige', function (): void {
         AdminActionType::FrameGridUnpublished,
         AdminActionType::FrameWithdrawn,
         AdminActionType::AvatarRemoved,
+        AdminActionType::NicknameBanned,
         AdminActionType::TakedownDecided,
         AdminActionType::SiteClosed,
     ]);

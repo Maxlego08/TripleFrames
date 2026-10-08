@@ -68,6 +68,13 @@ function literalDomainAllowlist(): array
         'image.tmdb.org' => 'images TMDB, import et curation seulement (règle 6)',
         'letterboxd.com' => 'lien sortant vers la fiche Letterboxd du film révélé, aucun appel serveur (D58 du 06/10)',
 
+        // Hôtes de la photo fournisseur : liste blanche de `CopyProviderAvatar`, citée par la spec 40 § 12.
+        'cdn.discordapp.com' => 'photo Discord, copie locale à la liaison seulement (spec 40 § 12, D51 du 01/10)',
+        'lh3.googleusercontent.com' => 'photo Google, copie locale à la liaison seulement (spec 40 § 12, D51 du 01/10)',
+        'lh4.googleusercontent.com' => 'photo Google, copie locale à la liaison seulement (spec 40 § 12, D51 du 01/10)',
+        'lh5.googleusercontent.com' => 'photo Google, copie locale à la liaison seulement (spec 40 § 12, D51 du 01/10)',
+        'lh6.googleusercontent.com' => 'photo Google, copie locale à la liaison seulement (spec 40 § 12, D51 du 01/10)',
+
         // Documentation citée par les commentaires de configuration du framework.
         'inertiajs.com' => 'documentation, commentaire de config/inertia.php',
         'developer.mozilla.org' => 'documentation, commentaire de config/session.php',

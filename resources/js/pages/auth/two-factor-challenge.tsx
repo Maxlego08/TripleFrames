@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import InputError from '@/components/input-error';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import {
     InputOTP,
     InputOTPGroup,
@@ -14,6 +15,11 @@ import { OTP_MAX_LENGTH } from '@/hooks/use-two-factor-auth';
 import { store } from '@/routes/two-factor/login';
 import type { AuthLayoutKeys } from '@/types';
 
+/**
+ * Défi de 2FA à la connexion (Fortify, spec 90 § 11.2) : code TOTP ou code de
+ * secours. Écran réécrit hors du starter : habillé par `AuthLayout` et
+ * `auth/_forms.scss`, chaque champ nommé, chaque erreur reliée à son champ.
+ */
 export default function TwoFactorChallenge() {
     const [showRecoveryInput, setShowRecoveryInput] = useState<boolean>(false);
     const [code, setCode] = useState<string>('');
@@ -65,25 +71,51 @@ export default function TwoFactorChallenge() {
                     {({ errors, processing, clearErrors }) => (
                         <>
                             {showRecoveryInput ? (
-                                <>
+                                <div className="grid gap-2">
+                                    <Label htmlFor="recovery_code">
+                                        {t(
+                                            'account.two_factor.challenge.recovery.heading',
+                                        )}
+                                    </Label>
                                     <Input
+                                        id="recovery_code"
                                         name="recovery_code"
                                         type="text"
+                                        autoComplete="one-time-code"
                                         placeholder={t(
                                             'account.two_factor.challenge.recovery.placeholder',
                                         )}
                                         autoFocus={showRecoveryInput}
                                         required
+                                        aria-invalid={
+                                            errors.recovery_code
+                                                ? true
+                                                : undefined
+                                        }
+                                        aria-describedby={
+                                            errors.recovery_code
+                                                ? 'recovery_code-error'
+                                                : undefined
+                                        }
                                     />
                                     <InputError
+                                        id="recovery_code-error"
                                         message={errors.recovery_code}
                                     />
-                                </>
+                                </div>
                             ) : (
                                 <div className="flex flex-col items-center justify-center space-y-3 text-center">
                                     <div className="flex w-full items-center justify-center">
                                         <InputOTP
                                             name="code"
+                                            aria-label={t(
+                                                'account.two_factor.challenge.code.heading',
+                                            )}
+                                            aria-describedby={
+                                                errors.code
+                                                    ? 'code-error'
+                                                    : undefined
+                                            }
                                             maxLength={OTP_MAX_LENGTH}
                                             value={code}
                                             onChange={(value) => setCode(value)}
@@ -104,14 +136,18 @@ export default function TwoFactorChallenge() {
                                             </InputOTPGroup>
                                         </InputOTP>
                                     </div>
-                                    <InputError message={errors.code} />
+                                    <InputError
+                                        id="code-error"
+                                        message={errors.code}
+                                    />
                                 </div>
                             )}
 
                             <Button
                                 type="submit"
-                                className="w-full"
+                                className="min-h-11 w-full"
                                 disabled={processing}
+                                aria-busy={processing}
                             >
                                 {t('account.two_factor.challenge.submit')}
                             </Button>
@@ -124,7 +160,7 @@ export default function TwoFactorChallenge() {
                                 </span>
                                 <button
                                     type="button"
-                                    className="cursor-pointer text-foreground underline decoration-neutral-300 underline-offset-4 transition-colors duration-300 ease-out hover:decoration-current! dark:decoration-neutral-500"
+                                    className="text-link min-h-11 cursor-pointer rounded-sm text-foreground underline decoration-muted-foreground underline-offset-4 transition-colors hover:decoration-current focus-visible:ring-3 focus-visible:ring-ring focus-visible:outline-none"
                                     onClick={() =>
                                         toggleRecoveryMode(clearErrors)
                                     }

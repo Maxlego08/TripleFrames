@@ -356,6 +356,12 @@ export const ADMIN_ACTION_KEYS: Record<AdminActionTypeValue, TranslationKey> = {
     'theme.updated': 'admin.enum.admin_action.theme_updated',
     'theme.published': 'admin.enum.admin_action.theme_published',
     'theme.unpublished': 'admin.enum.admin_action.theme_unpublished',
+    'content_report.dismissed':
+        'admin.enum.admin_action.content_report_dismissed',
+    'movie.resynced': 'admin.enum.admin_action.movie_resynced',
+    'import.abandoned': 'admin.enum.admin_action.import_abandoned',
+    'movie.difficulty_corrected':
+        'admin.enum.admin_action.movie_difficulty_corrected',
 };
 
 /** Les sujets du journal — `AdminActionSubject::labelKey()`. */
@@ -375,6 +381,7 @@ export const ADMIN_ACTION_SUBJECT_KEYS: Record<
     game: 'admin.enum.admin_action_subject.game',
     games: 'admin.enum.admin_action_subject.games',
     players: 'admin.enum.admin_action_subject.players',
+    content_report: 'admin.enum.admin_action_subject.content_report',
 };
 
 /** Les deux classes de conservation d'une ligne du journal. */
@@ -526,5 +533,6 @@ export const INSPECTION_INCIDENT_KEYS: Record<
     frame_unavailable: 'admin.inspection.enum.incident.frame_unavailable',
     no_variant_available: 'admin.inspection.enum.incident.no_variant_available',
     movie_withdrawn: 'admin.inspection.enum.incident.movie_withdrawn',
+    movie_suspended: 'admin.inspection.enum.incident.movie_suspended',
     choices_unavailable: 'admin.inspection.enum.incident.choices_unavailable',
 };

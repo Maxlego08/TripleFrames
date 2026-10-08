@@ -2,17 +2,23 @@
 
 namespace App\Http\Requests\Auth;
 
+use App\Concerns\ConsentValidationRules;
 use App\Concerns\ProfileValidationRules;
 use Illuminate\Foundation\Http\FormRequest;
 
 /**
  * L'envoi de « Finaliser l'inscription » (spec 40 § 12.3) : le nom du compte,
- * par les mêmes règles que le profil, l'acceptation des CGU et la
+ * par la règle de pseudo de jeu (§ 13.1), l'acceptation des CGU et la
  * déclaration d'âge.
  */
 class OAuthFinishRequest extends FormRequest
 {
-    use ProfileValidationRules;
+    use ConsentValidationRules, ProfileValidationRules;
+
+    protected function prepareForValidation(): void
+    {
+        $this->merge(['name' => $this->prepareName($this->input('name'))]);
+    }
 
     /**
      * @return array<string, array<int, mixed>>
@@ -21,8 +27,7 @@ class OAuthFinishRequest extends FormRequest
     {
         return [
             'name' => $this->nameRules(),
-            'terms' => ['accepted'],
-            'age' => ['accepted'],
+            ...$this->consentRules(),
         ];
     }
 
@@ -31,10 +36,7 @@ class OAuthFinishRequest extends FormRequest
      */
     public function messages(): array
     {
-        return [
-            'terms.accepted' => (string) __('account.oauth.finish.terms_required'),
-            'age.accepted' => (string) __('account.oauth.finish.age_required'),
-        ];
+        return $this->consentMessages();
     }
 
     public function accountName(): string

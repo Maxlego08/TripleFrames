@@ -33,6 +33,7 @@ return [
     ],
 
     'nav' => [
+        'admin' => 'Admin',
         'dashboard' => 'Dashboard',
         'home' => 'Home',
         'log_in' => 'Log in',
@@ -154,6 +155,35 @@ return [
         ],
     ],
 
+    // Player (spec 90 § 6.4, on the rule of 40 § 13.3; J2, D66 du 07/10).
+    // `masked` (“Player :ordinal”) is written with the masked rendering
+    // (nickname-moderation). `report.*`: report of another seat's nickname,
+    // same pattern as `avatar.report.*`; `:nickname` is the targeted seat's
+    // nickname. `report.sent` is identical in every accepted case.
+    // `masked_notice` is only rendered to the masked seat itself.
+    'player' => [
+        'masked' => 'Player :ordinal',
+        'masked_notice' => 'Your nickname was reported and is hidden from the other players. You can keep playing as usual.',
+        'report' => [
+            'action' => 'Report nickname',
+            'confirm_title' => 'Report :nickname’s nickname?',
+            'confirm_body' => 'Report a shocking or inappropriate nickname. After two reports, it is hidden until an administrator decides.',
+            'sent' => 'Report sent. Thank you.',
+            'not_reportable' => 'This nickname cannot be reported.',
+        ],
+    ],
+
+    // Service closure page (spec 90 § 11.7, `site:close` from 100; J2, D66
+    // du 07/10). No placeholder, no promised return date (closure is
+    // reversible) and no legal commitment: the links lead to the legal pages
+    // and to the report page, which stay open.
+    'closure' => [
+        'title' => 'TripleFrames is closed',
+        'body' => 'The service is closed for now: you can no longer create or join a game, or create an account. Your data has not been erased, and you can still log in to export it or delete your account.',
+        'legal_link' => 'Legal notice',
+        'report_link' => 'Report content',
+    ],
+
     // Accueil (spec 90 § 4.7) : le jeu en une phrase et ses trois entrées ;
     // « Rejoindre » demande le code ET le pseudo (D55 du 02/10).
     // Aucun placeholder. Aucun texte ne dit la longueur ni l'alphabet d'un
@@ -176,6 +206,15 @@ return [
         'nickname_label' => 'Your nickname',
         'nickname_placeholder' => 'E.g. Marty McFly',
         'tagline' => 'Guess the title before your friends. The earlier you find it, the more points you score.',
+    ],
+
+    // Generic description and Open Graph (spec 90 § 11.5, D66 du 07/10),
+    // server-rendered by `app.blade.php` through `App\Support\Http\PageMeta`,
+    // identical on every page. No placeholder: never a room code, a movie
+    // title or a nickname (rule 3), and no frame count (a setting, never a rule).
+    'meta' => [
+        'description' => 'A movie and cartoon guessing game: a few frames, from the most cryptic to the most obvious, and a title to find before your friends. Private rooms, no account needed.',
+        'title' => 'TripleFrames, guess the movie from its frames',
     ],
 
 ];

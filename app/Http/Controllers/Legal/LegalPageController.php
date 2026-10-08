@@ -65,20 +65,10 @@ class LegalPageController extends Controller
         return Inertia::render('legal/show', [
             'page' => $page->value,
             'body' => view()->file($page->viewPath())->render(),
-            'provisional' => $this->provisional($page),
+            'provisional' => $page->isProvisional(),
             'updatedAt' => $this->updatedAt($page),
             'contactEmail' => $this->contactEmail(),
         ]);
-    }
-
-    /**
-     * Le bandeau provisoire tombe sur un `false` explicite, et seulement sur
-     * lui : une entrée absente ou d'un autre type garde le texte marqué comme
-     * provisoire, ce qui est l'erreur sans danger.
-     */
-    private function provisional(LegalPage $page): bool
-    {
-        return config("legal.pages.{$page->value}.provisional") !== false;
     }
 
     /**

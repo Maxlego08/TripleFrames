@@ -19,6 +19,11 @@ type Props = {
     errors: string[];
 };
 
+/**
+ * Codes de secours de la 2FA (spec 40 § 8, 90 § 11.2) : affichés sur
+ * demande, régénérables, lisibles et sélectionnables. Le squelette de
+ * chargement est décoratif et masqué aux lecteurs d'écran.
+ */
 export default function TwoFactorRecoveryCodes({
     recoveryCodesList,
     fetchRecoveryCodes,
@@ -37,9 +42,13 @@ export default function TwoFactorRecoveryCodes({
         setCodesAreVisible(!codesAreVisible);
 
         if (!codesAreVisible) {
-            setTimeout(() => {
+            window.setTimeout(() => {
                 codesSectionRef.current?.scrollIntoView({
-                    behavior: 'smooth',
+                    behavior: window.matchMedia(
+                        '(prefers-reduced-motion: reduce)',
+                    ).matches
+                        ? 'auto'
+                        : 'smooth',
                     block: 'nearest',
                 });
             });
@@ -68,8 +77,9 @@ export default function TwoFactorRecoveryCodes({
             <CardContent>
                 <div className="flex flex-col gap-3 select-none sm:flex-row sm:items-center sm:justify-between">
                     <Button
+                        type="button"
                         onClick={toggleCodesVisibility}
-                        className="w-fit"
+                        className="min-h-11 w-fit"
                         aria-expanded={codesAreVisible}
                         aria-controls="recovery-codes-section"
                     >
@@ -92,10 +102,12 @@ export default function TwoFactorRecoveryCodes({
                                 <Button
                                     variant="secondary"
                                     type="submit"
+                                    className="min-h-11"
                                     disabled={processing}
+                                    aria-busy={processing}
                                     aria-describedby="regenerate-warning"
                                 >
-                                    <RefreshCw />
+                                    <RefreshCw aria-hidden="true" />
                                     {t(
                                         'account.two_factor.recovery_codes.regenerate',
                                     )}
@@ -123,9 +135,9 @@ export default function TwoFactorRecoveryCodes({
                                     )}
                                 >
                                     {recoveryCodesList.length ? (
-                                        recoveryCodesList.map((code, index) => (
+                                        recoveryCodesList.map((code) => (
                                             <div
-                                                key={index}
+                                                key={code}
                                                 role="listitem"
                                                 className="select-text"
                                             >

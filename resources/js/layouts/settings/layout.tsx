@@ -1,10 +1,17 @@
 import { Link } from '@inertiajs/react';
-import { CircleUserRound, Image, Link2, ShieldCheck } from 'lucide-react';
+import {
+    CircleUserRound,
+    History,
+    Image,
+    Link2,
+    ShieldCheck,
+} from 'lucide-react';
 import type { PropsWithChildren } from 'react';
 import { useCurrentUrl } from '@/hooks/use-current-url';
 import { useTranslations } from '@/hooks/use-translations';
 import { toUrl } from '@/lib/utils';
 import { edit as editAvatar } from '@/routes/avatar';
+import { index as historyIndex } from '@/routes/history';
 import { edit as editLinkedAccounts } from '@/routes/linked_accounts';
 import { edit } from '@/routes/profile';
 import { edit as editSecurity } from '@/routes/security';
@@ -26,6 +33,11 @@ export default function SettingsLayout({ children }: PropsWithChildren) {
             icon: Image,
         },
         {
+            title: t('account.settings.nav.history'),
+            href: historyIndex(),
+            icon: History,
+        },
+        {
             title: t('account.settings.nav.linked'),
             href: editLinkedAccounts(),
             icon: Link2,
@@ -39,18 +51,6 @@ export default function SettingsLayout({ children }: PropsWithChildren) {
 
     return (
         <div className="settings-page">
-            <header className="settings-page__hero">
-                <div className="settings-page__hero-copy">
-                    <h1>{t('account.settings.heading')}</h1>
-                    <p>{t('account.settings.description')}</p>
-                </div>
-                <div className="settings-page__frames" aria-hidden="true">
-                    <span />
-                    <span />
-                    <span />
-                </div>
-            </header>
-
             <div className="settings-page__workspace">
                 <aside className="settings-nav">
                     <nav aria-label={t('account.settings.heading')}>

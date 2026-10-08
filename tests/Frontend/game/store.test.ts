@@ -150,6 +150,7 @@ function packet(
             seat(RIVAL, { firstRoundNumber: 1 }),
         ],
         pause: null,
+        pauseRequested: false,
         round: null,
         self: {
             publicId: SELF,
@@ -217,6 +218,7 @@ function settingsState(maxAnswerLength: number): RoomSettingsState {
             advanced: false,
         },
         warnings: [],
+        advancedActive: [],
         pool: {
             count: 40,
             framesPerRound: 3,
@@ -241,6 +243,7 @@ const MOVIE: RevealMovie = {
     originalLanguage: 'fr',
     year: 1999,
     letterboxdUrl: null,
+    tmdb: null,
 };
 
 /** Un événement tel qu'il arrive du fil : enveloppe, puis charge. */
@@ -579,7 +582,7 @@ describe('store', () => {
                     endedAt: iso(30_000),
                     revealStartsAt: iso(30_300),
                     revealEndsAt: iso(38_300 + 10_000),
-                    reveal: { movie: MOVIE, finders: [] },
+                    reveal: { movie: MOVIE, frames: [], finders: [] },
                 }),
                 nextTransitionAt: iso(48_300 - LEAD_MS),
             }),
@@ -747,6 +750,82 @@ describe('store', () => {
         expect(locked.resyncs).toEqual([]);
     });
 
+    it('masque la valeur du palier quand leaderboard.scoreless est vrai', () => {
+        const at = (ms: number): number => ORIGIN_MS + ms;
+        const running = (scoreless: boolean): GameStatePacket =>
+            packet(0, {
+                round: round(1, 5_000, 'running', {
+                    images: [image(5_000, 1)],
+                }),
+                leaderboard: { scoreless, roundNumber: null, rows: [] },
+            });
+
+        // Même manche, même instant : la valeur n'est masquée que par le
+        // mode sans score (80 § 2.5).
+        const scored = harness(running(false));
+
+        expect(
+            visibleTierValue(scored.store.getState(), at(6_000)),
+        ).not.toBeNull();
+        scored.stop();
+
+        const scoreless = harness(running(true));
+
+        expect(
+            visibleTierValue(scoreless.store.getState(), at(6_000)),
+        ).toBeNull();
+        scoreless.stop();
+
+        // À `game.launched`, qui ne porte pas le classement, le drapeau est
+        // lu dans les réglages du lobby au lancement (barème à zéro).
+        const zero = settingsState(64);
+        const lobby = harness(lobbyPacket(1000), {
+            ...zero,
+            settings: {
+                ...zero.settings,
+                tierPoints: zero.settings.tierPoints.map(() => 0),
+            },
+        });
+
+        lobby.store.receive(
+            'game.launched',
+            event<'game.launched'>(1105, {
+                mode: 'multiplayer',
+                roundsCount: 10,
+                framesPerRound: 3,
+                inputDifficulty: 'normal',
+                revealDurationMs: 8000,
+                speedBonus: true,
+                seats: [
+                    seat(SELF, { firstRoundNumber: 1 }),
+                    seat(RIVAL, { firstRoundNumber: 1, isHost: false }),
+                ],
+            }),
+        );
+
+        expect(lobby.store.getState().leaderboard.scoreless).toBe(true);
+        lobby.stop();
+
+        // Barème ordinaire : le classement vide n'est pas sans score.
+        const ordinary = harness(lobbyPacket(1000), settingsState(64));
+
+        ordinary.store.receive(
+            'game.launched',
+            event<'game.launched'>(1105, {
+                mode: 'multiplayer',
+                roundsCount: 10,
+                framesPerRound: 3,
+                inputDifficulty: 'normal',
+                revealDurationMs: 8000,
+                speedBonus: true,
+                seats: [seat(SELF, { firstRoundNumber: 1 }), seat(RIVAL)],
+            }),
+        );
+
+        expect(ordinary.store.getState().leaderboard.scoreless).toBe(false);
+        ordinary.stop();
+    });
+
     it('masque la valeur du palier hors de la phase running', () => {
         const at = (ms: number): number => ORIGIN_MS + ms;
         // Référence : la fenêtre de `currentTier()` (90 § 7.3) — image et
@@ -831,6 +910,7 @@ describe('store', () => {
                 revealEndsAt: iso(30_300),
                 movie: MOVIE,
                 images: [image(5_000, 1), image(5_000, 2)],
+                frames: [],
                 finders: [],
                 leaderboard: { scoreless: false, roundNumber: 1, rows: [] },
             }),
@@ -846,6 +926,7 @@ describe('store', () => {
             event<'game.paused'>(30_310, {
                 pausedAt: iso(30_300),
                 interruptsAt: iso(930_300),
+                kind: 'empty',
             }),
         );
 
@@ -1138,7 +1219,7 @@ describe('store', () => {
                 round: round(1, 0, 'revealing', {
                     images: [image(0, 1)],
                     ...closedRound,
-                    reveal: { movie: MOVIE, finders: [] },
+                    reveal: { movie: MOVIE, frames: [], finders: [] },
                 }),
                 self: { ...packet(0).self, input: lockedInput },
                 nextTransitionAt: iso(8500),
@@ -1341,6 +1422,7 @@ describe('store', () => {
                 revealEndsAt: iso(38_300),
                 movie: MOVIE,
                 images: [image(0, 1), image(0, 2), image(0, 3)],
+                frames: [],
                 finders: [],
                 leaderboard: { scoreless: false, roundNumber: 1, rows: [] },
             });
@@ -1534,7 +1616,7 @@ describe('store', () => {
                     endedAt: iso(30_000),
                     revealStartsAt: iso(30_300),
                     revealEndsAt: iso(38_300),
-                    reveal: { movie: MOVIE, finders: [] },
+                    reveal: { movie: MOVIE, frames: [], finders: [] },
                 }),
                 self: {
                     ...packet(0).self,
@@ -1716,12 +1798,17 @@ describe('store', () => {
                 revealEndsAt: iso(17_800),
                 movie: MOVIE,
                 images: [image(0, 1)],
+                frames: [{ tierIndex: 1, framePublicId: 'K7M2Q9X4B1ZT' }],
                 finders: [],
                 leaderboard: { scoreless: false, roundNumber: 1, rows: [] },
             }),
         );
 
         expect(game.store.getState().rounds[0].images).toEqual([image(0, 1)]);
+        // `reveal.frames` voyage avec la révélation (D63 du 07/10).
+        expect(game.store.getState().rounds[0].reveal?.frames).toEqual([
+            { tierIndex: 1, framePublicId: 'K7M2Q9X4B1ZT' },
+        ]);
 
         // Film suspendu pendant la révélation : ses URL sont omises (60
         // § 15.4), et celles que le magasin détenait ne sont plus demandées.
@@ -1746,6 +1833,7 @@ describe('store', () => {
                 revealEndsAt: iso(38_300),
                 movie: MOVIE,
                 images: [],
+                frames: [],
                 finders: [],
                 leaderboard: { scoreless: false, roundNumber: 5, rows: [] },
             }),
@@ -1871,5 +1959,124 @@ describe('store', () => {
         await advanceTo(21_000 + HEARTBEAT_MS - 1);
         expect(game.resyncs).toEqual([]);
         game.stop();
+    });
+});
+
+describe('store — pause manuelle (D64 du 07/10)', () => {
+    beforeEach(() => {
+        vi.useFakeTimers();
+        vi.setSystemTime(ORIGIN_MS + 1000);
+    });
+
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    it('pose puis retire la demande de pause, une seule fois par événement', () => {
+        const game = harness(packet(1000));
+
+        expect(game.store.getState().pauseRequested).toBe(false);
+
+        const requested = event<'game.pause_requested'>(1100, {
+            requestedAt: iso(1100),
+        });
+
+        game.store.receive('game.pause_requested', requested);
+        const afterFirst = game.notifications();
+        game.store.receive('game.pause_requested', requested);
+
+        expect(game.store.getState().pauseRequested).toBe(true);
+        expect(game.notifications()).toBe(afterFirst);
+
+        game.store.receive(
+            'game.pause_request_cancelled',
+            event<'game.pause_request_cancelled'>(1200, {}),
+        );
+
+        expect(game.store.getState().pauseRequested).toBe(false);
+        game.stop();
+    });
+
+    it('efface la demande à game.paused, porte la nature de la pause, et la remet à zéro à game.resumed', () => {
+        const game = harness(packet(1000, { pauseRequested: true }));
+
+        game.store.receive(
+            'game.paused',
+            event<'game.paused'>(1100, {
+                pausedAt: iso(1100),
+                interruptsAt: iso(896_100),
+                kind: 'manual',
+            }),
+        );
+
+        let state = game.store.getState();
+
+        expect(state.status).toBe('paused');
+        expect(state.pauseRequested).toBe(false);
+        expect(state.pause).toEqual({
+            pausedAt: iso(1100),
+            interruptsAt: iso(896_100),
+            kind: 'manual',
+        });
+
+        // Une demande reçue en pause n'a pas de sens : ignorée.
+        game.store.receive(
+            'game.pause_requested',
+            event<'game.pause_requested'>(1150, { requestedAt: iso(1150) }),
+        );
+        expect(game.store.getState().pauseRequested).toBe(false);
+
+        game.store.receive(
+            'game.resumed',
+            event<'game.resumed'>(1200, { resumedAt: iso(1200) }),
+        );
+
+        state = game.store.getState();
+
+        expect(state.status).toBe('running');
+        expect(state.pause).toBeNull();
+        expect(state.pauseRequested).toBe(false);
+        game.stop();
+    });
+
+    it('lit pause.kind et pauseRequested dans le paquet, et efface la demande à game.ended', () => {
+        const paused = harness(
+            packet(1000, {
+                status: 'paused',
+                pause: {
+                    pausedAt: iso(900),
+                    interruptsAt: iso(895_900),
+                    kind: 'manual',
+                },
+            }),
+        );
+
+        expect(paused.store.getState().pause?.kind).toBe('manual');
+        paused.stop();
+
+        const running = harness(packet(1000, { pauseRequested: true }));
+
+        expect(running.store.getState().pauseRequested).toBe(true);
+
+        running.store.receive(
+            'game.ended',
+            event<'game.ended'>(1100, {
+                podium: {
+                    gameStatus: 'completed',
+                    mode: 'multiplayer',
+                    roundsCompleted: 10,
+                    roundsCount: 10,
+                    framesPerRound: 3,
+                    scoreless: true,
+                    endedAt: iso(1100),
+                    standings: [],
+                    recap: [],
+                    highlights: {},
+                } as unknown as GameEventPayloads['game.ended']['podium'],
+            }),
+        );
+
+        expect(running.store.getState().pauseRequested).toBe(false);
+        running.stop();
     });
 });

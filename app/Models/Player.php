@@ -73,6 +73,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  * @property string|null $nickname
  * @property string|null $nickname_normalized `#[Hidden]` : forme repliée, jamais affichée.
  * @property CarbonImmutable|null $nickname_masked_at
+ * @property CarbonImmutable|null $nickname_reports_from `#[Hidden]`, hors `#[Fillable]` : début de la fenêtre de comptage des signalements du pseudo, posé à la levée du masquage (spec 40 § 13.3, D66 du 07/10) ; NULL = depuis toujours.
  * @property string|null $player_token_hash `#[Hidden]` : SHA-256 du `tid` du `player_token`, jamais de la valeur du cookie (spec 40 § 3.5).
  * @property string|null $solo_token_hash `#[Hidden]` : créneau d'unicité du siège solo (E10-N3, `player_solo_token_uq`) — copie de `player_token_hash` si et seulement si `room_id` est nul, écrite dans la même écriture que lui par le démarrage solo et effacée avec lui. Hors `#[Fillable]`. La reprise d'un siège solo ne le lit jamais : elle passe par `player_token_hash` (`player_token_idx`).
  * @property string|null $active_seat_token
@@ -106,7 +107,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
     'avatar_kind',
     'avatar_preset',
 ])]
-#[Hidden(['id', 'room_id', 'user_id', 'user', 'visitor_id', 'visitor', 'device_class', 'browser_family', 'os_family', 'player_token_hash', 'solo_token_hash', 'active_seat_token', 'nickname_normalized', 'kicked_at'])]
+#[Hidden(['id', 'room_id', 'user_id', 'user', 'visitor_id', 'visitor', 'device_class', 'browser_family', 'os_family', 'player_token_hash', 'solo_token_hash', 'active_seat_token', 'nickname_normalized', 'kicked_at', 'nickname_reports_from'])]
 class Player extends Model
 {
     /** @use HasFactory<PlayerFactory> */
@@ -270,6 +271,7 @@ class Player extends Model
             'room_id' => 'integer',
             'user_id' => 'integer',
             'nickname_masked_at' => 'datetime',
+            'nickname_reports_from' => 'datetime',
             'locale' => Locale::class,
             'avatar_kind' => AvatarKind::class,
             'joined_at' => 'datetime',

@@ -44,6 +44,16 @@ function opsTemplateFiles(): array
         'systemd/worker-game.env',
         'systemd/worker-default.env',
         'nginx/additional-directives.conf',
+        // Préproduction (spec 100 § 18, L100-15).
+        'redis/tripleframes-preprod-redis.conf',
+        'systemd/tripleframes-preprod-redis.service',
+        'systemd/tripleframes-preprod-worker@.service',
+        'systemd/tripleframes-preprod-worker@game.service.d/limits.conf',
+        'systemd/tripleframes-preprod-worker@default.service.d/limits.conf',
+        'systemd/tripleframes-preprod-reverb.service',
+        'systemd/preprod-worker-game.env',
+        'systemd/preprod-worker-default.env',
+        'nginx/additional-directives.preprod.conf',
     ];
 }
 
@@ -131,11 +141,11 @@ function opsTemplateValue(string $relative, string $key): string
  *
  * @return array<string, list<string>>
  */
-function opsTemplateRedisDirectives(): array
+function opsTemplateRedisDirectives(string $relative = 'redis/tripleframes-redis.conf'): array
 {
     $directives = [];
 
-    foreach (opsTemplateLines('redis/tripleframes-redis.conf') as $line) {
+    foreach (opsTemplateLines($relative) as $line) {
         $parts = preg_split('/\s+/', $line, 2) ?: [];
         $directives[strtolower($parts[0])][] = $parts[1] ?? '';
     }
@@ -573,5 +583,229 @@ it('vide la base comme backup:snapshot et ne bat la supervision qu\'après l\'en
         expect($lines)->toContain("rm -rf -- \"\${state_dir}\"/{$tier}.work.*")
             ->and($lines)->toContain("work=\"\$(mktemp -d \"\${state_dir}/{$tier}.work.XXXXXX\")\"")
             ->and(implode("\n", $lines))->not->toMatch('/mktemp -d\)|\/tmp\b/');
+    }
+});
+
+/*
+| Préproduction (spec 100 § 18, L100-15, n° 6 de D66 du 07/10) : unités
+| système toujours actives, posées une fois par root, plafonds plus serrés que
+| la production ; Redis, Reverb, utilisateur et répertoire PROPRES ; même
+| comportement que la production pour tout le reste.
+*/
+
+/**
+ * Paires [production => préproduction] des gabarits homologues.
+ *
+ * @return array<string, string>
+ */
+function opsTemplatePreprodPairs(): array
+{
+    return [
+        'redis/tripleframes-redis.conf' => 'redis/tripleframes-preprod-redis.conf',
+        'systemd/tripleframes-redis.service' => 'systemd/tripleframes-preprod-redis.service',
+        'systemd/tripleframes-worker@.service' => 'systemd/tripleframes-preprod-worker@.service',
+        'systemd/tripleframes-worker@game.service.d/limits.conf' => 'systemd/tripleframes-preprod-worker@game.service.d/limits.conf',
+        'systemd/tripleframes-worker@default.service.d/limits.conf' => 'systemd/tripleframes-preprod-worker@default.service.d/limits.conf',
+        'systemd/tripleframes-reverb.service' => 'systemd/tripleframes-preprod-reverb.service',
+        'systemd/worker-game.env' => 'systemd/preprod-worker-game.env',
+        'systemd/worker-default.env' => 'systemd/preprod-worker-default.env',
+        'nginx/additional-directives.conf' => 'nginx/additional-directives.preprod.conf',
+    ];
+}
+
+it('donne à la préproduction un Redis dédié, aux mêmes garde-fous que la production et à son propre port', function (): void {
+    $production = opsTemplateRedisDirectives();
+    $preprod = opsTemplateRedisDirectives('redis/tripleframes-preprod-redis.conf');
+
+    // Mêmes directives, mêmes valeurs, sauf l'identité de l'instance et son
+    // plafond.
+    $own = ['port', 'requirepass', 'dir', 'maxmemory'];
+
+    expect(array_keys($preprod))->toBe(array_keys($production));
+
+    foreach (array_diff(array_keys($production), $own) as $directive) {
+        expect($preprod[$directive])->toBe($production[$directive], "Directive {$directive} différente de la production");
+    }
+
+    foreach (['port', 'requirepass', 'dir'] as $directive) {
+        expect($preprod[$directive])->toHaveCount(1)
+            ->and($preprod[$directive][0])->not->toBe($production[$directive][0], "La préproduction partage {$directive} avec la production");
+    }
+
+    expect($preprod['port'][0])->toBe('__TF_PREPROD_REDIS_PORT__')
+        ->and($preprod['requirepass'][0])->toBe('__TF_PREPROD_REDIS_PASSWORD__')
+        ->and(opsTemplateBytes($preprod['maxmemory'][0]))->toBeLessThan(opsTemplateBytes($production['maxmemory'][0]));
+
+    $unit = 'systemd/tripleframes-preprod-redis.service';
+
+    expect(opsTemplateBytes(opsTemplateValue($unit, 'MemoryMax')))->toBeGreaterThan(opsTemplateBytes($preprod['maxmemory'][0]))
+        ->and(opsTemplateValue($unit, 'ExecStart'))->toEndWith(' /etc/tripleframes/tripleframes-preprod-redis.conf')
+        ->and($preprod['dir'])->toBe(['/var/lib/'.opsTemplateValue($unit, 'StateDirectory')])
+        ->and(opsTemplateValue($unit, 'Type'))->toBe('notify')
+        ->and(opsTemplateValue($unit, 'User'))->toBe('tfredis');
+});
+
+it('lance les services de préproduction sous leur propre abonnement, plafonnés plus serré que la production', function (): void {
+    $units = [
+        'systemd/tripleframes-preprod-redis.service',
+        'systemd/tripleframes-preprod-worker@.service',
+        'systemd/tripleframes-preprod-reverb.service',
+    ];
+
+    foreach ($units as $unit) {
+        expect(opsTemplateValue($unit, 'User'))->not->toBe('root')
+            ->and(opsTemplateValue($unit, 'Restart'))->toBe('always')
+            ->and(opsTemplateValue($unit, 'NoNewPrivileges'))->toBe('true')
+            ->and(opsTemplateValue($unit, 'StartLimitIntervalSec'))->toBe('0')
+            // Toujours actives : une promotion ne demande aucun geste root.
+            ->and(opsTemplateValue($unit, 'WantedBy'))->toBe('multi-user.target');
+    }
+
+    $php = ['systemd/tripleframes-preprod-worker@.service', 'systemd/tripleframes-preprod-reverb.service'];
+
+    foreach ($php as $unit) {
+        $wants = implode("\n", opsTemplateAssignments($unit)['Wants'] ?? []);
+
+        expect(opsTemplateValue($unit, 'User'))->toBe('__TF_PREPROD_SUBSCRIPTION_USER__')
+            ->and(opsTemplateValue($unit, 'Group'))->toBe('__TF_PREPROD_SUBSCRIPTION_GROUP__')
+            ->and(opsTemplateValue($unit, 'WorkingDirectory'))->toBe('__TF_PREPROD_DEPLOY_PATH__')
+            ->and(opsTemplateValue($unit, 'ExecStart'))->toStartWith(opsTemplatePhp().' ')
+            ->and(opsTemplateValue($unit, 'UMask'))->toBe('0027')
+            ->and($wants)->toContain('tripleframes-preprod-redis.service')
+            ->and($wants)->not->toMatch('/\btripleframes-redis\.service/');
+    }
+
+    // Même commande de worker qu'en production, sur ses propres arguments.
+    expect(opsTemplateValue('systemd/tripleframes-preprod-worker@.service', 'ExecStart'))
+        ->toBe(opsTemplateValue('systemd/tripleframes-worker@.service', 'ExecStart'))
+        ->and(opsTemplateValue('systemd/tripleframes-preprod-worker@.service', 'EnvironmentFile'))
+        ->toBe('/etc/tripleframes/preprod-worker-%i.env')
+        ->and(opsTemplateValue('systemd/tripleframes-preprod-reverb.service', 'ExecStart'))
+        ->toBe(opsTemplatePhp().' artisan reverb:start');
+
+    // Plafonds : chacun au plus celui de son homologue de production, et un
+    // poids CPU strictement plus bas (la production passe toujours avant).
+    $capped = [
+        'systemd/tripleframes-redis.service',
+        'systemd/tripleframes-reverb.service',
+        'systemd/tripleframes-worker@game.service.d/limits.conf',
+        'systemd/tripleframes-worker@default.service.d/limits.conf',
+    ];
+
+    foreach ($capped as $production) {
+        $preprod = opsTemplatePreprodPairs()[$production];
+
+        expect(opsTemplateBytes(opsTemplateValue($preprod, 'MemoryMax')))
+            ->toBeLessThanOrEqual(opsTemplateBytes(opsTemplateValue($production, 'MemoryMax')), "{$preprod} : MemoryMax au-dessus de la production")
+            ->and((int) opsTemplateValue($preprod, 'CPUWeight'))
+            ->toBeGreaterThan(0)
+            ->toBeLessThan((int) opsTemplateValue($production, 'CPUWeight'), "{$preprod} : CPUWeight pas plus bas que la production");
+    }
+
+    // Bornes mémoire de chaque worker, dans l'ordre de la production, et même
+    // cadencement de la file game.
+    $retryAfter = (int) config('queue.connections.redis.retry_after');
+
+    foreach (opsTemplateWorkerInstances() as $instance) {
+        $env = "systemd/preprod-worker-{$instance}.env";
+        $limits = "systemd/tripleframes-preprod-worker@{$instance}.service.d/limits.conf";
+        $options = opsTemplateOptions(opsTemplateValue($env, 'WORKER_ARGS'));
+
+        expect(array_keys(opsTemplateAssignments($env)))->toBe(['PHP_ARGS', 'WORKER_ARGS'])
+            ->and(array_keys(opsTemplateAssignments($limits)))->toBe(['MemoryMax', 'CPUWeight'])
+            ->and($options)->toHaveKeys(['tries', 'sleep', 'timeout', 'max-time', 'memory'])
+            ->and((int) $options['timeout'])->toBeLessThan($retryAfter);
+
+        expect(preg_match('/^-d memory_limit=(\d+[KMG])$/', opsTemplateValue($env, 'PHP_ARGS'), $match))->toBe(1);
+
+        $memory = (int) $options['memory'] * 1024 ** 2;
+        $memoryLimit = opsTemplateBytes($match[1]);
+
+        expect($memory)->toBeLessThan($memoryLimit)
+            ->and($memoryLimit)->toBeLessThan(opsTemplateBytes(opsTemplateValue($limits, 'MemoryMax')));
+    }
+
+    $game = opsTemplateOptions(opsTemplateValue('systemd/preprod-worker-game.env', 'WORKER_ARGS'));
+    $productionGame = opsTemplateOptions(opsTemplateValue('systemd/worker-game.env', 'WORKER_ARGS'));
+
+    expect($game['tries'])->toBe($productionGame['tries'])
+        ->and($game['sleep'])->toBe($productionGame['sleep']);
+});
+
+it('ferme la préproduction par une authentification HTTP héritée de tout le site, Reverb compris', function (): void {
+    $preprod = opsTemplateLines('nginx/additional-directives.preprod.conf');
+    $production = opsTemplateLines('nginx/additional-directives.conf');
+
+    // Au niveau du serveur, AVANT toute location : héritée par toutes, celles
+    // que Plesk génère comprises.
+    $firstLocation = null;
+
+    foreach ($preprod as $index => $line) {
+        if ($firstLocation === null && str_starts_with($line, 'location ')) {
+            $firstLocation = $index;
+        }
+    }
+
+    $auth = array_search('auth_basic "TripleFrames preproduction";', $preprod, true);
+    $userFile = array_search('auth_basic_user_file __TF_PREPROD_HTPASSWD_FILE__;', $preprod, true);
+
+    expect($firstLocation)->not->toBeNull()
+        ->and($auth)->not->toBeFalse()
+        ->and($userFile)->not->toBeFalse()
+        ->and($auth)->toBeLessThan($firstLocation)
+        ->and($userFile)->toBeLessThan($firstLocation);
+
+    // Aucune location ne la désactive.
+    expect(implode("\n", $preprod))->not->toContain('auth_basic off');
+
+    // Hors l'authentification et le port de Reverb, les mêmes directives que
+    // la production : la préproduction répète la production.
+    $normalised = array_values(array_filter(
+        array_map(static fn (string $line): string => str_replace('__TF_PREPROD_REVERB_PORT__', '__TF_REVERB_PORT__', $line), $preprod),
+        static fn (string $line): bool => ! str_starts_with($line, 'auth_basic'),
+    ));
+
+    expect($normalised)->toBe($production);
+});
+
+it('livre un .env de référence de préproduction sans secret ni donnée de production, en APP_ENV=staging', function (): void {
+    $source = opsTemplateSource('preprod/env.reference');
+
+    expect($source)->not->toContain("\r");
+
+    $values = [];
+
+    foreach (opsTemplateLines('preprod/env.reference') as $line) {
+        expect(str_contains($line, '='))->toBeTrue("Ligne sans affectation : {$line}");
+
+        $values[Str::before($line, '=')] = Str::after($line, '=');
+    }
+
+    expect($values['APP_ENV'] ?? null)->toBe('staging')
+        ->and($values['APP_DEBUG'] ?? null)->toBe('false')
+        ->and($values['SITE_INDEXABLE'] ?? null)->toBe('')
+        ->and($values['ACCOUNTS_REGISTRATION_OPEN'] ?? null)->toBe('')
+        ->and($values['ACCOUNTS_PASSKEYS_ENABLED'] ?? null)->toBe('')
+        ->and($values['MAIL_MAILER'] ?? null)->toBe('log')
+        ->and($values['REDIS_CLIENT'] ?? null)->toBe('predis');
+
+    // Aucun secret : toute clé sensible est vide.
+    foreach ($values as $name => $value) {
+        if (preg_match('/(?:KEY|SECRET|TOKEN|PASSWORD)$/', $name) === 1) {
+            expect($value)->toBe('', "{$name} porte une valeur dans le dépôt");
+        }
+    }
+
+    // Toute variable de référence est une variable connue du projet : de
+    // .env.example, ou SESSION_SECURE_COOKIE, propre aux machines servies
+    // (spec 100 § 10.10).
+    $example = (string) file_get_contents(base_path('.env.example'));
+
+    foreach (array_keys($values) as $name) {
+        if ($name === 'SESSION_SECURE_COOKIE') {
+            continue;
+        }
+
+        expect(preg_match('/^#?\s*'.preg_quote($name, '/').'=/m', $example))->toBe(1, "{$name} absente de .env.example");
     }
 });

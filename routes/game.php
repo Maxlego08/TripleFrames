@@ -3,12 +3,16 @@
 use App\Http\Controllers\Game\AnswerController;
 use App\Http\Controllers\Game\ChoiceController;
 use App\Http\Controllers\Game\ClockController;
+use App\Http\Controllers\Game\ContentReportController;
+use App\Http\Controllers\Game\ContentReportFrameController;
 use App\Http\Controllers\Game\FrameServeController;
+use App\Http\Controllers\Game\GamePauseController;
 use App\Http\Controllers\Game\NextRoundController;
 use App\Http\Controllers\Game\RoomHeartbeatController;
 use App\Http\Controllers\Game\RoomStateController;
 use App\Http\Controllers\Game\SoloGameController;
 use App\Http\Controllers\Game\SoloHeartbeatController;
+use App\Http\Controllers\Game\SoloPauseController;
 use App\Http\Controllers\Game\SoloRoundController;
 use App\Http\Controllers\Game\SoloStateController;
 use App\Http\Controllers\Room\AvatarReportController;
@@ -16,12 +20,14 @@ use App\Http\Controllers\Room\HostTransferController;
 use App\Http\Controllers\Room\KickController;
 use App\Http\Controllers\Room\LaunchController;
 use App\Http\Controllers\Room\LeaveRoomController;
+use App\Http\Controllers\Room\NicknameReportController;
 use App\Http\Controllers\Room\ReplayController;
 use App\Http\Controllers\Room\RoomController;
 use App\Http\Controllers\Room\RoomEntryController;
 use App\Http\Controllers\Room\RoomPresetController;
 use App\Http\Controllers\Room\RoomSettingsController;
 use App\Http\Controllers\Room\SeatAvatarController;
+use App\Http\Middleware\VaryOnLanguage;
 use App\Support\Room\RoomCode;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
@@ -143,6 +149,19 @@ Route::middleware(['seat.active', 'throttle:game-write'])->group(function (): vo
 
     Route::post('solo/round/next', [SoloRoundController::class, 'next'])
         ->name('solo.next');
+
+    // Pause manuelle (D64 du 07/10, spec 60 § 14) : « Pause » (immédiate
+    // entre deux manches, sinon demandée pour la fin de la révélation),
+    // « Annuler la pause » et « Reprendre ». Répondent par le paquet à jour ;
+    // 409 `not_running`, `no_round_left`, `budget_exhausted` ou `draining`.
+    Route::post('solo/game/pause', [SoloPauseController::class, 'pause'])
+        ->name('solo.pause');
+
+    Route::post('solo/game/pause/cancel', [SoloPauseController::class, 'cancel'])
+        ->name('solo.pause.cancel');
+
+    Route::post('solo/game/resume', [SoloPauseController::class, 'resume'])
+        ->name('solo.resume');
 });
 
 Route::get('clock', [ClockController::class, 'show'])
@@ -232,6 +251,13 @@ Route::middleware(['seat.active', 'throttle:game-write'])->group(function (): vo
     Route::post('r/{room}/players/{target}/report-avatar', [AvatarReportController::class, 'store'])
         ->name('room.players.report_avatar');
 
+    // Signalement du pseudo d'un autre siège (spec 40 § 13.3, D66 du 07/10) :
+    // tout siège actif, aucune autorité d'hôte ; limiteur `seat-report` par
+    // siège, en plus de `game-write`.
+    Route::post('r/{room}/players/{target}/report-nickname', [NicknameReportController::class, 'store'])
+        ->middleware('throttle:seat-report')
+        ->name('room.players.report_nickname');
+
     Route::post('r/{room}/host', [HostTransferController::class, 'store'])
         ->name('room.host.transfer');
 
@@ -249,6 +275,21 @@ Route::middleware(['seat.active', 'throttle:game-write'])->group(function (): vo
     // pour un siège qui n'est pas l'hôte, relu sous le verrou du salon.
     Route::post('r/{room}/round/next', [NextRoundController::class, 'store'])
         ->name('room.round.next');
+
+    // Pause manuelle (D64 du 07/10, spec 60 § 14) : l'hôte met en pause
+    // (immédiate entre deux manches, sinon demandée pour la fin de la
+    // révélation) ou retire sa demande ; l'hôte reprend — tout siège présent
+    // si l'hôte n'en est pas un. 204 ; 409 `not_running`, `no_round_left`,
+    // `budget_exhausted` ou `draining` ; 403 sans autorité, relue sous le
+    // verrou du salon.
+    Route::post('r/{room}/game/pause', [GamePauseController::class, 'pause'])
+        ->name('room.game.pause');
+
+    Route::post('r/{room}/game/pause/cancel', [GamePauseController::class, 'cancel'])
+        ->name('room.game.pause.cancel');
+
+    Route::post('r/{room}/game/resume', [GamePauseController::class, 'resume'])
+        ->name('room.game.resume');
 });
 
 // Soumission d'une réponse en texte libre (spec 70 § 7.1, contrat C10 § 2) :
@@ -277,3 +318,34 @@ Route::post('seat/{player:public_id}/answer', [AnswerController::class, 'store']
 Route::post('seat/{player:public_id}/choice', [ChoiceController::class, 'store'])
     ->name('round.choice.store')
     ->middleware(['seat.active', 'throttle:answer']);
+
+// Signaler un film ou une image vue en jeu (D63 du 07/10, spec 90 § 4.5 bis),
+// depuis la révélation ou le podium : `/report?movie=<tmdb_id>&frame=<public_id>`,
+// aucun identifiant interne. Page publique, coquille `PublicLayout`, domaine
+// `game` (`legal` comme toute route joueur), `noindex` permanent : la route ne
+// porte JAMAIS `RobotsDirectives::ROUTE_FLAG`. L'envoi exige un compte ou un
+// siège (403 sinon) et passe par le limiteur `content-report`. Distincte de
+// « signaler un contenu » (`takedown.create`, `/report-content`), la voie des
+// ayants droit, vers laquelle la page renvoie.
+Route::middleware('translations:game,legal')->group(function (): void {
+    Route::get('report', [ContentReportController::class, 'create'])
+        ->name('content-report.create')
+        ->defaults(VaryOnLanguage::ROUTE_FLAG, true);
+
+    Route::post('report', [ContentReportController::class, 'store'])
+        ->name('content-report.store')
+        ->middleware('throttle:content-report');
+});
+
+// Aperçu de l'image signalée (D63 du 07/10, amendé le 07/10) : les octets du
+// dérivé `game/`, adressés par le `public_id` de la frame, servis au SEUL
+// demandeur — compte ou `player_token` — qui a participé à une manche révélée
+// où elle a été servie (`FrameViewEligibility`, relu à chaque requête). 404
+// uniforme sinon, mêmes en-têtes que `/f/` (`no-store`, `noindex`), débit
+// `content-report-frame`, seau distinct de `frame-serve` (l'aperçu ne mord
+// jamais sur le budget des paliers). Hors domaine de traduction, sans drapeau
+// d'indexation.
+Route::get('report/frame/{publicId}', [ContentReportFrameController::class, 'show'])
+    ->name('content-report.frame')
+    ->where('publicId', '[0-9A-Z]{12}')
+    ->middleware('throttle:content-report-frame');

@@ -92,6 +92,8 @@ function domainDeclarationTable(): array
         'pages/settings/' => $account,
         'pages/game/' => $game,
         'pages/room/' => ['common', 'legal', 'room'],
+        // Le signalement de contenu par un joueur (D63 du 07/10).
+        'pages/report/' => ['common', 'game', 'legal'],
         'pages/admin/' => $admin,
 
         // Répertoires rattachés (§ 6.3, L90-3).
@@ -114,8 +116,9 @@ it('déclare le domaine legal sur toute route joueur', function () {
     // passe, fichiers du disque local, octets d'image, horloge, et
     // l'autorisation de canal de diffusion (sans nom).
     // `avatar.show` (spec 40 § 11.3) sert des octets, comme `frame.serve` :
-    // aucune page, aucun domaine de traduction.
-    $excludedNames = ['well-known.passkeys', 'storage.local', 'frame.serve', 'clock.show', 'avatar.show'];
+    // aucune page, aucun domaine de traduction ; `content-report.frame` (D63
+    // du 07/10, amendé le 07/10) aussi : l'aperçu de l'image signalée.
+    $excludedNames = ['well-known.passkeys', 'storage.local', 'frame.serve', 'clock.show', 'avatar.show', 'content-report.frame'];
     $excludedUris = ['broadcasting/auth'];
 
     $checked = [];

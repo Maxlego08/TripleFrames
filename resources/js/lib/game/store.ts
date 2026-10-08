@@ -121,6 +121,8 @@ export type ResyncReason =
     | 'frame_expired'
     | 'solo_poll'
     | 'heartbeat_refused'
+    /** Un geste de pause refusé : l'écran était en retard (D64 du 07/10). */
+    | 'pause_refused'
     | 'retry';
 
 /** Réponse d'une resynchronisation, telle que la fonction de la page la rend. */
@@ -153,6 +155,8 @@ export interface GameStoreState {
     maxAnswerLength: number | null;
     seats: readonly SeatView[];
     pause: GameStatePacket['pause'];
+    /** Pause manuelle demandée, en attente de la fin de révélation (D64 du 07/10). */
+    pauseRequested: boolean;
     /**
      * Manches connues de la partie, dans l'ordre de jeu (`startsAt`) : la
      * manche en cours ou révélée, et la suivante déjà programmée. Leurs
@@ -342,15 +346,24 @@ export function displayedRound(
  * sa confirmation, et le serveur, qui rattrape avant tout jugement, la
  * traite déjà comme ouverte.
  *
- * Au J2 s'ajoutera le masquage du mode sans score (`leaderboard.scoreless`,
- * L60-17). Ne décide rien : un affichage indicatif, le serveur retient seul
- * le palier d'une réponse, à son instant de réception.
+ * **Mode sans score** (J2, L60-17 ; exigence de 80 § 14 et § 1.4) : masquée
+ * aussi quand `leaderboard.scoreless` est vrai — tous les paliers valant 0,
+ * « 0 point » n'apprendrait rien. Le drapeau arrive par le paquet et par
+ * chaque `round.revealed` ; à `game.launched`, qui ne le porte pas, il est lu
+ * dans les réglages du lobby au lancement (barème entièrement à zéro,
+ * `ScoringRules::isScoreless()`), comme `maxAnswerLength`. Ne décide rien :
+ * un affichage indicatif, le serveur retient seul le palier d'une réponse, à
+ * son instant de réception.
  */
 export function visibleTierValue(
     state: GameStoreState,
     nowMs: number,
 ): number | null {
-    if (state.gameRef === null || state.status !== 'running') {
+    if (
+        state.gameRef === null ||
+        state.status !== 'running' ||
+        state.leaderboard.scoreless
+    ) {
         return null;
     }
 
@@ -396,6 +409,8 @@ const GAME_BOUND = new Set<GameEventName>([
     'round.cancelled',
     'game.paused',
     'game.resumed',
+    'game.pause_requested',
+    'game.pause_request_cancelled',
     'game.ended',
     'seat.choices',
 ]);
@@ -411,6 +426,20 @@ const EMPTY_LEADERBOARD: Leaderboard = {
     roundNumber: null,
     rows: [],
 };
+
+/**
+ * Le barème des réglages vaut-il 0 partout (`ScoringRules::isScoreless()`,
+ * 80 § 2.5) ? Faux sans réglages connus (solo, page sans lobby).
+ */
+function isScorelessSettings(settings: RoomSettingsState | null): boolean {
+    return (
+        settings !== null &&
+        settings.settings.tierPoints.reduce(
+            (sum, points) => sum + points,
+            0,
+        ) === 0
+    );
+}
 
 /** Suivi interne d'une manche : programmation retenue, dernier palier ouvert. */
 type RoundMeta = { scheduledAtMs: number; openedTier: number };
@@ -557,6 +586,7 @@ function stateFromPacket(
         maxAnswerLength: packet.maxAnswerLength,
         seats: packet.seats,
         pause: packet.pause,
+        pauseRequested: packet.pauseRequested,
         rounds: round === null ? [] : [round],
         self: packet.self,
         offeredChoices:
@@ -879,6 +909,9 @@ export function createGameStore(options: GameStoreOptions): GameStore {
             case 'game.resumed':
                 parts.push(String(payload.resumedAt));
                 break;
+            case 'game.pause_requested':
+                parts.push(String(payload.requestedAt));
+                break;
             case 'game.launched':
             case 'game.ended':
                 break;
@@ -935,6 +968,7 @@ export function createGameStore(options: GameStoreOptions): GameStore {
                     settings: {
                         settings: changed.settings,
                         warnings: changed.warnings,
+                        advancedActive: changed.advancedActive,
                         pool: changed.pool,
                     },
                 });
@@ -1036,6 +1070,7 @@ export function createGameStore(options: GameStoreOptions): GameStore {
             const settings: RoomSettingsState = {
                 settings: event.settings,
                 warnings: event.warnings,
+                advancedActive: event.advancedActive,
                 pool: event.pool,
             };
 
@@ -1054,6 +1089,7 @@ export function createGameStore(options: GameStoreOptions): GameStore {
                     firstRoundNumber: null,
                 })),
                 pause: null,
+                pauseRequested: false,
                 rounds: [],
                 self: {
                     ...state.self,
@@ -1286,7 +1322,11 @@ export function createGameStore(options: GameStoreOptions): GameStore {
                     phase: 'revealing',
                     revealEndsAt: event.revealEndsAt,
                     images: mergeImages([], event.images),
-                    reveal: { movie: event.movie, finders: event.finders },
+                    reveal: {
+                        movie: event.movie,
+                        frames: event.frames,
+                        finders: event.finders,
+                    },
                 }),
             );
             commit({ ...state, leaderboard: event.leaderboard });
@@ -1324,13 +1364,36 @@ export function createGameStore(options: GameStoreOptions): GameStore {
                 pause: {
                     pausedAt: event.pausedAt,
                     interruptsAt: event.interruptsAt,
+                    kind: event.kind,
                 },
+                pauseRequested: false,
                 rounds: [],
             });
         },
 
         'game.resumed': () => {
-            commit({ ...state, status: 'running', pause: null });
+            commit({
+                ...state,
+                status: 'running',
+                pause: null,
+                pauseRequested: false,
+            });
+        },
+
+        'game.pause_requested': () => {
+            if (state.status !== 'running' || state.pauseRequested) {
+                return;
+            }
+
+            commit({ ...state, pauseRequested: true });
+        },
+
+        'game.pause_request_cancelled': () => {
+            if (!state.pauseRequested) {
+                return;
+            }
+
+            commit({ ...state, pauseRequested: false });
         },
 
         'game.ended': (event) => {
@@ -1340,6 +1403,7 @@ export function createGameStore(options: GameStoreOptions): GameStore {
                 status: event.podium.gameStatus,
                 roundsCompleted: event.podium.roundsCompleted,
                 pause: null,
+                pauseRequested: false,
                 rounds: [],
                 podium: event.podium,
                 nextTransitionAt: null,
@@ -1443,6 +1507,7 @@ export function createGameStore(options: GameStoreOptions): GameStore {
             maxAnswerLength: state.settings?.settings.maxAnswerLength ?? null,
             seats: event.seats,
             pause: null,
+            pauseRequested: false,
             rounds: [],
             self: {
                 ...state.self,
@@ -1456,7 +1521,13 @@ export function createGameStore(options: GameStoreOptions): GameStore {
                 ownScore: 0,
             },
             offeredChoices: null,
-            leaderboard: EMPTY_LEADERBOARD,
+            // Le mode sans score (80 § 2.5) avant le premier classement : lu
+            // dans les réglages du lobby au lancement, figés dans le
+            // snapshot ; le paquet et `round.revealed` le confirment.
+            leaderboard: {
+                ...EMPTY_LEADERBOARD,
+                scoreless: isScorelessSettings(state.settings),
+            },
             podium: null,
             nextTransitionAt: null,
         });

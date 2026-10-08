@@ -50,8 +50,11 @@ jobs:
         run: composer ci:check
 
   # Chaque commit de `main` vert devient un candidat au déploiement (spec 100
-  # § 2.5 et § 11.1) : un commit sur la branche `deploy`, que le serveur TIRE
-  # en avance rapide avec une clé de lecture seule. Les assets sont construits
+  # § 2.5, § 11.1 et § 18) : un commit sur la branche `deploy-preprod`, que la
+  # PRÉPRODUCTION tire en avance rapide avec une clé de lecture seule. La
+  # production ne tire que `deploy`, avancée sur un commit exact de
+  # `deploy-preprod` par le seul workflow manuel `promote.yml`, après les
+  # parcours Playwright (§ 19). Les assets sont construits
   # ici, jamais sur le VPS, qui les volerait en CPU à ses voisins.
   #
   # Deux jobs, pour que le jeton d'écriture ne côtoie jamais du code tiers :
@@ -60,7 +63,7 @@ jobs:
   # identifiant persisté ; `artifacts` détient le jeton d'écriture, mais
   # n'exécute que git et les actions de première partie. Une dépendance
   # compromise au build n'atteint ainsi que `public/build`, jamais la branche
-  # `deploy` que le serveur tire et migre (écart E11-8).
+  # `deploy-preprod` que la préproduction tire et migre (écart E11-8).
   build:
     needs: ci
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -134,14 +137,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
-    # Seul job du dépôt autorisé à écrire, avec le seul jeton automatique : il
-    # pousse la branche `deploy`, et aucun autre secret n'entre ici (§ 7.1).
+    # Seul job de ce workflow autorisé à écrire, avec le seul jeton automatique :
+    # il pousse la branche `deploy-preprod`, et aucun autre secret n'entre ici
+    # (§ 7.1). L'autre écrivain du dépôt est le job `promote` de `promote.yml`.
     # Il n'installe ni n'exécute aucune dépendance du projet.
     permissions:
       contents: write
 
-    # Deux constructions ne se croisent jamais sur la branche `deploy`, et
-    # aucune n'est annulée : chacune part d'un commit `deploy` publié.
+    # Deux constructions ne se croisent jamais sur la branche `deploy-preprod`,
+    # et aucune n'est annulée : chacune part d'un commit `deploy-preprod` publié.
     concurrency:
       group: deploy-artifacts
       cancel-in-progress: false
@@ -150,8 +154,9 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # Seul checkout du dépôt qui garde l'identifiant : la poussée de la
-          # branche `deploy` en a besoin (ZeroSecretTest l'exempte, lui seul).
+          # Checkout qui garde l'identifiant : la poussée de la branche
+          # `deploy-preprod` en a besoin (ZeroSecretTest l'exempte, avec le seul
+          # job `promote` de `promote.yml`).
           persist-credentials: true
 
       # Empreinte vérifiée à la réception (échec par défaut en cas d'écart).
@@ -184,8 +189,11 @@ jobs:
       # n'en a pas l'usage, et le jeton automatique ne peut ni créer ni modifier
       # un fichier de workflow (aucune permission `workflows` ne lui est
       # accordable), ce qui ferait refuser la poussée à chaque workflow modifié.
-      # Parent = commit `deploy` précédent : historique linéaire, JAMAIS de
-      # `push --force`, pour que Plesk Git tire toujours en avance rapide.
+      # Parent = commit `deploy-preprod` précédent : historique linéaire,
+      # JAMAIS de `push --force`, pour que Plesk Git tire toujours en avance
+      # rapide. Le premier commit `deploy-preprod` prend pour parent la pointe
+      # de `deploy` : `deploy` reste ainsi un ancêtre de `deploy-preprod`, ce
+      # qui rend chaque promotion possible en avance rapide (promote.yml).
       # Seule la pointe de `main` publie : le groupe de concurrence sérialise
       # les constructions sans les ordonner (celle d'un commit plus ancien, au
       # job `ci` plus lent, pourrait passer après une plus récente), et une
@@ -218,29 +226,49 @@ jobs:
 
           parent_args=()
           status=0
-          git ls-remote --exit-code origin refs/heads/deploy > /dev/null || status=$?
+          git ls-remote --exit-code origin refs/heads/deploy-preprod > /dev/null || status=$?
 
           case "$status" in
             0)
-              git fetch --no-tags --depth=1 origin +refs/heads/deploy:refs/remotes/origin/deploy
-              parent="$(git rev-parse refs/remotes/origin/deploy)"
-
-              if [ "$(git rev-parse "$parent^{tree}")" = "$tree" ]; then
-                echo "Arbre identique au commit deploy $parent : rien à publier."
-                exit 0
-              fi
-
-              parent_args=(-p "$parent")
+              parent_branch=deploy-preprod
               ;;
             2)
-              echo "Branche deploy absente : premier artefact, sans parent."
+              # Première publication vers la préproduction : la chaîne part de
+              # la pointe de `deploy`, s'il existe.
+              parent_branch=deploy
+              status=0
+              git ls-remote --exit-code origin refs/heads/deploy > /dev/null || status=$?
+
+              case "$status" in
+                0) ;;
+                2)
+                  parent_branch=""
+                  echo "Branches deploy-preprod et deploy absentes : premier artefact, sans parent."
+                  ;;
+                *)
+                  echo "Lecture de la branche deploy impossible (code $status)." >&2
+                  exit "$status"
+                  ;;
+              esac
               ;;
             *)
-              echo "Lecture de la branche deploy impossible (code $status)." >&2
+              echo "Lecture de la branche deploy-preprod impossible (code $status)." >&2
               exit "$status"
               ;;
           esac
 
+          if [ -n "$parent_branch" ]; then
+            git fetch --no-tags --depth=1 origin "+refs/heads/${parent_branch}:refs/remotes/origin/${parent_branch}"
+            parent="$(git rev-parse "refs/remotes/origin/${parent_branch}")"
+
+            if [ "$parent_branch" = "deploy-preprod" ] && [ "$(git rev-parse "$parent^{tree}")" = "$tree" ]; then
+              echo "Arbre identique au commit deploy-preprod $parent : rien à publier."
+              exit 0
+            fi
+
+            parent_args=(-p "$parent")
+          fi
+
           commit="$(git commit-tree "$tree" "${parent_args[@]}" -m "deploy: $SOURCE_SHA")"
-          git push origin "$commit:refs/heads/deploy"
-          echo "Publié : deploy $commit, source $SOURCE_SHA."
+          git push origin "$commit:refs/heads/deploy-preprod"
+          echo "Publié : deploy-preprod $commit, source $SOURCE_SHA."

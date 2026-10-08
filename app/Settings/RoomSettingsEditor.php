@@ -3,7 +3,6 @@
 namespace App\Settings;
 
 use Illuminate\Validation\ValidationException;
-use LogicException;
 
 /**
  * Éditeur des réglages de salon, par onglet (contrat C0, spec 50 § 3).
@@ -17,12 +16,13 @@ use LogicException;
  * ({@see PlatformLimits::roomSeats()}).
  *
  * **Règles de l'entrée (§ 3.1).**
- * - Toute clé hors de la liste de l'onglet, et `advanced: true` tant que
- *   {@see self::ADVANCED_TAB_AVAILABLE} est faux, est refusée par
+ * - Toute clé hors de la liste de l'onglet est refusée par
  *   `validation.room_settings.not_editable`, sous la clé du champ : sans ce
- *   refus, un client scripté poserait au J1 un barème que l'interface ne montre
- *   pas, puisque `fromInput()` accepte les seize champs. Un champ posté en
- *   snake_case, ou `themeIds`, est une clé hors liste comme une autre.
+ *   refus, un client scripté poserait depuis l'onglet Simple un barème que
+ *   l'interface n'y montre pas, puisque `fromInput()` accepte les seize champs.
+ *   Un champ posté en snake_case, ou `themeIds`, est une clé hors liste comme
+ *   une autre ; `roundDuration` l'est pour l'onglet Avancé, où `D` est la
+ *   somme des paliers.
  * - `themeKeys` est traduit en `themeIds` ; une clé inconnue ou dépubliée donne
  *   `validation.room_settings.theme_keys`. Aucun identifiant de thème ne vient
  *   du client (spec 10 § 1.1).
@@ -34,9 +34,12 @@ use LogicException;
  * paliers, barème, `attemptsPerRound` — suit `N` et `D` tant qu'elle vaut encore
  * le défaut dérivé de l'ancien couple ; sinon elle est conservée, sauf le
  * barème quand `N` change (sa taille change) et les paliers, toujours
- * réégalisés. Ces deux derniers cas sont rapportés (`reset`, `equalized`). Au
- * J1 les dérivés valent toujours leur défaut : les deux branches rapportées ne
- * sont atteignables qu'au J2, mais elles sont testées dès le J1.
+ * réégalisés. Ces deux derniers cas sont rapportés (`reset`, `equalized`).
+ *
+ * **Onglet Avancé (§ 3.3, lot L50-10).** Rien n'y est dérivé : quand `N`
+ * change, le client poste les deux listes redimensionnées, et une liste de
+ * mauvaise taille est refusée (`list_size`). Repasser en Simple
+ * (`advanced: false`) réégalise les paliers et conserve tout le reste.
  */
 final readonly class RoomSettingsEditor
 {
@@ -53,7 +56,7 @@ final readonly class RoomSettingsEditor
         'advanced',
     ];
 
-    /** [J2] Clés postées par l'onglet Avancé : `D = Σ tierDurations`, donc pas de `roundDuration`. */
+    /** Clés postées par l'onglet Avancé (L50-10) : `D = Σ tierDurations`, donc pas de `roundDuration`. */
     public const array ADVANCED_KEYS = [
         'themeKeys',
         'roundsCount',
@@ -75,10 +78,10 @@ final readonly class RoomSettingsEditor
 
     /**
      * Onglet Avancé livré ou non — constante de CODE, jamais un drapeau de
-     * configuration : elle passe à `true` par un commit du lot L50-10 [J2], jamais
-     * à l'exécution. Ce n'est donc pas un « feature flag ».
+     * configuration : elle est passée à `true` par un commit du lot L50-10
+     * [J2], jamais à l'exécution. Ce n'est donc pas un « feature flag ».
      */
-    public const bool ADVANCED_TAB_AVAILABLE = false;
+    public const bool ADVANCED_TAB_AVAILABLE = true;
 
     /** Clé client de la sélection de thèmes ; le stockage reste en `themeIds`. */
     public const string THEME_KEYS = 'themeKeys';
@@ -125,8 +128,8 @@ final readonly class RoomSettingsEditor
         }
 
         // L'onglet Simple ne sait poser que `advanced: false` : `true` est une
-        // bascule vers l'onglet Avancé, que l'appelant route vers `advanced()`
-        // une fois l'onglet livré, et qui n'atteint `simple()` qu'avant.
+        // bascule vers l'onglet Avancé, que l'aiguillage (`edit()`) route vers
+        // `advanced()` : elle n'atteint `simple()` que par un appel direct.
         if (array_key_exists(self::ADVANCED, $posted) && self::readBool($posted[self::ADVANCED]) === true) {
             $errors[self::ADVANCED][] = self::notEditable(self::ADVANCED);
         }
@@ -220,32 +223,178 @@ final readonly class RoomSettingsEditor
     }
 
     /**
-     * [J2] Onglet Avancé : même signature et même traduction des thèmes, rien
-     * n'y est dérivé (§ 3.3). Livré par le lot L50-10, avec
-     * {@see self::ADVANCED_TAB_AVAILABLE} à vrai.
+     * Onglet Avancé (§ 3.3, lot L50-10) : même signature et même traduction des
+     * thèmes que {@see self::simple()}, mais **rien n'y est dérivé**.
      *
-     * Tant que l'onglet n'est pas livré, l'appeler est une erreur de code et non
-     * un refus : un client qui poste `advanced: true` est routé vers
-     * {@see self::simple()}, qui le refuse par `not_editable`.
+     * ```
+     * input = current.toPayload() privé de themeIds
+     *       ⊕ posted (hors themeKeys)
+     *       ⊕ { themeIds: map(posted.themeKeys) ?? current.themeIds, advanced: true }
+     * changes:
+     *   tierPoints ↦ 'reset'  si N₁ ≠ N₀ ∧ current.tierPoints ≠ defaultTierPoints(N₀)
+     * ```
+     *
+     * - `roundDuration` y est hors liste (`not_editable`) : `D` devient
+     *   `Σ tierDurations` (10 § 6.1).
+     * - Quand `N` change, c'est le client qui poste les deux listes
+     *   redimensionnées ; une liste de mauvaise taille est refusée par
+     *   `fromInput()` (`list_size`) : le serveur n'invente aucune durée.
+     * - `advanced: false` n'y arrive jamais par l'aiguillage
+     *   ({@see self::edit()} le route vers {@see self::simple()}) ; posté
+     *   directement, il est refusé (`not_editable`), comme `advanced: true`
+     *   par l'onglet Simple.
+     * - Même rattrapage de capacité que l'onglet Simple : une capacité NON
+     *   postée au-dessus du plafond de plateforme abaissé est ramenée à ce
+     *   plafond et rapportée `clamped`.
      *
      * @param  array<string, mixed>  $posted
      * @param  array<string, int>  $publishedThemeIdsByKey
      * @return array{input: array<string, mixed>, changes: array<string, string>}
      *
-     * @throws LogicException Toujours, tant que l'onglet Avancé n'est pas livré.
+     * @throws ValidationException Clé hors de l'onglet, `advanced: false`, clé de thème inconnue.
      */
     public static function advanced(RoomSettings $current, array $posted, array $publishedThemeIdsByKey): array
     {
-        throw new LogicException(
-            'RoomSettingsEditor::advanced() : l’onglet Avancé n’est pas livré (ADVANCED_TAB_AVAILABLE, lot L50-10).',
-        );
+        $errors = [];
+
+        foreach (array_keys($posted) as $key) {
+            $field = (string) $key;
+
+            if (! in_array($field, self::ADVANCED_KEYS, true)) {
+                $errors[$field][] = self::notEditable($field);
+            }
+        }
+
+        if (array_key_exists(self::ADVANCED, $posted) && self::readBool($posted[self::ADVANCED]) === false) {
+            $errors[self::ADVANCED][] = self::notEditable(self::ADVANCED);
+        }
+
+        $themeIds = null;
+
+        if (array_key_exists(self::THEME_KEYS, $posted)) {
+            $themeIds = self::themeIds($posted[self::THEME_KEYS], $publishedThemeIdsByKey);
+
+            if ($themeIds === null) {
+                $errors[self::THEME_KEYS][] = self::message(
+                    'validation.room_settings.theme_keys',
+                    self::THEME_KEYS,
+                );
+            }
+        }
+
+        if ($errors !== []) {
+            throw ValidationException::withMessages($errors);
+        }
+
+        $framesBefore = $current->framesPerRound;
+        $framesAfter = array_key_exists('framesPerRound', $posted)
+            ? self::readInt($posted['framesPerRound'])
+            : $framesBefore;
+
+        $input = $current->toPayload();
+        unset($input[self::THEME_IDS]);
+
+        foreach ($posted as $key => $value) {
+            if ((string) $key !== self::THEME_KEYS) {
+                $input[(string) $key] = $value;
+            }
+        }
+
+        $input[self::THEME_IDS] = $themeIds ?? $current->themeIds;
+
+        // `advanced: true`, sauf une valeur illisible, transmise pour être refusée.
+        $input[self::ADVANCED] = array_key_exists(self::ADVANCED, $posted) && self::readBool($posted[self::ADVANCED]) === null
+            ? $posted[self::ADVANCED]
+            : true;
+
+        $changes = [];
+
+        if ($framesAfter !== null && $framesAfter !== $framesBefore
+            && $current->tierPoints !== RoomSettingsBounds::defaultTierPoints($framesBefore)) {
+            $changes['tierPoints'] = RoomSettings::CHANGE_RESET;
+        }
+
+        if (! array_key_exists('capacity', $posted) && $current->capacity > PlatformLimits::roomSeats()) {
+            $input['capacity'] = PlatformLimits::roomSeats();
+            $changes['capacity'] = RoomSettings::CHANGE_CLAMPED;
+        }
+
+        return ['input' => $input, 'changes' => $changes];
+    }
+
+    /**
+     * Les réglages propres à l'onglet Avancé (`ADVANCED_KEYS` hors
+     * `SIMPLE_KEYS`) qui s'écartent de leur défaut, dans l'ordre de `FIELDS`.
+     *
+     * « Défaut » veut dire le défaut DÉRIVÉ du couple courant `(N, D)` pour les
+     * champs dérivés — découpage égal des paliers, barème par défaut,
+     * `attemptsPerRound` dérivé de `D` —, et le défaut constant de
+     * {@see RoomSettingsBounds} pour les autres (§ 3.3, § 5.3).
+     *
+     * Deux lecteurs : le bandeau `room.settings.advanced_active` de l'onglet
+     * Simple (`advancedActive` de `RoomSettingsState`, § 2.6) et le rapport
+     * `overwritten` d'un preset ({@see self::overwritten()}).
+     *
+     * @return list<string>
+     */
+    public static function customizedAdvancedFields(RoomSettings $settings): array
+    {
+        $framesPerRound = $settings->framesPerRound;
+        $roundDuration = $settings->roundDuration();
+        $defaults = [
+            'tierDurations' => RoomSettingsBounds::defaultTierDurations($framesPerRound, $roundDuration),
+            'tierPoints' => RoomSettingsBounds::defaultTierPoints($framesPerRound),
+            'speedBonus' => RoomSettingsBounds::DEFAULT_SPEED_BONUS,
+            'noRepeatMovies' => RoomSettingsBounds::DEFAULT_NO_REPEAT_MOVIES,
+            'attemptsPerSecond' => RoomSettingsBounds::DEFAULT_ATTEMPTS_PER_SECOND,
+            'attemptsPerRound' => RoomSettingsBounds::defaultAttemptsPerRound($roundDuration),
+            'maxAnswerLength' => RoomSettingsBounds::DEFAULT_ANSWER_LENGTH,
+            'disconnectGraceSeconds' => RoomSettingsBounds::DEFAULT_DISCONNECT_GRACE_SECONDS,
+        ];
+        $payload = $settings->toPayload();
+        $customized = [];
+
+        foreach (self::advancedOnlyKeys() as $field) {
+            if (array_key_exists($field, $defaults) && $payload[$field] !== $defaults[$field]) {
+                $customized[] = $field;
+            }
+        }
+
+        return $customized;
+    }
+
+    /**
+     * Rapport `overwritten` d'une écriture qui remplace tout l'objet (preset,
+     * § 5.3 ; configuration chargée, § 18.3) : chaque réglage propre à l'onglet
+     * Avancé, personnalisé dans l'état courant et changé par la nouvelle
+     * valeur. Les champs de l'onglet Simple sont visibles à l'écran et ne sont
+     * jamais rapportés ; sans ce rapport, l'écrasement d'un réglage invisible
+     * serait silencieux.
+     *
+     * @return array<string, string>
+     */
+    public static function overwritten(RoomSettings $current, RoomSettings $next): array
+    {
+        $before = $current->toPayload();
+        $after = $next->toPayload();
+        $changes = [];
+
+        foreach (self::customizedAdvancedFields($current) as $field) {
+            if ($before[$field] !== $after[$field]) {
+                $changes[$field] = RoomSettings::CHANGE_OVERWRITTEN;
+            }
+        }
+
+        return $changes;
     }
 
     /**
      * L'onglet que choisit une charge postée : la clé `advanced` du corps, ou
-     * l'onglet courant quand elle est absente (§ 3.1). Tant que l'onglet Avancé
-     * n'est pas livré, tout part vers {@see self::simple()}, qui refuse
-     * `advanced: true` par `not_editable` et ramène un salon à `advanced = false`.
+     * l'onglet courant quand elle est absente (§ 3.1). `advanced: true` part
+     * vers {@see self::advanced()} ; `advanced: false` — la bascule Avancé →
+     * Simple — vers {@see self::simple()}, qui réégalise les paliers. Une
+     * valeur illisible part vers l'onglet Simple, qui la transmet pour
+     * qu'elle soit refusée (`boolean`).
      *
      * @param  array<string, mixed>  $posted
      * @param  array<string, int>  $publishedThemeIdsByKey
@@ -295,12 +444,22 @@ final readonly class RoomSettingsEditor
 
     /**
      * Lecture de {@see self::ADVANCED_TAB_AVAILABLE} derrière un type `bool` :
-     * la constante vaut `false` au J1, et une condition écrite sur elle seule
-     * serait lue comme toujours fausse par l'analyse statique.
+     * une condition écrite sur la constante seule serait lue comme toujours
+     * vraie par l'analyse statique.
      */
     private static function advancedTabAvailable(): bool
     {
         return self::ADVANCED_TAB_AVAILABLE;
+    }
+
+    /**
+     * Clés propres à l'onglet Avancé, dans l'ordre de `FIELDS`.
+     *
+     * @return list<string>
+     */
+    private static function advancedOnlyKeys(): array
+    {
+        return array_values(array_diff(self::ADVANCED_KEYS, self::SIMPLE_KEYS));
     }
 
     /**

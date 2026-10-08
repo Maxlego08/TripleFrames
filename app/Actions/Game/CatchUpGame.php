@@ -8,8 +8,8 @@ use App\Jobs\Game\AdvanceRound;
 use App\Models\Game;
 use App\Models\Round;
 use App\Models\RoundTier;
-use App\Settings\EngineConstants;
 use App\Support\Game\GameJournal;
+use App\Support\Game\PauseDeadline;
 use App\Support\Game\RoundStep;
 use App\Support\Game\TransitionBroadcasts;
 use Carbon\CarbonImmutable;
@@ -165,11 +165,11 @@ final readonly class CatchUpGame
         }
 
         if ($game->status === GameStatus::Paused) {
-            if ($game->paused_at === null) {
+            $interruptsAt = PauseDeadline::of($game);
+
+            if ($interruptsAt === null) {
                 return null;
             }
-
-            $interruptsAt = $game->paused_at->addMilliseconds(EngineConstants::pauseTimeoutMs());
 
             return ['kind' => self::INTERRUPT, 'at' => $interruptsAt, 'game' => $game, 'round' => null, 'tier' => null];
         }
@@ -283,8 +283,7 @@ final readonly class CatchUpGame
             if (! $lockedGame instanceof Game
                 || $lockedGame->ended_at !== null
                 || $lockedGame->status !== GameStatus::Paused
-                || $lockedGame->paused_at === null
-                || ! $lockedGame->paused_at->addMilliseconds(EngineConstants::pauseTimeoutMs())->equalTo($interruptsAt)) {
+                || PauseDeadline::of($lockedGame)?->equalTo($interruptsAt) !== true) {
                 return;
             }
 

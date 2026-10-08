@@ -35,7 +35,7 @@ type NextRoundBody = Record<string, never>;
 type Failure = { key: string; message: string };
 
 /**
- * « Manche suivante », le seul pouvoir de l'hôte en partie (spec 60 § 5.4,
+ * « Manche suivante », un pouvoir de l'hôte en partie (spec 60 § 5.4,
  * § 10.1 et § 13.5) : `POST room.round.next`, adressé par Wayfinder, envoyé
  * par `useHttp()` sous l'en-tête `X-Seat-Token` (`seatTokenHeaders()`, que
  * `useGameState` pose aussi sur toute requête). Le geste **raccourcit `R`,

@@ -26,6 +26,13 @@ final readonly class RoomRateLimits
     /** Entrées dans un salon par minute et par jeton (`room-join`). */
     public const int DEFAULT_JOINS_PER_MINUTE = 10;
 
+    /**
+     * Signalements de pseudo par minute et par siège (`seat-report`, spec 40
+     * § 13.3, D66 du 07/10) : douze sièges au plus par salon, un signalement
+     * utile par siège visé — au-delà, c'est un script.
+     */
+    public const int DEFAULT_SEAT_REPORTS_PER_MINUTE = 10;
+
     /** Préfixe de configuration sous lequel chaque débit est surchargeable. */
     private const string CONFIG_PREFIX = 'game.room.';
 
@@ -46,6 +53,14 @@ final readonly class RoomRateLimits
     public static function joinsPerMinute(): int
     {
         return self::configured('joins_per_minute', self::DEFAULT_JOINS_PER_MINUTE);
+    }
+
+    /**
+     * @throws InvalidArgumentException Débit configuré sous sa borne basse.
+     */
+    public static function seatReportsPerMinute(): int
+    {
+        return self::configured('seat_reports_per_minute', self::DEFAULT_SEAT_REPORTS_PER_MINUTE);
     }
 
     private static function configured(string $key, int $default): int

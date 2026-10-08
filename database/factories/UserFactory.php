@@ -10,6 +10,7 @@ use App\Enums\UserRole;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Factories\Factory;
+use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Imagick;
@@ -42,7 +43,36 @@ class UserFactory extends Factory
             'two_factor_secret' => null,
             'two_factor_recovery_codes' => null,
             'two_factor_confirmed_at' => null,
+            // Un compte de fabrique a accepté la version COURANTE des CGU, comme
+            // tout compte créé par l'application (spec 40 § 13.1) : sans quoi
+            // `terms.current` renverrait chaque page de compte vers
+            // l'interstitiel. Projections seules — voir {@see self::consented()}.
+            'terms_accepted_at' => now(),
+            'terms_version' => Config::string('legal.terms_version'),
+            'age_confirmed_at' => now(),
         ];
+    }
+
+    /**
+     * Aucun consentement : le cas du premier administrateur, créé en console
+     * (spec 40 § 13.1). `terms.current` le renvoie vers l'interstitiel, qui
+     * lui demande aussi son âge.
+     */
+    public function withoutConsent(): static
+    {
+        return $this->state([
+            'terms_accepted_at' => null,
+            'terms_version' => null,
+            'age_confirmed_at' => null,
+        ]);
+    }
+
+    /**
+     * CGU acceptées dans une version périmée : la ré-acceptation l'attend.
+     */
+    public function outdatedTerms(string $version = 'ancienne-1'): static
+    {
+        return $this->consented($version);
     }
 
     /**
@@ -305,13 +335,13 @@ class UserFactory extends Factory
      * survivent à l'anonymisation : un seeder qui ne poserait que ces colonnes
      * prouverait la mauvaise version dès le premier changement de CGU.
      */
-    public function consented(string $termsVersion = '1.0'): static
+    public function consented(?string $termsVersion = null): static
     {
         $now = CarbonImmutable::now();
 
         return $this->state([
             'terms_accepted_at' => $now,
-            'terms_version' => $termsVersion,
+            'terms_version' => $termsVersion ?? Config::string('legal.terms_version'),
             'age_confirmed_at' => $now,
         ]);
     }

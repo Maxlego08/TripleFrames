@@ -335,3 +335,31 @@ it('tient prêtes à leur place, inactives, les étapes de drainage absentes du 
         expect(array_key_exists($name, $commands))->toBeTrue("Étape préparée {$number} : la commande {$name} n'existe pas");
     }
 });
+
+it('sert la préproduction comme la production : aucun nom propre à un abonnement, tout chemin machine lu dans hook.env', function (): void {
+    // Spec 100 § 18 : le Plesk Git de la préproduction joue CE hook, identique.
+    // Ce qui diffère d'un abonnement à l'autre (composer.phar, HOME) vient de
+    // l'environnement de l'utilisateur d'abonnement, jamais du script.
+    $code = deployHookCodeLines();
+    $joined = implode("\n", $code);
+
+    expect($joined)->not->toMatch('/preprod|staging|production/i')
+        ->and($joined)->not->toMatch('/__TF_|<DOMAINE>/')
+        ->and($joined)->not->toMatch('/\btripleframes-[a-z@]/')
+        ->and($joined)->not->toContain('/var/www')
+        ->and($joined)->not->toMatch('/\bdeploy-preprod\b|refs\/heads\//');
+
+    // Le seul chemin absolu est le PHP de l'abonnement, commun aux deux
+    // abonnements de la machine ; la configuration machine est lue sous HOME.
+    preg_match_all('#(?<![\w$}])/[A-Za-z][\w./-]*#', str_replace(deployHookPhp(), '', $joined), $absolute);
+
+    expect(array_values(array_diff($absolute[0], ['/.config/tripleframes/hook.env'])))->toBe([])
+        ->and($joined)->toContain('source "${HOME:?}/.config/tripleframes/hook.env"');
+
+    // Le catalogue de démonstration de la préproduction est posé UNE fois à sa
+    // mise en service (ops/mise-en-service.md § 12), jamais par le hook, qui
+    // n'appelle que le seeder de plateforme, partout.
+    $seeds = array_values(array_filter(deployHookSteps(), static fn (array $step): bool => str_contains($step[1], 'db:seed')));
+
+    expect($seeds)->toBe([[6, 'artisan db:seed --class=PlatformDataSeeder --force']]);
+});

@@ -190,11 +190,12 @@ it('livre une liste noire avec en-tête de source et de licence pour chaque loca
     $directory = resource_path(NicknameBlocklist::DIRECTORY);
     $expected = array_map(
         static fn (string $name): string => "{$directory}/{$name}.txt",
-        [...array_map(static fn (Locale $locale): string => $locale->value, Locale::cases()), NicknameBlocklist::RESERVED_FILE],
+        [...array_map(static fn (Locale $locale): string => $locale->value, Locale::cases()), NicknameBlocklist::RESERVED_FILE, NicknameBlocklist::BANNED_FILE],
     );
 
     // Un fichier par cas de `Locale`, dans l'ordre de déclaration, puis les
-    // noms réservés ; aucun fichier du répertoire n'est laissé sans lecteur.
+    // noms réservés, puis les pseudos bannis au back-office (D66 du 07/10) ;
+    // aucun fichier du répertoire n'est laissé sans lecteur.
     expect(NicknameBlocklist::files())->toBe($expected);
 
     $present = glob("{$directory}/*") ?: [];
@@ -259,6 +260,12 @@ it('livre une liste noire avec en-tête de source et de licence pour chaque loca
             array_slice($lines, count($header), preserve_keys: true),
             static fn (string $line): bool => ! str_starts_with($line, '#'),
         );
+
+        // La liste des bannis naît vide : elle ne se remplit qu'au fil des
+        // bannissements du back-office (spec 40 § 13.3).
+        if ($file === NicknameBlocklist::BANNED_FILE.'.txt' && $entries === []) {
+            continue;
+        }
 
         expect($entries)->not->toBeEmpty("{$file} : aucune entrée");
 
@@ -519,7 +526,13 @@ it('ne cite jamais le mot refusé dans le message', function () {
         }
     }
 
-    expect(count($cases))->toBe(2 * count(NicknameBlocklist::files()));
+    // La liste des bannis (D66 du 07/10) peut ne porter aucune entrée.
+    $filled = array_filter(
+        NicknameBlocklist::files(),
+        static fn (string $path): bool => nicknameBlocklistEntries(basename($path, '.txt')) !== [],
+    );
+
+    expect(count($cases))->toBe(2 * count($filled));
 
     $messages = [];
 

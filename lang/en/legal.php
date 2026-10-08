@@ -48,7 +48,7 @@ return [
         'notice' => 'Legal notice',
         'privacy' => 'Privacy policy',
         'report' => 'Report content',
-        'sheet_description' => 'Legal notice, terms of use, privacy, content reporting and TMDB attribution.',
+        'sheet_description' => 'Legal notice, terms of use, privacy, cookie settings and content reporting.',
         'terms' => 'Terms of use',
     ],
 

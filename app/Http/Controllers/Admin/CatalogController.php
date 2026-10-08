@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Actions\Curation\PublishMovie;
 use App\Actions\Curation\SetMovieGroup;
+use App\Actions\Curation\UnsuspendMovie;
 use App\Enums\AnswerKeyKind;
 use App\Enums\ContentAvailability;
 use App\Enums\ContentFlag;
@@ -35,6 +36,7 @@ use App\Support\Catalog\AmbiguityPreview;
 use App\Support\Catalog\AnswerKeyNormalizer;
 use App\Support\Catalog\TextTarget;
 use App\Support\Curation\CurationStatus;
+use App\Support\Curation\MovieGroupCandidates;
 use App\Support\Curation\ReviewQueue;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
@@ -128,7 +130,7 @@ class CatalogController extends Controller
      * de fichier ne quitte le serveur** — la banque d'images n'expose que
      * niveau, disponibilité et état de traitement (§ 10).
      */
-    public function show(Request $request, Movie $movie, AmbiguityPreview $ambiguity): Response
+    public function show(Request $request, Movie $movie, AmbiguityPreview $ambiguity, MovieGroupCandidates $candidates): Response
     {
         $movie->load([
             'projection',
@@ -159,6 +161,13 @@ class CatalogController extends Controller
             // Le regroupement « même œuvre » et ses candidats exacts (§ 9.4).
             'group' => $this->group($movie),
             'group_exact_candidates' => $this->groupCandidates($movie),
+            // Les candidats par proximité (§ 9.4 [J2], L20-27) : titre proche
+            // à chiffres identiques, ou même collection. Calcul payé au seul
+            // rechargement partiel qui les demande ; une suggestion, jamais
+            // un regroupement.
+            'group_candidates' => Inertia::optional(
+                fn (): array => $this->proximityCandidates($movie, $candidates),
+            ),
             // La voie manuelle du regroupement : le film désigné par son
             // identifiant, servi au seul rechargement partiel qui ouvre la
             // même confirmation que celle d'un candidat — libellé pré-rempli,
@@ -198,6 +207,13 @@ class CatalogController extends Controller
             'publication_preview' => Inertia::optional(
                 fn (): array => $ambiguity->forPublication($movie)->toArray(),
             ),
+            // L'état que rendrait la levée d'une suspension (§ 11.2), lu dans
+            // le journal : la confirmation montre l'aperçu d'ambiguïté et en
+            // poste l'empreinte quand le film revient publié. `null` hors
+            // suspension, et pour qui ne peut pas lever.
+            'unsuspension' => Gate::allows('unsuspend', $movie)
+                ? ['restores' => UnsuspendMovie::restores($movie)?->value]
+                : null,
             // Ne sert qu'à afficher un bouton (spec 20 § 4.3) : chaque geste
             // garde sa policy à l'écriture. `curate` ouvre l'éditeur de la
             // banque, les titres, les alias et le regroupement ; les gestes
@@ -207,6 +223,9 @@ class CatalogController extends Controller
                 'publish' => Gate::allows('publish', $movie),
                 'unpublish' => Gate::allows('unpublish', $movie),
                 'verifyContent' => Gate::allows('verifyContent', $movie),
+                // Suspendre, lever (§ 11.2, ligne 30) : administrateur seul.
+                'suspend' => Gate::allows('suspend', $movie),
+                'unsuspend' => Gate::allows('unsuspend', $movie),
                 // Le lien « Historique » vers le journal filtré sur ce film
                 // (ligne 41, D41 du 30/09) : administrateur seul.
                 'viewJournal' => Gate::allows('viewAny', AdminAction::class),
@@ -214,6 +233,10 @@ class CatalogController extends Controller
                 // le seul lien que cette capacité masque ; les gestes
                 // d'appartenance suivent `curate`.
                 'editThemes' => Gate::allows('create', Theme::class),
+                // « Resynchroniser depuis TMDB » (§ 3.7, L20-24) : jamais
+                // un film retiré ni un film de démonstration.
+                'resync' => Gate::allows('resync', Movie::class)
+                    && MovieResyncController::ineligibility($movie) === null,
             ],
             // La cadence du battement de débit (§ 10.1) : la fiche est une
             // page du film, où le temps actif se mesure.
@@ -570,6 +593,26 @@ class CatalogController extends Controller
             ->get(['id', 'title_original', 'release_year', 'availability']);
 
         return AdminCatalogPresenter::movieGroup($group, $members);
+    }
+
+    /**
+     * Les candidats par proximité au regroupement (§ 9.4 [J2], L20-27),
+     * chacun avec ses raisons (`title_distance`, `same_collection`).
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function proximityCandidates(Movie $movie, MovieGroupCandidates $candidates): array
+    {
+        $rows = [];
+
+        foreach ($candidates->for($movie) as $candidate) {
+            $rows[] = [
+                ...AdminCatalogPresenter::groupCandidate($movie, $candidate['movie']),
+                'reasons' => $candidate['reasons'],
+            ];
+        }
+
+        return $rows;
     }
 
     /**

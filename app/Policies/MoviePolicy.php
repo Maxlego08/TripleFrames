@@ -24,7 +24,8 @@ use App\Models\User;
  * l'admin seul suspend et prononce un retrait juridique. Ces deux gestes, et la
  * resynchronisation, sont des méthodes du jalon 2 (`resync`, `suspend`,
  * `unsuspend`, `withdraw`) : elles arrivent avec les lots qui livrent leurs
- * routes (L20-20, L20-21, L20-24), jamais avant — une méthode qu'aucune route
+ * routes (L20-20, L20-21, L20-24 — `resync` livrée le 07/10, `suspend` et
+ * `unsuspend` le 08/10), jamais avant — une méthode qu'aucune route
  * n'appelle serait une décision que personne ne voit passer.
  *
  * **Vérifiée à chaque écriture** : chaque route du back-office la nomme par son
@@ -90,6 +91,19 @@ class MoviePolicy
     }
 
     /**
+     * Resynchroniser des films depuis TMDB (spec 20 § 3.7, ligne 26, L20-24) :
+     * l'écran de différences et le lancement du balayage `resync`. Curateur
+     * au moins, comme tout import — la resynchronisation ne touche que la
+     * liste close du § 9.3, jamais un état de curation ni une disponibilité.
+     * Méthode de classe : l'écran porte une sélection de films, et chaque
+     * film non éligible (retiré, de démonstration) y est écarté et nommé.
+     */
+    public function resync(User $user): bool
+    {
+        return $user->role->atLeast(UserRole::Curator);
+    }
+
+    /**
      * « Publier les films prêts » (spec 20 § 8.1 bis, ligne 47, D59 du 06/10) :
      * même seuil que la publication à l'unité. L'action rejoue ensuite
      * {@see self::publish()} sur chaque film du lot, sous verrou.
@@ -124,6 +138,35 @@ class MoviePolicy
     {
         return $user->role->atLeast(UserRole::Curator)
             && in_array($movie->availability, [ContentAvailability::Draft, ContentAvailability::Published], true);
+    }
+
+    /**
+     * Suspendre un film en un clic (spec 20 § 11.2, ligne 30, L20-20) :
+     * **administrateur seul** — régime conservatoire de l'admin (§ 11.1),
+     * jamais un geste de curation. Depuis tout état réversible — brouillon,
+     * publié, dépublié ou écarté —, jamais depuis `suspended` (déjà
+     * suspendu) ni `withdrawn` (terminal).
+     */
+    public function suspend(User $user, Movie $movie): bool
+    {
+        return $user->role->atLeast(UserRole::Admin)
+            && in_array($movie->availability, [
+                ContentAvailability::Draft,
+                ContentAvailability::Published,
+                ContentAvailability::Unpublished,
+            ], true);
+    }
+
+    /**
+     * Lever la suspension d'un film (§ 11.2) : administrateur seul, film
+     * `suspended` seulement. L'état restauré se lit dans le journal, et la
+     * garde de publication est rejouée sous verrou par `UnsuspendMovie` —
+     * jamais un 403 : une garde en échec fait revenir le film `unpublished`.
+     */
+    public function unsuspend(User $user, Movie $movie): bool
+    {
+        return $user->role->atLeast(UserRole::Admin)
+            && $movie->availability === ContentAvailability::Suspended;
     }
 
     /**

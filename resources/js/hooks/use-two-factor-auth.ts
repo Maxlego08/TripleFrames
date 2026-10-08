@@ -18,8 +18,17 @@ export type UseTwoFactorAuthReturn = {
     fetchRecoveryCodes: () => Promise<void>;
 };
 
+/**
+ * Longueur d'un code TOTP : celle que Fortify émet et vérifie (RFC 6238),
+ * jamais une règle de jeu.
+ */
 export const OTP_MAX_LENGTH = 6;
 
+/**
+ * Données de configuration de la 2FA lues à la demande (QR code, clé, codes
+ * de secours) pour l'écran Sécurité (spec 90 § 11.2). Chaque échec devient un
+ * message traduit, rendu par `AlertError`.
+ */
 export const useTwoFactorAuth = (): UseTwoFactorAuthReturn => {
     const { submit } = useHttp();
     const { t } = useTranslations();

@@ -6,6 +6,7 @@ use App\Enums\ContentAvailability;
 use App\Enums\ImportSource;
 use App\Models\Movie;
 use App\Models\User;
+use App\Support\Curation\CurationClaim;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Config;
@@ -37,6 +38,9 @@ use Illuminate\Support\Facades\Config;
  * n'est jamais suivie d'un incrément. Un film de démonstration n'est jamais
  * compté (§ 10.2).
  *
+ * **Réservation souple** (§ 4.1, L20-32) : chaque battement sur un film de la
+ * file prend ou prolonge sa réservation en cache ({@see CurationClaim}).
+ *
  * **N'écrit que `movie.curation_active_seconds`** : l'incrément passe par le
  * constructeur de requêtes, sans `updated_at` — le battement n'est pas une
  * retouche du film (la file de curation lit, elle, `frame.updated_at`).
@@ -59,6 +63,12 @@ final class RecordCurationHeartbeat
      */
     public function handle(User $user, Movie $movie, CarbonImmutable $now): int
     {
+        // La réservation souple du film (§ 4.1, L20-32) est prolongée par
+        // chaque battement d'un film de la file ; jamais volée à un autre.
+        if (self::inQueue($movie)) {
+            CurationClaim::claim($user, $movie->id);
+        }
+
         if (! self::measured($movie)) {
             return 0;
         }
@@ -109,6 +119,13 @@ final class RecordCurationHeartbeat
     public static function key(User $user, Movie $movie): string
     {
         return self::KEY_PREFIX.$user->id.':'.$movie->id;
+    }
+
+    /** Le film est-il dans le périmètre de la file de curation (§ 4.1) ? */
+    private static function inQueue(Movie $movie): bool
+    {
+        return $movie->import_source !== ImportSource::Demo
+            && $movie->availability === ContentAvailability::Draft;
     }
 
     /**

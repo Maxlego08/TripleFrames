@@ -3,8 +3,10 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useId } from 'react';
 import { BrandMark } from '@/components/auth/auth-brand';
 import { PlayerAvatar } from '@/components/game/player-avatar';
+import { usePlayerLabel } from '@/components/game/player-ordinals';
 import { useTranslations } from '@/hooks/use-translations';
 import type { SeatView } from '@/types/game-wire';
+import type { AvatarData } from '@/types/player';
 
 type CinemaSeatMapProps = {
     seats: readonly SeatView[];
@@ -20,6 +22,13 @@ type CinemaSeatMapProps = {
      * supplanté, connexion temps réel absente) : flèches visibles, inactives.
      */
     avatarBusy: boolean;
+    /**
+     * L'avatar affiché du siège du joueur, choix optimiste compris
+     * (`lobbyAvatarData`) ; nul : celui du salon.
+     */
+    selfAvatar: AvatarData | null;
+    /** Le clic sur l'avatar du joueur : la grille « Votre avatar ». */
+    onOpenAvatar: () => void;
 };
 
 const OTHER_POSITIONS = [1, 3, 5, 7, 8, 11, 2, 4, 6, 9, 12] as const;
@@ -32,8 +41,11 @@ export function CinemaSeatMap({
     selfPublicId,
     onCycleAvatar,
     avatarBusy,
+    selfAvatar,
+    onOpenAvatar,
 }: CinemaSeatMapProps) {
     const { t } = useTranslations();
+    const label = usePlayerLabel();
     const { name } = usePage().props;
     const headingId = useId();
     const presentSeats = seats.filter(
@@ -81,13 +93,13 @@ export function CinemaSeatMap({
                     <span className="cinema-room__tier cinema-room__tier--front" />
                 </div>
 
-                <ul className="cinema-room__seats" aria-live="polite">
+                <ul className="cinema-room__seats">
                     {Array.from({ length: ROOM_SEATS }, (_, index) => {
                         const position = index + 1;
                         const seat = slots.get(position);
                         const isSelf = seat?.publicId === selfPublicId;
-                        const nickname =
-                            seat?.nickname ?? seat?.avatar.initials ?? '';
+                        // « Joueur n » pour un pseudo masqué (spec 40 § 13.3).
+                        const nickname = seat === undefined ? '' : label(seat);
 
                         return (
                             <li
@@ -138,15 +150,39 @@ export function CinemaSeatMap({
                                             </button>
                                         )}
 
-                                        <PlayerAvatar
-                                            avatar={seat.avatar}
-                                            alt=""
-                                            className={
-                                                isSelf
-                                                    ? 'player-avatar player-avatar--large'
-                                                    : 'player-avatar'
-                                            }
-                                        />
+                                        {isSelf ? (
+                                            <button
+                                                type="button"
+                                                className="cinema-seat__avatar-button"
+                                                aria-label={t(
+                                                    'room.lobby.avatar.open',
+                                                )}
+                                                aria-haspopup="dialog"
+                                                aria-disabled={
+                                                    avatarBusy || undefined
+                                                }
+                                                onClick={() => {
+                                                    if (!avatarBusy) {
+                                                        onOpenAvatar();
+                                                    }
+                                                }}
+                                            >
+                                                <PlayerAvatar
+                                                    avatar={
+                                                        selfAvatar ??
+                                                        seat.avatar
+                                                    }
+                                                    alt=""
+                                                    className="player-avatar player-avatar--large"
+                                                />
+                                            </button>
+                                        ) : (
+                                            <PlayerAvatar
+                                                avatar={seat.avatar}
+                                                alt=""
+                                                className="player-avatar"
+                                            />
+                                        )}
 
                                         {isSelf && (
                                             <button

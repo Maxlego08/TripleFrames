@@ -68,8 +68,14 @@ function purgePerimeterSnapshot(): array
  * Des lignes éligibles dans chaque périmètre implémenté, puis la purge telle
  * que la restauration la joue (`purge:run --sync`) : chaque périmètre doit
  * avoir tourné ET supprimé.
+ *
+ * Rend l'instantané du périmètre interdit pris APRÈS l'ensemencement et
+ * AVANT la purge : un signalement de contenu (D63 du 07/10) vise un film du
+ * catalogue, que son jeu de lignes crée — la purge, elle, n'y touche jamais.
+ *
+ * @return array<string, int>
  */
-function purgePerimeterRunAll(): void
+function purgePerimeterRunAll(): array
 {
     $now = CarbonImmutable::now();
     $seeded = [];
@@ -77,6 +83,8 @@ function purgePerimeterRunAll(): void
     foreach (PurgeScope::implemented() as $scope) {
         $seeded[$scope->value] = RetentionRows::seed($scope, $now);
     }
+
+    $beforePurge = purgePerimeterSnapshot();
 
     test()->artisan('purge:run', ['--sync' => true])->assertSuccessful();
 
@@ -88,6 +96,8 @@ function purgePerimeterRunAll(): void
         expect($run->status)->toBe(PurgeRunStatus::Completed, $run->scope->value)
             ->and($run->rows_deleted)->toBe($seeded[$run->scope->value]['eligible'], $run->scope->value);
     }
+
+    return $beforePurge;
 }
 
 it('une saved_config de 18 mois existe toujours après purge', function (): void {
@@ -103,7 +113,7 @@ it('une saved_config de 18 mois existe toujours après purge', function (): void
 
     expect($config->created_at->lessThan($now->subMonths(12)))->toBeTrue();
 
-    purgePerimeterRunAll();
+    $beforePurge = purgePerimeterRunAll();
 
     // « Compte compris » dans la règle des 12 mois signifie « pas
     // d'exemption », jamais « supprimé à 12 mois » : la configuration et son
@@ -111,7 +121,8 @@ it('une saved_config de 18 mois existe toujours après purge', function (): void
     expect(SavedConfig::query()->find($config->id)?->getAttributes())->toBe($attributes)
         ->and(DB::table('users')->where('id', $config->user_id)->first())->not->toBeNull()
         ->and($config->user()->firstOrFail()->getAttributes())->toBe($owner)
-        ->and(purgePerimeterSnapshot())->toBe($before);
+        ->and(purgePerimeterSnapshot())->toBe($beforePurge)
+        ->and(array_diff_key($beforePurge, array_flip(['movie', 'movie_projection'])))->toBe(array_diff_key($before, array_flip(['movie', 'movie_projection'])));
 });
 
 it('une frame de 13 mois survit à la purge', function (): void {
@@ -135,10 +146,11 @@ it('une frame de 13 mois survit à la purge', function (): void {
         ->and($before['frame'])->toBeGreaterThan(1)
         ->and($before['tmdb_company'])->toBeGreaterThan(0);
 
-    purgePerimeterRunAll();
+    $beforePurge = purgePerimeterRunAll();
 
     expect(Frame::query()->find($frame->id)?->getAttributes())->toBe($attributes)
         ->and(DB::table('frame_review')->where('id', $frame->published_review_id)->first())->toEqual($review)
         ->and(Storage::disk(FrameStoragePrefix::DISK)->exists((string) $frame->game_path))->toBeTrue()
-        ->and(purgePerimeterSnapshot())->toBe($before);
+        ->and(purgePerimeterSnapshot())->toBe($beforePurge)
+        ->and(array_diff_key($beforePurge, array_flip(['movie', 'movie_projection'])))->toBe(array_diff_key($before, array_flip(['movie', 'movie_projection'])));
 });

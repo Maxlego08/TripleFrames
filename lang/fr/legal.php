@@ -39,7 +39,7 @@ return [
         'notice' => 'Mentions légales',
         'privacy' => 'Politique de confidentialité',
         'report' => 'Signaler un contenu',
-        'sheet_description' => 'Mentions légales, conditions d’utilisation, confidentialité, signalement d’un contenu et attribution TMDB.',
+        'sheet_description' => 'Mentions légales, conditions d’utilisation, confidentialité, gestion des cookies et signalement d’un contenu.',
         'terms' => 'Conditions générales d’utilisation',
     ],
 

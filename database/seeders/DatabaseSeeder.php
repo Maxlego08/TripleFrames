@@ -6,7 +6,8 @@ use Illuminate\Database\Seeder;
 
 /**
  * Le point d'entrée de `php artisan db:seed`, et la seule décision qu'il prend :
- * **ce qui tourne partout, et ce qui ne tourne qu'en `local` et en `testing`.**
+ * **ce qui tourne partout, et ce qui ne tourne qu'en `local` et en `testing`**
+ * — plus le seul catalogue de démonstration en `staging`, la préproduction.
  *
  * L'ordre est un ordre de dépendance, pas une préférence :
  *
@@ -46,13 +47,23 @@ class DatabaseSeeder extends Seeder
         // donne sa valeur à ce compte.
         $demo = app()->environment(['local', 'testing']);
 
+        // La préproduction (`APP_ENV=staging`, spec 100 § 18, n° 5 de D66 du
+        // 07/10) reçoit le catalogue de démonstration et lui seul : jamais les
+        // comptes au mot de passe connu, remplacés comme auteurs du catalogue par
+        // deux comptes inouvrables ({@see PreprodCurationAccountsSeeder}).
+        $preprod = app()->environment('staging');
+
         if ($demo) {
             $this->call(DemoAccountsSeeder::class);
         }
 
+        if ($preprod) {
+            $this->call(PreprodCurationAccountsSeeder::class);
+        }
+
         $this->call(PlatformDataSeeder::class);
 
-        if ($demo) {
+        if ($demo || $preprod) {
             $this->call(DemoCatalogueSeeder::class);
         }
     }

@@ -1,11 +1,13 @@
 <?php
 
+use App\Enums\ContentAvailability;
 use App\Enums\ContentFlag;
 use App\Enums\FrameLevel;
 use App\Enums\Locale;
 use App\Models\AdminAction;
 use App\Models\Alias;
 use App\Models\AudienceDaily;
+use App\Models\ContentReport;
 use App\Models\Frame;
 use App\Models\FrameReview;
 use App\Models\Game;
@@ -285,6 +287,30 @@ function adminRoutesMatrix(): array
             redirect: fn (array $parameters): string => route('admin.catalog.show', $parameters),
         ),
 
+        // Ligne 30 — suspendre un film, lever sa suspension (L20-20) :
+        // administrateur seul, motif facultatif. Un film suspendu sans ligne
+        // au journal revient brouillon : la levée n'exige alors aucun aperçu.
+        'admin.catalog.suspend' => adminRoutesRow(
+            row: 30,
+            method: 'POST',
+            guards: ['can:suspend,movie'],
+            curator: 403,
+            admin: 302,
+            parameters: fn (): array => adminRoutesMovieGestureParameters(Movie::factory()->published()->create()),
+            payload: fn (): array => ['reason' => 'Motif de la matrice.'],
+            redirect: fn (array $parameters): string => route('admin.catalog.show', $parameters),
+        ),
+
+        'admin.catalog.unsuspend' => adminRoutesRow(
+            row: 30,
+            method: 'POST',
+            guards: ['can:unsuspend,movie'],
+            curator: 403,
+            admin: 302,
+            parameters: fn (): array => adminRoutesMovieGestureParameters(Movie::factory()->suspended()->create()),
+            redirect: fn (array $parameters): string => route('admin.catalog.show', $parameters),
+        ),
+
         // Ligne 21 — cocher « contenu vérifié » sur un film dont la
         // classification reste à vérifier : motif obligatoire.
         'admin.catalog.content_verified' => adminRoutesRow(
@@ -426,6 +452,93 @@ function adminRoutesMatrix(): array
                 return ['movie_ids' => array_column($batch['movies'], 'id'), 'ambiguity_digest' => $batch['digest']];
             },
             redirect: fn (array $parameters): string => route('admin.catalog.index'),
+        ),
+
+        // Ligne 48 — la file des signalements de contenu par les joueurs
+        // (§ 11.6, D63 du 07/10) : curateur au moins ; chaque geste clôt les
+        // signalements ouverts de sa cible et revient à la file.
+        'admin.content-reports.index' => adminRoutesRow(
+            row: 48,
+            method: 'GET',
+            guards: ['can:viewAny,'.ContentReport::class],
+            curator: 200,
+            admin: 200,
+        ),
+
+        'admin.content-reports.unpublish-movie' => adminRoutesRow(
+            row: 48,
+            method: 'POST',
+            guards: ['can:resolve,contentReport'],
+            curator: 302,
+            admin: 302,
+            parameters: fn (): array => [
+                'contentReport' => ContentReport::factory()->forMovie(Movie::factory()->published()->create())->create()->id,
+            ],
+            payload: fn (): array => ['reason' => 'Motif de la matrice.'],
+            redirect: fn (array $parameters): string => route('admin.content-reports.index'),
+        ),
+
+        'admin.content-reports.unpublish-frame' => adminRoutesRow(
+            row: 48,
+            method: 'POST',
+            guards: ['can:resolve,contentReport'],
+            curator: 302,
+            admin: 302,
+            parameters: function (): array {
+                $frame = Frame::query()->findOrFail(adminRoutesFrameGestureParameters(published: true)['frame']);
+
+                return ['contentReport' => ContentReport::factory()->forFrame($frame)->create()->id];
+            },
+            redirect: fn (array $parameters): string => route('admin.content-reports.index'),
+        ),
+
+        'admin.content-reports.dismiss' => adminRoutesRow(
+            row: 48,
+            method: 'POST',
+            guards: ['can:resolve,contentReport'],
+            curator: 302,
+            admin: 302,
+            parameters: fn (): array => ['contentReport' => ContentReport::factory()->create()->id],
+            redirect: fn (array $parameters): string => route('admin.content-reports.index'),
+        ),
+
+        // Ligne 48, au J2 (D66 du 07/10, n° 34) — suspendre depuis la file :
+        // `resolve` garde la route, et la policy de la suspension, repassée
+        // sous verrou par l'action, refuse le curateur.
+        'admin.content-reports.suspend-movie' => adminRoutesRow(
+            row: 48,
+            method: 'POST',
+            guards: ['can:resolve,contentReport'],
+            curator: 403,
+            admin: 302,
+            parameters: fn (): array => [
+                'contentReport' => ContentReport::factory()->forMovie(Movie::factory()->published()->create())->create()->id,
+            ],
+            redirect: fn (array $parameters): string => route('admin.content-reports.index'),
+        ),
+
+        'admin.content-reports.suspend-frame' => adminRoutesRow(
+            row: 48,
+            method: 'POST',
+            guards: ['can:resolve,contentReport'],
+            curator: 403,
+            admin: 302,
+            parameters: function (): array {
+                $frame = Frame::query()->findOrFail(adminRoutesFrameGestureParameters(published: true)['frame']);
+
+                return ['contentReport' => ContentReport::factory()->forFrame($frame)->create()->id];
+            },
+            redirect: fn (array $parameters): string => route('admin.content-reports.index'),
+        ),
+
+        // Ligne 29 — films jamais trouvés et incidents (L20-29), agrégat par
+        // film sans identité de joueur.
+        'admin.incidents.index' => adminRoutesRow(
+            row: 29,
+            method: 'GET',
+            guards: ['can:viewAny,'.Movie::class],
+            curator: 200,
+            admin: 200,
         ),
 
         // Ligne 27 — file agrégée de suggestions, reconstruction idempotente,
@@ -608,6 +721,37 @@ function adminRoutesMatrix(): array
             admin: 302,
             parameters: fn (): array => adminRoutesFrameGestureParameters(published: true),
             payload: fn (): array => ['reason' => 'Motif de la matrice.'],
+            redirect: fn (array $parameters): string => route('admin.catalog.show', ['movie' => $parameters['movie']]),
+        ),
+
+        // Ligne 30 — suspendre une image publiée, lever sa suspension
+        // (L20-20) : administrateur seul ; la levée suppose un film qui
+        // n'est pas lui-même suspendu.
+        'admin.catalog.frames.suspend' => adminRoutesRow(
+            row: 30,
+            method: 'POST',
+            guards: ['can:suspend,frame'],
+            curator: 403,
+            admin: 302,
+            parameters: fn (): array => adminRoutesFrameGestureParameters(published: true),
+            redirect: fn (array $parameters): string => route('admin.catalog.show', ['movie' => $parameters['movie']]),
+        ),
+
+        'admin.catalog.frames.unsuspend' => adminRoutesRow(
+            row: 30,
+            method: 'POST',
+            guards: ['can:unsuspend,frame'],
+            curator: 403,
+            admin: 302,
+            parameters: function (): array {
+                $parameters = adminRoutesFrameGestureParameters(published: true);
+
+                Frame::query()->findOrFail($parameters['frame'])
+                    ->forceFill(['availability' => ContentAvailability::Suspended])
+                    ->save();
+
+                return $parameters;
+            },
             redirect: fn (array $parameters): string => route('admin.catalog.show', ['movie' => $parameters['movie']]),
         ),
 
@@ -906,6 +1050,105 @@ function adminRoutesMatrix(): array
             parameters: fn (): array => ['user' => User::factory()->withUploadedAvatar()->create()->getKey()],
             payload: fn (): array => ['reason' => 'Retrait matrice'],
             redirect: fn (array $parameters): string => route('admin.avatars.index'),
+        ),
+
+        // Ligne 35 — la modération des pseudos (D66 du 07/10) : administrateur
+        // seul, deux gestes consignés — lever, bannir (motif obligatoire).
+        'admin.moderation.index' => adminRoutesRow(
+            row: 35,
+            method: 'GET',
+            guards: ['can:moderateNicknames,'.Player::class],
+            curator: 403,
+            admin: 200,
+        ),
+
+        'admin.moderation.nickname.unmask' => adminRoutesRow(
+            row: 35,
+            method: 'POST',
+            guards: ['can:moderateNickname,player'],
+            curator: 403,
+            admin: 302,
+            parameters: fn (): array => ['player' => Player::factory()->masked()->create()->getKey()],
+            redirect: fn (array $parameters): string => route('admin.moderation.index'),
+        ),
+
+        // Ligne 26 — resynchroniser depuis TMDB (§ 3.7, L20-24). L'écran
+        // d'un film de démonstration n'appelle jamais TMDB : il le nomme
+        // écarté. Le lancement ouvre un balayage `resync` et le met en file
+        // (`Bus::fake()`), jamais un appel TMDB dans la requête.
+        'admin.catalog.resync.show' => adminRoutesRow(
+            row: 26,
+            method: 'GET',
+            guards: ['can:resync,'.Movie::class],
+            curator: 200,
+            admin: 200,
+            payload: fn (): array => ['movies' => [Movie::factory()->demo()->create()->getKey()]],
+        ),
+
+        'admin.catalog.resync.store' => adminRoutesRow(
+            row: 26,
+            method: 'POST',
+            guards: ['can:resync,'.Movie::class],
+            curator: 302,
+            admin: 302,
+            payload: fn (): array => ['movies' => [Movie::factory()->create()->getKey()]],
+            redirect: $latestRun,
+        ),
+
+        // Ligne 25 — clore un balayage suspendu (§ 3.8, L20-24) : un
+        // balayage « en file », qu'aucun traitement ne tient.
+        'admin.import.abandon' => adminRoutesRow(
+            row: 25,
+            method: 'POST',
+            guards: ['can:update,importRun'],
+            curator: 302,
+            admin: 302,
+            parameters: fn (): array => ['importRun' => ImportRun::factory()->paste()->running()->create(['started_at' => null])->getKey()],
+            redirect: fn (array $parameters): string => route('admin.import.show', $parameters),
+        ),
+
+        // Ligne 28 — corriger la difficulté d'un film (§ 9.6, L20-28b).
+        'admin.catalog.difficulty.update' => adminRoutesRow(
+            row: 28,
+            method: 'PATCH',
+            guards: ['can:curate,movie'],
+            curator: 302,
+            admin: 302,
+            parameters: fn (): array => adminRoutesMovieGestureParameters(Movie::factory()->create()),
+            payload: fn (): array => ['movie_difficulty_override' => 'hard'],
+            redirect: fn (array $parameters): string => route('admin.catalog.show', $parameters),
+        ),
+
+        // Ligne 33 — le geste rétroactif de grille (§ 7.7, L20-25),
+        // administrateur seul. Sous la grille v1, non rétroactive, l'envoi
+        // valide revient à l'écran, qui dit « indisponible ».
+        'admin.exclusion_grid.retroactive.show' => adminRoutesRow(
+            row: 33,
+            method: 'GET',
+            guards: ['can:applyRetroactiveGrid,'.Frame::class],
+            curator: 403,
+            admin: 200,
+        ),
+
+        'admin.exclusion_grid.retroactive.store' => adminRoutesRow(
+            row: 33,
+            method: 'POST',
+            guards: ['can:applyRetroactiveGrid,'.Frame::class],
+            curator: 403,
+            admin: 302,
+            payload: fn (): array => ['version' => ExclusionGrid::CURRENT_VERSION, 'reason' => 'Motif juridique de la matrice.'],
+            redirect: fn (array $parameters): string => route('admin.exclusion_grid.retroactive.show'),
+        ),
+
+        'admin.moderation.nickname.ban' => adminRoutesRow(
+            row: 35,
+            method: 'POST',
+            guards: ['can:moderateNickname,player'],
+            curator: 403,
+            admin: 302,
+            parameters: fn (): array => ['player' => Player::factory()->create()->getKey()],
+            payload: fn (): array => ['reason' => 'Bannissement matrice'],
+            redirect: fn (array $parameters): string => route('admin.moderation.index'),
         ),
     ];
 }

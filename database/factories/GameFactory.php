@@ -4,6 +4,7 @@ namespace Database\Factories;
 
 use App\Actions\Game\FinalizeGame;
 use App\Enums\GameMode;
+use App\Enums\GamePauseKind;
 use App\Enums\GameStatus;
 use App\Models\Game;
 use App\Models\Room;
@@ -68,7 +69,10 @@ class GameFactory extends Factory
             'draw_seed' => SeededPrf::generateSeed(),
             'started_at' => now(),
             'paused_at' => null,
+            'pause_kind' => null,
+            'pause_requested_at' => null,
             'total_paused_ms' => 0,
+            'manual_paused_ms' => 0,
             'ended_at' => null,
         ]);
     }
@@ -158,6 +162,17 @@ class GameFactory extends Factory
         return $this->state(fn (array $attributes): array => [
             'status' => GameStatus::Paused,
             'paused_at' => now(),
+            'pause_kind' => GamePauseKind::Empty,
+        ]);
+    }
+
+    /** Partie en pause manuelle (D64 du 07/10) : seule une reprise explicite la reprend. */
+    public function manuallyPaused(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'status' => GameStatus::Paused,
+            'paused_at' => now(),
+            'pause_kind' => GamePauseKind::Manual,
         ]);
     }
 

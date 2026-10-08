@@ -5,6 +5,7 @@ namespace App\Providers;
 use App\Events\Game\AnswerAccepted;
 use App\Events\Game\GameFinalized;
 use App\Events\Game\InputClosed;
+use App\Listeners\Account\ForgetPlayHistoryCache;
 use App\Listeners\DiagnoseDependencies;
 use App\Listeners\Game\BroadcastGameEnded;
 use App\Listeners\Game\CloseSeatInput;
@@ -13,6 +14,7 @@ use App\Listeners\SyncCarbonLocale;
 use App\Models\PerfSample;
 use App\Settings\EngineConstants;
 use App\Settings\PlatformLimits;
+use App\Support\Catalog\TmdbQuotaLimiter;
 use App\Support\Draw\PoolQuery;
 use App\Support\I18n\CookiePlayerTokenLocale;
 use App\Support\I18n\LangVersion;
@@ -59,6 +61,11 @@ class AppServiceProvider extends ServiceProvider
         // La mesure des performances (spec 100 § 10.11, D47 du 01/10) : une
         // seule instance, qui porte les portées ouvertes de la requête ou du job.
         $this->app->singleton(PerfRecorder::class);
+
+        // Le limiteur de quota TMDB est partagé entre la commande d'import et
+        // le client (spec 20 § 3.6, L20-24a) : un appel admis par le balayage
+        // ne doit pas être recompté comme interactif.
+        $this->app->singleton(TmdbQuotaLimiter::class);
     }
 
     /**
@@ -101,13 +108,16 @@ class AppServiceProvider extends ServiceProvider
      * crochets de fin de saisie sur les événements de domaine de 70
      * (`AnswerAccepted`, `InputClosed`), qui émettent `player.locked` et
      * réévaluent la fin anticipée, et l'annonce `game.ended` sur le gel de 80
-     * (`GameFinalized`). Tous sont livrés après commit, synchrones.
+     * (`GameFinalized`). Tous sont livrés après commit, synchrones. Le même
+     * gel oublie le cache court de l'historique des comptes de la partie
+     * (spec 40 § 13.4, L40-13).
      */
     protected function registerGameListeners(): void
     {
         Event::listen(AnswerAccepted::class, [CloseSeatInput::class, 'answerAccepted']);
         Event::listen(InputClosed::class, [CloseSeatInput::class, 'inputClosed']);
         Event::listen(GameFinalized::class, BroadcastGameEnded::class);
+        Event::listen(GameFinalized::class, ForgetPlayHistoryCache::class);
     }
 
     /**

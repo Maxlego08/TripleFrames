@@ -4,6 +4,7 @@ namespace Tests\Support\Retention;
 
 use App\Enums\PurgeScope;
 use App\Models\AudienceDaily;
+use App\Models\ContentReport;
 use App\Models\Game;
 use App\Models\GamePlayer;
 use App\Models\GameTrace;
@@ -108,6 +109,7 @@ final class RetentionRows
             PurgeScope::PurgeRun => $now->subMonthsNoOverflow(RetentionWindows::PURGE_RUN_MONTHS),
             PurgeScope::Perf, PurgeScope::GameTrace => $now->subDays(RetentionWindows::PERF_DAYS),
             PurgeScope::Audience => $now->startOfDay()->subMonthsNoOverflow(RetentionWindows::AUDIENCE_MONTHS),
+            PurgeScope::ContentReport => $now->subMonthsNoOverflow(RetentionWindows::CONTENT_REPORT_MONTHS),
             default => throw new LogicException("Aucun jeu de lignes de test pour le périmètre {$scope->value}."),
         };
     }
@@ -129,6 +131,7 @@ final class RetentionRows
             PurgeScope::Perf => self::perfSample($key, $at),
             PurgeScope::GameTrace => self::gameTrace($key, $at),
             PurgeScope::Audience => self::audienceCounter($key, $at),
+            PurgeScope::ContentReport => self::contentReport($key, $at),
             default => throw new LogicException("Aucun jeu de lignes de test pour le périmètre {$scope->value}."),
         };
     }
@@ -184,6 +187,9 @@ final class RetentionRows
                 ->count(),
             PurgeScope::Audience => AudienceDaily::query()
                 ->where('dimension', 'like', self::MARKER.'%')
+                ->count(),
+            PurgeScope::ContentReport => ContentReport::query()
+                ->where('comment', 'like', self::MARKER.'%')
                 ->count(),
             default => throw new LogicException("Aucun jeu de lignes de test pour le périmètre {$scope->value}."),
         };
@@ -334,6 +340,16 @@ final class RetentionRows
     public static function audienceCounter(string $key, CarbonImmutable $day): void
     {
         AudienceDaily::factory()->counter($day->toDateString(), 'pageviews', $key, 1)->create();
+    }
+
+    /** Un signalement de contenu marqué par son texte libre (périmètre `content_report`, D63 du 07/10). */
+    public static function contentReport(string $key, CarbonImmutable $createdAt): void
+    {
+        ContentReport::factory()->create([
+            'comment' => $key,
+            'created_at' => $createdAt,
+            'updated_at' => $createdAt,
+        ]);
     }
 
     public static function purgeRun(CarbonImmutable $ranAt): void

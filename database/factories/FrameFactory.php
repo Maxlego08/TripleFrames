@@ -15,6 +15,7 @@ use App\Settings\PlatformLimits;
 use App\Support\Frames\FrameGeometry;
 use App\Support\Frames\FrameStoragePrefix;
 use App\Support\Frames\WebpPadding;
+use App\Support\Identity\PublicId;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Facades\Storage;
 use Imagick;
@@ -97,6 +98,9 @@ class FrameFactory extends Factory
     public function definition(): array
     {
         return [
+            // Identité publique (D63 du 07/10) : le générateur de production,
+            // que la garde `creating` du modèle appellerait de toute façon.
+            'public_id' => PublicId::generate(),
             'movie_id' => Movie::factory(),
             'frame_level' => FrameLevel::Level3,
             'availability' => ContentAvailability::Draft,

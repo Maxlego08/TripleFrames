@@ -81,7 +81,9 @@ export interface RevealTitle {
  * langue et l'année. Aussi le « paquet de titres » du récapitulatif de fin
  * de partie (`TitlePacket` de `types/scoring.ts`, contrat C13).
  * `letterboxdUrl` : la fiche Letterboxd du film, nulle sans `tmdb_id`
- * (catalogue de démonstration ; D58 du 06/10).
+ * (catalogue de démonstration ; D58 du 06/10). `tmdb` : l'identifiant TMDB
+ * du film, adresse du lien « Signaler » (`/report?movie=`, D63 du 07/10) ;
+ * nul sans `tmdb_id`, et alors aucun lien.
  */
 export interface RevealMovie {
     titles: Record<LocaleCode, RevealTitle>;
@@ -90,6 +92,18 @@ export interface RevealMovie {
     originalLanguage: string;
     year: number | null;
     letterboxdUrl: string | null;
+    tmdb: number | null;
+}
+
+/**
+ * L'identité publique de l'image réellement servie à un palier ouvert, pour
+ * le lien « Signaler cette image » (D63 du 07/10). **Seulement à la
+ * révélation** (règle 3) : jamais dans `TierImageRef`, `round.scheduled`
+ * ni `tier.opened`.
+ */
+export interface RevealFrame {
+    tierIndex: number;
+    framePublicId: string;
 }
 
 // --- L60-4 : sièges, chronologie, paquet de resynchronisation ---------------
@@ -144,7 +158,11 @@ export interface RoundState extends RoundTimeline {
     endedAt: IsoMs | null;
     revealStartsAt: IsoMs | null;
     revealEndsAt: IsoMs | null;
-    reveal: { movie: RevealMovie; finders: RoundFinder[] } | null;
+    reveal: {
+        movie: RevealMovie;
+        frames: RevealFrame[];
+        finders: RoundFinder[];
+    } | null;
     choicesUnavailable: boolean;
 }
 
@@ -184,12 +202,31 @@ export interface GameStatePacket extends WireEnvelope {
     /** `settings_snapshot.maxAnswerLength` ; nul sans partie (écart (r)). */
     maxAnswerLength: number | null;
     seats: SeatView[];
-    pause: { pausedAt: IsoMs; interruptsAt: IsoMs } | null;
+    pause: GamePause | null;
+    /**
+     * Pause manuelle demandée, en attente de la fin de la révélation de la
+     * manche en cours (D64 du 07/10) ; toujours faux hors partie en cours.
+     */
+    pauseRequested: boolean;
     round: RoundState | null;
     self: SelfState;
     leaderboard: Leaderboard;
     podium: Podium | null;
     nextTransitionAt: IsoMs | null;
+}
+
+/**
+ * Nature d'une pause (D64 du 07/10) : `empty`, plus aucun siège présent (le
+ * retour d'un siège la reprend) ; `manual`, geste de l'hôte ou du joueur solo
+ * (seul « Reprendre » la reprend).
+ */
+export type GamePauseKind = 'empty' | 'manual';
+
+/** Une partie en pause : son instant, son échéance (`interrupted`) et sa nature. */
+export interface GamePause {
+    pausedAt: IsoMs;
+    interruptsAt: IsoMs;
+    kind: GamePauseKind;
 }
 
 /**
@@ -211,9 +248,9 @@ export interface RealtimeConfig {
 // --- L60-9 : liste close des événements et leurs charges --------------------
 
 /**
- * Les dix-neuf noms `broadcastAs` de la liste close du J1 (60 § 11.3, écart
- * (i) du § 22 bis), miroir de `app/Events/Game/` : `EventPayloadTest` refuse
- * tout écart. Seize sont diffusés au salon, trois ciblés au siège
+ * Les vingt et un noms `broadcastAs` de la liste close (60 § 11.3, écart
+ * (i) du § 22 bis ; D64 du 07/10), miroir de `app/Events/Game/` :
+ * `EventPayloadTest` refuse tout écart. Dix-huit sont diffusés au salon, trois ciblés au siège
  * (`seat.choices`, `seat.superseded`, `seat.kicked`). Tout nouvel événement
  * amende 60 et entre ici.
  */
@@ -233,6 +270,8 @@ export type GameEventName =
     | 'round.cancelled'
     | 'game.paused'
     | 'game.resumed'
+    | 'game.pause_requested'
+    | 'game.pause_request_cancelled'
     | 'game.ended'
     | 'seat.choices'
     | 'seat.superseded'
@@ -301,13 +340,18 @@ export interface GameEventPayloads {
         revealEndsAt: IsoMs;
         movie: RevealMovie;
         images: TierImageRef[];
+        frames: RevealFrame[];
         finders: RoundFinder[];
         leaderboard: Leaderboard;
     };
     /** Ni motif, ni titre. */
     'round.cancelled': { sequenceIndex: number; roundNumber: number };
-    'game.paused': { pausedAt: IsoMs; interruptsAt: IsoMs };
+    'game.paused': GamePause;
     'game.resumed': { resumedAt: IsoMs };
+    /** Pause manuelle demandée pour la fin de la révélation (D64 du 07/10). */
+    'game.pause_requested': { requestedAt: IsoMs };
+    /** Demande de pause retirée avant sa prise d'effet (D64 du 07/10). */
+    'game.pause_request_cancelled': EmptyPayload;
     'game.ended': { podium: Podium };
     /** Ciblé : les quatre chaînes du QCM de CE siège (contrat C11). */
     'seat.choices': { sequenceIndex: number } & ChoicesPayload;

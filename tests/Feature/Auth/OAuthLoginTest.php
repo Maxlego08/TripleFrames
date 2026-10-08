@@ -96,13 +96,13 @@ it('met en attente l’inscription d’un inconnu, puis crée le compte avec ses
     $this->post(route('oauth.finish.store'), ['name' => 'Alice', 'terms' => '1'])
         ->assertSessionHasErrors('age');
 
-    $this->post(route('oauth.finish.store'), ['name' => 'Alice M.', 'terms' => '1', 'age' => '1'])
+    $this->post(route('oauth.finish.store'), ['name' => 'Alice M', 'terms' => '1', 'age' => '1'])
         ->assertRedirect(Config::string('fortify.home'));
 
     $user = User::query()->sole();
 
     $this->assertAuthenticatedAs($user);
-    expect($user->name)->toBe('Alice M.')
+    expect($user->name)->toBe('Alice M')
         ->and($user->email)->toBe('alice@example.test')
         ->and($user->email_verified_at)->not->toBeNull()
         ->and($user->password)->toBeNull()

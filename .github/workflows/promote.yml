@@ -1,0 +1,72 @@
+name: promote
+
+# Promotion manuelle en un geste (spec 100 § 18, L100-15) : avance la branche
+# `deploy`, que la production tire, sur le commit EXACT de `deploy-preprod`
+# joué en préproduction, en avance rapide seulement (ops/deploy/promote.sh).
+# Condition : les trois parcours Playwright verts sur la préproduction
+# (spec 100 § 19), déclarés par la case de confirmation. Ensuite, et à la main :
+# drainage et tirage Plesk de production (§ 11.4). Aucun secret : le seul
+# identifiant est le jeton automatique, limité au job `promote`.
+on:
+  workflow_dispatch:
+    inputs:
+      preprod_commit:
+        description: Commit de deploy-preprod joué en préproduction (40 caractères, lu dans Plesk Git de la préproduction)
+        required: true
+        type: string
+      playwright_journeys_played:
+        description: Les trois parcours Playwright ont été joués et sont verts sur ce commit en préproduction
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  promote:
+    # Le workflow n'existe que sur `main` (les branches d'artefacts n'ont pas
+    # de `.github/`) : il n'est jamais lancé depuis une autre branche.
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    # Seul job de ce workflow autorisé à écrire, avec le seul jeton automatique
+    # (ZeroSecretTest l'exempte avec `artifacts`, eux seuls). Il n'installe ni
+    # n'exécute aucune dépendance du projet : git et un script du dépôt.
+    permissions:
+      contents: write
+
+    # Une promotion à la fois, jamais annulée en cours de poussée.
+    concurrency:
+      group: deploy-promote
+      cancel-in-progress: false
+
+    steps:
+      # Les entrées passent par l'environnement, jamais par une expression dans
+      # le script : une valeur saisie ne devient jamais du code shell.
+      - name: Check Confirmation
+        shell: bash
+        env:
+          JOURNEYS_PLAYED: ${{ inputs.playwright_journeys_played }}
+        run: |
+          set -euo pipefail
+
+          if [ "$JOURNEYS_PLAYED" != "true" ]; then
+            echo "Refus : les trois parcours Playwright doivent être joués sur la préproduction avant toute promotion (spec 100 § 19)." >&2
+            exit 1
+          fi
+
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Historique complet : l'ascendance se vérifie sur les vrais commits.
+          fetch-depth: 0
+          # La poussée de `deploy` a besoin de l'identifiant.
+          persist-credentials: true
+
+      - name: Promote
+        shell: bash
+        env:
+          PREPROD_COMMIT: ${{ inputs.preprod_commit }}
+        run: bash ops/deploy/promote.sh origin "$PREPROD_COMMIT"

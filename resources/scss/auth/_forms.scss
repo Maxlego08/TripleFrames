@@ -106,10 +106,17 @@
         text-underline-offset: 0.18rem;
     }
 
-    p[class*='text-red-'] {
+    .input-error {
         color: $error;
         font-size: 0.74rem;
         font-weight: 800;
+    }
+
+    button.text-link {
+        color: $ink;
+        font-weight: 800;
+        text-decoration-color: $violet;
+        text-underline-offset: 0.18rem;
     }
 }
 

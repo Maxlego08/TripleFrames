@@ -49,6 +49,10 @@ final class GameTraceWriter
 
     public const string GAME_RESUMED = 'game.resumed';
 
+    public const string PAUSE_REQUESTED = 'game.pause_requested';
+
+    public const string PAUSE_REQUEST_CANCELLED = 'game.pause_request_cancelled';
+
     public const string GAME_FINALIZED = 'game.finalized';
 
     public const string RESYNCHRONIZED = 'game.resynchronized';

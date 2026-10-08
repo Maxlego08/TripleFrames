@@ -2,6 +2,7 @@
 
 namespace App\Actions\Game;
 
+use App\Enums\GamePauseKind;
 use App\Enums\GameStatus;
 use App\Models\Game;
 use App\Models\Player;
@@ -37,7 +38,13 @@ use LogicException;
  *    `preload_lead_ms` relu sur la partie (colonne figée), jamais moins, sans
  *    quoi son palier 1 n'aurait aucune fenêtre de préchargement ; sinon la
  *    partie est gelée `completed` à `reveal_ends_at` de cette manche
- *    ({@see FinalizeGame}, `game` pris avant `round`, § 4.5 et § 14.5).
+ *    ({@see FinalizeGame}, `game` pris avant `round`, § 4.5 et § 14.5) ;
+ * 6. **pause demandée** (`pause_requested_at`, D64 du 07/10) : la manche
+ *    passée ne passe jamais par {@see EndReveal}, qui seul consomme la
+ *    demande ; le geste la consomme donc lui-même, comme `EndReveal` à la fin
+ *    d'une révélation — une manche reste : {@see PauseGame} `manual` à
+ *    `reveal_ends_at` de la manche passée, et la suivante n'est **pas**
+ *    programmée ; aucune ne reste : la demande est effacée avant le gel.
  *
  * **Aucune révélation** : la manche ne passe jamais `revealing`, et son titre
  * n'apparaît qu'au récapitulatif du podium (80). **Jamais de `guess`**
@@ -45,11 +52,20 @@ use LogicException;
  */
 final readonly class SkipSoloRound
 {
+    /**
+     * Colonnes de `game` qu'une pause écrit, recopiées sur l'instance de
+     * l'appelant.
+     *
+     * @var list<string>
+     */
+    private const array PAUSE_COLUMNS = ['status', 'paused_at', 'pause_kind', 'pause_requested_at', 'updated_at'];
+
     public function __construct(
         private CatchUpGame $catchUp,
         private RecordHeartbeat $heartbeat,
         private ScheduleRound $schedule,
         private FinalizeGame $finalize,
+        private PauseGame $pause,
     ) {}
 
     /**
@@ -83,17 +99,37 @@ final readonly class SkipSoloRound
             $next = Round::query()->where('game_id', $lockedGame->id)->toPlay()->first();
 
             if ($next instanceof Round) {
+                $lockedNext = Round::query()->whereKey($next->id)->lockForUpdate()->firstOrFail();
+
+                // 6. Pause demandée (D64) : effective à la clôture de la
+                // manche passée, comme `EndReveal` à la fin d'une révélation.
+                // Le budget a été vérifié à la demande ; la suivante n'est
+                // pas programmée, la reprise s'en charge (§ 14.2).
+                if ($lockedGame->pause_requested_at !== null) {
+                    $this->pause->handle($lockedGame, $closedAt, GamePauseKind::Manual);
+                    $game->forceFill($lockedGame->only(self::PAUSE_COLUMNS))
+                        ->syncOriginalAttributes(self::PAUSE_COLUMNS);
+
+                    return true;
+                }
+
                 $startsAt = $now
                     ->addMilliseconds($lockedGame->preload_lead_ms + EngineConstants::nextRoundMarginMs())
                     ->startOfMillisecond();
 
-                $this->schedule->handle(Round::query()->whereKey($next->id)->lockForUpdate()->firstOrFail(), $startsAt);
+                $this->schedule->handle($lockedNext, $startsAt);
 
                 return true;
             }
 
             // Aucune manche à jouer : le gel, à `reveal_ends_at` de la manche
-            // passée (= min(now, started_at + D)).
+            // passée (= min(now, started_at + D)). Une demande de pause, que
+            // la garde `NoRoundLeft` de la demande rend inattendue ici, est
+            // effacée avant le gel, comme dans `EndReveal`.
+            if ($lockedGame->pause_requested_at !== null) {
+                $lockedGame->forceFill(['pause_requested_at' => null])->save();
+            }
+
             if ($this->finalize->handle($lockedGame, GameStatus::Completed, $closedAt)) {
                 GameJournal::gameFinalized($lockedGame, GameStatus::Completed, $closedAt);
             }

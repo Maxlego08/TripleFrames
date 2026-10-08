@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vite-plus/test';
 import {
+    advancedFramesPerRoundChange,
     choicesAtPercent,
     crossBoundErrors,
     defaultAttemptsPerRound,
@@ -12,6 +13,7 @@ import {
     minRoundDuration,
     settingsChangeLines,
     settingsChangesFrom,
+    waitingPays,
     warnings,
 } from '@/lib/room-settings';
 import type {
@@ -42,6 +44,7 @@ type DerivationCase = {
 
 type WarningCase = {
     revealDuration: number;
+    speedBonus: boolean;
     tierDurations: number[];
     tierPoints: number[];
     warnings: RoomSettingsWarningCode[];
@@ -49,6 +52,7 @@ type WarningCase = {
 
 type Derivations = {
     bounds: RoomSettingsBoundsPayload;
+    speedBonusMaxPercent: Record<string, number>;
     cases: DerivationCase[];
     warningCases: WarningCase[];
 };
@@ -61,6 +65,8 @@ const FIXTURE = JSON.parse(
 ) as Derivations;
 
 const { bounds } = FIXTURE;
+// `B_max(N)` de la prop `limits`, seul lu par `waiting_pays` (L50-10).
+const limits = { speedBonusMaxPercent: FIXTURE.speedBonusMaxPercent };
 
 describe('room-settings', () => {
     it('dérive comme le serveur chaque cas du jeu partagé', () => {
@@ -81,10 +87,12 @@ describe('room-settings', () => {
                 sample.attemptsPerRound,
             );
             expect(
-                warnings(bounds, {
+                warnings(bounds, limits, {
                     revealDuration: sample.r,
                     tierDurations: sample.tierDurations,
                     tierPoints: sample.tierPoints,
+                    // Les cas Simple partent des défauts : bonus actif.
+                    speedBonus: true,
                 }),
                 label,
             ).toEqual(sample.warnings);
@@ -104,7 +112,9 @@ describe('room-settings', () => {
         for (const sample of FIXTURE.warningCases) {
             const label = JSON.stringify(sample);
 
-            expect(warnings(bounds, sample), label).toEqual(sample.warnings);
+            expect(warnings(bounds, limits, sample), label).toEqual(
+                sample.warnings,
+            );
         }
     });
 
@@ -204,26 +214,37 @@ describe('room-settings', () => {
             revealDuration,
             tierDurations: defaultTierDurations(bounds, frames, duration),
             tierPoints: points,
+            speedBonus: true,
         });
 
         // Révélation : sous le seuil recommandé seulement, jamais au seuil.
         expect(
-            warnings(bounds, view(recommendedMinRevealDuration - 1, ordinary)),
+            warnings(
+                bounds,
+                limits,
+                view(recommendedMinRevealDuration - 1, ordinary),
+            ),
         ).toEqual(['short_reveal']);
         expect(
-            warnings(bounds, view(recommendedMinRevealDuration, ordinary)),
+            warnings(
+                bounds,
+                limits,
+                view(recommendedMinRevealDuration, ordinary),
+            ),
         ).toEqual([]);
 
         // Manche longue : au-delà du seuil seulement, jamais au seuil.
         expect(
             warnings(
                 bounds,
+                limits,
                 view(recommendedMinRevealDuration, longRoundWarningDuration),
             ),
         ).toEqual([]);
         expect(
             warnings(
                 bounds,
+                limits,
                 view(
                     recommendedMinRevealDuration,
                     longRoundWarningDuration + 1,
@@ -250,10 +271,11 @@ describe('room-settings', () => {
         ).not.toEqual([]);
 
         for (const sample of FIXTURE.cases) {
-            const codes = warnings(bounds, {
+            const codes = warnings(bounds, limits, {
                 revealDuration: sample.r,
                 tierDurations: sample.tierDurations,
                 tierPoints: sample.tierPoints,
+                speedBonus: true,
             });
 
             expect(codes.includes('short_reveal')).toBe(
@@ -277,13 +299,15 @@ describe('room-settings', () => {
                 'long_round',
                 'non_decreasing_points',
                 'short_reveal',
+                'waiting_pays',
             ].sort(),
         );
         expect(
             FIXTURE.warningCases.some(
                 (sample) =>
                     sample.warnings.length === 4 &&
-                    warnings(bounds, sample).join() === sample.warnings.join(),
+                    warnings(bounds, limits, sample).join() ===
+                        sample.warnings.join(),
             ),
         ).toBe(true);
     });
@@ -336,5 +360,70 @@ describe('room-settings', () => {
             'room.settings.change.clamped(room.settings.capacity.label)',
         ]);
         expect(settingsChangeLines({}, t)).toEqual([]);
+    });
+
+    it('en Avancé, poste les deux listes redimensionnées et annonce D remonté', () => {
+        const { min: fewest, max: most } = framesPerRoundBound(bounds);
+        const lowest = minRoundDuration(bounds, fewest);
+        const view = {
+            tierDurations: defaultTierDurations(bounds, fewest, lowest),
+            tierPoints: defaultTierPoints(bounds, fewest),
+        };
+        const raised = advancedFramesPerRoundChange(bounds, view, most);
+
+        expect(raised.body).toEqual({
+            framesPerRound: most,
+            tierDurations: defaultTierDurations(
+                bounds,
+                most,
+                minRoundDuration(bounds, most),
+            ),
+            tierPoints: defaultTierPoints(bounds, most),
+        });
+        expect(raised.announcement).toEqual({
+            key: 'room.settings.roundDuration.raised',
+            seconds: minRoundDuration(bounds, most),
+        });
+        expect(raised.pointsReset).toBe(false);
+
+        // Un barème personnalisé remplacé : annoncé d'avance, D gardé.
+        const custom = {
+            tierDurations: defaultTierDurations(
+                bounds,
+                most,
+                minRoundDuration(bounds, most),
+            ),
+            tierPoints: defaultTierPoints(bounds, most).map(
+                () => bounds.derivation.tierPointsUnit,
+            ),
+        };
+        const lowered = advancedFramesPerRoundChange(bounds, custom, fewest);
+
+        expect(lowered.announcement).toBeNull();
+        expect(lowered.pointsReset).toBe(true);
+        expect(lowered.body.tierDurations.length).toBe(fewest);
+    });
+
+    it("waitingPays suit le serveur sur chaque cas d'avertissement du jeu partagé", () => {
+        for (const sample of FIXTURE.warningCases) {
+            const percent =
+                FIXTURE.speedBonusMaxPercent[String(sample.tierPoints.length)];
+
+            if (percent === undefined) {
+                throw new Error('B_max absent du jeu partagé.');
+            }
+
+            if (sample.warnings.includes('waiting_pays')) {
+                expect(waitingPays(sample.tierPoints, percent)).toBe(true);
+            }
+        }
+
+        for (const [n, percent] of Object.entries(
+            FIXTURE.speedBonusMaxPercent,
+        )) {
+            expect(
+                waitingPays(defaultTierPoints(bounds, Number(n)), percent),
+            ).toBe(false);
+        }
     });
 });

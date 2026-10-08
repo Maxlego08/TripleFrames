@@ -2,14 +2,17 @@
 
 namespace App\Providers;
 
+use App\Actions\Account\DeletePasskeyUnlessLastMethod;
 use App\Actions\Fortify\CreateNewUser;
 use App\Actions\Fortify\ResetUserPassword;
 use App\Enums\OAuthProvider;
+use App\Http\Middleware\EnforceAccountSwitches;
 use App\Http\Middleware\EnsureActiveSeat;
 use App\Models\LinkedAccount;
 use App\Models\User;
 use App\Settings\EngineConstants;
 use App\Settings\RoomSettingsBounds;
+use App\Support\ContentReport\ContentReportRateLimits;
 use App\Support\Identity\AccountSwitches;
 use App\Support\Identity\OAuthProviders;
 use App\Support\Identity\PlayerTokenManager;
@@ -25,6 +28,8 @@ use Illuminate\Validation\Rules\Password;
 use Inertia\Inertia;
 use Laravel\Fortify\Features;
 use Laravel\Fortify\Fortify;
+use Laravel\Passkeys\Actions\DeletePasskey;
+use Laravel\Passkeys\Passkeys;
 use LogicException;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -35,6 +40,15 @@ class FortifyServiceProvider extends ServiceProvider
 
     /** Espace des clés de limiteur de jeu comptées par adresse, faute de jeton. */
     private const string SEAT_THROTTLE_IP_PREFIX = 'ip:';
+
+    /**
+     * Envois d'inscription par adresse et par heure (spec 40 § 13.1) : une
+     * garde anti-automate, jamais une valeur de jeu.
+     */
+    public const int REGISTRATIONS_PER_HOUR = 20;
+
+    /** Espace des clés du limiteur `content-report` comptées par compte connecté. */
+    private const string ACCOUNT_THROTTLE_PREFIX = 'user:';
 
     /**
      * Les deux budgets du limiteur `answer` par siège (spec 70 § 8) : la
@@ -51,7 +65,9 @@ class FortifyServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        // Supprimer une passkey refuse la dernière méthode de connexion (spec
+        // 40 § 13.8) : l'action du paquet est remplacée, sa route gardée.
+        $this->app->bind(DeletePasskey::class, DeletePasskeyUnlessLastMethod::class);
     }
 
     /**
@@ -60,6 +76,7 @@ class FortifyServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->configureActions();
+        $this->configurePasskeyLogin();
         $this->configureViews();
         $this->configureRateLimiting();
     }
@@ -71,6 +88,25 @@ class FortifyServiceProvider extends ServiceProvider
     {
         Fortify::resetUserPasswordsUsing(ResetUserPassword::class);
         Fortify::createUsersUsing(CreateNewUser::class);
+    }
+
+    /**
+     * La connexion par passkey (spec 40 § 13.8, n° 10 option A).
+     *
+     * Une passkey à vérification de l'utilisateur vaut second facteur À LA
+     * CONNEXION : le paquet ouvre la session sans défi TOTP. Elle ne dispense
+     * jamais d'enrôler le TOTP (`admin.2fa` ne lit que
+     * `two_factor_confirmed_at`), et la ré-acceptation des CGU s'applique
+     * comme à toute connexion : la réponse mène à `fortify.home`, qui porte
+     * `terms.current` (§ 13.1). Une pierre tombale (`anonymized_at` posé) ne
+     * se connecte jamais, même si une passkey avait survécu à
+     * l'anonymisation (§ 13.6).
+     */
+    private function configurePasskeyLogin(): void
+    {
+        Passkeys::authorizeLoginUsing(
+            static fn (Request $request, mixed $user): bool => ! ($user instanceof User && $user->anonymized_at !== null),
+        );
     }
 
     /**
@@ -174,6 +210,15 @@ class FortifyServiceProvider extends ServiceProvider
         // un invité n'ayant pas encore de compte.
         RateLimiter::for('oauth', function (Request $request) {
             return Limit::perMinute(10)->by((string) $request->ip());
+        });
+
+        // L'inscription par mot de passe (spec 40 § 13.1, L40-10) : par
+        // adresse, un visiteur n'ayant pas encore de compte. Fortify n'a pas de
+        // clé de limiteur d'inscription : `accounts.switches` l'applique à
+        // `register.store`, sans désenregistrer la route (§ 8.2). Il compte
+        // aussi les envois refusés, d'où un seau large pour une saisie ratée.
+        RateLimiter::for(EnforceAccountSwitches::REGISTER_LIMITER, function (Request $request) {
+            return Limit::perHour(self::REGISTRATIONS_PER_HOUR)->by((string) $request->ip());
         });
 
         RateLimiter::for('avatar-upload', function (Request $request) {
@@ -383,6 +428,12 @@ class FortifyServiceProvider extends ServiceProvider
      *   le cache du limiteur, jamais dans une table de domaine ;
      * - `room-join` (`room.join`) : par hash du `player_token`, repli sur
      *   l'IP, comme les limiteurs de jeu.
+     *
+     * S'y ajoute `content-report` (`content-report.store`, D63 du 07/10) :
+     * par compte connecté, sinon comme `room-join`. Et `content-report-frame`
+     * (`content-report.frame`, amendé le 07/10), même clé, seau distinct de
+     * `frame-serve`, pour que l'aperçu ne consomme jamais le budget C8 des
+     * paliers.
      */
     private function configureRoomRateLimiting(): void
     {
@@ -394,6 +445,43 @@ class FortifyServiceProvider extends ServiceProvider
         RateLimiter::for('room-join', function (Request $request) {
             return Limit::perMinute(RoomRateLimits::joinsPerMinute())
                 ->by($this->seatThrottleKey($request));
+        });
+
+        // Le signalement d'un pseudo (spec 40 § 13.3, D66 du 07/10) : par
+        // SIÈGE, résolu par `seat.active`, qui passe avant ce limiteur ; repli
+        // sur le jeton puis l'adresse, comme les limiteurs de jeu.
+        RateLimiter::for('seat-report', function (Request $request) {
+            $seat = EnsureActiveSeat::seat($request);
+
+            return Limit::perMinute(RoomRateLimits::seatReportsPerMinute())
+                ->by($seat !== null ? 'seat-report:'.$seat->id : $this->seatThrottleKey($request));
+        });
+
+        // Le signalement de contenu par un joueur (D63 du 07/10) : par compte
+        // connecté — qui peut signaler sans siège, donc sans jeton —, sinon
+        // par hash du `player_token`, repli sur l'IP, comme l'entrée dans un
+        // salon. Plusieurs comptes derrière une même adresse ne partagent
+        // jamais un seau.
+        RateLimiter::for('content-report', function (Request $request) {
+            $account = $request->user()?->getAuthIdentifier();
+
+            return Limit::perHour(ContentReportRateLimits::reportsPerHour())
+                ->by($account !== null
+                    ? self::ACCOUNT_THROTTLE_PREFIX.$account
+                    : $this->seatThrottleKey($request));
+        });
+
+        // L'aperçu de l'image signalée (amendé le 07/10) : même clé que
+        // `content-report`, seau distinct de `frame-serve` — un onglet
+        // « Signaler » rechargé pendant la partie ne fait jamais tomber en 429
+        // le préchargement du palier suivant.
+        RateLimiter::for('content-report-frame', function (Request $request) {
+            $account = $request->user()?->getAuthIdentifier();
+
+            return Limit::perMinute(ContentReportRateLimits::framePreviewsPerMinute())
+                ->by($account !== null
+                    ? self::ACCOUNT_THROTTLE_PREFIX.$account
+                    : $this->seatThrottleKey($request));
         });
     }
 

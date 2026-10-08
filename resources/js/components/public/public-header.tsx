@@ -2,7 +2,9 @@ import { Link, usePage } from '@inertiajs/react';
 import { AuthBrand } from '@/components/auth/auth-brand';
 import LanguageSwitcher from '@/components/language-switcher';
 import { useTranslations } from '@/hooks/use-translations';
+import { hasAtLeastRole } from '@/lib/roles';
 import { login, register } from '@/routes';
+import { dashboard as adminDashboard } from '@/routes/admin';
 import { edit as editProfile } from '@/routes/profile';
 
 const NAV_LINK_CLASS =
@@ -18,9 +20,12 @@ const NAV_LINK_CLASS =
  *   seulement si** `accountsOpen` est vrai (40 § 8.2), c'est-à-dire jamais en
  *   production au jalon 1, où aucun compte n'existe hors le premier admin
  *   (D1, D4 du 23/09). La prop décide seule : aucun littéral d'environnement
- *   n'entre ici. Un visiteur déjà connecté voit le tableau de bord à la place
- *   de « Se connecter » et « Créer un compte », qui le renverraient au même
+ *   n'entre ici. Un visiteur déjà connecté voit ses réglages à la place de
+ *   « Se connecter » et « Créer un compte », qui le renverraient au même
  *   endroit.
+ * - Tout curateur ou administrateur connecté voit l'accès au back-office,
+ *   indépendamment de l'ouverture publique des comptes. Les middlewares et
+ *   policies du groupe `/admin` restent la source d'autorité.
  */
 export function PublicHeader() {
     const { t } = useTranslations();
@@ -30,6 +35,8 @@ export function PublicHeader() {
     // (spec 40 § 12.1, D51 du 01/10) ; l'inscription par mot de passe suit
     // seule `accountsOpen`.
     const canSignIn = accountsOpen || oauthProviders.length > 0;
+    const canAccessAdmin =
+        auth.user !== null && hasAtLeastRole(auth.user.role, 'curator');
 
     return (
         <header className="public-header border-b border-border">
@@ -37,6 +44,15 @@ export function PublicHeader() {
                 <AuthBrand />
 
                 <div className="public-header__controls flex flex-wrap items-center gap-1">
+                    {canAccessAdmin && (
+                        <Link
+                            href={adminDashboard()}
+                            className={`${NAV_LINK_CLASS} public-header__nav-admin`}
+                        >
+                            {t('common.nav.admin')}
+                        </Link>
+                    )}
+
                     {canSignIn &&
                         (auth.user ? (
                             <Link

@@ -225,3 +225,44 @@ it("livre un robots.txt qui n'interdit que /admin et /f/", function () {
     expect($routes)->not->toBeEmpty()
         ->and($routes)->not->toContain('robots.txt');
 });
+
+it('une page légale provisoire reste noindex même indexable', function () {
+    // Garde de code (n° 19, spec 100 § 21) : lever `SITE_INDEXABLE` avant que
+    // les textes définitifs soient déposés n'indexe aucun texte « à fournir ».
+    // Le comportement d'en-tête complet reste prouvé par `Public/IndexingTest` ;
+    // ce test garde la seule condition propre à la levée.
+    $this->withoutVite();
+
+    config(['app.indexable' => true]);
+
+    foreach (['notice' => '/legal/notice', 'terms' => '/legal/terms', 'privacy' => '/legal/privacy'] as $page => $url) {
+        config(["legal.pages.{$page}.provisional" => true]);
+
+        expect($this->get($url)->assertOk()->headers->all('x-robots-tag'))
+            ->toBe(['noindex, nofollow'], "{$url} provisoire doit rester noindex");
+
+        // Entrée d'un autre type qu'un vrai booléen : provisoire, l'erreur sans danger.
+        config(["legal.pages.{$page}.provisional" => 'false']);
+
+        expect($this->get($url)->assertOk()->headers->all('x-robots-tag'))
+            ->toBe(['noindex, nofollow'], "{$url} au drapeau mal typé doit rester noindex");
+
+        config(["legal.pages.{$page}.provisional" => false]);
+
+        $this->get($url)->assertOk()->assertHeaderMissing('X-Robots-Tag');
+    }
+
+    // Avec la configuration livrée par le dépôt, la variable levée seule
+    // n'indexe que l'accueil tant qu'une page reste provisoire.
+    /** @var array{pages: array<string, array{provisional: mixed}>} $shipped */
+    $shipped = require base_path('config/legal.php');
+    config(['legal.pages' => $shipped['pages']]);
+
+    foreach (['notice' => '/legal/notice', 'terms' => '/legal/terms', 'privacy' => '/legal/privacy'] as $page => $url) {
+        if ($shipped['pages'][$page]['provisional'] !== false) {
+            expect($this->get($url)->headers->all('x-robots-tag'))->toBe(['noindex, nofollow'], "{$url} est livrée provisoire");
+        }
+    }
+
+    $this->get('/')->assertOk()->assertHeaderMissing('X-Robots-Tag');
+});

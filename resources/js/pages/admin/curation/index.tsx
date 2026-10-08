@@ -487,6 +487,17 @@ function CurationQueueTable({
                         </TableCell>
 
                         <TableCell className="align-top">
+                            {movie.claimed_by !== null && (
+                                <Badge
+                                    variant="outline"
+                                    className="mb-1"
+                                    title={t('admin.curation.claimed_hint')}
+                                >
+                                    {t('admin.curation.claimed_by', {
+                                        name: movie.claimed_by,
+                                    })}
+                                </Badge>
+                            )}
                             {movie.is_started ? (
                                 <div className="flex flex-col gap-1">
                                     <Badge variant="secondary">

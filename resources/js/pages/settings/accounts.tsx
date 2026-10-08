@@ -110,7 +110,10 @@ export default function LinkedAccounts({ providers, requiresCode }: Props) {
                                                     ),
                                                 })
                                             ) : (
-                                                <Badge variant="outline">
+                                                <Badge
+                                                    variant="outline"
+                                                    className="settings-provider-status"
+                                                >
                                                     {t(
                                                         'account.linked.not_linked',
                                                     )}

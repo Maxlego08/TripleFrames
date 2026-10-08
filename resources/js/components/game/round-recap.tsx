@@ -1,5 +1,6 @@
 import { useId } from 'react';
 import { LetterboxdLink } from '@/components/game/letterboxd-link';
+import { ReportLink } from '@/components/game/report-link';
 import { useTranslations } from '@/hooks/use-translations';
 import { recapTitles } from '@/lib/game/scoring-format';
 import type { RecapEntry } from '@/types/scoring';
@@ -20,7 +21,8 @@ type RecapFilmProps = {
  * Le film d'une manche close, rendu exactement comme l'écran de révélation
  * rend `RevealMovie` : par l'assistant client unique `revealTitles()` (60
  * § 9.5, par `recapTitles()`), le titre retenu dans la langue du joueur, le
- * titre original s'il diffère, l'année, le lien Letterboxd (D58 du 06/10) — chaque titre dans un élément
+ * titre original s'il diffère, l'année, le lien Letterboxd (D58 du 06/10) et le lien « Signaler » du
+ * film (D63 du 07/10) — chaque titre dans un élément
  * portant **sa** langue (05 § Attribut `lang`), jamais celle du joueur. Au
  * changement de langue, le titre bascule aussitôt : le paquet porte déjà
  * celui de chaque locale activée.
@@ -55,10 +57,17 @@ function RecapFilm({ entry }: RecapFilmProps) {
                       })}
             </p>
 
-            <LetterboxdLink
-                url={entry.titles.letterboxdUrl}
-                title={title.text}
-            />
+            <div className="flex flex-wrap gap-2">
+                <LetterboxdLink
+                    url={entry.titles.letterboxdUrl}
+                    title={title.text}
+                />
+                <ReportLink
+                    kind="movie"
+                    tmdb={entry.titles.tmdb}
+                    title={title.text}
+                />
+            </div>
         </>
     );
 }
@@ -66,7 +75,8 @@ function RecapFilm({ entry }: RecapFilmProps) {
 /**
  * Le récapitulatif des films de la partie (spec 80 § 11.4, lot L80-7) :
  * **texte seul**, aucune vignette ni URL d'image (Q80-1), le seul lien sortant
- * étant la fiche Letterboxd de chaque film (D58 du 06/10) — un film dépublié,
+ * étant la fiche Letterboxd de chaque film (D58 du 06/10) et le lien
+ * « Signaler » du film, au niveau du film seulement (D63 du 07/10) — un film dépublié,
  * suspendu ou retiré depuis sa manche y garde son titre, sans aucun octet
  * d'image servi.
  *

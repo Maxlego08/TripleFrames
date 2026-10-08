@@ -27,22 +27,23 @@
         display: flex;
         width: min(100% - 2rem, 72rem);
         max-width: none;
-        min-height: 3.25rem;
+        min-height: 2.75rem;
         margin-inline: auto;
         flex-flow: row wrap;
         align-items: center;
         justify-content: center;
-        gap: 0.2rem 1.25rem;
-        padding: 0.35rem 0;
+        gap: 0;
+        padding: 0;
         color: $ink;
     }
 
     ul {
-        gap: 0 1rem;
+        justify-content: center;
+        gap: 0 0.75rem;
     }
 
     a {
-        min-height: 2rem;
+        min-height: 2.5rem;
         color: $ink;
         font-weight: 800;
     }
@@ -54,7 +55,6 @@
     @media (max-width: $mobile) {
         > div {
             width: min(100% - 1rem, 72rem);
-            padding-block: 0.5rem;
         }
     }
 }
@@ -67,12 +67,22 @@
     > div {
         width: min(100% - 2rem, 76rem);
         max-width: none;
+        min-height: 2.75rem;
         flex-direction: row;
         align-items: center;
-        justify-content: space-between;
-        gap: 0.75rem 1.5rem;
-        padding-block: 1rem;
+        justify-content: center;
+        gap: 0;
+        padding-block: 0;
         color: $ink;
+    }
+
+    nav {
+        width: 100%;
+    }
+
+    ul {
+        justify-content: center;
+        gap: 0 0.75rem;
     }
 
     a,
@@ -81,13 +91,13 @@
     }
 
     a {
+        min-height: 2.5rem;
         font-weight: 800;
     }
 
     @media (max-width: $tablet) {
         > div {
             align-items: center;
-            flex-direction: column;
             text-align: center;
         }
     }

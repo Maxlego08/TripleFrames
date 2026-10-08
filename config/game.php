@@ -2,6 +2,7 @@
 
 use App\Settings\EngineConstants;
 use App\Settings\PlatformLimits;
+use App\Support\ContentReport\ContentReportRateLimits;
 use App\Support\Room\RoomRateLimits;
 
 return [
@@ -104,6 +105,27 @@ return [
     'room' => [
         'creates_per_hour' => RoomRateLimits::DEFAULT_CREATES_PER_HOUR,
         'joins_per_minute' => RoomRateLimits::DEFAULT_JOINS_PER_MINUTE,
+        'seat_reports_per_minute' => RoomRateLimits::DEFAULT_SEAT_REPORTS_PER_MINUTE,
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Signalement de contenu par les joueurs (D63 du 07/10)
+    |--------------------------------------------------------------------------
+    |
+    | Section lue EXCLUSIVEMENT par
+    | `App\Support\ContentReport\ContentReportRateLimits` : garde anti-abus
+    | des limiteurs `content-report` et `content-report-frame`, jamais une
+    | valeur de jeu.
+    |
+    */
+
+    'content_report' => [
+        'reports_per_hour' => ContentReportRateLimits::DEFAULT_REPORTS_PER_HOUR,
+        // Aperçu de l'image signalée (`content-report-frame`, amendé le
+        // 07/10) : seau distinct de `frame-serve`, pour que l'aperçu ne
+        // consomme jamais le budget de chargement des paliers (C8).
+        'frame_previews_per_minute' => ContentReportRateLimits::DEFAULT_FRAME_PREVIEWS_PER_MINUTE,
     ],
 
 ];

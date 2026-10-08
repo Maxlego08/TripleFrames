@@ -106,9 +106,19 @@ it('rend le corps légal dans un fragment français quelle que soit la locale du
     // par un lecteur d'écran (05 § Attribut `lang`).
     $source = legalPagesSource();
 
-    expect(preg_match('/<div\s+lang="fr"[^>]*?dangerouslySetInnerHTML=\{\{\s*__html:\s*body\s*\}\}/s', $source))
+    // Le corps passe d'abord par `prepareLegalDocument` (sommaire et ancres
+    // des sections), qui n'en rend que la forme préparée.
+    expect(preg_match('/prepareLegalDocument\(\s*body\s*\)/', $source))
+        ->toBe(1, 'le corps doit passer par prepareLegalDocument')
+        ->and(preg_match('/<div\s+lang="fr"[^>]*?dangerouslySetInnerHTML=\{\{\s*__html:\s*document\.html\s*,?\s*\}\}/s', $source))
         ->toBe(1, 'le corps doit être injecté dans un <div lang="fr">')
-        ->and(substr_count($source, 'dangerouslySetInnerHTML'))->toBe(1);
+        ->and(substr_count($source, 'dangerouslySetInnerHTML'))->toBe(1)
+        // Le sommaire reprend les intitulés `<h2>` du corps français : sa
+        // liste porte `lang="fr"` elle aussi, et aucun intitulé n'est rendu
+        // ailleurs.
+        ->and(preg_match('/<ol\s+lang="fr"[^>]*>(?:(?!<\/ol>).)*?\{section\.label\}/s', $source))
+        ->toBe(1, 'les intitulés du sommaire doivent être rendus dans un <ol lang="fr">')
+        ->and(substr_count($source, 'section.label'))->toBe(1);
 
     foreach (LegalPage::cases() as $page) {
         $partial = view()->file($page->viewPath())->render();
@@ -285,6 +295,38 @@ it('affiche le bandeau provisoire tant que la configuration le demande', functio
             ->assertOk()
             ->assertInertia(fn (Assert $inertia) => $inertia->where('provisional', true));
     }
+});
+
+it('une page légale non provisoire ne contient aucun marqueur [À FOURNIR', function () {
+    // Spec 90 § 11.5 (D66 du 07/10) : `provisional` passe à `false` dans le
+    // commit qui dépose le texte définitif, jamais avant. Une page déclarée
+    // définitive qui garderait un marqueur publierait un squelette comme texte
+    // opposable, et deviendrait indexable une fois `SITE_INDEXABLE` levée.
+    $marker = '/\[\s*À\s+FOURNIR/iu';
+
+    // Le détecteur d'abord : il voit les marqueurs du squelette.
+    foreach (['[À FOURNIR : hébergeur]', '[à fournir]', '[ À FOURNIR : x]'] as $sample) {
+        expect(preg_match($marker, $sample))->toBe(1, "le motif ne reconnaît pas « {$sample} »");
+    }
+
+    $shipped = require config_path('legal.php');
+    $checked = 0;
+
+    foreach (LegalPage::cases() as $page) {
+        $text = html_entity_decode(view()->file($page->viewPath())->render(), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+
+        if (($shipped['pages'][$page->value]['provisional'] ?? true) === false) {
+            expect(preg_match($marker, $text))->toBe(0, "{$page->value} est déclarée définitive mais garde un marqueur [À FOURNIR");
+        } else {
+            // Une page encore provisoire peut garder ses marqueurs : son
+            // bandeau et la garde d'indexation la couvrent.
+            expect($page->isProvisional())->toBeTrue();
+        }
+
+        $checked++;
+    }
+
+    expect($checked)->toBe(count(LegalPage::cases()));
 });
 
 it('remplace un contact absent par la mention traduite', function () {

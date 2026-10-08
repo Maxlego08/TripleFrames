@@ -1,6 +1,5 @@
 import { CONSENT_SETTINGS_ID } from '@/components/public/consent-banner';
 import { Link } from '@inertiajs/react';
-import { TmdbAttribution } from '@/components/public/tmdb-attribution';
 import { Button } from '@/components/ui/button';
 import {
     Sheet,
@@ -48,15 +47,14 @@ type SiteFooterProps = {
 
 /**
  * Pied de page joueur, présent sur TOUS les écrans, écran de jeu compris : les
- * pages légales y sont toujours atteignables, et l'attribution TMDB toujours
- * visible (spec 90 § 3.1, principe 12).
+ * pages légales y sont toujours atteignables.
  *
- * - `full` (`PublicLayout`, `AuthLayout`, `AppLayout`) : une rangée de liens et
- *   l'attribution. Les liens sont des `<Link>` Inertia : on quitte une page
- *   ordinaire pour une autre.
+ * - `full` (`PublicLayout`, `AuthLayout`, `AppLayout`) : une rangée compacte de
+ *   liens. Les liens sont des `<Link>` Inertia : on quitte une page ordinaire
+ *   pour une autre.
  * - `collapsed` (`GameLayout`) : un seul bouton, qui ouvre une feuille basse
- *   contenant les liens et l'attribution. Une rangée complète coûterait deux
- *   lignes à 360 de large, prises sur l'image (principe 5). Les liens s'ouvrent
+ *   contenant les liens. Une rangée complète coûterait deux lignes à 360 de
+ *   large, prises sur l'image (principe 5). Les liens s'ouvrent
  *   dans un NOUVEL ONGLET, jamais par une visite Inertia : quitter la page de
  *   jeu démonterait la souscription et ferait courir le délai de grâce de
  *   déconnexion — on ne quitte jamais une partie pour lire des mentions
@@ -74,14 +72,14 @@ function FullFooter() {
 
     return (
         <footer className="site-footer mt-auto border-t border-border">
-            <div className="site-footer__inner mx-auto flex w-full max-w-5xl flex-col gap-3 px-4 py-6 text-sm text-muted-foreground">
-                <nav aria-label={t('legal.footer.label')}>
-                    <ul className="flex flex-wrap gap-x-4">
+            <div className="site-footer__inner mx-auto flex w-full max-w-5xl items-center justify-center px-4 text-sm text-muted-foreground">
+                <nav className="w-full" aria-label={t('legal.footer.label')}>
+                    <ul className="flex flex-wrap items-center justify-center gap-x-3">
                         {LEGAL_LINKS.map((link) => (
                             <li key={link.label}>
                                 <Link
                                     href={link.href}
-                                    className="inline-flex min-h-11 items-center rounded-sm underline-offset-4 hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                                    className="inline-flex min-h-10 items-center rounded-sm px-1 text-center underline-offset-4 hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                                 >
                                     {t(link.label)}
                                 </Link>
@@ -89,8 +87,6 @@ function FullFooter() {
                         ))}
                     </ul>
                 </nav>
-
-                <TmdbAttribution />
             </div>
         </footer>
     );
@@ -130,7 +126,7 @@ function CollapsedFooter() {
                     </SheetDescription>
                 </SheetHeader>
 
-                <div className="flex flex-col gap-3 px-4 text-sm">
+                <div className="px-4 text-sm">
                     <nav aria-label={t('legal.footer.label')}>
                         <ul className="flex flex-col">
                             {LEGAL_LINKS.map((link) => (
@@ -151,8 +147,6 @@ function CollapsedFooter() {
                             ))}
                         </ul>
                     </nav>
-
-                    <TmdbAttribution />
                 </div>
 
                 <SheetFooter>

@@ -128,7 +128,8 @@ function lobbyPageOwnProps(TestResponse $response): array
     $props = $page['props'];
 
     return array_diff_key($props, array_flip([
-        'name', 'auth', 'sidebarOpen', 'accountsOpen', 'frameFormat', 'realtime', 'maintenance',
+        'name', 'auth', 'sidebarOpen', 'accountsOpen', 'oauthProviders', 'consent',
+        'frameFormat', 'realtime', 'maintenance',
         'locale', 'locales', 'translations', 'errors', 'flash',
     ]));
 }
@@ -195,7 +196,7 @@ it("rend le lobby au siège du jeton avec l'état des réglages, les bornes par 
                 ->all(),
         ))
         ->and($props['launch'])->toBe(['minConnected' => RoomSettingsBounds::MIN_CONNECTED_PLAYERS_TO_LAUNCH])
-        ->and($props['editor'])->toBe(['advancedAvailable' => false, 'themeSelectorVisible' => false, 'lateJoinAvailable' => true])
+        ->and($props['editor'])->toBe(['advancedAvailable' => true, 'themeSelectorVisible' => false, 'lateJoinAvailable' => true])
         ->and($props['themes'])->toBeNull()
         ->and($props['configs'])->toBeNull();
 

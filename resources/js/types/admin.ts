@@ -69,6 +69,72 @@ export type AdminAliasSuggestion = {
     };
 };
 
+/** `App\Enums\ContentReportReason` (D63 du 07/10). */
+export type ContentReportReason =
+    | 'wrong_movie'
+    | 'title_visible'
+    | 'wrong_level'
+    | 'poor_quality'
+    | 'offensive'
+    | 'other';
+
+/** `App\Enums\ContentReportResolution`. */
+export type ContentReportResolution =
+    | 'movie_unpublished'
+    | 'frame_unpublished'
+    | 'dismissed'
+    | 'already_handled'
+    | 'movie_suspended'
+    | 'frame_suspended';
+
+/** Filtre de la file des signalements de contenu. */
+export type ContentReportFilter = 'open' | 'closed';
+
+/**
+ * Une CIBLE de la file des signalements de contenu (spec 20 § 11.6, D63 du
+ * 07/10) : l'image, sinon le film, avec ses signalements regroupés. Les
+ * gestes l'adressent par `report_id`, son plus ancien signalement.
+ */
+export type AdminContentReportGroup = {
+    report_id: number;
+    scope: 'frame' | 'movie';
+    reports_count: number;
+    first_reported_at: string | null;
+    last_reported_at: string | null;
+    /** Nombre de signalements par motif, du plus fréquent au moins fréquent. */
+    reasons: Partial<Record<ContentReportReason, number>>;
+    comments: {
+        reason: ContentReportReason;
+        comment: string;
+        reported_at: string | null;
+    }[];
+    /** Nuls pour une cible ouverte. */
+    resolution: ContentReportResolution | null;
+    resolved_at: string | null;
+    movie: {
+        id: number;
+        title_original: string;
+        release_year: number | null;
+        availability: ContentAvailability;
+    };
+    frame: {
+        id: number;
+        frame_level: FrameLevel;
+        availability: ContentAvailability;
+        thumbnail_url: string | null;
+        /** `CoverageLossPreview::forFrame()` ; nul : rien à annoncer. */
+        coverage_warning: AdminUnpublishPreview | null;
+    } | null;
+    abilities: {
+        unpublish_movie: boolean;
+        unpublish_frame: boolean;
+        dismiss: boolean;
+        /** Administrateur seul (J2, spec 20 § 11.6). */
+        suspend_movie: boolean;
+        suspend_frame: boolean;
+    };
+};
+
 export type ThemeMembershipState = 'added' | 'removed';
 
 /** Natures d'un thème — miroir de `App\Enums\ThemeKind`. */
@@ -122,6 +188,8 @@ export type AdminCurationQueueRow = AdminMovieRow & {
     rank: number;
     is_started: boolean;
     touched_at: string | null;
+    /** Nom réel d'un AUTRE curateur qui réserve ce film (L20-32), sinon `null`. */
+    claimed_by: string | null;
 };
 
 /** Un film écarté (spec 20 § 4.2), motif relu tel quel. */
@@ -374,6 +442,79 @@ export type AdminGroupCandidate = AdminMovieIdentity & {
     default_label: string;
 };
 
+/** Pourquoi un film est proposé par proximité (`MovieGroupCandidates`). */
+export type AdminProximityReason = 'title_distance' | 'same_collection';
+
+/**
+ * Un candidat `movie_group` par proximité (spec 20 § 9.4 [J2], L20-27), servi
+ * en prop facultative `group_candidates` au rechargement partiel qui le
+ * demande : une suggestion, jamais un regroupement.
+ */
+export type AdminProximityCandidate = AdminGroupCandidate & {
+    reasons: AdminProximityReason[];
+};
+
+/** Les champs que compare l'écran de resynchronisation — `ResyncSnapshot::FIELDS`. */
+export type AdminResyncField =
+    | 'title_original'
+    | 'title_original_latin'
+    | 'original_language'
+    | 'release_year'
+    | 'vote_count'
+    | 'adult'
+    | 'collection_id'
+    | 'genres'
+    | 'companies'
+    | 'movie_certification'
+    | 'movie_title'
+    | 'alias'
+    | 'content_flag';
+
+/** Le motif qui écarte un film d'une resynchronisation. */
+export type AdminResyncIneligibility = 'withdrawn' | 'demo' | 'no_tmdb';
+
+/** Un film de la sélection d'une resynchronisation (spec 20 § 3.7). */
+export type AdminResyncMovie = AdminMovieIdentity & {
+    tmdb_id: number | null;
+    content_flag: ContentFlag;
+    ineligible: AdminResyncIneligibility | null;
+};
+
+/** Une ligne de l'écran de différences : valeurs affichables, vides pour NULL. */
+export type AdminResyncRow = {
+    field: AdminResyncField;
+    changed: boolean;
+    before: string[];
+    after: string[];
+};
+
+/**
+ * L'écran de différences d'un film seul : la fiche TMDB relue, appliquée
+ * puis annulée (`MovieImporter::previewResync()`), ou l'état qui l'empêche.
+ */
+export type AdminResyncPreview =
+    | { status: 'not_configured' | 'unavailable' | 'not_found' }
+    | {
+          status: 'ready';
+          rows: AdminResyncRow[];
+          changed: AdminResyncField[];
+          content_flag_blocked: boolean;
+          reappeared_aliases: string[];
+          curator_title_locales: string[];
+          certifications_read_at: string | null;
+          propose_unpublish: boolean;
+      };
+
+/**
+ * Un film que le geste rétroactif de grille toucherait (spec 20 § 7.7) :
+ * images visées et, s'il devient incomplet, son `N` jouable maximal après.
+ */
+export type AdminRetroactiveMovie = AdminMovieIdentity & {
+    frames: number;
+    becomes_incomplete: boolean;
+    playable_up_to: number | null;
+};
+
 /** Ce qu'un texte saisi deviendra : un titre ou un alias (`TextTarget`). */
 export type AdminTextTarget = 'title' | 'alias';
 
@@ -552,6 +693,11 @@ export type AdminMovieFrame = {
      * décision (§ 7.3, § 7.5) : `curation_state` la dit `in_play`.
      */
     review_rejected: boolean;
+    /**
+     * Suspendre une image publiée, lever sa suspension (spec 20 § 11.2) :
+     * administrateur seul. Affichage seulement, la route rejoue sa policy.
+     */
+    abilities: { suspend: boolean; unsuspend: boolean };
 };
 
 /**
@@ -865,15 +1011,31 @@ export type AdminReviewBatch = {
 export type AdminQueueReviewBatch = AdminReviewBatch & { movie_id: number };
 
 /** Les gestes de la fiche film, pour l'affichage seulement. */
+/**
+ * La levée d'une suspension vue par la fiche (spec 20 § 11.2) : l'état que
+ * le journal fait rendre au film — `published` exige l'aperçu d'ambiguïté.
+ */
+export type AdminUnsuspension = {
+    restores: 'published' | 'unpublished' | 'draft' | null;
+};
+
 export type AdminMovieAbilities = {
     curate: boolean;
     publish: boolean;
     unpublish: boolean;
     verifyContent: boolean;
+    /** Suspendre le film, lever sa suspension (spec 20 § 11.2) : administrateur seul. */
+    suspend: boolean;
+    unsuspend: boolean;
     /** Le lien « Historique » vers le journal : administrateur seul. */
     viewJournal: boolean;
     /** « Créer la saga depuis cette collection » (`ThemePolicy::create`). */
     editThemes: boolean;
+    /**
+     * « Resynchroniser depuis TMDB » (`MoviePolicy::resync`, spec 20 § 3.7) :
+     * jamais un film retiré ni de démonstration.
+     */
+    resync: boolean;
 };
 
 export type AdminImportRunRow = {
@@ -1381,7 +1543,11 @@ export type AdminActionTypeValue =
     | 'theme.created'
     | 'theme.updated'
     | 'theme.published'
-    | 'theme.unpublished';
+    | 'theme.unpublished'
+    | 'content_report.dismissed'
+    | 'movie.resynced'
+    | 'import.abandoned'
+    | 'movie.difficulty_corrected';
 
 /** Les sujets du journal — miroir de `App\Enums\AdminActionSubject`. */
 export type AdminActionSubjectValue =
@@ -1396,7 +1562,8 @@ export type AdminActionSubjectValue =
     | 'theme'
     | 'game'
     | 'games'
-    | 'players';
+    | 'players'
+    | 'content_report';
 
 /** Les deux classes de conservation — `App\Enums\AdminActionRetention`. */
 export type AdminActionRetentionValue = 'permanent' | 'rolling_12m';
@@ -1578,6 +1745,7 @@ export type InspectionIncidentReason =
     | 'frame_unavailable'
     | 'no_variant_available'
     | 'movie_withdrawn'
+    | 'movie_suspended'
     | 'choices_unavailable';
 
 /** L'identité d'un siège ; `nickname` nul = pseudo effacé à l'archivage. */
@@ -1799,6 +1967,23 @@ export type PerfReport = {
 
 export type PerfWindow = '1h' | '24h' | '7d';
 
+/** Un score de bonne réponse, tel qu'écrit ou rejoué (spec 80 § 6.3). */
+export type InspectionTierScore = {
+    tierIndex: number;
+    pointsTier: number;
+    pointsBonus: number;
+    pointsTotal: number;
+};
+
+/** Un écart de rejeu d'une partie close (L80-9). */
+export type InspectionReplayMismatch = {
+    sequence_index: number;
+    round_number: number | null;
+    player: { public_id: string; nickname: string | null };
+    stored: InspectionTierScore;
+    replayed: InspectionTierScore;
+};
+
 export type InspectionTraceLine = {
     event: string;
     sequence_index: number | null;
@@ -1873,3 +2058,52 @@ export type AdminAvatarRow = {
 };
 
 export type AdminAvatarFilter = 'hidden' | 'reported';
+
+/**
+ * Une ligne de l'écran « Modération » des pseudos (ligne 35, spec 20
+ * § 11.5 ; D66 du 07/10), miroir de `ModerationController::row()`.
+ */
+export type AdminModerationRow = {
+    /** `player.id` : lie les deux gestes, ne sort que vers le back-office. */
+    id: number;
+    /** Lie la fiche du siège (`admin.players.show`). */
+    public_id: string;
+    /** Le pseudo, montré à l'administrateur seul ; nul s'il a été effacé. */
+    nickname: string | null;
+    /** Code du salon, nul pour un siège solo. */
+    room_code: string | null;
+    account: { id: number; name: string } | null;
+    masked_at: string | null;
+    /** `reports_count` de la dernière ligne `nickname.masked` ; nul sans elle. */
+    reports_count: number | null;
+    /** Sièges distincts depuis le début de la fenêtre courante. */
+    current_reports: number;
+    banned: boolean;
+    /** Chaque signaleur, avec ses signalements de pseudo conservés. */
+    reporters: { id: number; nickname: string | null; reports: number }[];
+};
+
+/** Une forme à recopier dans `resources/moderation/nicknames/banned.txt`. */
+export type AdminBlocklistForm = {
+    id: number;
+    nickname: string;
+    form: string;
+};
+
+/**
+ * Une ligne de l’écran « Films jamais trouvés et incidents » (spec 20
+ * § 12.1, L20-29) : agrégat par film, aucune identité de joueur. Les deux
+ * dictionnaires sont indexés par motif d’incident.
+ */
+export type AdminIncidentRow = {
+    movie: {
+        id: number;
+        title_original: string;
+        release_year: number | null;
+        availability: string;
+    };
+    completed: number;
+    never_found: number;
+    cancelled: Partial<Record<InspectionIncidentReason, number>>;
+    substituted: Partial<Record<InspectionIncidentReason, number>>;
+};

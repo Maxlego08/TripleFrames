@@ -1,5 +1,6 @@
 import { router } from '@inertiajs/react';
 import { KeyRound } from 'lucide-react';
+import { useId } from 'react';
 import { destroy } from '@/actions/Laravel/Passkeys/Http/Controllers/PasskeyRegistrationController';
 import Heading from '@/components/heading';
 import PasskeyItem from '@/components/passkey-item';
@@ -12,13 +13,16 @@ export type Props = {
     passkeys?: Passkey[];
 };
 
-const EmptyState = () => {
+function EmptyState() {
     const { t } = useTranslations();
 
     return (
-        <div className="settings-empty-state p-8 text-center">
-            <div className="settings-empty-state__icon mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-muted">
-                <KeyRound className="h-7 w-7 text-muted-foreground" />
+        <div className="settings-credential-list settings-empty-state p-8 text-center">
+            <div
+                className="settings-empty-state__icon mx-auto mb-4 flex size-14 items-center justify-center rounded-2xl"
+                aria-hidden="true"
+            >
+                <KeyRound className="size-7" />
             </div>
             <p className="font-medium">{t('account.passkeys.empty')}</p>
             <p className="mt-1 text-sm text-muted-foreground">
@@ -26,16 +30,27 @@ const EmptyState = () => {
             </p>
         </div>
     );
-};
+}
 
+/**
+ * Section « Passkeys » de l'écran Sécurité (spec 40 § 8.1, 90 § 11.2) :
+ * rendue seulement quand l'interrupteur `canManagePasskeys` est ouvert. La
+ * liste est une vraie liste (`ul`), nommée par le titre de la section.
+ */
 export default function ManagePasskeys(props: Props) {
     const passkeys = props.passkeys ?? [];
     const { t } = useTranslations();
+    const headingId = useId();
 
-    const handleDelete = (id: number, onError: () => void) => {
+    // Un refus traduit — la dernière méthode de connexion (spec 40 § 13.8) —
+    // remonte à l'élément, qui l'affiche dans sa boîte de confirmation.
+    const handleDelete = (
+        id: number,
+        onError: (message: string | undefined) => void,
+    ) => {
         router.delete(destroy.url(id), {
             preserveScroll: true,
-            onError,
+            onError: (errors) => onError(errors.passkey),
         });
     };
 
@@ -48,28 +63,35 @@ export default function ManagePasskeys(props: Props) {
     }
 
     return (
-        <div className="settings-section space-y-6">
+        <section
+            className="settings-section space-y-6"
+            aria-labelledby={headingId}
+        >
             <Heading
+                id={headingId}
                 variant="small"
                 title={t('account.passkeys.heading')}
                 description={t('account.passkeys.description')}
             />
 
-            <div className="settings-credential-list overflow-hidden rounded-lg border border-border">
-                {passkeys.length > 0 ? (
-                    passkeys.map((passkey) => (
+            {passkeys.length > 0 ? (
+                <ul
+                    className="settings-credential-list"
+                    aria-labelledby={headingId}
+                >
+                    {passkeys.map((passkey) => (
                         <PasskeyItem
                             key={passkey.id}
                             passkey={passkey}
                             onDelete={handleDelete}
                         />
-                    ))
-                ) : (
-                    <EmptyState />
-                )}
-            </div>
+                    ))}
+                </ul>
+            ) : (
+                <EmptyState />
+            )}
 
             <PasskeyRegistration onSuccess={handleRegisterSuccess} />
-        </div>
+        </section>
     );
 }

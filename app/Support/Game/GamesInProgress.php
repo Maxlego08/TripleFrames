@@ -120,4 +120,17 @@ final class GamesInProgress
             + $playableRounds * PlatformLimits::tierGraceMs()
             + $launchCountdowns * EngineConstants::launchCountdownMs();
     }
+
+    /**
+     * Temps maximal qu'une partie passe en **pause manuelle**, décomptes de
+     * reprise compris (D64 du 07/10) : le budget cumulé par partie,
+     * `pauseTimeoutMs` ({@see PauseDeadline}). Le drainage l'ajoute à la durée
+     * naturelle (100 § 11) : une pause manuelle déjà en cours, ou demandée
+     * avant le drapeau, prolonge une partie au plus de ce budget — pendant le
+     * drainage, aucune nouvelle demande n'est acceptée.
+     */
+    public static function manualPauseBudgetMs(): int
+    {
+        return EngineConstants::pauseTimeoutMs();
+    }
 }

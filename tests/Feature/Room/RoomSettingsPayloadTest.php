@@ -101,7 +101,7 @@ it('types/room-settings.ts reflète les codes, les clés et les charges du serve
     $limits = PlatformLimits::current()->toArray();
 
     expect(ScoringTypes::objectFields($declarations['RoomSettingsView']))->toBe([array_keys($view)])
-        ->and(ScoringTypes::objectFields($declarations['RoomSettingsState']))->toBe([['settings', 'warnings', 'pool']])
+        ->and(ScoringTypes::objectFields($declarations['RoomSettingsState']))->toBe([['settings', 'warnings', 'advancedActive', 'pool']])
         ->and(ScoringTypes::objectFields($declarations['PlatformLimitsPayload']))->toBe([array_keys($limits)])
         ->and(ScoringTypes::objectFields($declarations['RoomSettingsBoundsPayload']))->toBe([array_keys($bounds)])
         ->and(ScoringTypes::objectFields($declarations['Bound']))->toBe([['min', 'max']])

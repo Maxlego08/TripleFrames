@@ -304,6 +304,10 @@ it("ne propose ni n'accepte « Mon avatar » d'un compte connecté qui n'est pas
     // Siège pris en invité (user_id nul), puis siège pris sous un autre compte.
     [$guest, $guestToken] = HostGestures::seat($room, 10, ['avatar_preset' => SeatEntry::avatar(2)]);
     [$owned, $ownedToken] = HostGestures::seat($room, 11, ['user_id' => $owner->id, 'avatar_preset' => SeatEntry::avatar(4)]);
+    // Le compte connecté tient déjà un siège de ce salon : le rattachement
+    // automatique (spec 40 § 13.2, D66 du 07/10) ne lui lie donc pas le siège
+    // invité au rendu, qui reste un siège d'un autre que lui.
+    HostGestures::seat($room, 12, ['user_id' => $other->id, 'avatar_preset' => SeatEntry::avatar(6)]);
     $guestBefore = HostGestures::raw('player', $guest->id);
     $ownedBefore = HostGestures::raw('player', $owned->id);
 

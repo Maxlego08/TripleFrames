@@ -9,9 +9,11 @@ namespace App\Events\Game;
  * Émetteur : `RevealRound`, à `ended_at + tier_grace_ms`.
  *
  * Charge, hors enveloppe : `{ sequenceIndex, roundNumber, revealEndsAt,
- * movie: RevealMovie, images: TierImageRef[], finders: RoundFinder[],
- * leaderboard: Leaderboard }` : `movie` par le seul `RevealMovieBuilder`,
- * `images` des seuls paliers ouverts (§ 11.5).
+ * movie: RevealMovie, images: TierImageRef[], frames: RevealFrame[],
+ * finders: RoundFinder[], leaderboard: Leaderboard }` : `movie` par le seul
+ * `RevealMovieBuilder`, `images` des seuls paliers ouverts (§ 11.5), `frames`
+ * l'identité publique de leurs images servies, pour le lien « Signaler »
+ * (`RevealFramesPresenter`, D63 du 07/10) — jamais avant la révélation.
  */
 final class RoundRevealed extends RoomBroadcast
 {
@@ -22,6 +24,7 @@ final class RoundRevealed extends RoomBroadcast
         'revealEndsAt' => 'iso',
         'movie' => 'object',
         'images' => 'list',
+        'frames' => 'list',
         'finders' => 'list',
         'leaderboard' => 'object',
     ];

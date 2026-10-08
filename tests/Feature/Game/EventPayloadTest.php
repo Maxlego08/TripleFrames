@@ -14,6 +14,8 @@ use App\Events\Game\GameEnded;
 use App\Events\Game\GameFinalized;
 use App\Events\Game\GameLaunched;
 use App\Events\Game\GamePaused;
+use App\Events\Game\GamePauseRequestCancelled;
+use App\Events\Game\GamePauseRequested;
 use App\Events\Game\GameResumed;
 use App\Events\Game\HostChanged;
 use App\Events\Game\PlayerLocked;
@@ -34,6 +36,7 @@ use App\Events\Game\SettingsChanged;
 use App\Events\Game\TierOpened;
 use App\Http\Middleware\EnsureActiveSeat;
 use App\Jobs\Game\AdvanceRound;
+use App\Jobs\Game\BroadcastLobbyState;
 use App\Jobs\Game\InterruptPausedGame;
 use App\Models\Alias;
 use App\Models\AnswerKey;
@@ -62,9 +65,11 @@ use App\Support\Game\GameStateBuilder;
 use App\Support\Game\NextRoundOutcome;
 use App\Support\Game\RevealMovieBuilder;
 use App\Support\Game\RoundStep;
+use App\Support\Game\SeatViewPresenter;
 use App\Support\Game\TransitionBroadcasts;
 use App\Support\Identity\PlayerToken;
 use App\Support\Identity\PlayerTokenCookie;
+use App\Support\Identity\PublicId;
 use App\Support\Realtime\ChannelNames;
 use App\Support\Realtime\GameRef;
 use App\Support\Realtime\GameWire;
@@ -95,6 +100,7 @@ use Tests\Support\Realtime\RecordingBroadcaster;
 use Tests\Support\Realtime\RecordingJob;
 use Tests\Support\Realtime\WireFixtures;
 use Tests\Support\Realtime\WireScene;
+use Tests\Support\Room\HostGestures;
 use Tests\Support\Room\SeatEntry;
 use Tests\Support\Scoring\ScoringFixtures;
 use Tests\TestCase;
@@ -140,18 +146,20 @@ function eventPayloadClosedList(): array
         'seat.joined' => [SeatJoined::class, 'room', ['seat']],
         'seat.updated' => [SeatUpdated::class, 'room', ['seat']],
         'host.changed' => [HostChanged::class, 'room', ['hostPublicId', 'previousHostPublicId']],
-        'settings.changed' => [SettingsChanged::class, 'room', ['settings', 'warnings', 'pool']],
-        'room.replayed' => [RoomReplayed::class, 'room', ['settings', 'warnings', 'pool']],
+        'settings.changed' => [SettingsChanged::class, 'room', ['settings', 'warnings', 'advancedActive', 'pool']],
+        'room.replayed' => [RoomReplayed::class, 'room', ['settings', 'warnings', 'advancedActive', 'pool']],
         'game.launched' => [GameLaunched::class, 'room', ['mode', 'roundsCount', 'framesPerRound', 'inputDifficulty', 'revealDurationMs', 'speedBonus', 'seats']],
         'room.archived' => [RoomArchived::class, 'room', []],
         'round.scheduled' => [RoundScheduled::class, 'room', ['round', 'image']],
         'tier.opened' => [TierOpened::class, 'room', ['sequenceIndex', 'roundNumber', 'tierIndex', 'opensAt', 'next', 'choicesUnavailable']],
         'player.locked' => [PlayerLocked::class, 'room', ['sequenceIndex', 'publicId', 'lockRank']],
         'round.closed' => [RoundClosed::class, 'room', ['sequenceIndex', 'roundNumber', 'endedAt', 'revealStartsAt', 'revealEndsAt']],
-        'round.revealed' => [RoundRevealed::class, 'room', ['sequenceIndex', 'roundNumber', 'revealEndsAt', 'movie', 'images', 'finders', 'leaderboard']],
+        'round.revealed' => [RoundRevealed::class, 'room', ['sequenceIndex', 'roundNumber', 'revealEndsAt', 'movie', 'images', 'frames', 'finders', 'leaderboard']],
         'round.cancelled' => [RoundCancelled::class, 'room', ['sequenceIndex', 'roundNumber']],
-        'game.paused' => [GamePaused::class, 'room', ['pausedAt', 'interruptsAt']],
+        'game.paused' => [GamePaused::class, 'room', ['pausedAt', 'interruptsAt', 'kind']],
         'game.resumed' => [GameResumed::class, 'room', ['resumedAt']],
+        'game.pause_requested' => [GamePauseRequested::class, 'room', ['requestedAt']],
+        'game.pause_request_cancelled' => [GamePauseRequestCancelled::class, 'room', []],
         'game.ended' => [GameEnded::class, 'room', ['podium']],
         'seat.choices' => [SeatChoicesOffered::class, 'seat', ['sequenceIndex', 'choices', 'useOriginalTitle', 'lang']],
         'seat.superseded' => [SeatSuperseded::class, 'seat', []],
@@ -744,17 +752,17 @@ it('la liste des événements diffusés est exactement la liste close du J1', fu
     ksort($found);
     ksort($expected);
 
-    // Dix-neuf, ni plus ni moins : tout nouvel événement amende 60 § 11.3 et
-    // entre ici.
+    // Vingt et un, ni plus ni moins : tout nouvel événement amende 60 § 11.3
+    // et entre ici (D64 du 07/10 : demande de pause et son retrait).
     expect($found)->toBe($expected)
-        ->and($found)->toHaveCount(19);
+        ->and($found)->toHaveCount(21);
 
     // Seuls trois événements sont ciblés.
     expect(array_keys(array_filter($found, static fn (array $row): bool => $row[1] === 'seat')))
         ->toEqualCanonicalizing(['seat.choices', 'seat.superseded', 'seat.kicked']);
 
     // Miroir client (L60-9, écart (i) du § 22 bis) : l'union `GameEventName`
-    // et les charges typées nomment exactement les dix-neuf, dans l'ordre de
+    // et les charges typées nomment exactement les vingt et un, dans l'ordre de
     // la liste close ; les écoutes d'Echo suivent le canal de chaque classe.
     $closedList = eventPayloadClosedList();
     $onChannel = static fn (string $channel): array => array_keys(array_filter(
@@ -1144,6 +1152,7 @@ it("chaque titre de la révélation porte l'attribut lang de la locale atteinte"
             'originalLanguage' => $movie->original_language,
             'year' => $movie->release_year,
             'letterboxdUrl' => "https://letterboxd.com/tmdb/{$movie->tmdb_id}/",
+            'tmdb' => $movie->tmdb_id,
         ], $label)
             // Une entrée par locale activée, dans l'ordre du registre.
             ->and(array_keys($packet['titles'] ?? []))->toBe(array_map(static fn (Locale $locale): string => $locale->value, Locale::cases()), $label);
@@ -1986,6 +1995,8 @@ it('chaque charge aux bornes tient sous la borne de requête de Reverb, pire cas
             'revealEndsAt' => WireTime::iso(Date::now()->toImmutable()),
             'movie' => RevealMovieBuilder::build(Movie::query()->findOrFail($last->movie_id)),
             'images' => array_map(static fn (int $tierIndex): array => WireFixtures::image($game, $last, $tierIndex), range(1, $game->frames_per_round)),
+            // Pire cas : une identité publique par palier (D63 du 07/10).
+            'frames' => array_map(static fn (int $tierIndex): array => ['tierIndex' => $tierIndex, 'framePublicId' => str_repeat('Z', PublicId::LENGTH)], range(1, $game->frames_per_round)),
             'finders' => Scoreboard::roundFinders($last),
             'leaderboard' => Scoreboard::leaderboard($game, $last),
         ]),
@@ -2012,4 +2023,74 @@ it('chaque charge aux bornes tient sous la borne de requête de Reverb, pire cas
     foreach (WireFixtures::events($scene) as $event) {
         expect(strlen(eventPayloadReverbBody($event)) + $requestOverhead)->toBeLessThanOrEqual($bound, $event->broadcastAs());
     }
+});
+
+it('un pseudo masqué part à nul dans toute vue de siège, lobby comme partie, affichage gelé compris', function (): void {
+    PoolFixtures::fakeFramesDisk();
+    Queue::fake([AdvanceRound::class, InterruptPausedGame::class]);
+
+    // Spec 60 § 11.3 (J2, L60-17) et 40 § 13.3 : `nickname: null`,
+    // `masked: true`, jamais le pseudo ni ses initiales, sur le même
+    // transport que tout le reste.
+    [$room, $host] = HostGestures::room();
+    [$target] = HostGestures::seat($room, attributes: ['nickname' => 'Pseudo Vilain', 'nickname_normalized' => 'pseudovilain']);
+    [$game] = HostGestures::runningGame($room, [$host, $target]);
+
+    $target->forceFill(['nickname_masked_at' => Date::now()])->save();
+    $recorder = RecordingBroadcaster::install();
+
+    SeatJoined::dispatch($room, null, ['seat' => SeatViewPresenter::lobby($target, $room->host_player_id)]);
+    SeatUpdated::dispatch($room, $game, ['seat' => SeatViewPresenter::ofSeat($target, $game, $room->host_player_id)]);
+
+    expect(array_column($recorder->sent, 'event'))->toBe(['seat.joined', 'seat.updated']);
+
+    foreach ($recorder->sent as $sent) {
+        expect($sent['payload']['seat']['publicId'])->toBe($target->public_id)
+            ->and($sent['payload']['seat']['nickname'])->toBeNull()
+            ->and($sent['payload']['seat']['masked'])->toBeTrue()
+            ->and($sent['json'])->not->toContain('Pseudo Vilain')
+            ->and($sent['json'])->not->toContain('pseudovilain');
+    }
+
+    // La partie en cours garde son affichage gelé en base, jamais sur le fil.
+    expect(GamePlayer::query()->whereBelongsTo($game)->where('player_id', $target->id)->sole()->display_nickname)
+        ->toBe('Pseudo Vilain');
+});
+
+// Volet Avancé de L60-17 (spec 60 § 11.3, spec 50 § 2.6) : `settings.changed`
+// porte, sur le même transport, le contenu de l'onglet Avancé — les seize
+// champs, `advanced` compris, et `advancedActive`, la liste des réglages
+// avancés hors de leur défaut —, identique pour tous les sièges.
+it('settings.changed porte le contenu de l’onglet Avancé, identique pour tous', function (): void {
+    PoolFixtures::fakeFramesDisk();
+    $frames = RoomSettingsBounds::DEFAULT_FRAMES_PER_ROUND;
+    $points = array_fill(0, $frames, RoomSettingsBounds::MAX_TIER_POINTS);
+    $room = Room::factory()->withSettings(RoomSettings::fromInput([
+        'advanced' => true,
+        'tierPoints' => $points,
+        'speedBonus' => false,
+        'maxAnswerLength' => RoomSettingsBounds::MIN_ANSWER_LENGTH,
+    ]))->create();
+    $payloads = [];
+
+    foreach (['fr', 'en'] as $locale) {
+        $recorder = RecordingBroadcaster::install();
+        app()->setLocale($locale);
+        (new BroadcastLobbyState($room->id))->handle();
+
+        expect($recorder->sent)->toHaveCount(1)
+            ->and($recorder->sent[0]['event'])->toBe('settings.changed');
+
+        $payloads[$locale] = array_diff_key($recorder->sent[0]['payload'], array_flip(['v', 'serverNow']));
+    }
+
+    $payload = $payloads['fr'];
+
+    expect($payloads['en'])->toBe($payload)
+        ->and($payload['settings']['advanced'])->toBeTrue()
+        ->and($payload['settings']['tierPoints'])->toBe($points)
+        ->and($payload['settings']['speedBonus'])->toBeFalse()
+        ->and($payload['settings']['maxAnswerLength'])->toBe(RoomSettingsBounds::MIN_ANSWER_LENGTH)
+        ->and($payload['advancedActive'])->toBe(['tierPoints', 'speedBonus', 'maxAnswerLength'])
+        ->and($payload['warnings'])->toContain(RoomSettings::WARNING_NON_DECREASING_POINTS);
 });

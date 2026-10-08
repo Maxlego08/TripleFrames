@@ -2,6 +2,7 @@
 
 namespace App\Actions\Room;
 
+use App\Actions\Identity\ClaimSeatForAccount;
 use App\Enums\RoomRefusal;
 use App\Enums\RoomStatus;
 use App\Events\Game\RoomReplayed;
@@ -29,6 +30,7 @@ use LogicException;
  * | R6 | Drapeau de drainage posé → `draining` (D32 du 23/09), message unique `common.maintenance.launch_blocked`. |
  * | R7 | `room.status = lobby`, `last_activity_at = $now`, par mise à jour ciblée. |
  * | R8 | APRÈS la validation : `room.replayed` au salon, qui porte `RoomSettingsState` recalculé — la non-répétition vient de réduire le vivier. |
+ * | R9 | Salon revenu au lobby : les marques d'avatar des sièges rattachés en cours de partie sont consommées ({@see ClaimSeatForAccount::applyPendingAvatars()}, spec 40 § 13.2, D66 du 07/10), dans une seconde transaction sous le verrou du salon — jamais après le verrou de la partie (ordre `room → player → game`). |
  *
  * **Ce que « Rejouer » ne fait pas.** Il n'écrit ni les réglages, que l'hôte
  * retrouve tels qu'il les a figés au lancement et qui redeviennent
@@ -53,6 +55,7 @@ final readonly class ReplayRoom
     public function __construct(
         private TransferHost $transferHost,
         private DeployDrain $drain,
+        private ClaimSeatForAccount $claims,
     ) {}
 
     /**
@@ -63,6 +66,19 @@ final readonly class ReplayRoom
      * @throws LogicException Un défaut d'appelant sous la transaction.
      */
     public function handle(Room $room, Player $requester): ?RoomRefusal
+    {
+        $refusal = $this->replay($room, $requester);
+
+        // R9 — après la validation, salon au lobby (relu sous son verrou).
+        if ($refusal === null) {
+            $this->claims->applyPendingAvatars($room);
+        }
+
+        return $refusal;
+    }
+
+    /** R1 à R8, en une transaction. */
+    private function replay(Room $room, Player $requester): ?RoomRefusal
     {
         return DB::transaction(function () use ($room, $requester): ?RoomRefusal {
             // R1 — premier verrou, puis R2 — l'instant.

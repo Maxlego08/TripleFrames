@@ -58,7 +58,8 @@ function roomEntryOwnProps(TestResponse $response): array
     $props = $response->inertiaPage()['props'];
 
     return array_diff_key($props, array_flip([
-        'name', 'auth', 'sidebarOpen', 'accountsOpen', 'frameFormat', 'realtime', 'maintenance',
+        'name', 'auth', 'sidebarOpen', 'accountsOpen', 'oauthProviders', 'consent',
+        'frameFormat', 'realtime', 'maintenance',
         'locale', 'locales', 'translations', 'errors', 'flash',
     ]));
 }

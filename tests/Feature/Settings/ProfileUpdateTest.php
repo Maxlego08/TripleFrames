@@ -81,3 +81,24 @@ test("n'expose aucune suppression de compte tant que l'anonymisation n'est pas l
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page->component('settings/profile'));
 });
+
+it('applique la règle de pseudo de jeu au nom qui change, jamais au nom antérieur renvoyé tel quel', function () {
+    // Un nom hérité, non conforme (point final), écrit avant la règle.
+    $user = User::factory()->create(['name' => 'Dr. Legacy']);
+
+    $this->actingAs($user)
+        ->patch(route('profile.update'), ['name' => 'Dr. Legacy', 'email' => $user->email])
+        ->assertSessionHasNoErrors();
+
+    expect($user->refresh()->name)->toBe('Dr. Legacy');
+
+    $this->actingAs($user)
+        ->patch(route('profile.update'), ['name' => 'Dr. Nouveau', 'email' => $user->email])
+        ->assertSessionHasErrors('name');
+
+    $this->actingAs($user)
+        ->patch(route('profile.update'), ['name' => '  Nouveau   Nom ', 'email' => $user->email])
+        ->assertSessionHasNoErrors();
+
+    expect($user->refresh()->name)->toBe('Nouveau Nom');
+});

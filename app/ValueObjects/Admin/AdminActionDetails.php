@@ -4,9 +4,12 @@ namespace App\ValueObjects\Admin;
 
 use App\Casts\AdminActionDetailsCast;
 use App\Enums\ContentOrigin;
+use App\Enums\ContentReportResolution;
 use App\Enums\FrameLevel;
 use App\Enums\FrameProcessingFailure;
 use App\Enums\FrameSourceKind;
+use App\Enums\ImportRunStatus;
+use App\Enums\MovieDifficulty;
 use App\Enums\ThemeKind;
 use App\Models\AdminAction;
 use App\Models\FrameReview;
@@ -252,6 +255,55 @@ final readonly class AdminActionDetails implements JsonSerializable
     {
         return new self([
             'works' => $works,
+        ]);
+    }
+
+    /**
+     * `content_report.dismissed` (D63 du 07/10) : la cible — film, et image
+     * si le groupe vise une image —, l'issue et le nombre de signalements
+     * clos. Jamais le texte libre d'un joueur : la ligne est permanente.
+     */
+    public static function contentReportsDismissed(int $movieId, ?int $frameId, ContentReportResolution $resolution, int $closed): self
+    {
+        return new self([
+            'movie_id' => $movieId,
+            'frame_id' => $frameId,
+            'resolution' => $resolution->value,
+            'closed' => $closed,
+        ]);
+    }
+
+    /**
+     * `movie.resynced` (D66 du 07/10, spec 10 § 8.3) : le balayage `resync`
+     * qui l'a portée, les champs de la liste close écrasés (§ 9.3) et la
+     * bascule vers `blocked` d'une certification restrictive découverte.
+     *
+     * @param  list<string>  $changed
+     */
+    public static function movieResynced(?int $importRunId, array $changed, bool $contentFlagBlocked): self
+    {
+        return new self([
+            'import_run_id' => $importRunId,
+            'changed' => $changed,
+            'content_flag_blocked' => $contentFlagBlocked,
+        ]);
+    }
+
+    /** `import.abandoned` (D66 du 07/10) : l'état du balayage avant sa clôture. */
+    public static function importAbandoned(ImportRunStatus $statusBefore): self
+    {
+        return new self(['status_before' => $statusBefore->value]);
+    }
+
+    /**
+     * `movie.difficulty_corrected` (D66 du 07/10) : la correction d'avant et
+     * d'après (`movie_difficulty_override`, NULL admis des deux côtés).
+     */
+    public static function difficultyCorrected(?MovieDifficulty $from, ?MovieDifficulty $to): self
+    {
+        return new self([
+            'from' => $from?->value,
+            'to' => $to?->value,
         ]);
     }
 

@@ -2,6 +2,8 @@
 
 namespace App\Http\Middleware;
 
+use App\Enums\LegalPage;
+use App\Support\Http\PageMeta;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Route;
@@ -26,6 +28,17 @@ use Symfony\Component\HttpFoundation\Response;
  *    ni une route technique ; `IndexingTest` refuse tout autre porteur ;
  * 3. la méthode est `GET` ou `HEAD` ;
  * 4. le statut est 200 : une erreur sur une route indexable reste `noindex`.
+ *
+ * **Garde des pages provisoires** (n° 19, spec 90 § 11.5, spec 100 § 21 —
+ * D66 du 07/10) : une page légale dont `config('legal.pages.<page>.provisional')`
+ * n'est pas `false` reste `noindex` même quand la variable est levée, pour
+ * qu'un texte à « [À FOURNIR » ne soit jamais indexé si `SITE_INDEXABLE`
+ * passe à vrai avant que tous les textes soient livrés.
+ *
+ * Les conditions 1, 2 et la garde forment {@see self::routeIndexable()},
+ * seule décision partagée avec la balise canonique de `app.blade.php`
+ * ({@see PageMeta}) : une canonique n'existe que là où
+ * l'en-tête peut tomber.
  *
  * **Il n'écrase jamais un `X-Robots-Tag` déjà posé** : la réponse d'image de
  * `/f/{serveToken}` et de l'aperçu admin pose le sien (`FrameImageResponse`,
@@ -86,6 +99,18 @@ final class RobotsDirectives
      */
     private function indexable(Request $request, Response $response): bool
     {
+        return self::routeIndexable($request)
+            && in_array($request->getMethod(), ['GET', 'HEAD'], true)
+            && $response->getStatusCode() === Response::HTTP_OK;
+    }
+
+    /**
+     * La part de la décision qui ne dépend que de la route : variable levée,
+     * drapeau posé à `true`, et page légale non provisoire. La méthode et le
+     * statut restent au middleware, seul à voir la réponse.
+     */
+    public static function routeIndexable(Request $request): bool
+    {
         if (config('app.indexable') !== true) {
             return false;
         }
@@ -96,7 +121,6 @@ final class RobotsDirectives
             return false;
         }
 
-        return in_array($request->getMethod(), ['GET', 'HEAD'], true)
-            && $response->getStatusCode() === Response::HTTP_OK;
+        return LegalPage::fromRouteName($route->getName())?->isProvisional() !== true;
     }
 }

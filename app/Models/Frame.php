@@ -8,6 +8,7 @@ use App\Enums\FrameProcessingFailure;
 use App\Enums\FrameProcessingState;
 use App\Enums\FrameSourceKind;
 use App\Support\Frames\FrameStoragePrefix;
+use App\Support\Identity\PublicId;
 use Carbon\CarbonImmutable;
 use Database\Factories\FrameFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -38,6 +39,7 @@ use League\Flysystem\FilesystemException;
  * reçoit est un `round_tier.serve_token`, lié à une manche et non à une image.
  *
  * @property int $id
+ * @property string $public_id Identité publique base32 aléatoire (D63 du 07/10), frappée à la création ; ne quitte le serveur qu'après la révélation d'une manche (lien « Signaler »), jamais avant (règle 3).
  * @property int $movie_id `#[Hidden]` — cacher `frame.id` pour empêcher le regroupement des images d'un même film serait vain en laissant partir la clé de regroupement elle-même.
  * @property FrameLevel $frame_level
  * @property ContentAvailability $availability
@@ -76,6 +78,7 @@ use League\Flysystem\FilesystemException;
  * @property-read Collection<int, RoundTier> $drawnTiers
  * @property-read Collection<int, RoundTier> $servedTiers
  * @property-read Collection<int, TakedownRequest> $takedownRequests
+ * @property-read Collection<int, ContentReport> $contentReports
  */
 #[Table('frame')]
 #[Fillable([
@@ -287,6 +290,30 @@ class Frame extends Model
     public function takedownRequests(): HasMany
     {
         return $this->hasMany(TakedownRequest::class, 'target_frame_id');
+    }
+
+    /**
+     * Signalements de joueurs visant cette image (D63 du 07/10). `restrictOnDelete`.
+     *
+     * @return HasMany<ContentReport, $this>
+     */
+    public function contentReports(): HasMany
+    {
+        return $this->hasMany(ContentReport::class);
+    }
+
+    /**
+     * `public_id` est frappé par le serveur à la création, quelle que soit la
+     * voie d'ajout (TMDB, capture, lot d'images) : jamais par l'appelant,
+     * jamais dérivé de l'`id` ({@see PublicId}).
+     */
+    protected static function booted(): void
+    {
+        static::creating(static function (self $frame): void {
+            if ($frame->getAttribute('public_id') === null) {
+                $frame->public_id = PublicId::generate();
+            }
+        });
     }
 
     /**
