@@ -15,6 +15,11 @@ type Props = {
     passwordRules: string;
 };
 
+/**
+ * Réinitialisation du mot de passe (Fortify, spec 90 § 11.2) : écran réécrit
+ * hors du starter, habillé par `AuthLayout` et `auth/_forms.scss`, chaque
+ * erreur reliée à son champ par `aria-describedby`.
+ */
 export default function ResetPassword({ token, email, passwordRules }: Props) {
     const { t } = useTranslations();
 
@@ -41,10 +46,14 @@ export default function ResetPassword({ token, email, passwordRules }: Props) {
                                 value={email}
                                 className="mt-1 block w-full"
                                 readOnly
+                                aria-invalid={errors.email ? true : undefined}
+                                aria-describedby={
+                                    errors.email ? 'email-error' : undefined
+                                }
                             />
                             <InputError
+                                id="email-error"
                                 message={errors.email}
-                                className="mt-2"
                             />
                         </div>
 
@@ -60,8 +69,19 @@ export default function ResetPassword({ token, email, passwordRules }: Props) {
                                 autoFocus
                                 placeholder={t('account.fields.password')}
                                 passwordrules={passwordRules}
+                                aria-invalid={
+                                    errors.password ? true : undefined
+                                }
+                                aria-describedby={
+                                    errors.password
+                                        ? 'password-error'
+                                        : undefined
+                                }
                             />
-                            <InputError message={errors.password} />
+                            <InputError
+                                id="password-error"
+                                message={errors.password}
+                            />
                         </div>
 
                         <div className="grid gap-2">
@@ -77,17 +97,28 @@ export default function ResetPassword({ token, email, passwordRules }: Props) {
                                     'account.fields.password_confirmation',
                                 )}
                                 passwordrules={passwordRules}
+                                aria-invalid={
+                                    errors.password_confirmation
+                                        ? true
+                                        : undefined
+                                }
+                                aria-describedby={
+                                    errors.password_confirmation
+                                        ? 'password_confirmation-error'
+                                        : undefined
+                                }
                             />
                             <InputError
+                                id="password_confirmation-error"
                                 message={errors.password_confirmation}
-                                className="mt-2"
                             />
                         </div>
 
                         <Button
                             type="submit"
-                            className="mt-4 w-full"
+                            className="mt-4 min-h-11 w-full"
                             disabled={processing}
+                            aria-busy={processing}
                             data-test="reset-password-button"
                         >
                             {processing && (

@@ -1,17 +1,19 @@
-// Credit: https://usehooks-ts.com/
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 
 export type CopiedValue = string | null;
 export type CopyFn = (text: string) => Promise<boolean>;
 export type UseClipboardReturn = [CopiedValue, CopyFn];
 
+/**
+ * Copie dans le presse-papiers (clé de configuration 2FA). Renvoie faux sans
+ * bruit quand l'API manque ou refuse : l'appelant garde la valeur lisible et
+ * sélectionnable à l'écran, seul repli utile pour un lecteur d'écran.
+ */
 export function useClipboard(): UseClipboardReturn {
     const [copiedText, setCopiedText] = useState<CopiedValue>(null);
 
-    const copy: CopyFn = async (text) => {
-        if (!navigator?.clipboard) {
-            console.warn('Clipboard not supported');
-
+    const copy = useCallback<CopyFn>(async (text) => {
+        if (typeof navigator === 'undefined' || !navigator.clipboard) {
             return false;
         }
 
@@ -20,13 +22,12 @@ export function useClipboard(): UseClipboardReturn {
             setCopiedText(text);
 
             return true;
-        } catch (error) {
-            console.warn('Copy failed', error);
+        } catch {
             setCopiedText(null);
 
             return false;
         }
-    };
+    }, []);
 
     return [copiedText, copy];
 }

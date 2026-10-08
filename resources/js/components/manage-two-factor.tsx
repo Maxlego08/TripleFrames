@@ -1,7 +1,8 @@
 import { Form } from '@inertiajs/react';
 import { ShieldCheck } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import Heading from '@/components/heading';
+import InputError from '@/components/input-error';
 import TwoFactorRecoveryCodes from '@/components/two-factor-recovery-codes';
 import TwoFactorSetupModal from '@/components/two-factor-setup-modal';
 import { Button } from '@/components/ui/button';
@@ -11,14 +12,24 @@ import { disable, enable } from '@/routes/two-factor';
 
 export type Props = {
     canManageTwoFactor?: boolean;
+    /** Faux pour un curateur ou un administrateur : la 2FA leur est obligatoire (spec 40 § 13.8). */
+    canDisableTwoFactor?: boolean;
     requiresConfirmation?: boolean;
     twoFactorEnabled?: boolean;
 };
 
+/**
+ * Section « Authentification à deux facteurs » de l'écran Sécurité (spec 40
+ * § 8, 90 § 11.2) : état actif ou inactif, activation en boîte de dialogue,
+ * codes de secours. Tout est aux tokens ; l'habillage vit dans
+ * `settings.scss`.
+ */
 export default function ManageTwoFactor(props: Props) {
     const requiresConfirmation = props.requiresConfirmation ?? false;
     const twoFactorEnabled = props.twoFactorEnabled ?? false;
+    const canDisableTwoFactor = props.canDisableTwoFactor ?? true;
     const { t } = useTranslations();
+    const headingId = useId();
 
     const {
         qrCodeSvg,
@@ -47,8 +58,12 @@ export default function ManageTwoFactor(props: Props) {
     }
 
     return (
-        <div className="settings-section space-y-6">
+        <section
+            className="settings-section space-y-6"
+            aria-labelledby={headingId}
+        >
             <Heading
+                id={headingId}
                 variant="small"
                 title={t('account.two_factor.manage.heading')}
                 description={t('account.two_factor.manage.description')}
@@ -59,19 +74,38 @@ export default function ManageTwoFactor(props: Props) {
                         {t('account.two_factor.manage.enabled_hint')}
                     </p>
 
-                    <div className="relative inline">
-                        <Form {...disable.form()}>
-                            {({ processing }) => (
-                                <Button
-                                    variant="destructive"
-                                    type="submit"
-                                    disabled={processing}
-                                >
-                                    {t('account.two_factor.manage.disable')}
-                                </Button>
-                            )}
-                        </Form>
-                    </div>
+                    {canDisableTwoFactor ? (
+                        <div className="relative inline">
+                            <Form {...disable.form()}>
+                                {({ processing, errors: disableErrors }) => (
+                                    <>
+                                        <Button
+                                            variant="destructive"
+                                            type="submit"
+                                            className="min-h-11"
+                                            disabled={processing}
+                                            aria-busy={processing}
+                                        >
+                                            {t(
+                                                'account.two_factor.manage.disable',
+                                            )}
+                                        </Button>
+                                        <InputError
+                                            role="alert"
+                                            message={disableErrors.two_factor}
+                                        />
+                                    </>
+                                )}
+                            </Form>
+                        </div>
+                    ) : (
+                        <p
+                            className="text-sm text-muted-foreground"
+                            data-test="two-factor-privileged-hint"
+                        >
+                            {t('account.two_factor.manage.privileged_hint')}
+                        </p>
+                    )}
 
                     <TwoFactorRecoveryCodes
                         recoveryCodesList={recoveryCodesList}
@@ -87,8 +121,12 @@ export default function ManageTwoFactor(props: Props) {
 
                     <div>
                         {hasSetupData ? (
-                            <Button onClick={() => setShowSetupModal(true)}>
-                                <ShieldCheck />
+                            <Button
+                                type="button"
+                                className="min-h-11"
+                                onClick={() => setShowSetupModal(true)}
+                            >
+                                <ShieldCheck aria-hidden="true" />
                                 {t('account.two_factor.manage.setup')}
                             </Button>
                         ) : (
@@ -97,7 +135,12 @@ export default function ManageTwoFactor(props: Props) {
                                 onSuccess={() => setShowSetupModal(true)}
                             >
                                 {({ processing }) => (
-                                    <Button type="submit" disabled={processing}>
+                                    <Button
+                                        type="submit"
+                                        className="min-h-11"
+                                        disabled={processing}
+                                        aria-busy={processing}
+                                    >
                                         {t('account.two_factor.manage.enable')}
                                     </Button>
                                 )}
@@ -118,6 +161,6 @@ export default function ManageTwoFactor(props: Props) {
                 fetchSetupData={fetchSetupData}
                 errors={errors}
             />
-        </div>
+        </section>
     );
 }

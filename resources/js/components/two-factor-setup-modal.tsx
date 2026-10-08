@@ -26,7 +26,10 @@ import { confirm } from '@/routes/two-factor';
 
 function GridScanIcon() {
     return (
-        <div className="settings-two-factor-scan mb-3 rounded-full p-0.5">
+        <div
+            className="settings-two-factor-scan mb-3 rounded-full p-0.5"
+            aria-hidden="true"
+        >
             <div className="settings-two-factor-scan__inner relative overflow-hidden rounded-full p-2.5">
                 <div className="absolute inset-0 grid grid-cols-5 opacity-50">
                     {Array.from({ length: 5 }, (_, i) => (
@@ -78,13 +81,21 @@ function TwoFactorSetupStep({
                         <div className="settings-two-factor-qr mx-auto aspect-square w-64 rounded-lg">
                             <div className="z-10 flex h-full w-full items-center justify-center p-5">
                                 {qrCodeSvg ? (
+                                    // Le QR code garde son fond clair et ses
+                                    // modules sombres, seul contraste que
+                                    // lisent toutes les applications : son
+                                    // fond vient de `settings.scss`
+                                    // (`.settings-two-factor-qr__code`),
+                                    // jamais d'un filtre ni d'une couleur en
+                                    // dur.
                                     <div
-                                        className="aspect-square w-full rounded-lg bg-white p-2 [&_svg]:size-full"
+                                        role="img"
+                                        aria-label={t(
+                                            'account.two_factor.setup.qr_label',
+                                        )}
+                                        className="settings-two-factor-qr__code aspect-square w-full rounded-lg p-2 [&_svg]:size-full"
                                         dangerouslySetInnerHTML={{
                                             __html: qrCodeSvg,
-                                        }}
-                                        style={{
-                                            filter: 'invert(1) brightness(1.5)',
                                         }}
                                     />
                                 ) : (
@@ -97,13 +108,20 @@ function TwoFactorSetupStep({
                     </div>
 
                     <div className="flex w-full space-x-5">
-                        <Button className="w-full" onClick={onNextStep}>
+                        <Button
+                            type="button"
+                            className="min-h-11 w-full"
+                            onClick={onNextStep}
+                        >
                             {buttonText}
                         </Button>
                     </div>
 
                     <div className="relative flex w-full items-center justify-center">
-                        <div className="settings-two-factor-divider absolute inset-0 top-1/2 h-px w-full" />
+                        <div
+                            className="settings-two-factor-divider absolute inset-0 top-1/2 h-0.5 w-full"
+                            aria-hidden="true"
+                        />
                         <span className="settings-two-factor-divider__label relative px-2 py-1">
                             {t('account.two_factor.setup.manual_entry')}
                         </span>
@@ -123,12 +141,15 @@ function TwoFactorSetupStep({
                                         type="text"
                                         readOnly
                                         value={manualSetupKey}
-                                        className="settings-two-factor-key__value h-full w-full p-3 outline-none"
+                                        aria-label={t(
+                                            'account.two_factor.setup.key_label',
+                                        )}
+                                        className="settings-two-factor-key__value h-full w-full p-3 font-mono outline-none"
                                     />
                                     <button
                                         type="button"
                                         onClick={() => copy(manualSetupKey)}
-                                        className="settings-two-factor-key__copy px-3"
+                                        className="settings-two-factor-key__copy min-h-11 px-3"
                                         aria-label={t(
                                             copied
                                                 ? 'account.two_factor.setup.key_copied'
@@ -136,7 +157,7 @@ function TwoFactorSetupStep({
                                         )}
                                     >
                                         <IconComponent
-                                            className="w-4"
+                                            className="size-4"
                                             aria-hidden="true"
                                         />
                                     </button>
@@ -162,9 +183,11 @@ function TwoFactorVerificationStep({
     const { t } = useTranslations();
 
     useEffect(() => {
-        setTimeout(() => {
+        const timer = window.setTimeout(() => {
             pinInputContainerRef.current?.querySelector('input')?.focus();
         }, 0);
+
+        return () => window.clearTimeout(timer);
     }, []);
 
     return (
@@ -190,6 +213,9 @@ function TwoFactorVerificationStep({
                             <InputOTP
                                 id="otp"
                                 name="code"
+                                aria-label={t(
+                                    'account.two_factor.setup.code_label',
+                                )}
                                 maxLength={OTP_MAX_LENGTH}
                                 onChange={setCode}
                                 disabled={processing}
@@ -219,7 +245,7 @@ function TwoFactorVerificationStep({
                             <Button
                                 type="button"
                                 variant="outline"
-                                className="flex-1"
+                                className="min-h-11 flex-1"
                                 onClick={onBack}
                                 disabled={processing}
                             >
@@ -227,7 +253,7 @@ function TwoFactorVerificationStep({
                             </Button>
                             <Button
                                 type="submit"
-                                className="flex-1"
+                                className="min-h-11 flex-1"
                                 disabled={
                                     processing || code.length < OTP_MAX_LENGTH
                                 }
@@ -254,6 +280,11 @@ type Props = {
     errors: string[];
 };
 
+/**
+ * Boîte d'activation de la 2FA (spec 40 § 8, 90 § 11.2) : QR code et clé de
+ * configuration, puis vérification du code quand Fortify l'exige. Le bouton
+ * « Close » généré est masqué au profit d'un `DialogClose` traduit (§ 2.5).
+ */
 export default function TwoFactorSetupModal({
     isOpen,
     onClose,

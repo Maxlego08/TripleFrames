@@ -314,3 +314,40 @@ it('ne garde dans EXEMPT que des fichiers existants hors du périmètre surveill
 
     expect($added)->toBe([], 'fichier(s) entré(s) dans EXEMPT après le gel : '.implode(', ', $added));
 });
+
+it('surveille les écrans de compte sortis du starter et ne garde aucune coquille morte', function () {
+    // Spec 90 § 11.2 (PK-C, D66 du 07/10) : les écrans de compte réécrits
+    // entrent dans WATCHED dans le commit qui les réécrit (§ 9.3, règle
+    // d'entrée n° 1), et la chaîne morte du starter est supprimée.
+    $watched = themePerimeter()['watched'];
+
+    foreach ([
+        'resources/js/pages/settings/profile.tsx',
+        'resources/js/pages/settings/security.tsx',
+        'resources/js/pages/settings/accounts.tsx',
+        'resources/js/pages/settings/avatar.tsx',
+        'resources/js/pages/auth/reset-password.tsx',
+        'resources/js/pages/auth/two-factor-challenge.tsx',
+        'resources/js/components/input-error.tsx',
+        'resources/js/components/password-input.tsx',
+        'resources/js/components/manage-two-factor.tsx',
+        'resources/js/components/manage-passkeys.tsx',
+        'resources/js/layouts/app-layout.tsx',
+        'resources/js/layouts/settings/layout.tsx',
+    ] as $path) {
+        expect(themePerimeterCovers($watched, $path))->toBeTrue("{$path} n'est pas surveillé (spec 90 § 11.2)");
+    }
+
+    foreach ([
+        'resources/js/components/app-sidebar.tsx',
+        'resources/js/components/app-header.tsx',
+        'resources/js/components/app-shell.tsx',
+        'resources/js/components/nav-user.tsx',
+        'resources/js/components/user-menu-content.tsx',
+        'resources/js/layouts/app/app-sidebar-layout.tsx',
+        'resources/js/layouts/auth/auth-card-layout.tsx',
+        'resources/js/layouts/auth/auth-split-layout.tsx',
+    ] as $path) {
+        expect(base_path($path))->not->toBeFile("{$path} : coquille morte du starter, à supprimer");
+    }
+});
